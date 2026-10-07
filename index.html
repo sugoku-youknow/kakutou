@@ -142,10 +142,10 @@ const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308"];
 const CLONE_COLOR = "#f472b6";                // コペルニウムの分身
 const MAX_PLAYERS = 4, WIN_ROUNDS = 3;
 const ATK_COOLDOWN = 10;
-// 攻撃の種類: 0=通常 / 1=侍の居合斬り（踏み込みながら長く斬る）
+// 攻撃の種類: 0=通常 / 1=侍の居合斬り（少しためてから、踏み込みながら斬る）
 const ATKS = [
   { total: 26, on: 7, off: 13, reach: 46 },
-  { total: 34, on: 8, off: 13, reach: 74, dash: 13, dashFrom: 4, dashTo: 13 },
+  { total: 50, on: 24, off: 29, reach: 74, dash: 13, dashFrom: 20, dashTo: 29 },   // 20 フレームためてから踏み込む
 ];
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
 
@@ -164,7 +164,7 @@ const defMul = d => 1 - 0.10 * (d - BASE_STAT);    // 受ける吹っ飛ばし�
 //   ジャンプ初速: 6 で基準の 1.4 倍（最高到達点は約 2 倍）。2 未満は 1 ポイントごとに 4.5% 減
 const moveMul = s => s >= BASE_STAT ? 1 + 1.8 * (s - BASE_STAT) / (MAX_STAT - BASE_STAT) : 1 + 0.10 * (s - BASE_STAT);
 const jumpMul = s => s >= BASE_STAT ? 1 + 0.10 * (s - BASE_STAT) : 1 + 0.045 * (s - BASE_STAT);
-const SHIELD_HITS = 3;               // 攻撃 = 防御のとき、盾が壊れるまでの回数
+const SHIELD_HITS = 3;               // 盾が壊れるまでの回数（攻撃・防御の差に関係なく全員一律）
 const SHIELD_BREAK_FRAMES = 300;     // 壊れた盾が元に戻るまで（60fps で 5 秒）
 const SHIELD_IDLE_FRAMES = 180;      // 攻撃されないまま 3 秒たつと、盾のダメージは全回復
 
@@ -176,42 +176,52 @@ const SD_MIN_W = 120;                // 縮みきったメインステージの�
 const SD_HOLD_FRAMES = 6 * 60;       // 最小幅になってから、足場がすべて崩れるまで
 
 // スキルの数値（60fps 換算）
-const BOMB_FUSE = 75, BOMB_R = 9, BOMB_BLAST = 85;      // ボム: 導火線の長さ / 大きさ / 爆風の半径
-const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 150;   // 花: 咲くまで / 残る時間 / 踏んだ人が動けない時間
+const BOMB_FUSE = 120, BOMB_R = 9, BOMB_BLAST = 85;     // ボム: 導火線の長さ（2 秒）/ 大きさ / 爆風の半径
+const BOMB_KNOCK = 0.475, BOMB_LIFT = 5.5;              // ボムの吹っ飛び（横の強さ / 上向きの初速）。以前の半分
+const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 60;    // 花: 咲くまで / 残る時間 / 踏んだ人が動けない時間（1 秒）
+const DOGEZA_KNOCK = 0.5;            // 花で動けない（土下座）間に受ける吹っ飛びの倍率
 const CLONE_LIFE = 420;              // 分身が消えるまで
 const BZ_FRAMES = 360, BZ_BONUS = 2; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値
 const CN_FRAMES = 24, CN_WHIFF = 18; // カウンター: 構えている時間 / 空振りしたときの隙
-const GH_FRAMES = 210;               // 透過が続く時間
+const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
+const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛ばし力の倍率
+const GIANT_FRAMES = 480, GIANT_BONUS = 3, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
 
 // ---------- キャラクター ----------
 // A/D/S = 攻撃/防御/スピード。skill.cd = クールタイム(秒)、スキルが強いほど長い。hold = 押している間ためて離すと発動
 const CHARS = [
   { id: "normal", name: "ノーマル", A: 2, D: 2, S: 2, tag: "練習用。すべて普通で、スキルはない", skill: null },
-  { id: "bomber", name: "ボマー", A: 2, D: 2, S: 3, tag: "爆弾で広い範囲を吹っ飛ばす",
-    skill: { name: "ボム", cd: 6, text: "爆弾を山なりに投げる。敵に当たるか約1.2秒で爆発し、周りを吹っ飛ばす。盾は効かない（自分は無傷）" } },
+  { id: "bomber", name: "ボマー", A: 2, D: 2, S: 3, tag: "爆弾で周りを吹っ飛ばす",
+    skill: { name: "ボム", cd: 6, text: "爆弾を短く山なりに投げる。敵に当たっても爆発せず、2秒後に爆発して周りを軽く吹っ飛ばす。盾は効かない（自分は無傷）" } },
   { id: "samurai", name: "侍", A: 5, D: 1, S: 3, tag: "攻撃力が高く、盾を一撃で割れる",
-    skill: { name: "居合斬り", cd: 6, text: "前へ踏み込んで斬る。盾で受けられても一撃で盾を壊し、吹っ飛ばす" } },
+    skill: { name: "居合斬り", cd: 6, text: "少しためてから、前へ踏み込んで斬る。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 3, tag: "遠くから矢を放つ",
     skill: { name: "弓矢", cd: 3, hold: true, maxCharge: 72, openShield: true, text: "押している間ためて、離すと矢を放つ。長くためるほど速く強い。ためている間は盾が外れる" } },
-  { id: "okure", name: "おくれたん", A: 2, D: 3, S: 2, tag: "花の罠で相手を足止めする",
-    skill: { name: "花", cd: 8, text: "目の前に小さな花を咲かせる。踏んだ相手は2.5秒動けなくなる（自分は平気）" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 4, tag: "瞬間移動で間合いを支配する",
     skill: { name: "テレポート", cd: 4, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
-  { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 3, tag: "分身と一緒に戦う",
-    skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分と同じ動きをする" } },
-  { id: "nao", name: "なお", A: 1, D: 1, S: 2, tag: "弱いが、残機が1つ多い", skill: null, lives: 1 },
   { id: "berserker", name: "バーサーカー", A: 4, D: 3, S: 4, tag: "盾なし。全身が強く、さらに強化できる", noShield: true,
     skill: { name: "狂化", cd: 14, text: "6秒間、攻撃・防御・スピードがさらに上がる" } },
   { id: "knight", name: "騎士", A: 3, D: 5, S: 1, tag: "とても硬い。攻撃を2倍にして返す",
     skill: { name: "カウンター", cd: 7, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 3, tag: "透明になって攻撃をすり抜ける",
-    skill: { name: "透過", cd: 9, text: "3.5秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される" } },
+    skill: { name: "透過", cd: 9, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
+  { id: "giant", name: "巨人", A: 1, D: 1, S: 1, tag: "ふだんは弱いが、巨大化して暴れる",
+    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+3され、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
+  { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 3, tag: "分身と一緒に戦う",
+    skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分と同じ動きをする" } },
+  { id: "okure", name: "おくれたん", A: 2, D: 3, S: 2, tag: "花の罠で相手を足止めする",
+    skill: { name: "花", cd: 8, text: "目の前に小さな花を咲かせる。踏んだ相手は1秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）" } },
+  { id: "nao", name: "なお", A: 1, D: 1, S: 2, tag: "弱いが、残機が1つ多い", skill: null, lives: 1 },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
-const effA = p => chOf(p).A + (p.bz > 0 ? BZ_BONUS : 0);     // 狂化中は上乗せ
-const effD = p => chOf(p).D + (p.bz > 0 ? BZ_BONUS : 0);
-const effS = p => chOf(p).S + (p.bz > 0 ? BZ_BONUS : 0);
+const bonusOf = p => (p.bz > 0 ? BZ_BONUS : 0) + (p.gt > 0 ? GIANT_BONUS : 0);   // 狂化中・巨大化中は上乗せ
+const effA = p => chOf(p).A + bonusOf(p);
+const effD = p => chOf(p).D + bonusOf(p);
+const effS = p => chOf(p).S + bonusOf(p);
+const szOf = p => p.gt > 0 ? GIANT_SCALE : 1;                // 巨大化中は 2 倍の大きさ
+const pwOf = p => PLW * szOf(p), phOf = p => PLH * szOf(p);
+const dzMul = t => t.dz > 0 ? DOGEZA_KNOCK : 1;              // 土下座中は吹っ飛びにくい
 
 // ---------- 状態 ----------
 const q = new URLSearchParams(location.search).get("room");
@@ -254,6 +264,7 @@ function newPlayer() {
            kc: 0, ks: 0, kp: 0,                         // スキルのクールタイム / ためている長さ / 前のフレームでスキルボタンが押されていたか
            gh: 0, bz: 0, cn: 0, cnHit: false,           // 透過 / 狂化 / カウンターの構え / 構え中に受けたか
            fz: 0, iv: 0, lv: 0,                         // 動けない時間 / 無敵 / 残機
+           gt: 0, dz: 0, gb: 0,                         // 巨大化 / 土下座（花で動けない）/ 透過中に振った攻撃
            life: 0, isClone: false };
 }
 
@@ -282,7 +293,7 @@ function applyProfile(p, prof) {
 // 効果音・演出のきっかけ。ホスト自身が鳴らし、同じ内容を次のスナップショットで参加者にも届ける
 //   ["s",x,y] 攻撃 / ["j",x,y] ジャンプ / ["b",x,y,向き] 盾で受けた / ["h",x,y,向き,強さ] 当たった / ["k",x,y,向き,強さ] 盾が割れた
 //   ["sk",x,y,キャラ] スキル発動 / ["sc",x,y,キャラ] ため始め / ["ar",x,y,向き,ため] 矢 / ["x",x,y,半径] 爆発 / ["tp",x0,y0,x1,y1] 瞬間移動
-//   ["fl",x,y] 花を踏んだ / ["cn",x,y,向き] カウンター成功 / ["rv",x,y] 残機で復活 / ["gx",x,y] 透過が解けた / ["cl",x,y] 分身が消えた
+//   ["sl",x,y] 居合斬りの踏み込み / ["fl",x,y] 花を踏んだ / ["cn",x,y,向き] カウンター成功 / ["rv",x,y] 残機で復活 / ["gx",x,y] 透過が解けた / ["cl",x,y] 分身が消えた
 let evq = [];
 function emit(...e) {
   if (game.ph === "lobby") return;
@@ -290,7 +301,7 @@ function emit(...e) {
   fxEvent(e);
 }
 
-const ecx = p => p.x + PLW / 2, ecy = p => p.y + PLH / 2;
+const ecx = p => p.x + pwOf(p) / 2, ecy = p => p.y + phOf(p) / 2;
 const untouchable = t => t.gh > 0 || t.iv > 0;           // 透過中・復活直後は、攻撃も罠もすり抜ける
 // 盾が効く状態か（振っている・吹っ飛び中・盾が壊れている・動けない・弓をためている間は外れる）
 function shieldUp(p) {
@@ -318,7 +329,8 @@ function spawn(p, slot, n, battle) {
   p.vx = p.vy = 0; p.a = 0; p.ak = 0; p.cd = 0; p.s = 0; p.bf = p.hf = 0; p.ground = true;
   p.f = (p.x + PLW / 2 < PX + PW / 2) ? 1 : -1; p.hit = [];
   p.sh = 1; p.sbk = 0; p.shi = 0;
-  p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0;
+  p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0;
+  if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
 }
 
 function connectedSlots() {
@@ -372,9 +384,9 @@ function ents() {
 function useSkill(p) {                       // 押した瞬間に発動するスキル
   const id = chOf(p).id;
   if (id === "bomber") {
-    game.pj.push({ k: 0, x: ecx(p) + p.f * 18, y: p.y + 14, vx: p.f * 7.5 + p.vx * 0.5, vy: -8.5, own: p.own, t: 0 });
+    game.pj.push({ k: 0, x: ecx(p) + p.f * 18, y: p.y + 14, vx: p.f * 3.75 + p.vx * 0.25, vy: -8.5, own: p.own, t: 0 });   // 飛ぶ距離は以前の半分
   } else if (id === "samurai") {
-    p.a = 1; p.ak = 1; p.hit = [];           // 居合斬り（盾を一撃で壊す）
+    p.a = 1; p.ak = 1; p.hit = [];           // 居合斬り（ためてから踏み込み、盾を一撃で壊す）
   } else if (id === "okure") {
     if (!plantFlower(p)) return false;
   } else if (id === "copern") {
@@ -385,6 +397,8 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     p.cn = CN_FRAMES; p.cnHit = false;
   } else if (id === "ghost") {
     p.gh = GH_FRAMES;
+  } else if (id === "giant") {
+    p.gt = GIANT_FRAMES; p.x -= PLW / 2; p.y -= PLH;     // 足もとの中心を保ったまま 2 倍の大きさになる
   }
   p.kc = chOf(p).skill.cd * 60;
   emit("sk", ecx(p), ecy(p), p.ch);
@@ -394,7 +408,7 @@ function fireHold(p) {                       // ためて離すスキル
   const sk = chOf(p).skill, c = Math.min(1, p.ks / sk.maxCharge), id = chOf(p).id;
   p.ks = 0;
   if (id === "archer") {
-    game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * (13 + 9 * c), vy: 0, own: p.own, pw: 0.35 + 0.85 * c, br: Math.round(3 * c), t: 0 });
+    game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * (13 + 9 * c), vy: 0, own: p.own, pw: 0.35 + 0.85 * c, t: 0 });
     emit("ar", ecx(p) + p.f * 24, p.y + 24, p.f, c);
   } else if (id === "teleporter") {
     const x0 = ecx(p), y0 = ecy(p);
@@ -431,7 +445,7 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.x = (pl ? pl.x + pl.w / 2 : PX + PW / 2) - PLW / 2;
   p.y = (pl ? pl.y : PY) - PLH - 50;
   p.vx = p.vy = 0; p.s = 0; p.a = 0; p.ak = 0; p.cd = 0; p.ks = 0; p.cn = 0; p.fz = 0; p.gh = 0; p.ground = false;
-  p.sh = 1; p.sbk = 0; p.shi = 0; p.iv = RESPAWN_INV;
+  p.sh = 1; p.sbk = 0; p.shi = 0; p.iv = RESPAWN_INV; p.dz = 0; p.gt = 0; p.gb = 0;
   emit("rv", ecx(p), ecy(p));
 }
 
@@ -445,6 +459,9 @@ function physics(p, inp, neutral) {
   if (p.iv > 0) p.iv--;
   if (p.gh > 0 && --p.gh === 0) emit("gx", ecx(p), ecy(p));
   if (p.fz > 0) p.fz--;
+  if (p.dz > 0) p.dz--;
+  if (p.a === 0) p.gb = 0;
+  if (p.gt > 0 && --p.gt === 0) { p.x += PLW / 2; p.y += PLH; }     // 巨大化が終わる（足もとの中心を保つ）
   if (p.cn > 0 && --p.cn === 0 && !p.cnHit) p.fz = CN_WHIFF;       // 構えが空振りに終わると隙ができる
   // 盾の回復
   if (p.sbk > 0) { if (--p.sbk === 0) { p.sh = 1; p.shi = 0; } }
@@ -461,6 +478,8 @@ function physics(p, inp, neutral) {
   } else {
     const dir = (r ? 1 : 0) - (l ? 1 : 0);
     let spm = p.a > 0 ? 0.44 : 1;
+    const ak0 = ATKS[p.ak] || ATKS[0];
+    if (p.a > 0 && ak0.dash && p.a < ak0.dashFrom) spm = 0;     // 居合斬りのため中は動けない
     if (p.ks > 0) spm = Math.min(spm, 0.45);     // ためている間は動きが鈍る
     if (p.cn > 0) spm = 0;                       // カウンターの構え中は動かない
     const sp = spm * MOVE_BASE * moveMul(S);
@@ -470,7 +489,7 @@ function physics(p, inp, neutral) {
     if (u && p.ground && p.cn === 0) { p.vy = -JUMP_BASE * jumpMul(S); p.ground = false; if (!p.isClone) emit("j", ecx(p), p.y + PLH); }
     if (a && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0) {
       p.a = 1; p.ak = 0; p.hit = [];
-      if (p.gh > 0) { p.gh = 0; emit("gx", ecx(p), ecy(p)); }       // 自分から攻撃すると透過が解ける
+      if (p.gh > 0) { p.gh = 0; p.gb = 1; emit("gx", ecx(p), ecy(p)); }       // 自分から攻撃すると透過が解ける（この攻撃は 1.5 倍）
       emit("s", ecx(p), ecy(p));
     }
     if (sk && !neutral && !p.isClone) {          // スキル
@@ -483,6 +502,7 @@ function physics(p, inp, neutral) {
   const ak = ATKS[p.ak] || ATKS[0];
   if (p.a > 0) {
     p.a++;
+    if (ak.dash && p.a === ak.dashFrom) emit("sl", ecx(p), ecy(p));
     if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) p.vx = p.f * ak.dash;      // 居合斬りの踏み込み
     if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ATK_COOLDOWN; }
   }
@@ -490,13 +510,13 @@ function physics(p, inp, neutral) {
   p.vy += 0.6;
   if (d && !p.ground && p.s === 0) p.vy += 0.4;
   if (p.vy > 18) p.vy = 18;
-  const prevBottom = p.y + PLH;
+  const prevBottom = p.y + phOf(p), ww = pwOf(p), hh = phOf(p);
   p.x += p.vx; p.y += p.vy;
   p.ground = false;
   if (p.vy >= 0) {
     for (const pl of platforms()) {               // 上にある台から調べる。上からは乗れて、下からは通り抜ける
-      if (prevBottom <= pl.y + 0.01 && p.y + PLH >= pl.y && p.x + PLW > pl.x && p.x < pl.x + pl.w) {
-        p.y = pl.y - PLH; p.vy = 0; p.ground = true; break;
+      if (prevBottom <= pl.y + 0.01 && p.y + hh >= pl.y && p.x + ww > pl.x && p.x < pl.x + pl.w) {
+        p.y = pl.y - hh; p.vy = 0; p.ground = true; break;
       }
     }
   }
@@ -506,15 +526,16 @@ function breakShield(t) { t.sh = 0; t.sbk = SHIELD_BREAK_FRAMES; t.shi = 0; t.bf
 // frac: 盾なしで当たったときの吹っ飛ばしに対する割合（0 なら横には飛ばず、少し浮いてよろけるだけ）
 function knock(att, t, frac, dir) {
   frac = Math.min(1.3, frac);
-  t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac;
-  t.vy = -9; t.s = Math.round(16 + 16 * Math.min(1, frac)); t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0;
+  const mul = (att.gb > 0 ? GH_ATK_MUL : 1) * dzMul(t);          // 透過中の攻撃は強く、土下座中は飛びにくい
+  t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul;
+  t.vy = -9; t.s = Math.round(16 + 16 * Math.min(1, frac)); t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0; t.dz = 0;
   t.ground = false; t.hf = 12;
 }
 
 // 当たった瞬間: 効果音と演出を出し、全員の動きを一瞬止める（ヒットストップ）。kind: b=盾で受けた / k=盾が割れた / h=当たった
 function impact(kind, att, t, frac, dir) {
   const d = dir === undefined ? att.f : dir;
-  const x = kind === "h" ? ecx(t) : (t.f > 0 ? t.x + PLW + 4 : t.x - 4), y = ecy(t);   // 体の中心 / 盾の位置
+  const x = kind === "h" ? ecx(t) : (t.f > 0 ? t.x + pwOf(t) + 4 : t.x - 4), y = ecy(t);   // 体の中心 / 盾の位置
   emit(kind, x, y, d, frac);
   game.hs = Math.max(game.hs, kind === "b" ? 3 : kind === "k" ? 9 + Math.round(2 * frac) : 6 + Math.round(3 * frac));
 }
@@ -523,31 +544,23 @@ function impact(kind, att, t, frac, dir) {
 function counterHit(kn, att) {
   const dir = Math.sign(ecx(att) - ecx(kn)) || -kn.f;
   att.vx = dir * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(att)) * 2.0;
-  att.vy = -9; att.s = 48; att.a = 0; att.ak = 0; att.cd = 0; att.ks = 0; att.cn = 0; att.fz = 0; att.ground = false; att.hf = 14;
+  att.vy = -9; att.s = 48; att.a = 0; att.ak = 0; att.cd = 0; att.ks = 0; att.cn = 0; att.fz = 0; att.dz = 0; att.ground = false; att.hf = 14;
   kn.cn = 0; kn.cnHit = true;
   emit("cn", ecx(kn), ecy(kn), dir);
   game.hs = Math.max(game.hs, 12);
 }
 
-// 近接攻撃と矢の命中処理。o: { dir 飛んでくる向き, frac 盾なしの強さ, bonus 盾を壊す力への上乗せ, recoil 反動, breaker 盾を一撃で壊す }
+// 近接攻撃と矢の命中処理。o: { dir 飛んでくる向き, frac 盾なしの強さ, recoil 反動, breaker 盾を一撃で壊す（吹っ飛ばさない）}
 function strike(att, t, o) {
   if (untouchable(t)) return;
   if (t.cn > 0 && att.al) { counterHit(t, att); return; }
   const open = !shieldUp(t) || t.f !== -o.dir;               // 盾がない・外れている・背後から → 盾は効かない
   if (open) { knock(att, t, o.frac, o.dir); impact("h", att, t, o.frac, o.dir); return; }
-  if (o.breaker) {                                           // 居合斬り: 盾を一撃で壊して吹っ飛ばす
-    breakShield(t);
-    const fr = 0.6 * o.frac;
-    knock(att, t, fr, o.dir); impact("k", att, t, fr, o.dir); return;
+  if (o.breaker) {                                           // 居合斬り: 盾を壊すだけで、吹っ飛ばしはしない
+    breakShield(t); impact("k", att, t, 0, o.dir); return;
   }
-  const diff = effA(att) - effD(t) + (o.bonus || 0);          // 攻撃 - 防御
-  if (diff >= 3) {                                           // 盾を破る。残り回数が -1, -2, -3 なら盾なしの 1/4, 1/2, 3/4 の力で吹っ飛ばす
-    const frac = (diff - 3) / 4 * o.frac;
-    breakShield(t);
-    knock(att, t, frac, o.dir); impact("k", att, t, frac, o.dir); return;
-  }
-  t.shi = 0;                                                 // 盾で受けた（壊れるまで 3 - 差 回）
-  t.sh -= 1 / (SHIELD_HITS - diff);
+  t.shi = 0;                                                 // 盾で受けた（攻撃・防御に関係なく 3 回で壊れる）
+  t.sh -= 1 / SHIELD_HITS;
   const broke = t.sh <= 0.001;
   if (broke) breakShield(t); else t.bf = 10;
   t.vx += o.dir * 3;
@@ -559,30 +572,31 @@ function resolveHits(list) {
   for (const p of list) {
     const ak = ATKS[p.ak] || ATKS[0];
     if (!p.al || p.a < ak.on || p.a > ak.off) continue;
-    const hx0 = p.f > 0 ? p.x + PLW : p.x - ak.reach, hx1 = hx0 + ak.reach;
-    const hy0 = p.y + 8, hy1 = p.y + PLH - 8;
+    const sz = szOf(p), reach = ak.reach * sz;                       // 巨大化中は射程も 2 倍
+    const hx0 = p.f > 0 ? p.x + PLW * sz : p.x - reach, hx1 = hx0 + reach;
+    const hy0 = p.y + 8 * sz, hy1 = p.y + (PLH - 8) * sz;
     for (const t of list) {
       if (t === p || t.own === p.own || p.hit.includes(t) || !t.al || untouchable(t)) continue;
-      if (hx1 < t.x || hx0 > t.x + PLW || hy1 < t.y || hy0 > t.y + PLH) continue;
+      if (hx1 < t.x || hx0 > t.x + pwOf(t) || hy1 < t.y || hy0 > t.y + phOf(t)) continue;
       p.hit.push(t);
-      strike(p, t, { dir: p.f, frac: ak.dash ? 1.1 : 1, bonus: 0, recoil: true, breaker: !!ak.dash });
+      strike(p, t, { dir: p.f, frac: ak.dash ? 1.1 : 1, recoil: true, breaker: !!ak.dash });
     }
   }
 }
 
-// ボムの爆発: 爆風の中の相手を、盾を無視して吹っ飛ばす（持ち主と分身は無傷）
+// ボムの爆発: 爆風の中の相手を、盾を無視して軽く吹っ飛ばす（持ち主と分身は無傷）
 function explode(b, list) {
   const owner = game.p[b.own], A = owner ? effA(owner) : BASE_STAT;
   emit("x", b.x, b.y, BOMB_BLAST);
   let any = false;
   for (const e of list) {
     if (e.own === b.own || untouchable(e)) continue;
-    const nx = Math.max(e.x, Math.min(b.x, e.x + PLW)), ny = Math.max(e.y, Math.min(b.y, e.y + PLH));
+    const nx = Math.max(e.x, Math.min(b.x, e.x + pwOf(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e)));
     const dist = Math.hypot(b.x - nx, b.y - ny);
     if (dist > BOMB_BLAST) continue;
     const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
-    e.vx = dir * KNOCK_BASE * atkMul(A) * defMul(effD(e)) * 0.95 * (1 - 0.4 * dist / BOMB_BLAST);
-    e.vy = -11; e.s = 34; e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.ground = false; e.hf = 12;
+    e.vx = dir * KNOCK_BASE * atkMul(A) * defMul(effD(e)) * BOMB_KNOCK * dzMul(e) * (1 - 0.4 * dist / BOMB_BLAST);
+    e.vy = -BOMB_LIFT; e.s = 34; e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.ground = false; e.hf = 12;
     any = true;
   }
   game.hs = Math.max(game.hs, any ? 8 : 4);
@@ -602,12 +616,7 @@ function updateProjectiles(list) {
           b.y = pl.y - BOMB_R; b.vy = -b.vy * 0.4; if (Math.abs(b.vy) < 2.5) b.vy = 0; b.vx *= 0.7; break;
         }
       }
-      let boom = b.t >= BOMB_FUSE;
-      if (!boom && b.t >= 6) for (const e of list) {         // 敵に触れたら爆発
-        if (e.own === b.own || untouchable(e)) continue;
-        const nx = Math.max(e.x, Math.min(b.x, e.x + PLW)), ny = Math.max(e.y, Math.min(b.y, e.y + PLH));
-        if (Math.hypot(b.x - nx, b.y - ny) <= BOMB_R) { boom = true; break; }
-      }
+      const boom = b.t >= BOMB_FUSE;                         // 敵に当たっても爆発しない。導火線が尽きたときだけ爆発
       if (boom) { explode(b, list); game.pj.splice(i, 1); continue; }
       if (b.y > H + 150 || b.x < -200 || b.x > W + 200) game.pj.splice(i, 1);
     } else {                                                 // 矢
@@ -617,11 +626,11 @@ function updateProjectiles(list) {
       let hit = null;
       for (const e of list) {
         if (e.own === b.own || untouchable(e)) continue;
-        if (e.x < xb && e.x + PLW > xa && b.y > e.y && b.y < e.y + PLH) { hit = e; break; }
+        if (e.x < xb && e.x + pwOf(e) > xa && b.y > e.y && b.y < e.y + phOf(e)) { hit = e; break; }
       }
       if (hit) {
         const owner = game.p[b.own] || { ch: 0, bz: 0, f: Math.sign(b.vx), al: false };
-        strike(owner, hit, { dir: Math.sign(b.vx), frac: b.pw, bonus: b.br, recoil: false });
+        strike(owner, hit, { dir: Math.sign(b.vx), frac: b.pw, recoil: false });
         game.pj.splice(i, 1); continue;
       }
       if (b.x < -250 || b.x > W + 250 || b.t > 200) game.pj.splice(i, 1);
@@ -639,8 +648,8 @@ function updateFlowers(list) {
     if (f.t < FLOWER_ARM) continue;                          // 咲くまでは無害
     for (const e of list) {
       if (e.own === f.own || untouchable(e) || !e.ground) continue;
-      if (Math.abs(e.y + PLH - f.y) < 3 && e.x < f.x + 9 && e.x + PLW > f.x - 9) {      // 踏んだ人は動けなくなる
-        e.fz = FLOWER_ROOT; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0;
+      if (Math.abs(e.y + phOf(e) - f.y) < 3 && e.x < f.x + 9 && e.x + pwOf(e) > f.x - 9) {      // 踏んだ人は土下座して動けなくなる
+        e.fz = FLOWER_ROOT; e.dz = FLOWER_ROOT; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0;
         emit("fl", f.x, f.y);
         game.hs = Math.max(game.hs, 4);
         game.fl.splice(i, 1);
@@ -708,7 +717,7 @@ const r1 = v => Math.round(v * 10) / 10;
 function serEnt(p) {                                         // 見た目に必要な状態だけを送る
   return { x: r1(p.x), y: r1(p.y), f: p.f, a: p.a, ak: p.ak, s: p.s, al: p.al ? 1 : 0, bf: p.bf, hf: p.hf,
            sh: Math.round(p.sh * 100) / 100, sk: p.sbk, sg: shieldUp(p) ? 1 : 0,
-           gh: p.gh, bz: p.bz, cn: p.cn, fz: p.fz, iv: p.iv, ks: p.ks };
+           gh: p.gh, bz: p.bz, cn: p.cn, fz: p.fz, iv: p.iv, ks: p.ks, gt: p.gt, dz: p.dz };
 }
 function snapshot() {
   const inGame = game.ph !== "lobby";         // キャラは試合が始まるまで他のプレイヤーに送らない
@@ -801,7 +810,7 @@ function readEnt(p, n) {                                     // スナップシ�
   p.tx = n.x; p.ty = n.y; if (jump) { p.x = n.x; p.y = n.y; }
   p.f = n.f; p.a = n.a; p.ak = n.ak | 0; p.s = n.s; p.al = !!n.al; p.bf = n.bf; p.hf = n.hf;
   p.sh = n.sh; p.sbk = n.sk; p.sg = n.sg;
-  p.gh = n.gh | 0; p.bz = n.bz | 0; p.cn = n.cn | 0; p.fz = n.fz | 0; p.iv = n.iv | 0; p.ks = n.ks | 0;
+  p.gh = n.gh | 0; p.bz = n.bz | 0; p.cn = n.cn | 0; p.fz = n.fz | 0; p.iv = n.iv | 0; p.ks = n.ks | 0; p.gt = n.gt | 0; p.dz = n.dz | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
 function applySnapshot(s) {
@@ -902,6 +911,13 @@ function deco(c, id, x, y, f) {
     c.fillStyle = "#cbd5e1"; c.fillRect(x + 2, y - 2, PLW - 4, 12);
     c.fillStyle = "#111827"; c.fillRect(x + (f > 0 ? 18 : 6), y + 4, 16, 3);
     c.fillStyle = "#dc2626"; c.fillRect(x + 16, y - 8, 8, 7);
+  } else if (id === "giant") {
+    c.fillStyle = "#78350f"; c.fillRect(x, y + 38, PLW, 9);
+    c.fillStyle = "#fbbf24"; c.fillRect(x + 16, y + 38, 8, 9);
+    c.fillStyle = "#451a03";
+    c.beginPath(); c.moveTo(x + 6, y); c.lineTo(x + 10, y - 9); c.lineTo(x + 15, y); c.fill();
+    c.beginPath(); c.moveTo(x + 17, y); c.lineTo(x + 21, y - 12); c.lineTo(x + 26, y); c.fill();
+    c.beginPath(); c.moveTo(x + 28, y); c.lineTo(x + 32, y - 9); c.lineTo(x + 36, y); c.fill();
   } else if (id === "ghost") {
     c.fillStyle = "#f8fafc"; c.beginPath(); c.arc(x + 20, y + 36, 8, Math.PI, 0);
     c.lineTo(x + 28, y + 49); c.lineTo(x + 24, y + 45); c.lineTo(x + 20, y + 49); c.lineTo(x + 16, y + 45); c.lineTo(x + 12, y + 49); c.closePath(); c.fill();
@@ -1223,13 +1239,15 @@ function fxEvent(e) {
   } else if (k === "sk") {                         // スキルの発動
     const id = (CHARS[e[3]] || CHARS[0]).id;
     if (id === "bomber") Sfx.throwBomb();
-    else if (id === "samurai") { Sfx.slash(); shake(3); }
+    else if (id === "samurai") { Sfx.charge(); burst(x, y, 6, { v0: 1, v1: 3, l0: 10, l1: 18, s0: 2, s1: 4, colors: ["#fecaca", "#ffffff"] }); }
+    else if (id === "giant") { Sfx.rumble(); shake(8); rings.push({ x, y, t: 0, max: 18, c: "#fbbf24", r0: 14, sp: 6 }); burst(x, y + 50, 18, { dir: -Math.PI / 2, spread: 3, v0: 2, v1: 6, l0: 14, l1: 26, s0: 4, s1: 8, g: 0.12, colors: ["#fbbf24", "#a16207", "#e2e8f0"] }); }
     else if (id === "okure") { Sfx.bloom(); burst(x, y, 8, { dir: -Math.PI / 2, spread: 3, v0: 1, v1: 3, l0: 14, l1: 24, s0: 3, s1: 5, g: 0.05, colors: ["#f9a8d4", "#fbcfe8", "#facc15"] }); }
     else if (id === "copern") { Sfx.summon(); burst(x, y, 14, { v0: 1, v1: 4, l0: 16, l1: 28, s0: 3, s1: 5, colors: ["#f472b6", "#fbcfe8", "#ffffff"] }); }
     else if (id === "berserker") { Sfx.roar(); shake(6); rings.push({ x, y, t: 0, max: 16, c: "#ef4444" }); burst(x, y, 16, { v0: 2, v1: 6, l0: 14, l1: 26, s0: 3, s1: 6, g: -0.05, colors: ["#ef4444", "#f97316", "#fde047"] }); }
     else if (id === "knight") { Sfx.guardUp(); rings.push({ x, y, t: 0, max: 12, c: "#facc15" }); }
     else if (id === "ghost") { Sfx.ghost(); burst(x, y, 10, { v0: 0.5, v1: 2.5, l0: 18, l1: 30, s0: 4, s1: 7, g: -0.04, colors: ["#e2e8f0", "#f8fafc", "#bae6fd"] }); }
   } else if (k === "sc") Sfx.charge();
+  else if (k === "sl") { Sfx.slash(); shake(3); }      // 居合斬りの踏み込み
   else if (k === "ar") {                           // 矢を放った
     Sfx.arrow(f);
     burst(x, y, 5, { dir: d > 0 ? 0 : Math.PI, spread: 0.8, v0: 2, v1: 5, l0: 8, l1: 14, s0: 2, s1: 4, colors: ["#fef3c7", "#ffffff"] });
@@ -1325,14 +1343,20 @@ function drawPlayer(p, i, me, now) {
   if (clone) alpha *= 0.88;
   cx.save();
   cx.globalAlpha = alpha;
+  const sz = p.gt > 0 ? GIANT_SCALE : 1;                          // 巨大化中は 2 倍（左上の座標を基準に拡大。足もとの中心はホストが保っている）
+  if (sz !== 1) { cx.translate(p.x, p.y); cx.scale(sz, sz); cx.translate(-p.x, -p.y); }
   // 狂化のオーラ
   if (p.bz > 0 && p.al) {
     const wob = Math.sin(now / 60) * 1.5;
     cx.fillStyle = "rgba(239,68,68,0.28)"; cx.fillRect(p.x - 5 + wob, p.y - 5, PLW + 10, PLH + 10);
     cx.fillStyle = "rgba(249,115,22,0.18)"; cx.fillRect(p.x - 9, p.y - 10, PLW + 18, PLH + 16);
   }
-  // 本体
+  // 本体（花で動けない間は土下座の形につぶれる）
+  const dg = p.dz > 0 && p.al;
+  if (dg) { cx.save(); cx.translate(0, p.y + PLH); cx.scale(1, 0.55); cx.translate(0, -(p.y + PLH)); }
   drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2);
+  if (dg) cx.restore();
+  if (p.gt > 0 && p.al) { cx.strokeStyle = "rgba(251,191,36,0.8)"; cx.lineWidth = 2; cx.strokeRect(p.x - 1, p.y - 1, PLW + 2, PLH + 2); }
   // 盾 / 攻撃
   const sx = p.f > 0 ? p.x + PLW + 2 : p.x - 10;
   if (chd.noShield) { /* 盾なし */ }
@@ -1354,6 +1378,10 @@ function drawPlayer(p, i, me, now) {
     if (p.a >= ak.on && p.a <= ak.off) {
       cx.fillStyle = p.ak === 1 ? "#fecaca" : "#fde68a";
       cx.fillRect(p.f > 0 ? p.x + PLW : p.x - ak.reach, p.y + (p.ak === 1 ? 14 : 18), ak.reach, p.ak === 1 ? 30 : 22);
+    } else if (p.ak === 1 && p.a < ak.dashFrom) {
+      const k = p.a / ak.dashFrom;                    // 居合斬りのため: 赤い枠が締まっていく
+      cx.strokeStyle = "rgba(248,113,113," + (0.4 + 0.5 * k).toFixed(2) + ")"; cx.lineWidth = 3;
+      cx.strokeRect(p.x - 8 + 6 * k, p.y - 8 + 6 * k, PLW + 16 - 12 * k, PLH + 16 - 12 * k);
     } else {
       cx.fillStyle = "rgba(253,230,138,0.5)";       // 予備動作・戻り（盾なし＝隙）
       cx.fillRect(p.f > 0 ? p.x + PLW : p.x - 14, p.y + 22, 14, 14);
@@ -1370,7 +1398,7 @@ function drawPlayer(p, i, me, now) {
     cx.strokeRect(p.x - 4, p.y - 4, PLW + 8, PLH + 8);
   }
   // 花で動けない（つるが巻きつく）
-  if (p.fz > 20 && p.al) {
+  if (p.dz > 0 && p.al) {
     cx.strokeStyle = "#16a34a"; cx.lineWidth = 3;
     cx.beginPath(); cx.moveTo(p.x - 2, p.y + 52); cx.lineTo(p.x + PLW + 2, p.y + 38); cx.moveTo(p.x - 2, p.y + 32); cx.lineTo(p.x + PLW + 2, p.y + 46);
     cx.moveTo(p.x + 6, p.y + PLH); cx.lineTo(p.x + 10, p.y + 22); cx.stroke();
@@ -1390,11 +1418,11 @@ function drawPlayer(p, i, me, now) {
   if (p.al) {
     cx.fillStyle = col; cx.font = "bold 16px sans-serif"; cx.textAlign = "center";
     const label = clone ? "分身" : nameOf(i) + (p.lv > 0 ? " ♥" : "") + (me ? " ▼" : "");
-    cx.fillText(label, p.x + PLW / 2, p.y - 10);
+    cx.fillText(label, p.x + PLW * sz / 2, p.y - 10);
   }
 }
 function drawBomb(b, now) {
-  const blink = b.t > 45 && Math.floor(b.t / 5) % 2 === 0;
+  const blink = b.t > BOMB_FUSE - 30 && Math.floor(b.t / 5) % 2 === 0;
   cx.fillStyle = blink ? "#ef4444" : "#1f2937"; cx.beginPath(); cx.arc(b.x, b.y, BOMB_R, 0, 6.2832); cx.fill();
   cx.fillStyle = "rgba(255,255,255,0.35)"; cx.beginPath(); cx.arc(b.x - 3, b.y - 3, 3, 0, 6.2832); cx.fill();
   cx.strokeStyle = "#a16207"; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(b.x + 2, b.y - BOMB_R + 1); cx.lineTo(b.x + 6, b.y - BOMB_R - 5); cx.stroke();
@@ -1492,7 +1520,8 @@ function render() {
     h.push(p.x, p.y); if (h.length > 14) h.splice(0, 2);
     if (p.al && p.s > 0) {
       cx.save(); cx.fillStyle = p.isClone ? CLONE_COLOR : COLORS[i];
-      for (let k = 0; k < h.length - 2; k += 2) { cx.globalAlpha = 0.05 + 0.2 * (k / h.length); cx.fillRect(h[k], h[k + 1], PLW, PLH); }
+      const tz = p.gt > 0 ? GIANT_SCALE : 1;
+      for (let k = 0; k < h.length - 2; k += 2) { cx.globalAlpha = 0.05 + 0.2 * (k / h.length); cx.fillRect(h[k], h[k + 1], PLW * tz, PLH * tz); }
       cx.restore();
     }
     drawPlayer(p, i, me, now);
