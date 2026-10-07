@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>シールドファイト</title>
+<style>
+  html,body{margin:0;height:100%;background:#111827;color:#e5e7eb;font-family:system-ui,"Yu Gothic",sans-serif;overflow:hidden}
+  #wrap{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+  #box{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9}
+  canvas{width:100%;height:100%;display:block;background:#1f2937;border-radius:8px}
+  #ui{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .panel{pointer-events:auto;background:rgba(17,24,39,.92);border:1px solid #374151;border-radius:12px;padding:20px 28px;text-align:center;max-width:80%}
+  .panel h1{margin:0 0 8px;font-size:28px}
+  .panel p{margin:6px 0;color:#9ca3af;font-size:14px}
+  button{font:inherit;background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:10px 20px;margin:6px 4px;cursor:pointer}
+  button:disabled{background:#4b5563;cursor:default}
+  input{font:inherit;width:100%;box-sizing:border-box;padding:8px;border-radius:6px;border:1px solid #4b5563;background:#111827;color:#e5e7eb}
+  .slot{display:inline-block;width:20px;height:20px;border-radius:4px;margin:2px;vertical-align:middle}
+  #touch{position:absolute;left:0;right:0;bottom:8px;display:none;justify-content:space-between;padding:0 12px;pointer-events:none}
+  #touch div{pointer-events:auto}
+  .tb{display:inline-block;width:56px;height:56px;line-height:56px;text-align:center;background:rgba(255,255,255,.18);border-radius:12px;margin:3px;font-size:22px;user-select:none;touch-action:none}
+  @media (pointer:coarse){#touch{display:flex}}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="box">
+  <canvas id="cv" width="960" height="540"></canvas>
+  <div id="ui"></div>
+  <div id="touch">
+    <div><span class="tb" data-k="l">◀</span><span class="tb" data-k="u">▲</span><span class="tb" data-k="r">▶</span><span class="tb" data-k="d">▼</span></div>
+    <div><span class="tb" data-k="a">⚔</span></div>
+  </div>
+</div></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+"use strict";
+// ---------- 定数 ----------
+const W = 960, H = 540;
+const PX = 190, PW = 580, PY = 400;          // ステージ
+const PLW = 40, PLH = 60;                    // プレイヤー
+const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308"];
+const MAX_PLAYERS = 4, WIN_ROUNDS = 3;
+const ATK_TOTAL = 26, ATK_ON = 7, ATK_OFF = 13, ATK_COOLDOWN = 10;
+const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16 };
+
+// ---------- 状態 ----------
+let role = null;         // "host" | "client"
+let myId = -1;           // 自分のスロット番号
+let peer = null, conns = [];   // host: conns[slot]
+let hostConn = null;
+let roomCode = "";
+let net = "idle";        // idle | connecting | ready | error
+let netMsg = "";
+
+// ゲーム状態（host は計算結果、client は受信結果）
+const game = { ph: "lobby", tm: 0, win: -1, p: [null, null, null, null] };
+const inputs = [0, 0, 0, 0];
+let myKeys = 0, sentKeys = -1;
+
+function newPlayer(slot) {
+  return { x: 0, y: 0, vx: 0, vy: 0, f: 1, a: 0, cd: 0, s: 0, al: false, w: 0, c: true,
+           bf: 0, hf: 0, ground: false, hit: [] };
+}
+
+// ---------- ホスト側シミュレーション ----------
+function spawn(p, slot, n) {
+  const xs = n <= 2 ? [PX + 150, PX + PW - 150 - PLW] : [PX + 70, PX + 200, PX + PW - 200 - PLW, PX + PW - 70 - PLW];
+  p.x = xs[Math.min(slot, xs.length - 1)];
+  p.y = PY - PLH; p.vx = p.vy = 0; p.a = 0; p.cd = 0; p.s = 0; p.bf = p.hf = 0; p.ground = true;
+  p.f = (p.x + PLW / 2 < PX + PW / 2) ? 1 : -1; p.hit = [];
+}
+
+function connectedSlots() {
+  const r = [];
+  for (let i = 0; i < MAX_PLAYERS; i++) if (game.p[i] && game.p[i].c) r.push(i);
+  return r;
+}
+
+function startRound() {
+  const slots = connectedSlots();
+  const n = slots.length;
+  slots.forEach((s, idx) => { const p = game.p[s]; spawn(p, idx, n); p.al = true; });
+  game.ph = "count"; game.tm = 180; game.win = -1;
+}
+
+function hostStartMatch() {
+  if (role !== "host" || connectedSlots().length < 2) return;
+  connectedSlots().forEach(s => game.p[s].w = 0);
+  startRound();
+}
+
+function physics(p, inp, frozen) {
+  if (!p.al) return;
+  if (p.hf > 0) p.hf--;
+  if (p.bf > 0) p.bf--;
+  if (frozen) return;
+  const l = inp & KEY.l, r = inp & KEY.r, u = inp & KEY.u, d = inp & KEY.d, a = inp & KEY.a;
+  if (p.s > 0) {
+    p.s--;
+    p.vx *= p.ground ? 0.92 : 0.985;
+  } else {
+    const dir = (r ? 1 : 0) - (l ? 1 : 0);
+    const sp = p.a > 0 ? 2.2 : 5;
+    if (dir && p.a === 0) p.f = dir;
+    const acc = p.ground ? 0.4 : 0.12;
+    p.vx += (dir * sp - p.vx) * acc;
+    if (u && p.ground) { p.vy = -13; p.ground = false; }
+    if (a && p.a === 0 && p.cd === 0) { p.a = 1; p.hit = []; }
+  }
+  if (p.a > 0) { p.a++; if (p.a > ATK_TOTAL) { p.a = 0; p.cd = ATK_COOLDOWN; } }
+  if (p.cd > 0) p.cd--;
+  p.vy += 0.6;
+  if (d && !p.ground && p.s === 0) p.vy += 0.4;
+  if (p.vy > 18) p.vy = 18;
+  const prevBottom = p.y + PLH;
+  p.x += p.vx; p.y += p.vy;
+  p.ground = false;
+  if (p.vy >= 0 && prevBottom <= PY + 0.01 && p.y + PLH >= PY && p.x + PLW > PX && p.x < PX + PW) {
+    p.y = PY - PLH; p.vy = 0; p.ground = true;
+  }
+}
+
+function shielded(t, attackerFacing) {
+  return t.a === 0 && t.s === 0 && t.f === -attackerFacing;
+}
+
+function resolveHits(ids) {
+  for (const i of ids) {
+    const p = game.p[i];
+    if (!p.al || p.a < ATK_ON || p.a > ATK_OFF) continue;
+    const hx0 = p.f > 0 ? p.x + PLW : p.x - 46, hx1 = hx0 + 46;
+    const hy0 = p.y + 8, hy1 = p.y + PLH - 8;
+    for (const j of ids) {
+      if (j === i || p.hit.includes(j)) continue;
+      const t = game.p[j];
+      if (!t.al) continue;
+      if (hx1 < t.x || hx0 > t.x + PLW || hy1 < t.y || hy0 > t.y + PLH) continue;
+      p.hit.push(j);
+      if (shielded(t, p.f)) {            // ガードされた
+        t.bf = 10; t.vx += p.f * 3;
+        p.vx = -p.f * 5; p.bf = 10;
+      } else {                           // 隙を突いた → 吹っ飛ばし
+        t.vx = p.f * 18; t.vy = -9; t.s = 32; t.a = 0; t.cd = 0;
+        t.ground = false; t.hf = 12;
+      }
+    }
+  }
+}
+
+function hostTick() {
+  const slots = connectedSlots();
+  if (game.ph === "lobby") {
+    for (const i of slots) {
+      const p = game.p[i];
+      physics(p, inputs[i], false);
+      if (p.y > H + 100 || p.x < -150 || p.x > W + 150) spawn(p, i, slots.length);
+      p.al = true;
+    }
+    resolveHits(slots);
+  } else if (game.ph === "count") {
+    game.tm--;
+    if (game.tm <= 0) game.ph = "play";
+  } else if (game.ph === "play") {
+    for (const i of slots) physics(game.p[i], inputs[i], false);
+    resolveHits(slots.filter(i => game.p[i].al));
+    for (const i of slots) {
+      const p = game.p[i];
+      if (p.al && (p.y > H + 120 || p.x < -150 || p.x > W + 150)) p.al = false;
+    }
+    const alive = slots.filter(i => game.p[i].al);
+    if (alive.length <= 1) {
+      game.win = alive.length === 1 ? alive[0] : -1;
+      if (game.win >= 0) game.p[game.win].w++;
+      game.ph = (game.win >= 0 && game.p[game.win].w >= WIN_ROUNDS) ? "match" : "round";
+      game.tm = game.ph === "match" ? 360 : 120;
+    }
+  } else if (game.ph === "round") {
+    game.tm--;
+    if (game.tm <= 0) {
+      if (connectedSlots().length < 2) { game.ph = "lobby"; return; }
+      startRound();
+    }
+  } else if (game.ph === "match") {
+    game.tm--;
+    if (game.tm <= 0) { connectedSlots().forEach(s => { game.p[s].w = 0; spawn(game.p[s], s, connectedSlots().length); game.p[s].al = true; }); game.ph = "lobby"; renderUI(); }
+  }
+}
+
+const r1 = v => Math.round(v * 10) / 10;
+function snapshot() {
+  return { t: "s", ph: game.ph, tm: game.tm, win: game.win,
+    p: game.p.map(p => p ? { x: r1(p.x), y: r1(p.y), f: p.f, a: p.a, s: p.s, al: p.al ? 1 : 0, w: p.w, c: p.c ? 1 : 0, bf: p.bf, hf: p.hf } : null) };
+}
+
+let tickCount = 0, lastPh = "";
+function hostLoop() {
+  inputs[0] = myKeys;
+  hostTick();
+  if (++tickCount % 2 === 0) {
+    const snap = snapshot();
+    for (const c of conns) if (c && c.open) c.send(snap);
+  }
+  if (game.ph !== lastPh) { lastPh = game.ph; renderUI(); }
+}
+
+// ---------- ネットワーク ----------
+function randCode() {
+  let s = ""; for (let i = 0; i < 4; i++) s += Math.floor(Math.random() * 10);
+  return s;
+}
+const PREFIX = "shieldfight-room-";
+
+function startHost() {
+  role = "host"; net = "connecting"; netMsg = ""; renderUI();
+  roomCode = randCode();
+  peer = new Peer(PREFIX + roomCode);
+  peer.on("open", () => {
+    net = "ready"; myId = 0;
+    game.p[0] = newPlayer(0); spawn(game.p[0], 0, 1); game.p[0].al = true;
+    setInterval(hostLoop, 1000 / 60);
+    renderUI();
+  });
+  peer.on("error", e => {
+    if (e.type === "unavailable-id" && net === "connecting") { peer.destroy(); startHost(); return; }
+    net = "error"; netMsg = "接続エラー: " + e.type; renderUI();
+  });
+  peer.on("connection", conn => {
+    conn.on("open", () => {
+      let slot = -1;
+      for (let i = 1; i < MAX_PLAYERS; i++) if (!game.p[i] || !game.p[i].c) { slot = i; break; }
+      if (slot < 0) { conn.send({ t: "full" }); setTimeout(() => conn.close(), 300); return; }
+      conns[slot] = conn;
+      const p = newPlayer(slot); game.p[slot] = p;
+      const n = connectedSlots().length;
+      spawn(p, slot, n);
+      p.al = game.ph === "lobby";            // 試合中の参加は次のラウンドから
+      inputs[slot] = 0;
+      conn.send({ t: "hello", id: slot });
+      renderUI();
+      conn.on("data", d => { if (d && d.t === "in") inputs[slot] = d.k | 0; });
+      conn.on("close", () => { if (conns[slot] === conn) { game.p[slot].c = false; game.p[slot].al = false; conns[slot] = null; renderUI(); } });
+    });
+  });
+}
+
+function startClient(code) {
+  role = "client"; roomCode = code; net = "connecting"; renderUI();
+  peer = new Peer();
+  peer.on("open", () => {
+    hostConn = peer.connect(PREFIX + code, { reliable: true });
+    hostConn.on("data", d => {
+      if (d.t === "hello") { myId = d.id; net = "ready"; renderUI(); }
+      else if (d.t === "full") { net = "error"; netMsg = "この部屋は満員です（最大4人）"; renderUI(); }
+      else if (d.t === "s") applySnapshot(d);
+    });
+    hostConn.on("close", () => { net = "error"; netMsg = "ホストとの接続が切れました"; renderUI(); });
+    setTimeout(() => { if (net === "connecting") { net = "error"; netMsg = "部屋が見つかりません（URLを確認してください）"; renderUI(); } }, 10000);
+  });
+  peer.on("error", e => { net = "error"; netMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（ホストが閉じたか、URLが違います）" : "接続エラー: " + e.type; renderUI(); });
+}
+
+function applySnapshot(s) {
+  const phChanged = game.ph !== s.ph;
+  game.ph = s.ph; game.tm = s.tm; game.win = s.win;
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const n = s.p[i];
+    if (!n) { game.p[i] = null; continue; }
+    let p = game.p[i];
+    if (!p) { p = game.p[i] = newPlayer(i); p.x = n.x; p.y = n.y; }
+    const jump = Math.abs(p.x - n.x) > 120 || Math.abs(p.y - n.y) > 120;
+    p.tx = n.x; p.ty = n.y; if (jump) { p.x = n.x; p.y = n.y; }
+    p.f = n.f; p.a = n.a; p.s = n.s; p.al = !!n.al; p.w = n.w; p.c = !!n.c; p.bf = n.bf; p.hf = n.hf;
+  }
+  if (phChanged) renderUI();
+}
+
+// ---------- 入力 ----------
+const keyMap = { ArrowLeft: "l", KeyA: "l", ArrowRight: "r", KeyD: "r", ArrowUp: "u", KeyW: "u", ArrowDown: "d", KeyS: "d", Space: "a", KeyZ: "a", KeyJ: "a" };
+const down = new Set();
+function recalcKeys() {
+  let k = 0; for (const c of down) k |= KEY[c];
+  myKeys = k;
+  pushKeys();
+}
+function pushKeys() {
+  if (role === "client" && hostConn && hostConn.open && sentKeys !== myKeys) {
+    hostConn.send({ t: "in", k: myKeys }); sentKeys = myKeys;
+  }
+}
+addEventListener("keydown", e => {
+  const k = keyMap[e.code]; if (!k) return;
+  if (e.target.tagName === "INPUT") return;
+  e.preventDefault(); down.add(k); recalcKeys();
+});
+addEventListener("keyup", e => { const k = keyMap[e.code]; if (!k) return; down.delete(k); recalcKeys(); });
+addEventListener("blur", () => { down.clear(); recalcKeys(); });
+document.querySelectorAll(".tb").forEach(el => {
+  const k = el.dataset.k;
+  el.addEventListener("pointerdown", e => { e.preventDefault(); down.add(k); recalcKeys(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, () => { down.delete(k); recalcKeys(); }));
+});
+setInterval(() => { if (role === "client") { sentKeys = -1; pushKeys(); } }, 500);   // 取りこぼし対策
+
+// ---------- UI（DOM） ----------
+const ui = document.getElementById("ui");
+function shareUrl() {
+  const u = new URL(location.href); u.search = "?room=" + roomCode; u.hash = "";
+  return u.toString();
+}
+function renderUI() {
+  if (role === null) {
+    ui.innerHTML = `<div class="panel"><h1>シールドファイト</h1>
+      <p>盾が外れた隙を突いて、相手をステージから落とせ！（最大4人 / 3本先取）</p>
+      <button id="bHost">部屋を作る（ホスト）</button>
+      <p>— または —</p>
+      <input id="code" inputmode="numeric" maxlength="4" placeholder="部屋番号（4桁）" style="width:200px;text-align:center;font-size:20px">
+      <button id="bJoin">参加する</button>
+      <p>操作: WASD または矢印キーで移動（↑/W ジャンプ）/ Space 攻撃</p></div>`;
+    document.getElementById("bHost").onclick = startHost;
+    const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d{4}$/.test(c)) startClient(c); else document.getElementById("code").style.borderColor = "#ef4444"; };
+    document.getElementById("bJoin").onclick = join;
+    document.getElementById("code").onkeydown = e => { if (e.key === "Enter") join(); };
+    return;
+  }
+  if (net === "connecting") { ui.innerHTML = `<div class="panel"><h1>接続中…</h1></div>`; return; }
+  if (net === "error") { ui.innerHTML = `<div class="panel"><h1>エラー</h1><p>${netMsg}</p><button onclick="location.href=location.pathname">トップへ</button></div>`; return; }
+  if (game.ph === "lobby") {
+    const slots = game.p.map((p, i) => `<span class="slot" style="background:${p && p.c ? COLORS[i] : "#374151"}"></span>`).join("");
+    const n = game.p.filter(p => p && p.c).length;
+    if (role === "host") {
+      ui.innerHTML = `<div class="panel" style="transform:translateY(-35%)"><h1>ロビー</h1>
+        <p>部屋番号</p>
+        <div style="font-size:48px;font-weight:bold;letter-spacing:12px">${roomCode}</div>
+        <p>この番号を友達に伝えるか、下の URL を送ってください</p>
+        <input id="url" readonly value="${shareUrl()}">
+        <button id="bCopy">URLをコピー</button>
+        <p>参加者 ${n}/4 ${slots}</p>
+        <button id="bStart" ${n < 2 ? "disabled" : ""}>ゲーム開始</button>
+        <p>ホストのタブは開いたままにしてください</p></div>`;
+      document.getElementById("bCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(shareUrl()); };
+      document.getElementById("bStart").onclick = hostStartMatch;
+      document.getElementById("url").onclick = e => e.target.select();
+    } else {
+      ui.innerHTML = `<div class="panel" style="transform:translateY(-35%)"><h1>ロビー</h1><p>参加者 ${n}/4 ${slots}</p><p>ホストの開始を待っています…</p></div>`;
+    }
+  } else ui.innerHTML = "";
+}
+
+// URL に room があれば自動参加
+const q = new URLSearchParams(location.search).get("room");
+if (q) startClient(q.trim()); else renderUI();
+
+// ---------- 描画 ----------
+const cv = document.getElementById("cv"), cx = cv.getContext("2d");
+function drawPlayer(p, i, me) {
+  const col = COLORS[i];
+  cx.save();
+  cx.globalAlpha = p.al ? 1 : 0.25;
+  // 本体
+  const flash = p.hf > 0 && p.hf % 4 < 2;
+  cx.fillStyle = flash ? "#ffffff" : col;
+  cx.fillRect(p.x, p.y, PLW, PLH);
+  // 目（向き）
+  cx.fillStyle = "#111827";
+  cx.fillRect(p.x + (p.f > 0 ? 24 : 8), p.y + 12, 8, 8);
+  // 盾 / 攻撃
+  const shield = p.a === 0 && p.s === 0;
+  if (shield) {
+    cx.fillStyle = p.bf > 0 ? "#ffffff" : "rgba(226,232,240,0.9)";
+    cx.fillRect(p.f > 0 ? p.x + PLW + 2 : p.x - 10, p.y + 4, 8, PLH - 8);
+  } else if (p.a >= ATK_ON && p.a <= ATK_OFF) {
+    cx.fillStyle = "#fde68a";
+    cx.fillRect(p.f > 0 ? p.x + PLW : p.x - 46, p.y + 18, 46, 22);
+  } else if (p.a > 0) {
+    cx.fillStyle = "rgba(253,230,138,0.5)";       // 予備動作・戻り（盾なし＝隙）
+    cx.fillRect(p.f > 0 ? p.x + PLW : p.x - 14, p.y + 22, 14, 14);
+  }
+  cx.restore();
+  if (p.al) {
+    cx.fillStyle = col; cx.font = "bold 14px sans-serif"; cx.textAlign = "center";
+    cx.fillText(me ? "YOU" : "P" + (i + 1), p.x + PLW / 2, p.y - 10);
+  }
+}
+function banner(t, sub) {
+  cx.fillStyle = "rgba(0,0,0,0.45)"; cx.fillRect(0, 190, W, 130);
+  cx.fillStyle = "#fff"; cx.textAlign = "center"; cx.font = "bold 56px sans-serif"; cx.fillText(t, W / 2, 255);
+  if (sub) { cx.font = "22px sans-serif"; cx.fillStyle = "#d1d5db"; cx.fillText(sub, W / 2, 295); }
+}
+function draw() {
+  cx.clearRect(0, 0, W, H);
+  // 背景
+  const g = cx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
+  cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+  // ステージ
+  cx.fillStyle = "#64748b"; cx.fillRect(PX, PY, PW, 22);
+  cx.fillStyle = "#475569"; cx.fillRect(PX + 20, PY + 22, PW - 40, 30);
+  // プレイヤー
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const p = game.p[i]; if (!p || !p.c) continue;
+    if (role === "client" && p.tx !== undefined) { p.x += (p.tx - p.x) * 0.6; p.y += (p.ty - p.y) * 0.6; }
+    drawPlayer(p, i, i === myId);
+  }
+  // HUD: 勝ち数
+  cx.textAlign = "left"; cx.font = "bold 18px sans-serif";
+  let hx = 20;
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const p = game.p[i]; if (!p || !p.c) continue;
+    cx.fillStyle = COLORS[i]; cx.fillText("P" + (i + 1) + (i === myId ? "(YOU)" : ""), hx, 32);
+    for (let k = 0; k < WIN_ROUNDS; k++) {
+      cx.beginPath(); cx.arc(hx + 4 + k * 20, 48, 7, 0, 7);
+      if (k < p.w) cx.fill(); else { cx.strokeStyle = COLORS[i]; cx.lineWidth = 2; cx.stroke(); }
+    }
+    hx += 130;
+  }
+  // メッセージ
+  if (game.ph === "count") banner(String(Math.ceil(game.tm / 60)), "ラウンド開始！");
+  else if (game.ph === "round") banner(game.win >= 0 ? "P" + (game.win + 1) + " の勝ち！" : "引き分け");
+  else if (game.ph === "match") banner("P" + (game.win + 1) + " 優勝！", "まもなくロビーに戻ります");
+  else if (game.ph === "play" && myId >= 0 && game.p[myId] && !game.p[myId].al) {
+    cx.fillStyle = "rgba(255,255,255,.6)"; cx.font = "20px sans-serif"; cx.textAlign = "center";
+    cx.fillText("観戦中", W / 2, 80);
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>
