@@ -1,5 +1,4 @@
 <!doctype html>
-
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -20,11 +19,14 @@
   .slot{display:inline-block;width:20px;height:20px;border-radius:4px;margin:2px;vertical-align:middle}
   #touch{display:none;justify-content:space-between;align-items:flex-end;box-sizing:border-box;padding:0 16px;pointer-events:none}
   #touch>div{pointer-events:auto}
-  #dpad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,64px);gap:4px}
-  .tb{display:flex;align-items:center;justify-content:center;width:64px;height:64px;background:rgba(255,255,255,.18);border-radius:14px;font-size:24px;user-select:none;-webkit-user-select:none;touch-action:none}
+  #dpad{display:flex;gap:12px}
+  .tb{display:flex;flex-direction:column;align-items:center;justify-content:center;width:88px;height:88px;background:rgba(255,255,255,.18);border-radius:18px;font-size:34px;user-select:none;-webkit-user-select:none;touch-action:none}
   .tb:active{background:rgba(255,255,255,.35)}
-  #dpad .u{grid-column:2;grid-row:1} #dpad .l{grid-column:1;grid-row:2} #dpad .r{grid-column:3;grid-row:2}
-  .tb.atk{width:96px;height:96px;border-radius:48px;font-size:36px;background:rgba(239,68,68,.35)}
+  #rbtns{position:relative;width:196px;height:196px}
+  #rbtns .tb{position:absolute;border-radius:50%}
+  .tb.jump{width:100px;height:100px;right:0;bottom:0;background:rgba(59,130,246,.4);font-size:11px;font-weight:bold;gap:2px}
+  .tb.jump svg{width:44px;height:44px}
+  .tb.atk{width:86px;height:86px;left:0;top:0;font-size:36px;background:rgba(239,68,68,.4)}
   @media (pointer:coarse){#touch{display:flex}}
   /* スマホ縦持ち: 画面を上、ボタンを下に分離して重ならないようにする */
   @media (pointer:coarse) and (orientation:portrait){
@@ -40,9 +42,12 @@
   /* スマホ横持ち: 画面の上に重ねて下端に配置 */
   @media (pointer:coarse) and (orientation:landscape){
     #touch{position:absolute;left:0;right:0;bottom:6px}
-    #dpad{grid-template-columns:repeat(3,48px);grid-template-rows:repeat(2,48px);gap:3px}
-    .tb{width:48px;height:48px;font-size:18px}
-    .tb.atk{width:76px;height:76px}
+    #dpad{gap:8px}
+    .tb{width:64px;height:64px;font-size:24px}
+    #rbtns{width:146px;height:146px}
+    .tb.jump{width:76px;height:76px}
+    .tb.jump svg{width:32px;height:32px}
+    .tb.atk{width:64px;height:64px;font-size:26px}
   }
 </style>
 </head>
@@ -53,11 +58,16 @@
 </div>
   <div id="touch">
     <div id="dpad">
-      <span class="tb u" data-k="u">▲</span>
       <span class="tb l" data-k="l">◀</span>
       <span class="tb r" data-k="r">▶</span>
     </div>
-    <div><span class="tb atk" data-k="a">⚔</span></div>
+    <div id="rbtns">
+      <span class="tb atk" data-k="a">⚔</span>
+      <span class="tb jump" data-k="u">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l7-7 7 7"/><path d="M5 19l7-7 7 7"/></svg>
+        JUMP
+      </span>
+    </div>
   </div>
 </div>
 
@@ -66,7 +76,7 @@
 "use strict";
 // ---------- 定数 ----------
 const W = 960, H = 540;
-const PX = 132, PW = 696, PY = 400;          // ステージ
+const PX = 190, PW = 580, PY = 400;          // ステージ
 const PLW = 40, PLH = 60;                    // プレイヤー
 const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308"];
 const MAX_PLAYERS = 4, WIN_ROUNDS = 3;
@@ -170,7 +180,7 @@ function resolveHits(ids) {
         t.bf = 10; t.vx += p.f * 3;
         p.vx = -p.f * 5; p.bf = 10;
       } else {                           // 隙を突いた → 吹っ飛ばし
-        t.vx = p.f * 13.5; t.vy = -9; t.s = 32; t.a = 0; t.cd = 0;
+        t.vx = p.f * 11.3; t.vy = -9; t.s = 32; t.a = 0; t.cd = 0;
         t.ground = false; t.hf = 12;
       }
     }
