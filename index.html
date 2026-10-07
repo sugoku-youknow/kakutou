@@ -127,8 +127,11 @@ const STATS = [
 const KNOCK_BASE = 11.3, MOVE_BASE = 6, JUMP_BASE = 15.9;   // 性能 2 のときの値
 const atkMul = a => 1 + 0.15 * (a - BASE_STAT);    // 与える吹っ飛ばし力
 const defMul = d => 1 - 0.10 * (d - BASE_STAT);    // 受ける吹っ飛ばし力（小さいほど飛ばされにくい）
-const moveMul = s => 1 + 0.10 * (s - BASE_STAT);   // 移動速度
-const jumpMul = s => 1 + 0.045 * (s - BASE_STAT);  // ジャンプの初速（高さは約 2 乗で効く）
+// スピード: 2 を基準（移動 6 / ジャンプ初速 15.9）にして、上げるほど急に速く・高くなる
+//   移動速度    : 6 で基準の 2.8 倍（最高 16.8）。2 未満は 1 ポイントごとに 10% 減
+//   ジャンプ初速: 6 で基準の 1.4 倍（最高到達点は約 2 倍）。2 未満は 1 ポイントごとに 4.5% 減
+const moveMul = s => s >= BASE_STAT ? 1 + 1.8 * (s - BASE_STAT) / (MAX_STAT - BASE_STAT) : 1 + 0.10 * (s - BASE_STAT);
+const jumpMul = s => s >= BASE_STAT ? 1 + 0.10 * (s - BASE_STAT) : 1 + 0.045 * (s - BASE_STAT);
 const SHIELD_HITS = 3;               // 攻撃 = 防御のとき、盾が壊れるまでの回数
 const SHIELD_BREAK_FRAMES = 300;     // 壊れた盾が元に戻るまで（60fps で 5 秒）
 const SHIELD_IDLE_FRAMES = 180;      // 攻撃されないまま 3 秒たつと、盾のダメージは全回復
@@ -674,13 +677,20 @@ function banner(t, sub) {
   if (sub) { cx.font = fs * 0.4 + "px sans-serif"; cx.fillStyle = "#d1d5db"; cx.fillText(sub, cw / 2, y + fs * 1.85); }
 }
 const VIEW_W = 640, VIEW_H = 460, FOCUS_Y = 150;   // ステージ(580)＋余白が画面幅いっぱいに入る。ステージの FOCUS_Y 上が画面の中心
-function draw() {
+let camLift = 0;                                    // 高く跳んだ人が見切れないよう、カメラを持ち上げている量
+function render() {
   fitCanvas();
   const g = cx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
   cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
   const sc = Math.min(cw / VIEW_W, ch / VIEW_H);
+  // いちばん高い人の頭（名前の分の余白つき）が画面の上端に収まるよう、必要なぶんだけカメラを上げる
+  let top = Infinity;
+  for (const p of game.p) if (p && p.c && p.al) top = Math.min(top, p.y - 30);
+  const viewTop = PY - FOCUS_Y - ch / 2 / sc + 6;
+  const need = top === Infinity ? 0 : Math.max(0, viewTop - top);
+  camLift += (need - camLift) * (need > camLift ? 0.2 : 0.08);
   cx.save();
-  cx.translate(cw / 2 - (PX + PW / 2) * sc, ch / 2 - (PY - FOCUS_Y) * sc);
+  cx.translate(cw / 2 - (PX + PW / 2) * sc, ch / 2 - (PY - FOCUS_Y - camLift) * sc);
   cx.scale(sc, sc);
   // ステージ
   cx.fillStyle = "#64748b"; cx.fillRect(PX, PY, PW, 22);
@@ -700,11 +710,11 @@ function draw() {
     cx.fillStyle = "rgba(255,255,255,.6)"; cx.font = "18px sans-serif"; cx.textAlign = "center";
     cx.fillText("観戦中", cw / 2, 30);
   }
-  requestAnimationFrame(draw);
 }
+function loop() { render(); requestAnimationFrame(loop); }
 
 renderUI();
-draw();
+loop();
 </script>
 </body>
 </html>
