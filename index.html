@@ -229,7 +229,7 @@ const jumpHeight = s => JUMP_MIN + (JUMP_MAX - JUMP_MIN) * Math.max(0, Math.min(
 const jumpVel = h => 0.3 + Math.sqrt(0.09 + 1.2 * h);       // 高さ h(px) に届く初速（重力 0.6 を 1 フレームずつ足す計算に合わせた式）
 const SHIELD_HITS = 3;               // 盾が壊れるまでの回数（攻撃・防御の差に関係なく全員一律）
 const SHIELD_BREAK_FRAMES = 300;     // 壊れた盾が元に戻るまで（60fps で 5 秒）
-const SHIELD_IDLE_FRAMES = 180;      // 攻撃されないまま 3 秒たつと、盾のダメージは全回復
+const SHIELD_STEP_FRAMES = 300;      // 盾のダメージは、攻撃されないまま 5 秒たつごとに 1 段階（1 回ぶん）ずつ回復する
 
 // 制限時間とサドンデス（60fps 換算）。時間切れになると足場が縮み、睨み合いを終わらせる
 const ROUND_FRAMES = 40 * 60;        // 1 ラウンドの制限時間
@@ -244,7 +244,9 @@ const BOMB_KNOCK = 0.475, BOMB_LIFT = 5.5;              // ボムの吹っ飛び
 const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 90;    // 花: 咲くまで / 残る時間 / 踏んだ人が動けない時間（1.5 秒）
 const DOGEZA_KNOCK = 0.5;            // 花で動けない（土下座）間に受ける吹っ飛びの倍率
 const CLONE_LIFE = 420;              // 分身が消えるまで
-const BZ_FRAMES = 360, BZ_BONUS = { A: 2, D: -2, S: 1 }; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値（防御は下がる）
+const ARROW_SPEED = 0.7;              // 矢の速さの倍率（13〜22px/フレームに掛ける）
+const CLONE_STATS = { A: 2, D: 1, S: 2 };   // コペルニウムの分身の性能（本体とは別）
+const BZ_FRAMES = 360, BZ_BONUS = { A: 2, D: -2, S: 2 }; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値（防御は下がる）
 const CN_FRAMES = 24, CN_WHIFF = 18; // カウンター: 構えている時間 / 空振りしたときの隙
 const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
 const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛ばし力の倍率
@@ -260,11 +262,11 @@ const CHARS = [
   { id: "samurai", name: "侍", A: 5, D: 1, S: 3, tag: "攻撃力が高く、盾を一撃で割れる",
     skill: { name: "居合斬り", cd: 4, text: "少しためてから、前へ踏み込んで斬る。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 3, tag: "遠くから矢を放つ",
-    skill: { name: "弓矢", cd: 1, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
+    skill: { name: "弓矢", cd: 0.5, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 4, tag: "瞬間移動で間合いを支配する",
     skill: { name: "テレポート", cd: 2, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
-  { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 3, tag: "盾なし。スキルで攻撃と速さが上がるが、防御がなくなる", noShield: true,
-    skill: { name: "狂化", cd: 14, text: "6秒間、攻撃+2・スピード+1になるが、防御が−2（0）になる（4/2/3 → 6/0/4）。吹っ飛ばされやすくなる" } },
+  { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 2, tag: "盾なし。スキルで攻撃と速さが上がるが、防御がなくなる", noShield: true,
+    skill: { name: "狂化", cd: 14, text: "6秒間、攻撃+2・スピード+2になるが、防御が−2（0）になる（4/2/2 → 6/0/4）。吹っ飛ばされやすくなる" } },
   { id: "knight", name: "騎士", A: 3, D: 5, S: 1, tag: "とても硬い。攻撃を2倍にして返す",
     skill: { name: "カウンター", cd: 4, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 3, tag: "透明になって攻撃をすり抜ける",
@@ -272,14 +274,14 @@ const CHARS = [
   { id: "giant", name: "巨人", A: 1, D: 1, S: 1, tag: "ふだんは弱いが、巨大化して暴れる",
     skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+5され（1/1/1 → 6/6/6）、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
   { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 3, tag: "分身と一緒に戦う",
-    skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分とは別に動き、敵を追いかけて攻撃してくれる味方になる。分身は盾を持たない" } },
+    skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分とは別に動き、敵を追いかけて攻撃してくれる味方になる。分身は盾を持たず、性能は攻撃2・防御1・スピード2" } },
   { id: "okure", name: "おくれたん", A: 2, D: 3, S: 2, tag: "花の罠で相手を足止めする",
     skill: { name: "花", cd: 1, text: "目の前に小さな花を咲かせる。踏んだ相手は1.5秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）" } },
   { id: "nao", name: "なお", A: 1, D: 1, S: 2, tag: "弱いが、残機が1つ多い", skill: null, lives: 1 },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる
-const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, chOf(p)[k] + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0)));
+const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, (p.isClone ? CLONE_STATS[k] : chOf(p)[k]) + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0)));
 const effA = p => statOf(p, "A");
 const effD = p => statOf(p, "D");
 const effS = p => statOf(p, "S");
@@ -476,7 +478,7 @@ function fireHold(p) {                       // ためて離すスキル
   const sk = chOf(p).skill, c = Math.min(1, p.ks / sk.maxCharge), id = chOf(p).id;
   p.ks = 0;
   if (id === "archer") {
-    game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * (13 + 9 * c), vy: 0, own: p.own, pw: 0.35 + 0.85 * c, t: 0 });
+    game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * ARROW_SPEED * (13 + 9 * c), vy: 0, own: p.own, pw: 0.35 + 0.85 * c, t: 0 });
     emit("ar", ecx(p) + p.f * 24, p.y + 24, p.f, c);
   } else if (id === "teleporter") {
     const x0 = ecx(p), y0 = ecy(p);
@@ -533,7 +535,7 @@ function physics(p, inp, neutral) {
   if (p.cn > 0 && --p.cn === 0 && !p.cnHit) p.fz = CN_WHIFF;       // 構えが空振りに終わると隙ができる
   // 盾の回復
   if (p.sbk > 0) { if (--p.sbk === 0) { p.sh = 1; p.shi = 0; } }
-  else if (p.sh < 1 && ++p.shi >= SHIELD_IDLE_FRAMES) { p.sh = 1; p.shi = 0; }
+  else if (p.sh < 1 && ++p.shi >= SHIELD_STEP_FRAMES) { p.sh = p.sh + 1 / SHIELD_HITS > 0.999 ? 1 : p.sh + 1 / SHIELD_HITS; p.shi = 0; }   // 1 段階だけ回復して、また 5 秒数える
   const S = neutral ? BASE_STAT : effS(p);       // ロビーでは性能を悟られないよう標準の動きにする
   const l = inp & KEY.l, r = inp & KEY.r, u = inp & KEY.u, d = inp & KEY.d, a = inp & KEY.a;
   const kin = (neutral || p.isClone) ? 0 : (inp & KEY.k);
