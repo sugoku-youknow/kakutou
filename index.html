@@ -31,6 +31,8 @@
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   #ui{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
   #mute{position:absolute;top:6px;right:8px;z-index:3;width:34px;height:34px;padding:0;margin:0;border-radius:50%;background:rgba(255,255,255,.14);font-size:16px;line-height:1}
+  #quit{display:none;position:absolute;top:6px;left:8px;z-index:3;height:34px;padding:0 12px;margin:0;border-radius:17px;background:rgba(255,255,255,.14);font-size:13px;line-height:1}
+  body.solo.battle #quit{display:block}
   #skillhint{display:none;position:absolute;left:50%;bottom:8px;transform:translateX(-50%);z-index:3;padding:4px 12px;border-radius:999px;background:rgba(0,0,0,.5);font-size:12px;pointer-events:none;white-space:nowrap}
   @media (pointer:fine){body.battle #skillhint{display:block}}
 
@@ -59,6 +61,15 @@
   .detail .skl{font-size:12px;margin-top:8px;line-height:1.5;color:#d1d5db}
   .detail .skl b{color:#facc15}
   .detail .trait{color:#fca5a5}
+
+  /* CPU 戦の設定 */
+  .cpuset{text-align:left;background:#111827;border:1px solid #374151;border-radius:10px;padding:6px 12px;margin:6px 0}
+  .cpuset .row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0;font-size:13px;color:#d1d5db}
+  .cpuset .hint{margin:-2px 0 6px;font-size:11px;color:#9ca3af;text-align:left}
+  .seg{display:inline-flex;gap:4px}
+  .seg button{margin:0;padding:6px 12px;background:#374151;font-size:13px}
+  .seg button.on{background:#3b82f6}
+  select{font:inherit;font-size:13px;background:#1f2937;color:#e5e7eb;border:1px solid #4b5563;border-radius:6px;padding:5px 6px;max-width:60%}
 
   /* 戦闘中: 画面上部のステータス表（横向きの棒グラフ） */
   .st-r{display:flex;align-items:center;gap:6px;height:30px;padding:0 4px;border-radius:5px}
@@ -143,6 +154,7 @@
     <canvas id="cv"></canvas>
     <div id="ui"></div>
     <button id="mute" type="button" aria-label="効果音のオン・オフ">🔊</button>
+    <button id="quit" type="button" aria-label="CPU戦をやめる">やめる</button>
     <div id="skillhint"></div>
   </div>
   <div id="touch">
@@ -316,7 +328,8 @@ function newPlayer() {
            fz: 0, iv: 0, lv: 0,                         // 動けない時間 / 無敵 / 残機
            gt: 0, dz: 0, gb: 0,                         // 巨大化 / 土下座（花で動けない）/ 透過中に振った攻撃
            jp: 0, dj: 0,                                // 前のフレームでジャンプボタンが押されていたか / 空中ジャンプを使ったか
-           aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null,   // 分身の頭脳（ホストだけが使う）: 次に考えるまで / 続ける移動 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵
+           cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
+           aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回）
            life: 0, isClone: false };
 }
 
@@ -383,6 +396,7 @@ function spawn(p, slot, n, battle) {
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
+  p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0;   // 頭脳の記憶を消す
 }
 
 function connectedSlots() {
@@ -716,50 +730,116 @@ function updateFlowers(list) {
   }
 }
 
-// ---- 分身の頭脳（CPU）----
-// 分身は、持ち主の入力を真似せず、自分で敵を追いかけて攻撃する味方として動く（スキルは使えない）。
-//   ・いちばん近い敵を狙う（持ち主が戦っている相手を優先して援護する）。透過中・復活直後の敵は狙わない
-//   ・敵の盾が自分のほうを向いているときは、背中側へ回り込んでから殴る（ときどき盾を殴って削る）。盾が外れているときは、そのまま殴る
-//   ・足場の端では止まる。上の台から降りるときだけ、中央に近い側の端から飛び降りる
-//   ・敵が上の台にいれば、ジャンプ（足りなければ二段ジャンプ）で登る
-//   ・メインの面より下へ落ちかけたら、二段ジャンプで足場へ戻る
-//   ・考え直すのは AI_THINK フレームに 1 回（人間らしい反応の遅れ）。ジャンプと攻撃のボタンは、考えた瞬間に 1 回だけ押す
-const AI_THINK = 3, AI_EDGE = 24;      // 考え直す間隔（フレーム）/ 足場の端で止まる距離（px）
-const AI_CHIP = 0.35;                  // 盾の正面にいて殴れる間合いのとき、考えるたびに殴る確率
-function platformUnder(e) {              // いま立っている足場（空中なら null）
+// ---- CPU の頭脳 ----
+// 分身（味方）と、CPU 戦の相手は、同じ頭脳（aiThink）で動く。作るのは人のプレイヤーと同じ「ボタンの状態」だけなので、物理や当たり判定は人と同じ。計算はホストだけで行う。
+//   ・いちばん近い敵を狙う（分身は、持ち主が戦っている相手を優先して援護する）。透過中・復活直後の敵は狙わない
+//   ・敵の盾が自分のほうを向いているときは、背中側へ回り込んでから殴る。盾が外れているときは、そのまま殴る。ときどき盾を殴って削る
+//   ・足場の端では止まる。上の台から降りるときだけ、中央に近い側の端から飛び降りる。敵が上の台にいれば、ジャンプ（二段ジャンプ込み）で登る
+//   ・メインの面より下へ落ちかけたら、二段ジャンプ（テレポーターは瞬間移動）で足場へ戻る
+//   ・CPU 戦の相手は、スキルを使い、矢・爆弾・花を避け、間合いの外で敵の出方を待つ（強さしだい）
+//   ・考え直すのは think フレームに 1 回（人間らしい反応の遅れ）。ジャンプ・攻撃・スキルのボタンは、考えた瞬間に 1 回だけ押す（ためるスキルは押し続ける）
+// 強さの設定 B:
+//   think 考え直す間隔（フレーム。大きいほど反応が遅い） / miss 殴れる場面を見送る確率 / flank 盾の向いていない側へ回り込む確率 / chip 盾の正面でも殴って削る確率
+//   skill スキルを使う確率 / punish 1 で、間合いの外で敵の出方を待つ / dodge 矢・爆弾・花を避ける確率
+//   recover 落ちかけて戻ろうとする確率 / clones 敵の分身も狙うか
+const AI_LEVELS = [
+  { name: "よわい", desc: "反応が遅く、よく空振りする。盾の向きも読まない", think: 14, miss: 0.4, flank: 0.2, chip: 0.5, skill: 0.25, punish: 0, dodge: 0, recover: 0.5, clones: false },
+  { name: "ふつう", desc: "ひととおり動く。スキルもほどよく使う", think: 8, miss: 0.2, flank: 0.6, chip: 0.35, skill: 0.6, punish: 0, dodge: 0.4, recover: 0.9, clones: true },
+  { name: "つよい", desc: "反応が速く、盾の向きや間合いを読んで戦う", think: 4, miss: 0.05, flank: 1, chip: 0.25, skill: 1, punish: 1, dodge: 0.9, recover: 1, clones: true },
+];
+const AI_CLONE = { think: 3, miss: 0, flank: 1, chip: 0.35, skill: 0, punish: 0, dodge: 0, recover: 1, clones: false };   // 分身（味方）。スキルは使えない
+const AI_EDGE = 24;                       // 足場の端で止まる距離（px）
+function platformUnder(e) {               // いま立っている足場（空中なら null）
   if (!e.ground) return null;
   const hh = phOf(e), ww = pwOf(e);
   return platforms().find(pl => Math.abs(e.y + hh - pl.y) < 2 && e.x + ww > pl.x && e.x < pl.x + pl.w) || null;
 }
-function cloneThink(c, owner, pls) {
-  const R = ATKS[0].reach, ccx = ecx(c), feet = c.y + PLH;
+function aiTarget(c, owner, B, ccx, feet) {            // 狙う敵: 近い（高さの違いは重く見る）。持ち主が戦っている相手は優先
+  const orc = owner ? ecx(owner) : ccx;
+  let t = null, best = 1e9;
+  const eat = (e, w) => {
+    if (!e || !e.c || !e.al || e.own === c.own || untouchable(e)) return;
+    let sc = (Math.abs(ecx(e) - ccx) + 1.5 * Math.abs(e.y + phOf(e) - feet)) * w;
+    if (owner && Math.abs(ecx(e) - orc) < 260) sc *= 0.7;
+    if (sc < best) { best = sc; t = e; }
+  };
+  for (let j = 0; j < MAX_PLAYERS; j++) { eat(game.p[j], 1); if (B.clones) eat(game.cl[j], 1.6); }
+  return t;
+}
+function aiSkill(c, t, X, B) {                         // スキルを使うなら KEY.k（使わなければ 0）。条件はキャラごと
+  const ch = chOf(c), id = ch.id;
+  if (!ch.skill || c.kc > 0 || c.kp || c.a > 0 || c.cn > 0 || c.s > 0 || c.fz > 0 || Math.random() >= B.skill) return 0;
+  const { gap, sgn, sd, dyFeet, sameLevel, tr } = X, g = c.ground, face = c.f === sgn, tFaces = t.f === -sgn;
+  switch (id) {
+    case "bomber": return g && face && sameLevel && gap > 40 && gap < 230 ? KEY.k : 0;                                  // 前へ投げる
+    case "samurai": return g && face && sameLevel && gap > 18 && gap < 112 && shieldUp(t) && tFaces && t.a === 0 && t.cd === 0 ? KEY.k : 0;   // 盾で固めた敵を、盾ごと割る
+    case "berserker": return sameLevel && gap < 230 ? KEY.k : 0;
+    case "knight": return g && face && t.a >= 1 && t.a <= 6 && t.ak === 0 && gap <= tr + 10 ? KEY.k : 0;                // 敵が振りかぶった瞬間にカウンター
+    case "ghost": return sameLevel && gap > 50 && gap < 280 && (t.a > 0 || (shieldUp(t) && tFaces)) ? KEY.k : 0;
+    case "giant": return gap < 260 ? KEY.k : 0;
+    case "copern": return gap < 360 ? KEY.k : 0;
+    case "okure": return g && face && sameLevel && t.ground && gap > 70 && gap < 240 ? KEY.k : 0;                      // 敵が来る道に花を置く
+    case "archer":                                                                                                      // 遠いほど長くためる
+      if (g && face && Math.abs(dyFeet) < 40 && gap >= 150 && gap <= 480) { c.aiCh = gap > 300 ? 72 : gap > 200 ? 48 : 28; return KEY.k; }
+      return 0;
+    case "teleporter":                                                                                                  // 盾を向けた敵の向こう側（背中）へ出る
+      if (g && face && sameLevel && tFaces && gap > 90 && gap < 300) {
+        const D = gap + 2 * sd + 30;
+        c.aiCh = Math.max(1, Math.ceil(Math.max(0, Math.min(1, (D - 90) / 260)) * 60));
+        return KEY.k;
+      }
+      return 0;
+  }
+  return 0;
+}
+function aiDodge(c, inp, ccx, feet) {                  // 爆弾から離れる / 矢を跳んでよける / 敵の花を跳び越す
+  const cy = c.y + phOf(c) / 2;
+  for (const b of game.pj) {
+    if (b.own === c.own) continue;
+    if (b.k === 0) {
+      if (BOMB_FUSE - b.t < 50 && Math.abs(ccx - b.x) < BOMB_BLAST + 30 && Math.abs(cy - b.y) < BOMB_BLAST + 30) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
+    } else {
+      const dx = ccx - b.x;
+      if (Math.sign(dx) === Math.sign(b.vx) && Math.abs(dx) > 70 && Math.abs(dx) < 280 && b.y > c.y - 6 && b.y < feet + 6) inp |= KEY.u;
+    }
+  }
+  for (const f of game.fl) {
+    const df = f.x - ccx;
+    if (f.own !== c.own && f.t >= FLOWER_ARM && Math.abs(f.y - feet) < 3 && Math.abs(df) > 6 && Math.abs(df) < 64 && (inp & (df > 0 ? KEY.r : KEY.l))) inp |= KEY.u;
+  }
+  return inp;
+}
+function aiThink(c, owner, pls, B) {
+  const ch = chOf(c), id = ch.id, sk = ch.skill, sz = szOf(c);
+  const ccx = ecx(c), feet = c.y + phOf(c), cwid = pwOf(c), R = ATKS[0].reach * sz;
   const main = pls.find(q => q.main) || pls[pls.length - 1];
   const stayX = x => Math.max(main.x + 24, Math.min(main.x + main.w - 24, x));       // メインの上に収まる x
   let inp = 0;
-  const steer = x => { if (Math.abs(x - ccx) > 8) inp |= x > ccx ? KEY.r : KEY.l; };   // 横へ x に向かう
-  c.aiDrop = false;
+  const steer = x => { c.aiGoal = x; if (Math.abs(x - ccx) > 8) inp |= x > ccx ? KEY.r : KEY.l; };   // 横へ x に向かう（着いたら止まる。aiInput が行き過ぎを防ぐ）
+  c.aiDrop = false; c.aiGoal = null; c.aiOnce = 0;
+  const t = aiTarget(c, owner, B, ccx, feet);
+  // 0) ためている最中（弓・テレポート）: 狙いの長さになるまで押し続ける。弓は、敵が近づきすぎたらすぐ放つ
+  if (c.ks > 0 && c.aiCh > 0) {
+    const near = t && Math.abs(ecx(t) - ccx) - (cwid + pwOf(t)) / 2 < 70;
+    if (c.ks < c.aiCh && !(id === "archer" && (near || !t))) inp |= KEY.k;
+    return inp;
+  }
   // 1) メインの面より下へ落ちかけている: 足場へ戻る
   if (!c.ground && feet > PY + 4) {
     steer(stayX(ccx));
-    if (!c.dj && !c.jp && c.vy > -3) inp |= KEY.u;
+    if (!c.dj && !c.jp && c.vy > -3 && Math.random() < B.recover) inp |= KEY.u;
+    else if (c.dj && id === "teleporter" && B.skill > 0 && !c.kc && !c.kp && c.s === 0 && c.a === 0 && Math.sign(main.x + main.w / 2 - ccx) === c.f && Math.random() < B.skill) { c.aiCh = 14; inp |= KEY.k; }   // 足場のほうを向いていれば、瞬間移動で戻る
     return inp;
   }
-  // 2) 狙う敵を選ぶ
-  const orc = owner ? ecx(owner) : ccx;
-  let t = null, best = 1e9;
-  for (let j = 0; j < MAX_PLAYERS; j++) {
-    const e = game.p[j];
-    if (j === c.own || !e || !e.c || !e.al || untouchable(e)) continue;
-    let sc = Math.abs(ecx(e) - ccx) + 1.5 * Math.abs(e.y + phOf(e) - feet);
-    if (Math.abs(ecx(e) - orc) < 260) sc *= 0.7;
-    if (sc < best) { best = sc; t = e; }
-  }
-  if (!t) {                                                   // 狙える敵がいない: 持ち主のそばで待つ
-    if (Math.abs(orc - ccx) > 110) steer(orc);
+  // 2) 狙える敵がいない
+  if (!t) {
+    if (owner) { if (Math.abs(ecx(owner) - ccx) > 110) steer(ecx(owner)); }            // 持ち主のそばで待つ
+    else if (Math.abs(CENTER_X - ccx) > 60) steer(stayX(CENTER_X));
     return inp;
   }
   const tcx = ecx(t), th = phOf(t), tw = pwOf(t), dyFeet = t.y + th - feet;
   const sgn = Math.sign(tcx - ccx) || c.f, tpl = platformUnder(t), pl = platformUnder(c);
+  const sd = (cwid + tw) / 2, gap = Math.abs(tcx - ccx) - sd;                          // gap: 体のふちどうしの距離
   // 3) 敵が上の台に立っている: 真下まで行って跳び、届かなければ二段ジャンプで登る
   if (dyFeet < -45 && tpl) {
     const gx = Math.max(tpl.x + 14, Math.min(tpl.x + tpl.w - 14, tcx));
@@ -777,26 +857,46 @@ function cloneThink(c, owner, pls) {
   }
   // 5) 同じ高さ: 盾が向いていない側（背中側）へ回り込んで、近づいて殴る
   const rel = Math.sign(ccx - tcx) || -sgn;                     // 敵から見て、自分のいる側（+1 = 右）
-  if (c.aiTgt !== t) { c.aiTgt = t; c.aiSideT = 0; }
-  if ((c.aiSideT -= AI_THINK) <= 0) { c.aiWant = shieldUp(t) ? -t.f : rel; c.aiSideT = 15; }   // 立ちたい側。コロコロ変えない
-  const want = c.aiWant, sd = PLW / 2 + tw / 2, gap = Math.abs(tcx - ccx) - sd;                // gap: 体のふちどうしの距離
-  if (rel !== want) steer(tcx + want * (sd + R * 0.55));         // 敵をまたいで反対側へ
-  else if (gap > R * 0.55) steer(tcx);                           // 近づく
-  else if (c.f !== sgn && c.ground) inp |= sgn > 0 ? KEY.r : KEY.l;   // 向きだけ合わせる
+  if (c.aiTgt !== t) { c.aiTgt = t; c.aiSideT = 0; c.aiWait = 0; }
+  if ((c.aiSideT -= B.think) <= 0) { c.aiWant = (shieldUp(t) && Math.random() < B.flank) ? -t.f : rel; c.aiSideT = 15; }   // 立ちたい側。コロコロ変えない
+  const want = c.aiWant, sameLevel = Math.abs(dyFeet) <= 45;
+  const tAk = ATKS[t.ak] || ATKS[0], tr = tAk.reach * szOf(t);
+  const tFaces = t.f === -sgn, tCan = t.s === 0 && t.fz === 0 && t.ks === 0;
+  let hold = false;
+  if (B.punish >= 1 && tFaces && tCan && !t.isClone && c.ground && t.a === 0 && t.cd === 0 && shieldUp(t) && gap > R + 2 && gap <= tr + 16 && c.aiWait < 40) hold = true;   // 間合いの外で、敵が出てくるのを待つ（待ちすぎない）
+  c.aiWait = hold ? c.aiWait + B.think : Math.max(0, c.aiWait - B.think);
+  const turn = () => { const b = sgn > 0 ? KEY.r : KEY.l; inp |= b; c.aiOnce |= b; };   // 向きを変えるだけ（押し続けると敵をまたいでしまうので、1 回だけ）
+  if (hold) { if (c.f !== sgn && c.ground) turn(); }
+  else if (rel !== want) steer(tcx + want * (sd + R * 0.55));    // 敵をまたいで反対側へ
+  else if (gap > R * 0.55) steer(tcx - sgn * (sd + R * 0.55));   // 殴れる間合いまで近づく
+  else if (c.f !== sgn && c.ground) turn();                      // 向きだけ合わせる
   if (!c.ground) { inp &= ~(KEY.l | KEY.r); steer(stayX(tcx)); }     // 空中では、メインの上へ寄るだけ
   const faceDir = ((inp & (KEY.l | KEY.r)) && c.ground && c.a === 0) ? ((inp & KEY.r) ? 1 : -1) : c.f;
   const open = !shieldUp(t) || t.f !== -faceDir;                 // 盾が効かない（外れている・背中側）
-  const near = c.y + PLH - 8 > t.y && c.y + 8 < t.y + th;        // 高さが重なっている
-  const chip = !open && Math.random() < AI_CHIP;                // 盾の正面でも、ときどき殴って盾を削る（3 回で壊れる。持ち主が追撃できる）
-  if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0) inp |= KEY.a;
+  const near = c.y + (PLH - 8) * sz > t.y && c.y + 8 * sz < t.y + th;     // 高さが重なっている
+  const chip = !open && Math.random() < B.chip;                  // 盾の正面でも、ときどき殴って盾を削る（3 回で壊れる）
+  if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0 && Math.random() >= B.miss) inp |= KEY.a;
+  if (sk && B.skill > 0) { const k = aiSkill(c, t, { gap, sgn, sd, dyFeet, sameLevel, tr }, B); if (k) { inp |= k; inp &= ~KEY.a; } }   // スキルを使うときは、通常攻撃を押さない
+  if (B.dodge && c.ground && Math.random() < B.dodge) inp = aiDodge(c, inp, ccx, feet);
   return inp;
 }
-function cloneInput(c, owner) {
+function aiInput(c, owner, B) {                                // 毎フレーム: ボタンの状態を返す
   const pls = platforms();
   if (!pls.length) return 0;
+  const sk = chOf(c).skill, keep = KEY.l | KEY.r | (sk && sk.hold ? KEY.k : 0);      // 考えない間も続ける入力（移動と、ためているボタン）
   let inp;
-  if (--c.aiT > 0) inp = c.aiIn;                                // 考えない間は、前の移動をそのまま続ける
-  else { c.aiT = AI_THINK; inp = cloneThink(c, owner, pls); c.aiIn = inp & (KEY.l | KEY.r); }
+  if (--c.aiT > 0) inp = c.aiIn;
+  else {
+    c.aiT = B.think;
+    if (c.ks === 0) c.aiCh = 0;
+    inp = aiThink(c, owner, pls, B);
+    c.aiIn = inp & keep & ~c.aiOnce;
+  }
+  if ((inp & (KEY.l | KEY.r)) && c.ground && c.aiGoal !== null) {      // 目的地に着いたら止まる（行き過ぎて敵をまたがない）
+    const d = c.aiGoal - ecx(c);
+    if (!(inp & (d > 0 ? KEY.r : KEY.l)) || Math.abs(d) < Math.abs(c.vx) * 1.5 + 3) inp &= ~(KEY.l | KEY.r);
+  }
+  if (c.aiCh > 0 && c.ks >= c.aiCh && (inp & KEY.k)) { inp &= ~KEY.k; c.aiIn &= ~KEY.k; c.aiCh = 0; }   // ためる長さに届いた: 離して発動する
   if ((inp & (KEY.l | KEY.r)) && c.ground && !c.aiDrop) {       // 足場の端から落ちない
     const pl = platformUnder(c), x = ecx(c);
     if (pl) {
@@ -806,6 +906,7 @@ function cloneInput(c, owner) {
   }
   return inp;
 }
+const cloneInput = (c, owner) => aiInput(c, owner, AI_CLONE);
 function tickClone(i) {                                      // 分身は自分で考えて動く（スキルは使えない）
   const c = game.cl[i], owner = game.p[i];
   if (!c) return;
@@ -817,6 +918,7 @@ function tickClone(i) {                                      // 分身は自分�
 
 function hostTick() {
   const slots = connectedSlots();
+  if (game.ph !== "play") for (const i of slots) if (game.p[i].cpu) inputs[i] = 0;      // CPU は戦闘中だけ動く
   if (game.ph === "lobby") {
     for (const i of slots) {
       const p = game.p[i];
@@ -830,6 +932,7 @@ function hostTick() {
   } else if (game.ph === "play") {
     if (game.hs > 0) { game.hs--; return; }                // ヒットストップ中は全員の動きを止める
     if (game.rt > 0) game.rt--; else game.sd++;            // 制限時間が尽きたらサドンデス（足場が縮む）
+    for (const i of slots) { const p = game.p[i]; if (p.cpu) inputs[i] = p.al ? aiInput(p, null, AI_LEVELS[p.cpuLv] || AI_LEVELS[1]) : 0; }   // CPU の頭脳
     for (const i of slots) physics(game.p[i], inputs[i], false);
     for (const i of slots) tickClone(i);
     const list = ents();
@@ -885,11 +988,50 @@ function hostLoop() {
   inputs[0] = myKeys;
   hostTick();
   if (++tickCount % 2 === 0) {
-    const snap = snapshot();
-    for (const c of conns) if (c && c.open) c.send(snap);
+    if (conns.some(c => c && c.open)) { const snap = snapshot(); for (const c of conns) if (c && c.open) c.send(snap); }
+    else evq.length = 0;                   // 参加者がいない（CPU 戦など）ときは、出来事をためない
   }
   if (game.ph !== lastPh) { lastPh = game.ph; renderUI(); }
   refreshHud();
+}
+
+// ---------- CPU 戦（ネットなし・ひとり用）----------
+// タイトルの「CPUと戦う」から始める。部屋も PeerJS も使わず、ホストと同じ計算（hostLoop）を自分のブラウザだけで回す。CPU の席は p.cpu = true で、頭脳（aiInput）が入力を作る
+let solo = false;
+const soloCfg = { n: 1, lv: 1, chars: [-1, -1, -1] };      // CPU の数 / 強さ（AI_LEVELS の番号）/ CPU ごとのキャラ（-1 = ランダム）
+function sanitizeSolo(d) {
+  d = d || {};
+  const n = Math.max(1, Math.min(MAX_PLAYERS - 1, Math.round(Number(d.n)) || 1));
+  let lv = Math.round(Number(d.lv)); if (!Number.isFinite(lv) || lv < 0 || lv >= AI_LEVELS.length) lv = 1;
+  const chars = [0, 1, 2].map(k => { const v = d.chars ? d.chars[k] : -1, c = Math.round(Number(v)); return v != null && Number.isFinite(c) && c >= 0 && c < CHARS.length ? c : -1; });
+  return { n, lv, chars };
+}
+function loadSolo() { try { const j = JSON.parse(localStorage.getItem("shieldfight-cpu") || "null"); if (j) Object.assign(soloCfg, sanitizeSolo(j)); } catch (e) {} }
+function saveSolo() { try { localStorage.setItem("shieldfight-cpu", JSON.stringify(soloCfg)); } catch (e) {} }
+loadSolo();
+function applySoloCfg() {                  // ロビーで、CPU の席を設定に合わせて作り直す
+  for (let i = 1; i < MAX_PLAYERS; i++) {
+    if (i > soloCfg.n) { game.p[i] = null; continue; }
+    const p = game.p[i] || (game.p[i] = newPlayer());
+    p.own = i; p.c = true; p.rd = true; p.cpu = true; p.cpuLv = soloCfg.lv; p.n = "CPU" + i;
+    p.ch = Math.max(0, soloCfg.chars[i - 1]);                // 「ランダム」は、始めるときに決める（それまではノーマルの見た目）
+  }
+  const slots = connectedSlots();
+  slots.forEach((s, idx) => { spawn(game.p[s], idx, slots.length); game.p[s].al = true; });
+}
+function rollCpuChars() {
+  for (let i = 1; i <= soloCfg.n; i++) {
+    const p = game.p[i];
+    if (p && p.cpu) p.ch = soloCfg.chars[i - 1] >= 0 ? soloCfg.chars[i - 1] : Math.floor(Math.random() * CHARS.length);
+  }
+}
+function startSolo() {
+  solo = true; role = "host"; net = "ready"; myId = 0; roomCode = "";
+  document.body.classList.add("solo");
+  const me = game.p[0] = newPlayer(); me.own = 0; me.n = draft.n; me.ch = draft.c; me.al = true;
+  applySoloCfg();
+  hostTimer = setInterval(hostLoop, 1000 / 60);
+  renderUI();
 }
 
 // ---------- ネットワーク ----------
@@ -1166,6 +1308,56 @@ function showSelect() {
   paintSelect();
 }
 
+function showSolo() {                       // CPU 戦の設定（自分の名前・キャラ、CPU の数・強さ・キャラ）
+  const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
+  ui.innerHTML = `<div class="panel setup"><h1>CPU戦</h1>
+    <p>名前とキャラを選んで、ひとりで CPU と対戦します（ネット不要）</p>
+    <input id="pname" maxlength="8" placeholder="${esc("プレイヤー1")}" value="${esc(draft.n)}">
+    <div class="chips">${chips}</div>
+    <div class="detail" id="detail"></div>
+    <div class="cpuset">
+      <div class="row"><span>CPU の数</span><span class="seg" id="segN">${[1, 2, 3].map(v => `<button data-v="${v}">${v}</button>`).join("")}</span></div>
+      <div class="row"><span>強さ</span><span class="seg" id="segLv">${AI_LEVELS.map((l, v) => `<button data-v="${v}">${esc(l.name)}</button>`).join("")}</span></div>
+      <div class="hint" id="lvHint"></div>
+      <div id="cpuRows"></div>
+    </div>
+    <button id="bGo">戦闘開始</button>
+    <button id="bBack" class="sub">タイトルへ</button></div>`;
+  const root = ui.querySelector(".setup");
+  root.querySelectorAll(".chip").forEach(b => {
+    const i = Number(b.dataset.i);
+    drawPreview(b.querySelector("canvas"), i);
+    b.onclick = () => { draft.c = i; game.p[0].ch = i; paintSelect(); };
+  });
+  const name = root.querySelector("#pname");
+  name.oninput = () => { draft.n = name.value; };
+  const opts = `<option value="-1">ランダム</option>` + CHARS.map((c, i) => `<option value="${i}">${esc(c.name)}</option>`).join("");
+  const paintCfg = () => {
+    root.querySelectorAll("#segN button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === soloCfg.n));
+    root.querySelectorAll("#segLv button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === soloCfg.lv));
+    root.querySelector("#lvHint").textContent = AI_LEVELS[soloCfg.lv].desc;
+    root.querySelector("#cpuRows").innerHTML = Array.from({ length: soloCfg.n }, (_, k) =>
+      `<div class="row"><span>CPU${k + 1} のキャラ</span><select data-k="${k}">${opts}</select></div>`).join("");
+    root.querySelectorAll("#cpuRows select").forEach(sel => {
+      const k = Number(sel.dataset.k);
+      sel.value = String(soloCfg.chars[k]);
+      sel.onchange = () => { soloCfg.chars[k] = Number(sel.value); saveSolo(); applySoloCfg(); };
+    });
+  };
+  root.querySelectorAll("#segN button").forEach(b => b.onclick = () => { soloCfg.n = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
+  root.querySelectorAll("#segLv button").forEach(b => b.onclick = () => { soloCfg.lv = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
+  root.querySelector("#bGo").onclick = () => {
+    const prof = sanitizeProfile(draft);
+    draft = prof; saveProfile();
+    applyProfile(game.p[0], prof);
+    rollCpuChars();
+    hostStartMatch();
+  };
+  root.querySelector("#bBack").onclick = () => { location.href = location.pathname; };
+  paintCfg();
+  paintSelect();
+}
+
 function showLobby() {
   const list = game.p.map((p, i) => p && p.c
     ? `<div class="pl" style="color:${COLORS[i]}"><b>${esc(nameOf(i))}</b>${i === myId ? "（あなた）" : ""}<span class="${p.rd ? "ok" : "wt"}">${p.rd ? "✔ 準備OK" : "選択中…"}</span></div>` : "").join("");
@@ -1201,20 +1393,23 @@ function renderUI() {
   if (role === null) key = "title";
   else if (net === "error") key = "error";
   else if (net !== "ready" || !me) key = "connecting";
+  else if (solo && game.ph === "lobby") key = "solo";
   else if (!me.rd) key = "setup";
   else if (game.ph === "lobby") key = "lobby";
   else key = "none";
-  if (key === uiKey && (key === "setup" || key === "title" || key === "none")) return;   // 入力中の画面を作り直さない
+  if (key === uiKey && (key === "setup" || key === "solo" || key === "title" || key === "none")) return;   // 入力中の画面を作り直さない
   uiKey = key;
   if (key === "title") {
     ui.innerHTML = `<div class="panel"><h1>シールドファイト</h1>
       <p>好きなキャラを選んで戦おう！スキルで逆転もできる<br>盾が外れた隙を突いて、相手をステージから落とせ（最大4人 / 3本先取）<br>制限時間は${ROUND_FRAMES / 60}秒。時間切れになるとステージが縮みます</p>
       <button id="bHost">部屋を作る（ホスト）</button>
+      <button id="bSolo" class="sub">CPUと戦う（ひとりで遊ぶ）</button>
       <p>— または —</p>
       <input id="code" inputmode="numeric" maxlength="1" placeholder="部屋番号（1桁）" style="width:200px;text-align:center;font-size:20px" value="${/^\d$/.test(q || "") ? q : ""}">
       <button id="bJoin">参加する</button>
       <p>操作: WASD / 矢印キーで移動（↑・W でジャンプ）、Space で攻撃、X でスキル</p></div>`;
     document.getElementById("bHost").onclick = startHost;
+    document.getElementById("bSolo").onclick = startSolo;
     const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d$/.test(c)) startClient(c); else document.getElementById("code").style.borderColor = "#ef4444"; };
     document.getElementById("bJoin").onclick = join;
     document.getElementById("code").onkeydown = e => { if (e.key === "Enter") join(); };
@@ -1223,6 +1418,7 @@ function renderUI() {
   } else if (key === "error") {
     ui.innerHTML = `<div class="panel"><h1>エラー</h1><p>${esc(netMsg)}</p><button onclick="location.href=location.pathname">トップへ</button></div>`;
   } else if (key === "setup") showSelect();
+  else if (key === "solo") showSolo();
   else if (key === "lobby") showLobby();
   else ui.innerHTML = "";
 }
@@ -1326,6 +1522,16 @@ const Sfx = (() => {
     airJump() { tone(480, 1100, 0.11, "triangle", 0.11); noise(0.11, 0.10, "bandpass", 2000, 5200); tone(1300, 1900, 0.07, "sine", 0.05, 0.05); },
   };
 })();
+// CPU 戦の「やめる」ボタン: 2 回押すと、いまの試合を終えて設定画面へ戻る（押し間違い防止）
+const quitBtn = document.getElementById("quit");
+let quitT = 0;
+quitBtn.onclick = () => {
+  quitBtn.blur();
+  if (!solo || game.ph === "lobby") return;
+  if (!quitT) { quitBtn.textContent = "もう一度押すと終了"; quitT = setTimeout(() => { quitT = 0; quitBtn.textContent = "やめる"; }, 2500); return; }
+  clearTimeout(quitT); quitT = 0; quitBtn.textContent = "やめる";
+  toLobby();
+};
 const muteBtn = document.getElementById("mute");
 const paintMute = () => { muteBtn.textContent = Sfx.muted ? "🔇" : "🔊"; };
 muteBtn.onclick = () => { Sfx.init(); Sfx.setMuted(!Sfx.muted); paintMute(); Sfx.beep(false); muteBtn.blur(); };
@@ -1494,7 +1700,7 @@ function fitCanvas() {
 function drawPlayer(p, i, me, now) {
   const clone = p.isClone;
   // ロビーでは、ほかの人のキャラは見せない
-  const chIdx = (game.ph === "lobby" && !clone && i !== myId) ? 0 : p.ch;
+  const chIdx = (game.ph === "lobby" && !clone && i !== myId && !solo) ? 0 : p.ch;
   const chd = CHARS[chIdx] || CHARS[0];
   const col = clone ? CLONE_COLOR : COLORS[i];
   const up = role === "client" ? !!p.sg : shieldUp(p);            // 盾が効いている状態か（ホストが決めたものを使う）
