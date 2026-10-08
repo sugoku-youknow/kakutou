@@ -217,7 +217,7 @@ const STATS = [
   { label: "防御", color: "#22d3ee" },
   { label: "スピード", color: "#c084fc" },
 ];
-const KNOCK_BASE = 11.3, MOVE_BASE = 6;   // 性能 2 のときの値
+const KNOCK_BASE = 11.3, MOVE_BASE = 6 * 0.7;   // 性能 2 のときの値（移動速度は、以前の 6px/フレームの 70%）
 const atkMul = a => 1 + 0.15 * (a - BASE_STAT);    // 与える吹っ飛ばし力
 const defMul = d => 1 - 0.10 * (d - BASE_STAT);    // 受ける吹っ飛ばし力（小さいほど飛ばされにくい）
 // スピード: 2 を基準（移動 6）にして、上げるほど急に速くなる
@@ -748,8 +748,8 @@ function updateFlowers(list) {
 //   recover 落ちかけて戻ろうとする確率 / clones 敵の分身も狙うか
 const AI_LEVELS = [
   { name: "よわい", desc: "反応が遅く、よく空振りする。盾の向きも読まない", think: 14, miss: 0.4, flank: 0.2, chip: 0.5, skill: 0.25, punish: 0, dodge: 0, recover: 0.5, clones: false },
-  { name: "ふつう", desc: "ひととおり動く。スキルもほどよく使う", think: 8, miss: 0.2, flank: 0.6, chip: 0.35, skill: 0.6, punish: 0, dodge: 0.4, recover: 0.9, clones: true },
-  { name: "つよい", desc: "反応が速く、盾の向きや間合いを読んで戦う", think: 4, miss: 0.05, flank: 1, chip: 0.25, skill: 1, punish: 1, dodge: 0.9, recover: 1, clones: true },
+  { name: "ふつう", desc: "ひととおり動く。スキルもほどよく使う", think: 10, miss: 0.2, flank: 0.6, chip: 0.35, skill: 0.6, punish: 0, dodge: 0.4, recover: 0.9, clones: true },
+  { name: "つよい", desc: "反応が速く、盾の向きや間合いを読んで戦う", think: 4, miss: 0.05, flank: 1, chip: 0.25, skill: 1, punish: 0, dodge: 0.9, recover: 1, clones: true },
 ];
 const AI_CLONE = { think: 3, miss: 0, flank: 1, chip: 0.35, skill: 0, punish: 0, dodge: 0, recover: 1, clones: false };   // 分身（味方）。スキルは使えない
 const AI_EDGE = 24;                       // 足場の端で止まる距離（px）
