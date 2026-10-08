@@ -6,22 +6,25 @@
 <title>シールドファイト</title>
 <style>
   html,body{margin:0;height:100%;background:#111827;color:#e5e7eb;font-family:system-ui,"Yu Gothic",sans-serif;overflow:hidden}
-  :root{--b:min(21vw,92px);--g:8px}   /* 操作ボタンの大きさ / ボタン同士のすき間 */
+  :root{--b:min(21vw,92px);--g:8px;--sh:124px}   /* 操作ボタンの大きさ / ボタン同士のすき間 / 下のプレイヤー情報の高さ（縦持ちで固定） */
   /* 画面構成: 上=戦闘画面 / 中=操作ボタン（スマホのみ）/ 下=プレイヤー情報 */
   #wrap{position:relative;display:flex;flex-direction:column;width:100%;height:100vh;height:100dvh}
-  #stats{display:none;flex:none;box-sizing:border-box;width:min(100%,560px);margin:0 auto;padding:4px 8px calc(6px + env(safe-area-inset-bottom))}
-  /* 戦闘中のプレイヤー情報: 1 人ぶんのカードを横に並べ、カードの中は縦に（名前 / キャラ / 攻撃 / 防御 / スピード） */
-  .pcs{display:flex;justify-content:center;gap:6px}
-  .pc{flex:1 1 0;min-width:0;max-width:150px;box-sizing:border-box;padding:4px 6px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid transparent;font-size:10px;line-height:1.25}
+  #stats{display:none;flex:none;align-items:center;box-sizing:border-box;width:min(100%,620px);min-height:var(--sh);margin:0 auto;padding:4px 3px calc(6px + env(safe-area-inset-bottom))}
+  /* 戦闘中のプレイヤー情報: 1 人ぶんのカードを横に並べ、カードの中は縦に（名前 / キャラ / 攻撃 / 防御 / スピード）。
+     文字と棒の大きさはカードの幅に合わせて変わる（cqw）。人数が少ないほど大きく、4 人でも読める大きさにする */
+  .pcs{flex:1 1 auto;display:flex;justify-content:center;gap:3px;min-width:0}
+  .pc{container-type:inline-size;flex:1 1 0;min-width:0;max-width:230px;box-sizing:border-box;padding:4px 3px 5px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid transparent;font-size:11px;line-height:1.25}
   .pc.me{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.28)}
-  .pc b{display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .pc .sub{display:flex;justify-content:space-between;gap:4px;margin-bottom:2px;color:#9ca3af;white-space:nowrap}
+  .pc b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-size:clamp(11px,13.8cqw,16px)}
+  .pc .sub{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:3px;color:#9ca3af;white-space:nowrap;font-size:11px;font-size:clamp(9.5px,11.7cqw,13px)}
   .pc .sub span:first-child{overflow:hidden;text-overflow:ellipsis}
-  .pc .wn{letter-spacing:1px;font-size:10px}
-  .pc .pr{display:flex;align-items:center;gap:3px;height:13px}
-  .pc .lb{flex:0 0 36px;font-size:9px;white-space:nowrap}
+  .pc .wn{flex:none;display:flex;align-items:center}
+  .pc .wn i{display:block;width:.62em;height:.62em;margin-left:.22em;box-sizing:border-box;border:1px solid currentColor;border-radius:50%}
+  .pc .wn i.on{background:currentColor}
+  .pc .pr{display:flex;align-items:center;gap:3px;height:17px;height:clamp(15px,18cqw,20px)}
+  .pc .lb{flex:0 0 4.1em;white-space:nowrap;font-size:10.5px;font-size:clamp(9px,11.2cqw,12.5px)}
   .pc .g{flex:1 1 0;min-width:0;display:flex;gap:1px}
-  .pc .g i{flex:1;height:7px;border-radius:1px;background:#374151}
+  .pc .g i{flex:1;height:10px;height:clamp(8px,10.6cqw,12px);border-radius:1px;background:#374151}
   .pc .g i.on{background:var(--c)}
   .pc .g i.up{background:#fff;box-shadow:0 0 5px var(--c),inset 0 0 0 2px var(--c)}   /* 狂化・巨大化の上乗せぶん */
   #box{position:relative;flex:1 1 0;min-height:0;width:100%}
@@ -94,7 +97,8 @@
   @media (pointer:coarse){body.battle #touch{display:flex}}
   /* スマホ縦持ち: ボタンを画面の下端から持ち上げる（親指が届きやすいように）。ぶんだけ戦闘画面は縦に縮む */
   @media (pointer:coarse) and (orientation:portrait){
-    #touch{padding-bottom:calc(20px + max(0px, min(25dvh - 100px, 120px)))}   /* 下にプレイヤー情報（約100px）が入るので、その分を引いて持ち上げる */
+    /* 操作ボタンの下端を、画面の下から「プレイヤー情報の高さ + 持ち上げ分」の位置に置く。持ち上げ分は画面の高さに比例（840px の画面で約 109px） */
+    #touch{padding-bottom:calc(20px + clamp(0px, 25dvh - var(--sh) + 23px, 130px))}
   }
   /* スマホ横持ち: 画面の下端に重ねる */
   @media (pointer:coarse) and (orientation:landscape){
@@ -102,14 +106,26 @@
     #touch{position:absolute;left:0;right:0;bottom:6px;padding:0 16px}
     #dpad{gap:8px}
   }
+  /* 4 人戦をスマホの縦持ち（高さに余裕のある画面）で遊ぶときは、カードを 2×2 に並べて大きくする（操作ボタンの下の余白を使う） */
+  @media (pointer:coarse) and (orientation:portrait) and (min-height:700px){
+    body.q4{--sh:218px}
+    body.q4 .pcs{display:grid;grid-template-columns:1fr 1fr;gap:4px;align-content:center}
+    body.q4 .pc{max-width:none;padding:4px 8px 5px}
+    body.q4 .pc b{font-size:15px}
+    body.q4 .pc .sub{font-size:12px}
+    body.q4 .pc .pr{height:18px}
+    body.q4 .pc .lb{font-size:11.5px}
+    body.q4 .pc .g i{height:11px}
+  }
   /* 高さが足りない横長画面: プレイヤー情報は画面の下の中央に小さく重ねる（スマホなら左右の操作ボタンのあいだ） */
   @media (orientation:landscape) and (max-height:520px){
-    #stats{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:min(70%,520px);z-index:3;padding:2px 4px;background:rgba(17,24,39,.6);border-radius:8px;pointer-events:none}
-    .pc{padding:2px 4px;font-size:8px}
+    #stats{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:min(70%,520px);min-height:0;z-index:3;padding:2px 3px;background:rgba(17,24,39,.6);border-radius:8px;pointer-events:none}
+    .pc{padding:2px 3px}
     .pc b{font-size:10px}
-    .pc .pr{height:10px}
-    .pc .lb{flex-basis:30px;font-size:8px}
-    .pc .g i{height:5px}
+    .pc .sub{font-size:9px;margin-bottom:1px}
+    .pc .pr{height:11px}
+    .pc .lb{font-size:8.5px}
+    .pc .g i{height:6px}
   }
   @media (pointer:coarse) and (orientation:landscape) and (max-height:520px){
     #stats{width:calc(100% - 340px);max-width:520px}
@@ -219,7 +235,7 @@ const BZ_FRAMES = 360, BZ_BONUS = 2; // 狂化: 続く時間 / 攻撃・防御�
 const CN_FRAMES = 24, CN_WHIFF = 18; // カウンター: 構えている時間 / 空振りしたときの隙
 const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
 const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛ばし力の倍率
-const GIANT_FRAMES = 480, GIANT_BONUS = 3, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
+const GIANT_FRAMES = 480, GIANT_BONUS = 4, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
 
 // ---------- キャラクター ----------
@@ -241,7 +257,7 @@ const CHARS = [
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 3, tag: "透明になって攻撃をすり抜ける",
     skill: { name: "透過", cd: 9, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
   { id: "giant", name: "巨人", A: 1, D: 1, S: 1, tag: "ふだんは弱いが、巨大化して暴れる",
-    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+3され、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
+    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+4され、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
   { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 3, tag: "分身と一緒に戦う",
     skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分と同じ動きをする" } },
   { id: "okure", name: "おくれたん", A: 2, D: 3, S: 2, tag: "花の罠で相手を足止めする",
@@ -328,7 +344,7 @@ function applyProfile(p, prof) {
 // 効果音・演出のきっかけ。ホスト自身が鳴らし、同じ内容を次のスナップショットで参加者にも届ける
 //   ["s",x,y] 攻撃 / ["j",x,y] ジャンプ / ["b",x,y,向き] 盾で受けた / ["h",x,y,向き,強さ] 当たった / ["k",x,y,向き,強さ] 盾が割れた
 //   ["sk",x,y,キャラ] スキル発動 / ["sc",x,y,キャラ] ため始め / ["ar",x,y,向き,ため] 矢 / ["x",x,y,半径] 爆発 / ["tp",x0,y0,x1,y1] 瞬間移動
-//   ["sl",x,y] 居合斬りの踏み込み / ["fl",x,y] 花を踏んだ / ["cn",x,y,向き] カウンター成功 / ["rv",x,y] 残機で復活 / ["gx",x,y] 透過が解けた / ["cl",x,y] 分身が消えた
+//   ["dj",x,y] 二段ジャンプ（足もとの座標） / ["sl",x,y] 居合斬りの踏み込み / ["fl",x,y] 花を踏んだ / ["cn",x,y,向き] カウンター成功 / ["rv",x,y] 残機で復活 / ["gx",x,y] 透過が解けた / ["cl",x,y] 分身が消えた
 let evq = [];
 function emit(...e) {
   if (game.ph === "lobby") return;
@@ -524,7 +540,8 @@ function physics(p, inp, neutral) {
     const jrise = u && !p.jp; p.jp = u ? 1 : 0;                  // ジャンプボタンを押した瞬間
     if (u && p.ground && p.cn === 0) { p.vy = -jumpVel(jumpHeight(S)); p.ground = false; if (!p.isClone) emit("j", ecx(p), p.y + PLH); }
     else if (jrise && !p.ground && !p.dj && p.cn === 0) {       // 二段ジャンプ: 空中で 1 回だけ
-      p.vy = Math.min(p.vy, -jumpVel(jumpHeight(S) * AIR_JUMP)); p.dj = 1;   // 上昇中に押しても、いまの勢いより弱くはならない if (!p.isClone) emit("j", ecx(p), p.y + phOf(p));
+      p.vy = Math.min(p.vy, -jumpVel(jumpHeight(S) * AIR_JUMP)); p.dj = 1;   // 上昇中に押しても、いまの勢いより弱くはならない
+      if (!p.isClone) emit("dj", ecx(p), p.y + phOf(p));
     }
     if (a && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0) {
       p.a = 1; p.ak = 0; p.hit = [];
@@ -987,7 +1004,7 @@ function statsHtml() {
   for (let i = 0; i < MAX_PLAYERS; i++) {
     const p = game.p[i];
     if (!p || !p.c || !p.lk) continue;
-    const c = chOf(p), wins = Array.from({ length: WIN_ROUNDS }, (_, k) => k < p.w ? "●" : "○").join("");
+    const c = chOf(p), wins = Array.from({ length: WIN_ROUNDS }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
     const vals = [effA(p), effD(p), effS(p)], bases = [c.A, c.D, c.S];
     html += `<div class="pc${i === myId ? " me" : ""}"><b style="color:${COLORS[i]}">${esc(nameOf(i))}</b>` +
       `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn" style="color:${COLORS[i]}">${wins}</span></div>` +
@@ -1004,7 +1021,8 @@ function refreshHud() {
   if (sig === lastHud) return;
   lastHud = sig;
   document.body.classList.toggle("battle", inBattle);
-  stats.style.display = inBattle ? "block" : "none";
+  document.body.classList.toggle("q4", inBattle && game.p.filter(p => p && p.c && p.lk).length >= 4);   // 4 人のとき、縦持ちのスマホではカードを 2×2 に並べる
+  stats.style.display = inBattle ? "flex" : "none";
   if (inBattle) stats.innerHTML = statsHtml();
 }
 
@@ -1214,6 +1232,7 @@ const Sfx = (() => {
     ghostEnd() { tone(280, 740, 0.25, "sine", 0.08); },
     respawn() { tone(400, 1400, 0.3, "triangle", 0.14); },
     pop() { tone(700, 300, 0.09, "sine", 0.08); },
+    airJump() { tone(480, 1100, 0.11, "triangle", 0.11); noise(0.11, 0.10, "bandpass", 2000, 5200); tone(1300, 1900, 0.07, "sine", 0.05, 0.05); },
   };
 })();
 const muteBtn = document.getElementById("mute");
@@ -1226,13 +1245,13 @@ paintMute();
 const parts = [], rings = [];
 let shakeAmp = 0, flashA = 0;
 const shake = a => { shakeAmp = Math.max(shakeAmp, a); };
-function burst(x, y, n, o) {                       // o.dir を省くと全方向。flat は平たいかけら
+function burst(x, y, n, o) {                       // o.dir を省くと全方向。flat は平たいかけら、round は丸い煙
   for (let i = 0; i < n && parts.length < 400; i++) {
     const a = o.dir === undefined ? Math.random() * Math.PI * 2 : o.dir + (Math.random() - 0.5) * o.spread;
     const v = o.v0 + Math.random() * (o.v1 - o.v0), life = o.l0 + Math.random() * (o.l1 - o.l0);
     parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: o.g || 0, life, max: life,
                  s: o.s0 + Math.random() * (o.s1 - o.s0), c: o.colors[(Math.random() * o.colors.length) | 0],
-                 rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.5, flat: !!o.flat });
+                 rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.5, flat: !!o.flat, round: !!o.round });
   }
 }
 function updateFx(dt) {
@@ -1248,11 +1267,14 @@ function drawFx() {
   for (const q of parts) {
     cx.globalAlpha = Math.min(1, q.life / (q.max * 0.5));
     cx.fillStyle = q.c; cx.save(); cx.translate(q.x, q.y); cx.rotate(q.rot);
-    cx.fillRect(-q.s / 2, -q.s / 2, q.s, q.flat ? q.s * 0.45 : q.s); cx.restore();
+    if (q.round) { cx.beginPath(); cx.arc(0, 0, q.s * (1.3 - 0.5 * q.life / q.max) / 2, 0, 6.2832); cx.fill(); }     // 煙は少しずつふくらむ
+    else cx.fillRect(-q.s / 2, -q.s / 2, q.s, q.flat ? q.s * 0.45 : q.s);
+    cx.restore();
   }
   for (const r of rings) {
     cx.globalAlpha = 1 - r.t / r.max; cx.strokeStyle = r.c; cx.lineWidth = 3;
-    cx.beginPath(); cx.arc(r.x, r.y, (r.r0 || 8) + r.t * (r.sp || 5.5), 0, Math.PI * 2); cx.stroke();
+    const rad = (r.r0 || 8) + r.t * (r.sp || 5.5);
+    cx.beginPath(); cx.ellipse(r.x, r.y, rad, rad * (r.sy || 1), 0, 0, Math.PI * 2); cx.stroke();      // sy: 縦のつぶし具合（1 より小さいと平たい輪）
   }
   cx.globalAlpha = 1;
 }
@@ -1265,6 +1287,12 @@ function fxEvent(e) {
   else if (k === "j") {
     Sfx.jump();
     burst(x, y, 5, { dir: -Math.PI / 2, spread: 2.8, v0: 0.6, v1: 2.2, l0: 10, l1: 18, s0: 3, s1: 6, g: 0.02, colors: ["#94a3b8", "#cbd5e1"] });
+  } else if (k === "dj") {                         // 二段ジャンプ: 足もとに平たい輪が広がり、空気のかたまりが下へ散る
+    Sfx.airJump();
+    rings.push({ x, y, t: 0, max: 16, c: "#bae6fd", r0: 8, sp: 3.2, sy: 0.32 });
+    rings.push({ x, y: y + 6, t: 0, max: 12, c: "#ffffff", r0: 4, sp: 2.6, sy: 0.32 });
+    burst(x, y, 7, { dir: Math.PI / 2, spread: 3.2, v0: 0.8, v1: 2.6, l0: 14, l1: 24, s0: 9, s1: 15, g: -0.01, round: true, colors: ["#ffffff", "#e0f2fe"] });      // 足もとの煙
+    burst(x, y, 10, { dir: Math.PI / 2, spread: 1.4, v0: 2.5, v1: 6, l0: 8, l1: 15, s0: 2, s1: 4, colors: ["#ffffff", "#fef9c3", "#bae6fd"] });                      // 下へ散る火花
   } else if (k === "b") {                          // 盾で受けた: 小さな火花
     Sfx.block(); shake(2);
     burst(x, y, 8, { dir: d > 0 ? Math.PI : 0, spread: 1.7, v0: 2, v1: 6, l0: 8, l1: 14, s0: 2, s1: 4, g: 0.15, colors: ["#ffffff", "#bae6fd", "#e2e8f0"] });
@@ -1527,7 +1555,8 @@ function render() {
   const g = cx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
   cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
   // いちばん高い人の頭（名前の分の余白つき）まで映す。範囲が広がったぶんだけ画面を引き、ステージは下端に残す
-  let top = ch > cw * 1.15 ? PY - 300 : VIEW_TOP;     // 縦長では上の余白を詰める（上の台に立つ人と名前が収まる高さ）
+  const portrait = window.innerHeight > window.innerWidth;          // 縦持ち。映す範囲の上を少し詰めて、ステージを画面の上寄りにする（上の台に立つ人と名前は収まる高さ）
+  let top = portrait ? PY - 320 : VIEW_TOP;
   for (const p of game.p) if (p && p.c && p.al) top = Math.min(top, p.y - 30);
   camTop += (top - camTop) * (top < camTop ? 0.2 : 0.08);
   const sc = Math.min(cw / (VIEW_W * (game.nf >= 3 ? WIDE_SCALE : 1)), ch / (VIEW_BOTTOM - camTop));   // 3〜4 人のステージは広いので、そのぶん広く映す
@@ -1536,9 +1565,7 @@ function render() {
   if (shakeAmp > 0.25) { ox = (Math.random() * 2 - 1) * shakeAmp; oy = (Math.random() * 2 - 1) * shakeAmp; shakeAmp *= Math.pow(0.86, dt); }
   else shakeAmp = 0;
   cx.save();
-  // 縦長（スマホ縦持ち）では、映す範囲の上端を画面の上端に合わせてステージを上に寄せる。横長では中央に置く
-  const portrait = ch > cw * 1.15;
-  cx.translate(ox + cw / 2 - (PX + PW / 2) * sc, oy + (portrait ? -camTop * sc : ch / 2 - ((camTop + VIEW_BOTTOM) / 2) * sc));
+  cx.translate(ox + cw / 2 - (PX + PW / 2) * sc, oy + ch / 2 - ((camTop + VIEW_BOTTOM) / 2) * sc);
   cx.scale(sc, sc);
   // ステージ（メイン＋人数に応じた上の台）。サドンデス中は縮んでいく端が赤く点滅する
   const sdOn = game.sd > 0, blink = Math.floor(now / 250) % 2 === 0;
