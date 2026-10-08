@@ -27,6 +27,7 @@
   .pc .g i{flex:1;height:10px;height:clamp(8px,10.6cqw,12px);border-radius:1px;background:#374151}
   .pc .g i.on{background:var(--c)}
   .pc .g i.up{background:#fff;box-shadow:0 0 5px var(--c),inset 0 0 0 2px var(--c)}   /* 狂化・巨大化の上乗せぶん */
+  .pc .g i.dn{background:#450a0a;box-shadow:inset 0 0 0 1px #ef4444}                     /* 狂化で下がったぶん */
   #box{position:relative;flex:1 1 0;min-height:0;width:100%}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   #ui{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
@@ -240,14 +241,14 @@ const SD_HOLD_FRAMES = 6 * 60;       // 最小幅になってから、足場が�
 // スキルの数値（60fps 換算）
 const BOMB_FUSE = 120, BOMB_R = 9, BOMB_BLAST = 85;     // ボム: 導火線の長さ（2 秒）/ 大きさ / 爆風の半径
 const BOMB_KNOCK = 0.475, BOMB_LIFT = 5.5;              // ボムの吹っ飛び（横の強さ / 上向きの初速）。以前の半分
-const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 60;    // 花: 咲くまで / 残る時間 / 踏んだ人が動けない時間（1 秒）
+const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 90;    // 花: 咲くまで / 残る時間 / 踏んだ人が動けない時間（1.5 秒）
 const DOGEZA_KNOCK = 0.5;            // 花で動けない（土下座）間に受ける吹っ飛びの倍率
 const CLONE_LIFE = 420;              // 分身が消えるまで
-const BZ_FRAMES = 360, BZ_BONUS = 2; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値
+const BZ_FRAMES = 360, BZ_BONUS = { A: 2, D: -2, S: 1 }; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値（防御は下がる）
 const CN_FRAMES = 24, CN_WHIFF = 18; // カウンター: 構えている時間 / 空振りしたときの隙
 const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
 const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛ばし力の倍率
-const GIANT_FRAMES = 480, GIANT_BONUS = 4, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
+const GIANT_FRAMES = 480, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
 
 // ---------- キャラクター ----------
@@ -255,32 +256,33 @@ const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時�
 const CHARS = [
   { id: "normal", name: "ノーマル", A: 2, D: 2, S: 2, tag: "練習用。すべて普通で、スキルはない", skill: null },
   { id: "bomber", name: "ボマー", A: 2, D: 2, S: 3, tag: "爆弾で周りを吹っ飛ばす",
-    skill: { name: "ボム", cd: 6, text: "爆弾を短く山なりに投げる。敵に当たっても爆発せず、2秒後に爆発して周りを軽く吹っ飛ばす。盾は効かない（自分は無傷）" } },
+    skill: { name: "ボム", cd: 3, text: "爆弾を短く山なりに投げる。敵に当たっても爆発せず、2秒後に爆発して周りを軽く吹っ飛ばす。盾は効かない（自分は無傷）" } },
   { id: "samurai", name: "侍", A: 5, D: 1, S: 3, tag: "攻撃力が高く、盾を一撃で割れる",
-    skill: { name: "居合斬り", cd: 6, text: "少しためてから、前へ踏み込んで斬る。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
+    skill: { name: "居合斬り", cd: 4, text: "少しためてから、前へ踏み込んで斬る。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 3, tag: "遠くから矢を放つ",
-    skill: { name: "弓矢", cd: 3, hold: true, maxCharge: 72, openShield: true, text: "押している間ためて、離すと矢を放つ。長くためるほど速く強い。ためている間は盾が外れる" } },
+    skill: { name: "弓矢", cd: 1, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 4, tag: "瞬間移動で間合いを支配する",
-    skill: { name: "テレポート", cd: 4, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
-  { id: "berserker", name: "バーサーカー", A: 4, D: 3, S: 4, tag: "盾なし。全身が強く、さらに強化できる", noShield: true,
-    skill: { name: "狂化", cd: 14, text: "6秒間、攻撃・防御・スピードがさらに上がる" } },
+    skill: { name: "テレポート", cd: 2, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
+  { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 3, tag: "盾なし。スキルで攻撃と速さが上がるが、防御がなくなる", noShield: true,
+    skill: { name: "狂化", cd: 14, text: "6秒間、攻撃+2・スピード+1になるが、防御が−2（0）になる（4/2/3 → 6/0/4）。吹っ飛ばされやすくなる" } },
   { id: "knight", name: "騎士", A: 3, D: 5, S: 1, tag: "とても硬い。攻撃を2倍にして返す",
-    skill: { name: "カウンター", cd: 7, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
+    skill: { name: "カウンター", cd: 4, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 3, tag: "透明になって攻撃をすり抜ける",
-    skill: { name: "透過", cd: 9, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
+    skill: { name: "透過", cd: 8, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
   { id: "giant", name: "巨人", A: 1, D: 1, S: 1, tag: "ふだんは弱いが、巨大化して暴れる",
-    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+4され、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
+    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+5され（1/1/1 → 6/6/6）、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
   { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 3, tag: "分身と一緒に戦う",
-    skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分とは別に動き、敵を追いかけて攻撃してくれる味方になる" } },
+    skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分とは別に動き、敵を追いかけて攻撃してくれる味方になる。分身は盾を持たない" } },
   { id: "okure", name: "おくれたん", A: 2, D: 3, S: 2, tag: "花の罠で相手を足止めする",
-    skill: { name: "花", cd: 8, text: "目の前に小さな花を咲かせる。踏んだ相手は1秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）" } },
+    skill: { name: "花", cd: 1, text: "目の前に小さな花を咲かせる。踏んだ相手は1.5秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）" } },
   { id: "nao", name: "なお", A: 1, D: 1, S: 2, tag: "弱いが、残機が1つ多い", skill: null, lives: 1 },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
-const bonusOf = p => (p.bz > 0 ? BZ_BONUS : 0) + (p.gt > 0 ? GIANT_BONUS : 0);   // 狂化中・巨大化中は上乗せ
-const effA = p => chOf(p).A + bonusOf(p);
-const effD = p => chOf(p).D + bonusOf(p);
-const effS = p => chOf(p).S + bonusOf(p);
+// 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる
+const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, chOf(p)[k] + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0)));
+const effA = p => statOf(p, "A");
+const effD = p => statOf(p, "D");
+const effS = p => statOf(p, "S");
 const szOf = p => p.gt > 0 ? GIANT_SCALE : 1;                // 巨大化中は 2 倍の大きさ
 const pwOf = p => PLW * szOf(p), phOf = p => PLH * szOf(p);
 const dzMul = t => t.dz > 0 ? DOGEZA_KNOCK : 1;              // 土下座中は吹っ飛びにくい
@@ -329,7 +331,7 @@ function newPlayer() {
            gt: 0, dz: 0, gb: 0,                         // 巨大化 / 土下座（花で動けない）/ 透過中に振った攻撃
            jp: 0, dj: 0,                                // 前のフレームでジャンプボタンが押されていたか / 空中ジャンプを使ったか
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
-           aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回）
+           aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
            life: 0, isClone: false };
 }
 
@@ -371,7 +373,7 @@ const untouchable = t => t.gh > 0 || t.iv > 0;           // 透過中・復活�
 // 盾が効く状態か（振っている・吹っ飛び中・盾が壊れている・動けない・弓をためている間は外れる）
 function shieldUp(p) {
   const c = chOf(p);
-  if (c.noShield) return false;
+  if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0) return false;
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
   return true;
@@ -396,7 +398,7 @@ function spawn(p, slot, n, battle) {
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
-  p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0;   // 頭脳の記憶を消す
+  p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
 
 function connectedSlots() {
@@ -780,7 +782,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "copern": return gap < 360 ? KEY.k : 0;
     case "okure": return g && face && sameLevel && t.ground && gap > 70 && gap < 240 ? KEY.k : 0;                      // 敵が来る道に花を置く
     case "archer":                                                                                                      // 遠いほど長くためる
-      if (g && face && Math.abs(dyFeet) < 40 && gap >= 150 && gap <= 480) { c.aiCh = gap > 300 ? 72 : gap > 200 ? 48 : 28; return KEY.k; }
+      if (g && face && Math.abs(dyFeet) < 40 && gap >= 150 && gap <= 480) { c.aiCh = gap > 300 ? 36 : gap > 200 ? 24 : 14; return KEY.k; }
       return 0;
     case "teleporter":                                                                                                  // 盾を向けた敵の向こう側（背中）へ出る
       if (g && face && sameLevel && tFaces && gap > 90 && gap < 300) {
@@ -868,7 +870,7 @@ function aiThink(c, owner, pls, B) {
   const turn = () => { const b = sgn > 0 ? KEY.r : KEY.l; inp |= b; c.aiOnce |= b; };   // 向きを変えるだけ（押し続けると敵をまたいでしまうので、1 回だけ）
   if (hold) { if (c.f !== sgn && c.ground) turn(); }
   else if (rel !== want) steer(tcx + want * (sd + R * 0.55));    // 敵をまたいで反対側へ
-  else if (gap > R * 0.55) steer(tcx - sgn * (sd + R * 0.55));   // 殴れる間合いまで近づく
+  else if (gap > R * 0.55 + 8) steer(tcx - sgn * (sd + R * 0.55));   // 殴れる間合いまで近づく（steer の不感帯 8px のぶん余裕を見て、向き直る処理へ必ず進めるようにする）
   else if (c.f !== sgn && c.ground) turn();                      // 向きだけ合わせる
   if (!c.ground) { inp &= ~(KEY.l | KEY.r); steer(stayX(tcx)); }     // 空中では、メインの上へ寄るだけ
   const faceDir = ((inp & (KEY.l | KEY.r)) && c.ground && c.a === 0) ? ((inp & KEY.r) ? 1 : -1) : c.f;
@@ -878,6 +880,9 @@ function aiThink(c, owner, pls, B) {
   if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0 && Math.random() >= B.miss) inp |= KEY.a;
   if (sk && B.skill > 0) { const k = aiSkill(c, t, { gap, sgn, sd, dyFeet, sameLevel, tr }, B); if (k) { inp |= k; inp &= ~KEY.a; } }   // スキルを使うときは、通常攻撃を押さない
   if (B.dodge && c.ground && Math.random() < B.dodge) inp = aiDodge(c, inp, ccx, feet);
+  // 行き詰まり防止: 同じ高さで 2 秒（120 フレーム）も何も押していなければ、とにかく敵へ向かう（待ち・不感帯などで動けなくなる場合の保険）
+  if (inp & (KEY.l | KEY.r | KEY.a | KEY.u | KEY.k)) c.aiIdle = 0; else c.aiIdle += B.think;
+  if (c.aiIdle >= 120 && c.ground) { c.aiIdle = 0; c.aiOnce = 0; c.aiSideT = 0; c.aiGoal = tcx; inp = sgn > 0 ? KEY.r : KEY.l; }
   return inp;
 }
 function aiInput(c, owner, B) {                                // 毎フレーム: ボタンの状態を返す
@@ -1230,7 +1235,10 @@ function shareUrl() {
 }
 
 // v: 今の値 / base: もとの値（v が大きいぶんの目盛りは「上乗せ」として光らせる）
-const barHtml = (v, c, base) => `<span class="g" style="--c:${c}">${[1, 2, 3, 4, 5, 6].map(n => `<i class="${n <= v ? (n > (base === undefined ? v : base) ? "on up" : "on") : ""}"></i>`).join("")}</span>`;
+const barHtml = (v, c, base) => {
+  const b = base === undefined ? v : base;             // up: 上がったぶん / dn: 下がったぶん（狂化の防御）
+  return `<span class="g" style="--c:${c}">${[1, 2, 3, 4, 5, 6].map(n => `<i class="${n <= v ? (n > b ? "on up" : "on") : (n <= b ? "dn" : "")}"></i>`).join("")}</span>`;
+};
 // 戦闘中だけ、画面の下に全員のキャラと性能と勝ち数を、1 人ずつのカード（縦並び）で表示する
 function statsHtml() {
   let html = "";
