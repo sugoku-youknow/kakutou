@@ -206,7 +206,7 @@ const ATK_COOLDOWN = 10;
 // 攻撃の種類: 0=通常 / 1=侍の居合斬り（少しためてから、踏み込みながら斬る）
 const ATKS = [
   { total: 26, on: 7, off: 13, reach: 46 },
-  { total: 50, on: 24, off: 29, reach: 74, dash: 6.5, dashFrom: 20, dashTo: 29 },   // 20 フレームためてから踏み込む（踏み込みは約 65px）
+  { total: 40, on: 14, off: 19, reach: 74, dash: 13, dashFrom: 10, dashTo: 19 },   // 10 フレームためてから踏み込む（踏み込みは約 130px）
 ];
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
 
@@ -260,7 +260,7 @@ const CHARS = [
   { id: "bomber", name: "ボマー", A: 2, D: 2, S: 3, tag: "爆弾で周りを吹っ飛ばす",
     skill: { name: "ボム", cd: 3, text: "爆弾を短く山なりに投げる。敵に当たっても爆発せず、2秒後に爆発して周りを軽く吹っ飛ばす。盾は効かない（自分は無傷）" } },
   { id: "samurai", name: "侍", A: 5, D: 1, S: 3, tag: "攻撃力が高く、盾を一撃で割れる",
-    skill: { name: "居合斬り", cd: 4, text: "少しためてから、前へ踏み込んで斬る。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
+    skill: { name: "居合斬り", cd: 4, text: "少しためてから（約0.17秒）、いちばん近い敵の方向へ自動で踏み込んで斬る（約130px）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 3, tag: "遠くから矢を放つ",
     skill: { name: "弓矢", cd: 0.5, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 4, tag: "瞬間移動で間合いを支配する",
@@ -451,12 +451,23 @@ function ents() {
 }
 
 // ---- スキル ----
+function aimAtFoe(p) {                       // 居合斬り: 右を向いていても、左に敵がいれば左へ踏み込む
+  let best = null, bd = 1e9;
+  for (const e of ents()) {
+    if (e.own === p.own || untouchable(e)) continue;
+    const d = Math.abs(ecx(e) - ecx(p)) + 1.5 * Math.abs(e.y + phOf(e) - (p.y + phOf(p)));
+    if (d < bd) { bd = d; best = e; }
+  }
+  const sg = best ? Math.sign(ecx(best) - ecx(p)) : 0;
+  if (sg) p.f = sg;
+}
 function useSkill(p) {                       // 押した瞬間に発動するスキル
   const id = chOf(p).id;
   if (id === "bomber") {
     game.pj.push({ k: 0, x: ecx(p) + p.f * 18, y: p.y + 14, vx: p.f * 3.75 + p.vx * 0.25, vy: -8.5, own: p.own, t: 0 });   // 飛ぶ距離は以前の半分
   } else if (id === "samurai") {
     p.a = 1; p.ak = 1; p.hit = [];           // 居合斬り（ためてから踏み込み、盾を一撃で壊す）
+    aimAtFoe(p);                             // いちばん近い敵のほうを向く
   } else if (id === "okure") {
     if (!plantFlower(p)) return false;
   } else if (id === "copern") {
@@ -577,7 +588,7 @@ function physics(p, inp, neutral) {
   const ak = ATKS[p.ak] || ATKS[0];
   if (p.a > 0) {
     p.a++;
-    if (ak.dash && p.a === ak.dashFrom) emit("sl", ecx(p), ecy(p));
+    if (ak.dash && p.a === ak.dashFrom) { aimAtFoe(p); emit("sl", ecx(p), ecy(p)); }      // 踏み込む直前にも、敵の方向へ向き直す
     if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) p.vx = p.f * ak.dash;      // 居合斬りの踏み込み
     if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ATK_COOLDOWN; }
   }
@@ -776,7 +787,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
   const { gap, sgn, sd, dyFeet, sameLevel, tr } = X, g = c.ground, face = c.f === sgn, tFaces = t.f === -sgn;
   switch (id) {
     case "bomber": return g && face && sameLevel && gap > 40 && gap < 230 ? KEY.k : 0;                                  // 前へ投げる
-    case "samurai": return g && face && sameLevel && gap > 18 && gap < 112 && shieldUp(t) && tFaces && t.a === 0 && t.cd === 0 ? KEY.k : 0;   // 盾で固めた敵を、盾ごと割る
+    case "samurai": return g && sameLevel && gap > 18 && gap < 170 && shieldUp(t) && tFaces && t.a === 0 && t.cd === 0 ? KEY.k : 0;   // 盾で固めた敵を、盾ごと割る
     case "berserker": return sameLevel && gap < 230 ? KEY.k : 0;
     case "knight": return g && face && t.a >= 1 && t.a <= 6 && t.ak === 0 && gap <= tr + 10 ? KEY.k : 0;                // 敵が振りかぶった瞬間にカウンター
     case "ghost": return sameLevel && gap > 50 && gap < 280 && (t.a > 0 || (shieldUp(t) && tFaces)) ? KEY.k : 0;
