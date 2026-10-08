@@ -243,25 +243,25 @@ const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時�
 const CHARS = [
   { id: "normal", name: "ノーマル", A: 2, D: 2, S: 2, tag: "練習用。すべて普通で、スキルはない", skill: null },
   { id: "bomber", name: "ボマー", A: 2, D: 2, S: 3, tag: "爆弾で周りを吹っ飛ばす",
-    skill: { name: "ボム", cd: 3, text: "爆弾を短く山なりに投げる。敵に当たっても爆発せず、2秒後に爆発して周りを軽く吹っ飛ばす。盾は効かない（自分は無傷）" } },
+    skill: { name: "ボム", cd: 6, text: "爆弾を短く山なりに投げる。敵に当たっても爆発せず、2秒後に爆発して周りを軽く吹っ飛ばす。盾は効かない（自分は無傷）" } },
   { id: "samurai", name: "侍", A: 5, D: 1, S: 3, tag: "攻撃力が高く、盾を一撃で割れる",
-    skill: { name: "居合斬り", cd: 4, text: "少しためてから、前へ踏み込んで斬る。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
+    skill: { name: "居合斬り", cd: 6, text: "少しためてから、前へ踏み込んで斬る。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 3, tag: "遠くから矢を放つ",
-    skill: { name: "弓矢", cd: 1, hold: true, maxCharge: 72, openShield: true, text: "押している間ためて、離すと矢を放つ。長くためるほど速く強い。ためている間は盾が外れる" } },
+    skill: { name: "弓矢", cd: 3, hold: true, maxCharge: 72, openShield: true, text: "押している間ためて、離すと矢を放つ。長くためるほど速く強い。ためている間は盾が外れる" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 4, tag: "瞬間移動で間合いを支配する",
-    skill: { name: "テレポート", cd: 2, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
+    skill: { name: "テレポート", cd: 4, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
   { id: "berserker", name: "バーサーカー", A: 4, D: 3, S: 4, tag: "盾なし。全身が強く、さらに強化できる", noShield: true,
     skill: { name: "狂化", cd: 14, text: "6秒間、攻撃・防御・スピードがさらに上がる" } },
   { id: "knight", name: "騎士", A: 3, D: 5, S: 1, tag: "とても硬い。攻撃を2倍にして返す",
-    skill: { name: "カウンター", cd: 5, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
+    skill: { name: "カウンター", cd: 7, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 3, tag: "透明になって攻撃をすり抜ける",
-    skill: { name: "透過", cd: 8, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
+    skill: { name: "透過", cd: 9, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
   { id: "giant", name: "巨人", A: 1, D: 1, S: 1, tag: "ふだんは弱いが、巨大化して暴れる",
     skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+4され、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
   { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 3, tag: "分身と一緒に戦う",
-    skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分と同じ動きをする" } },
+    skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分とは別に動き、敵を追いかけて攻撃してくれる味方になる" } },
   { id: "okure", name: "おくれたん", A: 2, D: 3, S: 2, tag: "花の罠で相手を足止めする",
-    skill: { name: "花", cd: 3, text: "目の前に小さな花を咲かせる。踏んだ相手は1秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）" } },
+    skill: { name: "花", cd: 8, text: "目の前に小さな花を咲かせる。踏んだ相手は1秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）" } },
   { id: "nao", name: "なお", A: 1, D: 1, S: 2, tag: "弱いが、残機が1つ多い", skill: null, lives: 1 },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
@@ -316,6 +316,7 @@ function newPlayer() {
            fz: 0, iv: 0, lv: 0,                         // 動けない時間 / 無敵 / 残機
            gt: 0, dz: 0, gb: 0,                         // 巨大化 / 土下座（花で動けない）/ 透過中に振った攻撃
            jp: 0, dj: 0,                                // 前のフレームでジャンプボタンが押されていたか / 空中ジャンプを使ったか
+           aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null,   // 分身の頭脳（ホストだけが使う）: 次に考えるまで / 続ける移動 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵
            life: 0, isClone: false };
 }
 
@@ -715,13 +716,103 @@ function updateFlowers(list) {
   }
 }
 
-function tickClone(i) {                                      // 分身は持ち主と同じ入力で動く（スキルは使えない）
+// ---- 分身の頭脳（CPU）----
+// 分身は、持ち主の入力を真似せず、自分で敵を追いかけて攻撃する味方として動く（スキルは使えない）。
+//   ・いちばん近い敵を狙う（持ち主が戦っている相手を優先して援護する）。透過中・復活直後の敵は狙わない
+//   ・敵の盾が自分のほうを向いているときは、背中側へ回り込んでから殴る（ときどき盾を殴って削る）。盾が外れているときは、そのまま殴る
+//   ・足場の端では止まる。上の台から降りるときだけ、中央に近い側の端から飛び降りる
+//   ・敵が上の台にいれば、ジャンプ（足りなければ二段ジャンプ）で登る
+//   ・メインの面より下へ落ちかけたら、二段ジャンプで足場へ戻る
+//   ・考え直すのは AI_THINK フレームに 1 回（人間らしい反応の遅れ）。ジャンプと攻撃のボタンは、考えた瞬間に 1 回だけ押す
+const AI_THINK = 3, AI_EDGE = 24;      // 考え直す間隔（フレーム）/ 足場の端で止まる距離（px）
+const AI_CHIP = 0.35;                  // 盾の正面にいて殴れる間合いのとき、考えるたびに殴る確率
+function platformUnder(e) {              // いま立っている足場（空中なら null）
+  if (!e.ground) return null;
+  const hh = phOf(e), ww = pwOf(e);
+  return platforms().find(pl => Math.abs(e.y + hh - pl.y) < 2 && e.x + ww > pl.x && e.x < pl.x + pl.w) || null;
+}
+function cloneThink(c, owner, pls) {
+  const R = ATKS[0].reach, ccx = ecx(c), feet = c.y + PLH;
+  const main = pls.find(q => q.main) || pls[pls.length - 1];
+  const stayX = x => Math.max(main.x + 24, Math.min(main.x + main.w - 24, x));       // メインの上に収まる x
+  let inp = 0;
+  const steer = x => { if (Math.abs(x - ccx) > 8) inp |= x > ccx ? KEY.r : KEY.l; };   // 横へ x に向かう
+  c.aiDrop = false;
+  // 1) メインの面より下へ落ちかけている: 足場へ戻る
+  if (!c.ground && feet > PY + 4) {
+    steer(stayX(ccx));
+    if (!c.dj && !c.jp && c.vy > -3) inp |= KEY.u;
+    return inp;
+  }
+  // 2) 狙う敵を選ぶ
+  const orc = owner ? ecx(owner) : ccx;
+  let t = null, best = 1e9;
+  for (let j = 0; j < MAX_PLAYERS; j++) {
+    const e = game.p[j];
+    if (j === c.own || !e || !e.c || !e.al || untouchable(e)) continue;
+    let sc = Math.abs(ecx(e) - ccx) + 1.5 * Math.abs(e.y + phOf(e) - feet);
+    if (Math.abs(ecx(e) - orc) < 260) sc *= 0.7;
+    if (sc < best) { best = sc; t = e; }
+  }
+  if (!t) {                                                   // 狙える敵がいない: 持ち主のそばで待つ
+    if (Math.abs(orc - ccx) > 110) steer(orc);
+    return inp;
+  }
+  const tcx = ecx(t), th = phOf(t), tw = pwOf(t), dyFeet = t.y + th - feet;
+  const sgn = Math.sign(tcx - ccx) || c.f, tpl = platformUnder(t), pl = platformUnder(c);
+  // 3) 敵が上の台に立っている: 真下まで行って跳び、届かなければ二段ジャンプで登る
+  if (dyFeet < -45 && tpl) {
+    const gx = Math.max(tpl.x + 14, Math.min(tpl.x + tpl.w - 14, tcx));
+    steer(gx);
+    if (c.ground && Math.abs(ccx - gx) < 36) inp |= KEY.u;
+    else if (!c.ground && !c.dj && !c.jp && c.vy > -2 && feet > tpl.y - 20) inp |= KEY.u;
+    return inp;
+  }
+  // 4) 自分が上の台にいて、敵が下にいる: 中央に近い側の端から飛び降りる（外側へ降りると場外へ落ちる）
+  if (dyFeet > 45 && pl && !pl.main && c.ground) {
+    c.aiDrop = true;
+    const inward = Math.sign(CENTER_X - (pl.x + pl.w / 2)) || sgn;
+    steer(inward > 0 ? pl.x + pl.w + 30 : pl.x - 30);
+    return inp;
+  }
+  // 5) 同じ高さ: 盾が向いていない側（背中側）へ回り込んで、近づいて殴る
+  const rel = Math.sign(ccx - tcx) || -sgn;                     // 敵から見て、自分のいる側（+1 = 右）
+  if (c.aiTgt !== t) { c.aiTgt = t; c.aiSideT = 0; }
+  if ((c.aiSideT -= AI_THINK) <= 0) { c.aiWant = shieldUp(t) ? -t.f : rel; c.aiSideT = 15; }   // 立ちたい側。コロコロ変えない
+  const want = c.aiWant, sd = PLW / 2 + tw / 2, gap = Math.abs(tcx - ccx) - sd;                // gap: 体のふちどうしの距離
+  if (rel !== want) steer(tcx + want * (sd + R * 0.55));         // 敵をまたいで反対側へ
+  else if (gap > R * 0.55) steer(tcx);                           // 近づく
+  else if (c.f !== sgn && c.ground) inp |= sgn > 0 ? KEY.r : KEY.l;   // 向きだけ合わせる
+  if (!c.ground) { inp &= ~(KEY.l | KEY.r); steer(stayX(tcx)); }     // 空中では、メインの上へ寄るだけ
+  const faceDir = ((inp & (KEY.l | KEY.r)) && c.ground && c.a === 0) ? ((inp & KEY.r) ? 1 : -1) : c.f;
+  const open = !shieldUp(t) || t.f !== -faceDir;                 // 盾が効かない（外れている・背中側）
+  const near = c.y + PLH - 8 > t.y && c.y + 8 < t.y + th;        // 高さが重なっている
+  const chip = !open && Math.random() < AI_CHIP;                // 盾の正面でも、ときどき殴って盾を削る（3 回で壊れる。持ち主が追撃できる）
+  if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0) inp |= KEY.a;
+  return inp;
+}
+function cloneInput(c, owner) {
+  const pls = platforms();
+  if (!pls.length) return 0;
+  let inp;
+  if (--c.aiT > 0) inp = c.aiIn;                                // 考えない間は、前の移動をそのまま続ける
+  else { c.aiT = AI_THINK; inp = cloneThink(c, owner, pls); c.aiIn = inp & (KEY.l | KEY.r); }
+  if ((inp & (KEY.l | KEY.r)) && c.ground && !c.aiDrop) {       // 足場の端から落ちない
+    const pl = platformUnder(c), x = ecx(c);
+    if (pl) {
+      if ((inp & KEY.l) && x - pl.x < AI_EDGE) inp &= ~KEY.l;
+      if ((inp & KEY.r) && pl.x + pl.w - x < AI_EDGE) inp &= ~KEY.r;
+    }
+  }
+  return inp;
+}
+function tickClone(i) {                                      // 分身は自分で考えて動く（スキルは使えない）
   const c = game.cl[i], owner = game.p[i];
   if (!c) return;
   if (--c.life <= 0 || !owner || !owner.al || c.y > H + 120 || c.x < -150 || c.x > W + 150) {
     emit("cl", ecx(c), ecy(c)); game.cl[i] = null; return;
   }
-  physics(c, inputs[i] & ~KEY.k, false);
+  physics(c, cloneInput(c, owner), false);
 }
 
 function hostTick() {
