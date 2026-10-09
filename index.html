@@ -323,8 +323,12 @@ const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛�
 const GIANT_FRAMES = 480, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
 const RW_SPAN = 120, RW_SPEED = 4;   // 時計師の巻き戻し: さかのぼる長さ（2 秒）/ 早戻りの速さ（4 倍速。2 秒ぶんを 0.5 秒で戻る）
-const LAW_R0 = 40, LAW_R_GROW = 3, LAW_R_MAX = 260, LAW_WHIFF = 120;   // ローの円: 押した瞬間の半径 / 1 フレームに広がる量 / 最大の半径 / 不発のときのクールタイム（2 秒）
-const lawR = ks => Math.min(LAW_R_MAX, LAW_R0 + LAW_R_GROW * ks);
+// ローの ROOM: 押している間だけ円が広がり（上限なし）、離すとその場所に 5 秒残る。円の中では、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで入れ替える。
+// 円が消えるとクールタイム（2 秒＋半径 100px ごとに 1 秒）が始まり、その間は盾がなく、移動速度が 0.7 倍になる
+const ROOM_R0 = 40, ROOM_GROW = 4, ROOM_LIFE = 300, ROOM_SWAP_GAP = 30;   // 押した瞬間の半径 / 1 フレームに広がる量 / 円が残る時間（5 秒）/ 入れ替えの間隔（0.5 秒）
+const ROOM_CD_BASE = 120, ROOM_CD_PER100 = 60, ROOM_SLOW = 0.7;          // クールタイム: 基本 2 秒 + 半径 100px ごとに 1 秒 / クールタイム中の移動速度の倍率
+const roomR = ks => ROOM_R0 + ROOM_GROW * ks;
+const roomCd = r => Math.round(ROOM_CD_BASE + ROOM_CD_PER100 * r / 100);
 const GRAB_ON = 8, GRAB_OFF = 12, GRAB_REACH = 40, GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.85;   // レスラーのつかみ: つかめる時間（フレーム目）/ 届く距離 / 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし
 const WIND_FRAMES = 300, WIND_W = 320, WIND_H = 220;    // 天狗の風の場: 続く時間（5 秒）/ 横幅 / 高さ
 const WIND_FOE_MV = 0.6, WIND_FOE_JP = 0.7, WIND_SELF_MV = 1.4, WIND_SELF_JP = 1.25;   // 場の中の 移動速度・ジャンプの高さ の倍率（敵 / 天狗自身）
@@ -362,8 +366,9 @@ const CHARS = [
   // 13〜16 体目（通信ではキャラを番号で送るので、必ず末尾に足す）
   { id: "clock", name: "時計師", A: 2, D: 2, S: 2, tag: "時間を巻き戻して、ピンチから抜け出す",
     skill: { name: "巻き戻し", cd: 10, text: "2秒前までの通り道を、残像を残しながら早戻りでさかのぼる（約0.5秒）。戻っている間は無敵。吹っ飛ばされている最中でも使える" } },
-  { id: "law", name: "ロー", A: 2, D: 1, S: 3, tag: "円の中のキャラと位置を入れ替える",
-    skill: { name: "入れ替え", cd: 8, hold: true, maxCharge: Math.ceil((LAW_R_MAX - LAW_R0) / LAW_R_GROW), text: "押している間、自分を中心に水色の円が広がる（約1.2秒で最大）。離すと、円の中のキャラ全員と自分の位置を入れ替える（3人以上ならランダム。誰も元の位置には残らない）。円に誰もいなければ不発" } },
+  { id: "law", name: "ロー", A: 2, D: 1, S: 3, tag: "ROOM の中では、回り込みも入れ替えも自由自在",
+    skill: { name: "ROOM", cd: 2, cdText: "2秒＋円の半径100pxごとに1秒（円が消えてから）", hold: true, maxCharge: 1e6,
+      text: "押している間だけ、水色の円が広がり続ける。離すと、その場所に円が5秒間残る。円の中に自分と敵がいるとき、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで円の中の全員と位置を入れ替える（0.5秒ごと）。円が消えるとクールタイムが始まり、その間は盾がなく、動きが遅くなる（大きく広げるほど長い）" } },
   { id: "wrestler", name: "レスラー", A: 4, D: 3, S: 1, tag: "盾ごとつかんで投げ飛ばす",
     skill: { name: "つかみ投げ", cd: 5, text: "目の前の敵を、盾やカウンターを無視してつかみ、持ち上げている間に押した方向へ投げる（押さなければ後ろへ）。地上でだけ使える。つかむ前に殴られると負け、空振りすると隙ができる" } },
   { id: "tengu", name: "天狗", A: 2, D: 2, S: 3, tag: "風の場で、敵を鈍らせ自分は速くなる",
@@ -393,8 +398,9 @@ let netMsg = "";
 // nf: この試合で戦っている人数（ステージの形が決まる） / rt: 制限時間の残りフレーム / sd: サドンデス開始からのフレーム / hs: ヒットストップの残り（ホストだけが使う）
 // wr: 何本先取か（ロビーでは次の試合の設定。ホストが決めて、スナップショットで参加者へ届く）
 // pj: 飛び道具（ボム・矢） / fl: 花 / cl: 分身（持ち主のスロットごとに 1 つ） / wd: 天狗の風の場（持ち主ごとに 1 つまで）
-const game = { ph: "lobby", tm: 0, win: -1, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], cl: [null, null, null, null], p: [null, null, null, null] };
-const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.cl = [null, null, null, null]; };
+// rm: ローの ROOM（持ち主ごとに 1 つまで）
+const game = { ph: "lobby", tm: 0, win: -1, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cl: [null, null, null, null], p: [null, null, null, null] };
+const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cl = [null, null, null, null]; };
 // いま使える足場。サドンデス中は縮む（上の台は早く消え、メインは最小幅まで縮んだあとすべて崩れる）
 function platforms() {
   const base = LAYOUTS[Math.max(0, Math.min(4, game.nf | 0))], sd = game.sd | 0;
@@ -424,6 +430,7 @@ function newPlayer() {
            gt: 0, dz: 0, gb: 0,                         // 巨大化 / 土下座（花で動けない）/ 透過中に振った攻撃
            jp: 0, dj: 0,                                // 前のフレームでジャンプボタンが押されていたか / 空中ジャンプを使ったか
            tl: [], rw: 0, rwPath: null, rwI: 0,         // 時計師: 通り道の記録（ホストだけ）/ 早戻りの残りフレーム / 戻る道 / 戻る道の今の位置
+           km: 0, rmSw: 0,                              // クールタイムの長さ（ローは毎回変わる。スキルボタンの表示用）/ ローの入れ替えの間隔の残り
            gr: 0, grT: null, grH: 0, grD: 0, f0: 1, hd: 0,   // レスラー: つかみの経過フレーム / つかんでいる相手 / 持ち上げの残り / 投げる向き / つかみ始めの向き。hd: つかまれている（残りフレーム）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
@@ -485,6 +492,7 @@ function shieldUp(p) {
   const c = chOf(p);
   if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0 || p.gr > 0 || p.hd > 0) return false;
+  if (c.id === "law" && p.kc > 0) return false;                  // ロー: ROOM が消えたあとのクールタイム中は盾がない
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
   return true;
 }
@@ -507,7 +515,7 @@ function spawn(p, slot, n, battle) {
   p.f = (p.x + PLW / 2 < PX + PW / 2) ? 1 : -1; p.hit = [];
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
-  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0;
+  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -609,10 +617,7 @@ function useSkill(p) {                       // 押した瞬間に発動する�
 function fireHold(p) {                       // ためて離すスキル
   const sk = chOf(p).skill, c = Math.min(1, p.ks / sk.maxCharge), id = chOf(p).id, ks = p.ks;
   p.ks = 0;
-  if (id === "law") {                        // 入れ替え: 円の中に誰もいなければ不発（クールタイムは短い）
-    p.kc = lawSwap(p, lawR(ks)) ? sk.cd * 60 : LAW_WHIFF;
-    return;
-  }
+  if (id === "law") { openRoom(p, ks); return; }   // ROOM を張る（クールタイムは円が消えてから）
   if (id === "archer") {
     game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * ARROW_SPEED * (13 + 9 * c), vy: 0, own: p.own, pw: 0.35 + 0.85 * c, t: 0 });
     emit("ar", ecx(p) + p.f * 24, p.y + 24, p.f, c);
@@ -667,11 +672,43 @@ function rewindStep(p) {
   if (--p.rw <= 0 || p.rwI >= path.length - 1) { p.rw = 0; p.dj = e[3]; p.ground = e[4]; p.rwPath = null; }
 }
 
-// ---- ロー: 入れ替え ----
+// ---- ロー: ROOM ----
 // 体のいちばん近い点が、円の中心から r 以内なら「円の中」
 function distToBody(x, y, e) {
   const nx = Math.max(e.x, Math.min(x, e.x + pwOf(e))), ny = Math.max(e.y, Math.min(y, e.y + phOf(e)));
   return Math.hypot(x - nx, y - ny);
+}
+const roomOf = p => game.rm.find(m => m.own === p.own) || null;            // 自分の ROOM（なければ null）
+const inRoom = (m, e) => distToBody(m.x, m.y, e) <= m.r;
+// ROOM の中にいる敵（透過中・復活直後・巻き戻し中・つかまれている人は除く）
+const roomFoes = (p, m) => ents().filter(e => e !== p && e.own !== p.own && e.al && !untouchable(e) && e.hd === 0 && inRoom(m, e));
+function openRoom(p, ks) {                     // 離した場所に、広げた大きさの円を残す（クールタイムは円が消えてから）
+  const m = { own: p.own, x: ecx(p), y: ecy(p), r: roomR(ks), t: ROOM_LIFE };
+  game.rm = game.rm.filter(o => o.own !== p.own); game.rm.push(m);
+  p.rmSw = 0;
+  emit("ro", m.x, m.y, m.r);
+}
+function updateRooms() {
+  for (let i = game.rm.length - 1; i >= 0; i--) {
+    const m = game.rm[i];
+    if (--m.t > 0) continue;
+    game.rm.splice(i, 1);
+    const p = game.p[m.own];
+    if (p) { p.kc = p.km = roomCd(m.r); }       // 円が消えたら、大きさに応じたクールタイム（その間は盾なし・動きが遅い）
+    emit("rx", m.x, m.y, m.r);
+  }
+}
+// 回り込み攻撃: 円の中でいちばん近い敵の背中側へ瞬間移動して、敵の背中を向いて攻撃を始める（当たるのは普通の攻撃と同じ 7 フレーム目から）
+function roomWarp(p, m) {
+  let best = null, bd = 1e9;
+  for (const e of roomFoes(p, m)) { const d = Math.abs(ecx(e) - ecx(p)) + Math.abs(ecy(e) - ecy(p)); if (d < bd) { bd = d; best = e; } }
+  if (!best) return false;
+  const x0 = ecx(p), y0 = ecy(p);
+  p.x = best.f > 0 ? best.x - PLW - 4 : best.x + pwOf(best) + 4;      // 敵の背中側
+  p.y = best.y + phOf(best) - PLH;                                      // 足もとをそろえる
+  p.f = best.f; p.vx = p.vy = 0; p.ground = false;
+  emit("tp", x0, y0, ecx(p), ecy(p));
+  return true;
 }
 // 誰も元の位置に残らない並べ替え（n >= 2）。ランダムに並べ、元の位置に残る人がいればやり直す
 function derange(n) {
@@ -682,12 +719,11 @@ function derange(n) {
   }
   return a.map((_, i) => (i + 1) % n);                  // 念のため（ひとつずつずらす）
 }
-function lawSwap(p, r) {
-  const x0 = ecx(p), y0 = ecy(p);
-  const inside = ents().filter(e => e !== p && e.own !== p.own && e.al && !untouchable(e) && e.hd === 0 && distToBody(x0, y0, e) <= r);
-  if (!inside.length) { emit("lw0", x0, y0); return false; }
+function lawSwap(p, m) {                      // 入れ替え: 自分も円の中にいて、円の中に敵がいるときだけ
+  const inside = inRoom(m, p) ? roomFoes(p, m) : [];
+  if (!inside.length) { emit("lw0", ecx(p), ecy(p)); return false; }
   const mem = [p, ...inside], spots = mem.map(e => ({ x: ecx(e), y: e.y + phOf(e) })), to = derange(mem.length);   // 足もとの中心を入れ替える
-  emit("lw", x0, y0, r);
+  emit("lw", m.x, m.y, m.r);
   mem.forEach((e, i) => {
     const s = spots[to[i]];
     e.x = s.x - pwOf(e) / 2; e.y = s.y - phOf(e); e.vx = e.vy = 0; e.ground = false;
@@ -769,6 +805,7 @@ function physics(p, inp, neutral) {
   if (p.hf > 0) p.hf--;
   if (p.bf > 0) p.bf--;
   if (p.kc > 0) p.kc--;
+  if (p.rmSw > 0) p.rmSw--;
   if (p.bz > 0) p.bz--;
   if (p.iv > 0) p.iv--;
   if (p.gh > 0 && --p.gh === 0) emit("gx", ecx(p), ecy(p));
@@ -806,6 +843,7 @@ function physics(p, inp, neutral) {
     if (p.a > 0 && ak0.dash && p.a < ak0.dashFrom) spm = 0;     // 居合斬りのため中は動けない
     if (p.ks > 0) spm = Math.min(spm, 0.45);     // ためている間は動きが鈍る
     if (p.cn > 0) spm = 0;                       // カウンターの構え中は動かない
+    if (chd.id === "law" && p.kc > 0 && !neutral) spm *= ROOM_SLOW;   // ロー: ROOM のクールタイム中は動きが遅い
     const sp = spm * MOVE_BASE * moveMul(S) * wm.mv;
     if (dir && p.a === 0 && p.ground && p.ks === 0 && p.cn === 0) p.f = dir;     // 向きを変えられるのは地面にいるときだけ（ため・構え中は固定）
     const acc = p.ground ? 0.4 : 0.12;
@@ -816,12 +854,16 @@ function physics(p, inp, neutral) {
       p.vy = Math.min(p.vy, -jumpVel(jumpHeight(S) * AIR_JUMP * wm.jp)); p.dj = 1;   // 上昇中に押しても、いまの勢いより弱くはならない
       if (!p.isClone) emit("dj", ecx(p), p.y + phOf(p));
     }
+    const room = (chd.id === "law" && !neutral && !p.isClone) ? roomOf(p) : null;   // ロー: 張っている ROOM
     if (a && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0) {
+      if (room && inRoom(room, p)) roomWarp(p, room);           // 円の中なら、敵の背後へ回り込んでから攻撃する
       p.a = 1; p.ak = 0; p.hit = [];
       if (p.gh > 0) { p.gh = 0; p.gb = 1; emit("gx", ecx(p), ecy(p)); }       // 自分から攻撃すると透過が解ける（この攻撃は 1.5 倍）
       emit("s", ecx(p), ecy(p));
     }
-    if (sk && !neutral && !p.isClone && chd.id !== "clock") {   // スキル（時計師は上で処理する）
+    if (room) {                                  // ROOM がある間、スキルボタンは入れ替えボタン（0.5 秒ごと）
+      if (rise && p.rmSw === 0 && p.a === 0) { lawSwap(p, room); p.rmSw = ROOM_SWAP_GAP; }
+    } else if (sk && !neutral && !p.isClone && chd.id !== "clock") {   // スキル（時計師は上で処理する）
       if (sk.hold) {
         if (p.ks > 0) { if (kin) p.ks = Math.min(p.ks + 1, sk.maxCharge); else fireHold(p); }
         else if (rise && p.kc === 0 && p.a === 0 && p.cn === 0) { p.ks = 1; emit("sc", ecx(p), ecy(p), p.ch); }
@@ -1043,13 +1085,9 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "okure": return g && face && sameLevel && t.ground && gap > 70 && gap < 240 ? KEY.k : 0;                      // 敵が来る道に花を置く
     case "wrestler": return g && face && sameLevel && gap < GRAB_REACH - 4 && t.a === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵をつかむ
     case "tengu": return g && face && ((sameLevel && gap < 200) || (!t.ground && t.y + phOf(t) > PY + 4 && gap < 280)) ? KEY.k : 0;   // 戦う場所か、崖の外の敵へ風の場を出す
-    case "law": {                                                                                                       // 自分が崖っぷちで、敵が内側にいるときに入れ替える
-      const pl = platformUnder(c), tp = platformUnder(t);
-      if (!g || !pl || !tp) return 0;
-      const edge = Math.min(ecx(c) - pl.x, pl.x + pl.w - ecx(c)), tEdge = Math.min(ecx(t) - tp.x, tp.x + tp.w - ecx(t));
-      const need = lawNeed(c, t);
-      if (edge > 90 || tEdge < edge + 100 || !need) return 0;
-      c.aiCh = need; return KEY.k;
+    case "law": {                                                                                                       // 敵が近ければ、敵を包める大きさまで広げて ROOM を張る
+      if (!g || roomOf(c) || gap > 220) return 0;
+      c.aiCh = lawNeed(c, t); return KEY.k;
     }
     case "archer":                                                                                                      // 遠いほど長くためる
       if (g && face && Math.abs(dyFeet) < 40 && gap >= 150 && gap <= 480) { c.aiCh = gap > 300 ? 36 : gap > 200 ? 24 : 14; return KEY.k; }
@@ -1064,10 +1102,28 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
   }
   return 0;
 }
-function lawNeed(c, e) {                                // ローが敵 e を円に入れるのに必要なためる長さ（届かなければ 0）
-  const d = distToBody(ecx(c), ecy(c), e);
-  if (d > LAW_R_MAX - 6) return 0;
-  return Math.max(1, Math.min(chOf(c).skill.maxCharge, Math.ceil((d - LAW_R0) / LAW_R_GROW) + 4));
+function lawNeed(c, e) {                                // ローが敵 e を ROOM に入れて、少し動かれても外れないためる長さ
+  const d = distToBody(ecx(c), ecy(c), e) + 90;
+  return Math.max(1, Math.ceil((d - ROOM_R0) / ROOM_GROW));
+}
+// ロー: ROOM の中での動き（入っていれば押すボタン、何もしなければ null）
+//   ・敵の盾がこちらを向いていて、敵の背後が足場の上なら、回り込み攻撃
+//   ・敵が崖の近くにいて自分が内側、または自分が落ちかけていて敵が足場の上にいるなら、入れ替え
+function aiRoom(c, t, B) {
+  const m = roomOf(c);
+  if (!m || !inRoom(m, c) || !t || !inRoom(m, t) || untouchable(t) || Math.random() < B.miss) return null;
+  const pls = platforms(), ccx = ecx(c), tcx = ecx(t), feet = c.y + phOf(c);
+  if (c.rmSw === 0 && !c.kp) {
+    const tp = platformUnder(t), pl = platformUnder(c);
+    const tEdge = tp ? Math.min(tcx - tp.x, tp.x + tp.w - tcx) : 999, edge = pl ? Math.min(ccx - pl.x, pl.x + pl.w - ccx) : 0;
+    if ((!c.ground && feet > PY + 4 && t.ground) || (tp && tEdge < 90 && edge > tEdge + 80)) { c.aiOnce |= KEY.k; return KEY.k; }
+  }
+  if (c.a === 0 && c.cd === 0 && c.ks === 0) {
+    const bx = t.f > 0 ? t.x - PLW / 2 - 4 : t.x + pwOf(t) + PLW / 2 + 4, by = t.y + phOf(t);   // 回り込む先（足もとの中心）
+    const safe = pls.some(q => Math.abs(by - q.y) < 3 && bx > q.x + 6 && bx < q.x + q.w - 6);
+    if (safe && t.s === 0 && (shieldUp(t) || t.a === 0)) return KEY.a;
+  }
+  return null;
 }
 function aiDodge(c, inp, ccx, feet) {                  // 爆弾から離れる / 矢を跳んでよける / 敵の花を跳び越す
   const cy = c.y + phOf(c) / 2;
@@ -1121,9 +1177,9 @@ function aiThink(c, owner, pls, B) {
     // ためが長いと、そのぶん落ちたり二段ジャンプが遅れたりして届かない（人の最善の操作と同じ。ため 3・同時押しがいちばん遠くから戻れる）
     const tpOk = id === "teleporter" && B.skill > 0 && !c.kc && !c.kp && c.s === 0 && c.a === 0 && c.ks === 0 && Math.sign(main.x + main.w / 2 - ccx) === c.f;
     const jumpOk = !c.dj && !c.jp && c.vy > -3 && Math.random() < B.recover;
-    if (id === "law" && B.skill > 0 && !c.kc && !c.kp && c.s === 0 && c.a === 0 && c.ks === 0 && t && t.ground) {   // ロー: 足場の上の敵が円に届くなら、入れ替わって戻る（敵が崖の外へ出る）
-      const need = lawNeed(c, t);
-      if (need && need <= 24 && Math.random() < B.skill) { c.aiCh = need; inp |= KEY.k; if (jumpOk) inp |= KEY.u; return inp; }
+    if (id === "law" && t && c.s === 0) {                                // ロー: ROOM の中なら、足場の上の敵と入れ替わって戻る（敵が崖の外へ出る）
+      const k = aiRoom(c, t, B);
+      if (k === KEY.k) { inp |= KEY.k; if (jumpOk) inp |= KEY.u; return inp; }
     }
     if (tpOk && !c.dj && Math.random() < B.skill) { c.aiCh = 3; inp |= KEY.k; if (jumpOk) inp |= KEY.u; }
     else if (jumpOk) inp |= KEY.u;
@@ -1176,6 +1232,7 @@ function aiThink(c, owner, pls, B) {
   const chip = !open && Math.random() < B.chip;                  // 盾の正面でも、ときどき殴って盾を削る（3 回で壊れる）
   if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0 && Math.random() >= B.miss) inp |= KEY.a;
   if (sk && B.skill > 0) { const k = aiSkill(c, t, { gap, sgn, sd, dyFeet, sameLevel, tr }, B); if (k) { inp |= k; inp &= ~KEY.a; } }   // スキルを使うときは、通常攻撃を押さない
+  if (id === "law" && B.skill > 0) { const k = aiRoom(c, t, B); if (k) inp = (inp & ~(KEY.a | KEY.k)) | k; }   // ロー: ROOM の中では、回り込み攻撃と入れ替え
   if (B.dodge && c.ground && Math.random() < B.dodge) inp = aiDodge(c, inp, ccx, feet);
   // 行き詰まり防止: 同じ高さで 2 秒（120 フレーム）も何も押していなければ、とにかく敵へ向かう（待ち・不感帯などで動けなくなる場合の保険）
   if (inp & (KEY.l | KEY.r | KEY.a | KEY.u | KEY.k)) c.aiIdle = 0; else c.aiIdle += B.think;
@@ -1241,6 +1298,7 @@ function hostTick() {
     updateFlowers(list);
     updateProjectiles(list);
     updateWinds();
+    updateRooms();
     resolveHits(ents());
     for (const i of slots) {
       const p = game.p[i];
@@ -1282,12 +1340,13 @@ function snapshot() {
   const inGame = game.ph !== "lobby";         // キャラは試合が始まるまで他のプレイヤーに送らない
   const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr,
     p: game.p.map(p => p ? Object.assign(serEnt(p),
-      { w: p.w, c: p.c ? 1 : 0, n: p.n, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, lv: p.lv },
+      { w: p.w, c: p.c ? 1 : 0, n: p.n, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, lv: p.lv },
       inGame ? { ch: p.ch } : null) : null),
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
     pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 ? Math.round(b.pw * 10) : 0]),
     fl: game.fl.map(f => [r1(f.x), r1(f.y), f.t]),
-    wd: game.wd.map(w => [r1(w.x), r1(w.y), w.w, w.h, w.d, w.t, w.own]) };
+    wd: game.wd.map(w => [r1(w.x), r1(w.y), w.w, w.h, w.d, w.t, w.own]),
+    rm: game.rm.map(m => [r1(m.x), r1(m.y), r1(m.r), m.t, m.own]) };
   if (evq.length) s.ev = evq.splice(0);        // 前回の送信以降に起きた効果音・演出のきっかけ
   return s;
 }
@@ -1425,7 +1484,7 @@ function applySnapshot(s) {
     let p = game.p[i];
     if (!p) { p = game.p[i] = newPlayer(); p.x = n.x; p.y = n.y; }
     readEnt(p, n);
-    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.lv = n.lv | 0; p.own = i;
+    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.lv = n.lv | 0; p.own = i;
     const cn = s.cl[i];
     if (!cn) game.cl[i] = null;
     else {
@@ -1437,6 +1496,7 @@ function applySnapshot(s) {
   game.pj = s.pj.map(a => ({ k: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], t: a[5], pw: a[6] / 10 }));
   game.fl = s.fl.map(a => ({ x: a[0], y: a[1], t: a[2] }));
   game.wd = (s.wd || []).map(a => ({ x: a[0], y: a[1], w: a[2], h: a[3], d: a[4], t: a[5], own: a[6] }));   // 古い版のホストは送らない
+  game.rm = (s.rm || []).map(a => ({ x: a[0], y: a[1], r: a[2], t: a[3], own: a[4] }));
   const sig = game.p.map(p => p ? (p.c ? 1 : 0) + "," + (p.rd ? 1 : 0) + "," + p.n : "-").join("|");
   if (phChanged || wrChanged || sig !== lastSig) renderUI();
   lastSig = sig;
@@ -1642,7 +1702,7 @@ function paintSelect() {
     `<h2>${esc(c.name)}</h2><div class="tag">${esc(c.tag)}</div>` +
     STATS.map((s, k) => `<div class="st-r"><span class="nm" style="color:${s.color}">${s.label}</span>${barHtml(vals[k], s.color)}</div>`).join("") +
     `<div class="skl">${c.skill
-      ? `<b>スキル「${esc(c.skill.name)}」</b>（クールタイム ${c.skill.cd}秒${c.skill.hold ? "・ためて発動" : ""}）<br>${esc(c.skill.text)}`
+      ? `<b>スキル「${esc(c.skill.name)}」</b>（クールタイム ${esc(c.skill.cdText || c.skill.cd + "秒")}${c.skill.hold ? "・ためて発動" : ""}）<br>${esc(c.skill.text)}`
       : "スキルなし"}${traits}</div>`;
 }
 function showSelect() {
@@ -1816,8 +1876,10 @@ function updateSkillUI() {
     const sk = chOf(me).skill;
     if (sk) {
       label = sk.name;
-      if (me.ks > 0) { state = "charge"; label = "ため中"; }
-      else if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (sk.cd * 60)); sec = String(Math.ceil(me.kc / 60)); }
+      const room = chOf(me).id === "law" ? roomOf(me) : null;
+      if (room) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(room.t / 60)); }   // ローの ROOM がある間（数字は円が消えるまでの秒数）
+      else if (me.ks > 0) { state = "charge"; label = "ため中"; }
+      else if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (me.km || sk.cd * 60)); sec = String(Math.ceil(me.kc / 60)); }
       else state = "ready";
     }
   }
@@ -1826,7 +1888,7 @@ function updateSkillUI() {
   lastSk = key;
   skBtn.dataset.state = state; skBtn.style.setProperty("--p", ratio.toFixed(3));
   skBtn.querySelector("b").textContent = label; skBtn.querySelector("i").textContent = sec;
-  skHint.textContent = state === "none" ? "スキルなし" : "[X] " + label + (state === "ready" ? "  準備OK" : state === "charge" ? "  ためて離す" : "  あと " + sec + " 秒");
+  skHint.textContent = state === "none" ? "スキルなし" : "[X] " + label + (state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : "  あと " + sec + " 秒");
 }
 
 // ---------- 効果音と演出 ----------
@@ -2031,9 +2093,13 @@ function fxEvent(e) {
     burst(x, y, 16, { v0: 1, v1: 5, l0: 18, l1: 30, s0: 3, s1: 6, colors: ["#ffffff", "#fde68a", "#bae6fd"] });
   } else if (k === "gx") {                         // 透過が解けた
     Sfx.ghostEnd(); burst(x, y, 10, { v0: 1, v1: 4, l0: 12, l1: 22, s0: 3, s1: 6, colors: ["#f8fafc", "#bae6fd"] });
-  } else if (k === "lw") {                         // ローの入れ替え: 円がしぼむ
+  } else if (k === "ro") {                         // ローが ROOM を張った: 円のふちが一瞬光る
+    Sfx.room(); rings.push({ x, y, t: 0, max: 12, c: "#cffafe", r0: e[3] * 0.92, sp: e[3] * 0.008 });
+  } else if (k === "rx") {                         // ROOM が消えた
+    Sfx.pop(); rings.push({ x, y, t: 0, max: 12, c: "#67e8f9", r0: e[3], sp: -e[3] / 16 });
+  } else if (k === "lw") {                         // ローの入れ替え
     Sfx.room(); shake(4);
-    rings.push({ x, y, t: 0, max: 14, c: "#67e8f9", r0: e[3], sp: -e[3] / 16 });
+    rings.push({ x, y, t: 0, max: 10, c: "#ffffff", r0: e[3], sp: -e[3] / 40 });
   } else if (k === "lwp") {                        // 入れ替わった先
     Sfx.swapPop();
     rings.push({ x, y, t: 0, max: 12, c: "#67e8f9", r0: 6, sp: 3.5 });
@@ -2250,14 +2316,18 @@ function drawWind(w, now) {
   }
   cx.stroke(); cx.restore();
 }
-// ローの円: ためている間、半透明の水色の円が広がる（全員に見える）
-function drawRoom(p) {
-  const r = lawR(p.ks), x = ecx(p), y = ecy(p);
-  cx.save();
-  cx.fillStyle = "rgba(103,232,249,0.16)"; cx.strokeStyle = "rgba(103,232,249,0.8)"; cx.lineWidth = 2;
+// ローの ROOM: ためている間はローを中心に広がり（点線）、張ったあとはその場所に残る（実線。消える前の 1 秒は点滅）。全員に見える
+function drawRoomCircle(x, y, r, placed, alpha) {
+  cx.save(); cx.globalAlpha = alpha;
+  cx.fillStyle = placed ? "rgba(103,232,249,0.14)" : "rgba(103,232,249,0.09)"; cx.strokeStyle = "rgba(103,232,249,0.85)"; cx.lineWidth = placed ? 2.5 : 2;
+  if (!placed) cx.setLineDash([8, 6]);
   cx.beginPath(); cx.arc(x, y, r, 0, 6.2832); cx.fill(); cx.stroke();
-  if (r >= LAW_R_MAX) { cx.strokeStyle = "rgba(255,255,255,0.5)"; cx.beginPath(); cx.arc(x, y, r - 5, 0, 6.2832); cx.stroke(); }   // 最大まで広がった
   cx.restore();
+}
+function drawRoom(p) { drawRoomCircle(ecx(p), ecy(p), roomR(p.ks), false, 1); }
+function drawPlacedRoom(m, now) {
+  const fadeIn = Math.min(1, (ROOM_LIFE - m.t) / 6), blink = m.t < 60 && Math.floor(now / 120) % 2 ? 0.45 : 1;
+  drawRoomCircle(m.x, m.y, m.r, true, fadeIn * blink);
 }
 // 時計師の巻き戻しの残像（各自の画面で作る）
 const rwGhosts = [];
@@ -2539,6 +2609,7 @@ function render() {
   }
   for (const w of game.wd) drawWind(w, now);
   for (const f of game.fl) drawFlower(f, now);
+  for (const m of game.rm) drawPlacedRoom(m, now);
   for (const p of game.p) if (p && p.c && p.al && p.ks > 0 && chOf(p).id === "law") drawRoom(p);
   drawRewindGhosts(dt);
   // プレイヤーと分身（吹っ飛んでいる間は残像を引く。巻き戻し中は、通った場所に青い残像を残す）
