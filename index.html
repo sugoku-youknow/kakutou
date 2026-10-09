@@ -142,6 +142,72 @@
   @media (pointer:coarse) and (orientation:landscape) and (max-height:520px){
     #stats{width:calc(100% - 340px);max-width:520px}
   }
+  /* 横画面モード（スマホの横持ち。JS が body.land を付ける）: 戦闘画面を画面いっぱいに使い、操作ボタンとプレイヤー情報は半透明で上に重ねる。
+     ボタンは大きく（画面の高さに比例）、左下に ◀ ▶、右下に ジャンプ・攻撃・スキル（正三角形）。プレイヤー情報は上部に小さく、名前・キャラ名・勝ち数だけ */
+  body.land{--b:clamp(56px,24vh,100px);--g:10px}
+  body.land.battle #touch{display:flex}
+  body.land #touch{position:absolute;left:0;right:0;bottom:0;padding:0 max(20px,env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}
+  body.land #dpad{gap:calc(var(--g)*1.2)}
+  body.land .tb{background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 2px rgba(255,255,255,.26)}
+  body.land .tb:active{background:rgba(255,255,255,.32)}
+  body.land .tb.jump{background:rgba(59,130,246,.28);font-size:calc(var(--b)*.16)}
+  body.land .tb.atk{background:rgba(239,68,68,.28)}
+  body.land .tb.skill{background:rgba(168,85,247,.3)}
+  body.land .tb.skill b{font-size:calc(var(--b)*.16)}
+  body.land .tb.jump:active{background:rgba(59,130,246,.55)}
+  body.land .tb.atk:active{background:rgba(239,68,68,.55)}
+  body.land .tb.skill:active{background:rgba(168,85,247,.55)}
+  body.land .tb.skill[data-state="ready"]{box-shadow:0 0 0 3px rgba(250,204,21,.7),inset 0 0 0 2px rgba(250,204,21,.4)}
+  body.land .tb.skill[data-state="charge"]{background:rgba(250,204,21,.5)}
+  body.land #stats{position:absolute;top:0;left:0;right:0;bottom:auto;transform:none;width:auto;max-width:none;min-height:0;margin:0;z-index:2;
+    padding:max(4px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
+    background:none;border-radius:0;align-items:flex-start;justify-content:space-between;pointer-events:none}
+  body.land #quit{top:48px}                                           /* 「やめる」は左のカードの下、音のボタンは上のまん中（残り時間の右） */
+  body.land #mute{top:6px;right:auto;left:calc(50% + 30px)}
+  .hg{display:flex;gap:5px;min-width:0}
+  .hc{display:flex;align-items:center;gap:6px;box-sizing:border-box;padding:3px 8px 4px;border-radius:8px;background:rgba(15,23,42,.55);border:1px solid rgba(255,255,255,.08);line-height:1.2;min-width:0}
+  .hc.me{border-color:rgba(255,255,255,.4)}
+  .hc b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:6.6em;font-size:13px;font-size:clamp(11px,3.3vh,14px);color:var(--c)}
+  .hc .sub{display:flex;align-items:center;gap:6px;color:#cbd5e1;white-space:nowrap;font-size:11px;font-size:clamp(10px,2.7vh,12px)}
+  .hc .wn{display:flex;align-items:center;color:var(--c)}
+  .hc .wn i{display:block;width:.7em;height:.7em;margin-left:.25em;box-sizing:border-box;border:1px solid currentColor;border-radius:50%}
+  .hc .wn i.on{background:currentColor}
+  .hs{display:flex;flex-direction:column;gap:2px}                      /* 自分のカードだけ付く性能の棒（攻撃・防御・スピード） */
+  .hs .g{display:flex;gap:1px;width:34px}
+  .hs .g i{flex:1;height:4px;border-radius:1px;background:#374151}
+  .hs .g i.on{background:var(--c)}
+  .hs .g i.up{background:#fff;box-shadow:0 0 4px var(--c)}
+  .hs .g i.dn{background:#450a0a;box-shadow:inset 0 0 0 1px #ef4444}
+  @media (max-width:700px){body.land .hc{padding:2px 5px 3px;gap:4px}body.land .hc b{max-width:4.6em}body.land .hs .g{width:26px}}
+  /* 横画面のメニュー: 縦に長いパネルを 2 列に組んで、スクロールしなくても決定まで届くようにする（左: 名前とキャラ一覧 / 右: 詳細と決定） */
+  .cols{display:block}
+  body.land .panel{padding:10px 18px}
+  body.land .panel h1{font-size:20px;margin:0 0 4px}
+  body.land .panel p{margin:3px 0;font-size:12px}
+  body.land .panel .cols{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:0 18px;align-items:start}
+  body.land .panel.setup{width:min(96%,880px)}
+  body.land .panel.lobby{width:min(96%,700px)}
+  body.land .panel.setup input{padding:6px 8px}
+  body.land .panel.setup .chips{margin:6px 0 0;gap:4px}
+  body.land .panel.setup .chip canvas{width:30px;height:42px}
+  body.land .panel.setup .chip{padding:4px 2px 3px}
+  body.land .panel.setup .colR{display:flex;flex-direction:column;align-items:stretch;max-height:calc(100dvh - 44px);overflow:auto}
+  body.land .panel.setup .detail{margin:0 0 4px;padding:8px 10px}
+  body.land .panel.setup .detail .skl{font-size:11px;line-height:1.45;margin-top:5px}
+  body.land .panel.setup .colR button{margin:3px 4px;padding:8px 16px}
+  body.land .code{font-size:36px;letter-spacing:8px}
+  body.land .panel.lobby button{margin:4px}
+  body.land .panel.setup .btns{display:flex;gap:4px}
+  body.land .panel.setup .btns button{flex:1 1 0}
+  body.land .panel.setup .btns button:first-child{flex:2 1 0}
+  body.land .panel.setup .detail h2{font-size:15px}
+  body.land .panel.setup .detail .tag{margin:0 0 3px}
+  body.land .panel.setup .detail .st-r{height:17px}
+  body.land .panel.setup .cpuset{margin:0 0 4px;padding:2px 10px}
+  body.land .panel.setup .cpuset .row{margin:4px 0}
+  body.land .panel.setup .cpuset .hint{margin:-2px 0 3px}
+  body.land .panel.setup .seg button{padding:5px 11px}
+  body.land:not(.battle) #mute{left:auto;right:8px}
   @media (max-width:480px){
     .panel{padding:14px 16px}
     .panel h1{font-size:22px}
@@ -252,6 +318,11 @@ const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
 const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛ばし力の倍率
 const GIANT_FRAMES = 480, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
+// 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
+// メインステージの端から 500px、足場の面から 300px の余裕を持たせる（以前は 340px / 260px で、飛ばされるとすぐ撃墜された）。左右はキャラの中心、下は頭の位置で判定する
+const KO_MARGIN = 500, KO_BOTTOM = 300;
+const KO_L = PX - KO_MARGIN, KO_R = PX + PW + KO_MARGIN, KO_B = PY + KO_BOTTOM;   // -310 / 1270 / 700
+const outOfBounds = p => { const x = p.x + pwOf(p) / 2; return x < KO_L || x > KO_R || p.y > KO_B; };
 
 // ---------- キャラクター ----------
 // A/D/S = 攻撃/防御/スピード。skill.cd = クールタイム(秒)、スキルが強いほど長い。hold = 押している間ためて離すと発動
@@ -495,8 +566,8 @@ function fireHold(p) {                       // ためて離すスキル
     const x0 = ecx(p), y0 = ecy(p);
     const dest = p.x + p.f * (90 + 260 * c);
     const pl = p.ground ? platforms().find(s => Math.abs(p.y + PLH - s.y) < 2 && ecx(p) > s.x && ecx(p) < s.x + s.w) : null;
-    // 地上からは、いま立っている足場の端までしか飛ばない（うっかり場外へ飛ばないように）。空中では制限なし
-    p.x = pl ? Math.max(pl.x, Math.min(pl.x + pl.w - PLW, dest)) : Math.max(-120, Math.min(W + 120 - PLW, dest));
+    // 地上からは、いま立っている足場の端までしか飛ばない（うっかり場外へ飛ばないように）。空中では撃墜ラインの内側まで
+    p.x = pl ? Math.max(pl.x, Math.min(pl.x + pl.w - PLW, dest)) : Math.max(KO_L, Math.min(KO_R - PLW, dest));
     p.vx = 0;
     emit("tp", x0, y0, ecx(p), ecy(p));
   }
@@ -704,7 +775,7 @@ function updateProjectiles(list) {
       }
       const boom = b.t >= BOMB_FUSE;                         // 敵に当たっても爆発しない。導火線が尽きたときだけ爆発
       if (boom) { explode(b, list); game.pj.splice(i, 1); continue; }
-      if (b.y > H + 150 || b.x < -200 || b.x > W + 200) game.pj.splice(i, 1);
+      if (b.y > KO_B + 80 || b.x < KO_L - 60 || b.x > KO_R + 60) game.pj.splice(i, 1);
     } else {                                                 // 矢
       const ox = b.x;
       b.x += b.vx;
@@ -719,7 +790,7 @@ function updateProjectiles(list) {
         strike(owner, hit, { dir: Math.sign(b.vx), frac: b.pw, recoil: false });
         game.pj.splice(i, 1); continue;
       }
-      if (b.x < -250 || b.x > W + 250 || b.t > 200) game.pj.splice(i, 1);
+      if (b.x < KO_L - 60 || b.x > KO_R + 60 || b.t > 200) game.pj.splice(i, 1);
     }
   }
 }
@@ -842,8 +913,13 @@ function aiThink(c, owner, pls, B) {
   // 1) メインの面より下へ落ちかけている: 足場へ戻る
   if (!c.ground && feet > PY + 4) {
     steer(stayX(ccx));
-    if (!c.dj && !c.jp && c.vy > -3 && Math.random() < B.recover) inp |= KEY.u;
-    else if (c.dj && id === "teleporter" && B.skill > 0 && !c.kc && !c.kp && c.s === 0 && c.a === 0 && Math.sign(main.x + main.w / 2 - ccx) === c.f && Math.random() < B.skill) { c.aiCh = 14; inp |= KEY.k; }   // 足場のほうを向いていれば、瞬間移動で戻る
+    // テレポーターは、足場のほうを向いていれば、硬直が解けたらすぐ短く（3 フレーム）ためて瞬間移動し、同時に二段ジャンプで戻る。
+    // ためが長いと、そのぶん落ちたり二段ジャンプが遅れたりして届かない（人の最善の操作と同じ。ため 3・同時押しがいちばん遠くから戻れる）
+    const tpOk = id === "teleporter" && B.skill > 0 && !c.kc && !c.kp && c.s === 0 && c.a === 0 && c.ks === 0 && Math.sign(main.x + main.w / 2 - ccx) === c.f;
+    const jumpOk = !c.dj && !c.jp && c.vy > -3 && Math.random() < B.recover;
+    if (tpOk && !c.dj && Math.random() < B.skill) { c.aiCh = 3; inp |= KEY.k; if (jumpOk) inp |= KEY.u; }
+    else if (jumpOk) inp |= KEY.u;
+    else if (tpOk && c.dj && Math.random() < B.skill) { c.aiCh = 14; inp |= KEY.k; }      // 二段ジャンプのあとでスキルが使えるようになったとき
     return inp;
   }
   // 2) 狙える敵がいない
@@ -928,7 +1004,7 @@ const cloneInput = (c, owner) => aiInput(c, owner, AI_CLONE);
 function tickClone(i) {                                      // 分身は自分で考えて動く（スキルは使えない）
   const c = game.cl[i], owner = game.p[i];
   if (!c) return;
-  if (--c.life <= 0 || !owner || !owner.al || c.y > H + 120 || c.x < -150 || c.x > W + 150) {
+  if (--c.life <= 0 || !owner || !owner.al || outOfBounds(c)) {
     emit("cl", ecx(c), ecy(c)); game.cl[i] = null; return;
   }
   physics(c, cloneInput(c, owner), false);
@@ -959,7 +1035,7 @@ function hostTick() {
     resolveHits(ents());
     for (const i of slots) {
       const p = game.p[i];
-      if (p.al && (p.y > H + 120 || p.x < -150 || p.x > W + 150)) { if (p.lv > 0) respawn(p); else p.al = false; }
+      if (p.al && outOfBounds(p)) { if (p.lv > 0) respawn(p); else p.al = false; }
     }
     const alive = slots.filter(i => game.p[i].al);
     if (alive.length <= 1) {
@@ -1252,8 +1328,26 @@ const barHtml = (v, c, base) => {
   const b = base === undefined ? v : base;             // up: 上がったぶん / dn: 下がったぶん（狂化の防御）
   return `<span class="g" style="--c:${c}">${[1, 2, 3, 4, 5, 6].map(n => `<i class="${n <= v ? (n > b ? "on up" : "on") : (n <= b ? "dn" : "")}"></i>`).join("")}</span>`;
 };
+// 横画面モード: 画面の上に、全員の名前・キャラ名・勝ち数だけを小さなカードで出す（自分が左上。左右に半分ずつ、まん中は残り時間のために空ける）。
+// 性能の棒は自分のカードにだけ付ける（敵の性能は出さない）。LAND_MY_STATS を false にすると自分の分も出さない
+const LAND_MY_STATS = true;
+function landStatsHtml() {
+  const ids = [];
+  for (let i = 0; i < MAX_PLAYERS; i++) { const p = game.p[i]; if (p && p.c && p.lk) ids.push(i); }
+  ids.sort((a, b) => a === myId ? -1 : b === myId ? 1 : a - b);
+  const card = i => {
+    const p = game.p[i], c = chOf(p), wins = Array.from({ length: WIN_ROUNDS }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
+    const vals = [effA(p), effD(p), effS(p)], bases = [c.A, c.D, c.S];
+    const bars = i === myId && LAND_MY_STATS ? `<div class="hs">${STATS.map((st, k) => barHtml(vals[k], st.color, bases[k])).join("")}</div>` : "";
+    return `<div class="hc${i === myId ? " me" : ""}" style="--c:${COLORS[i]}"><div><b>${esc(nameOf(i))}</b>` +
+      `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn">${wins}</span></div></div>${bars}</div>`;
+  };
+  const half = Math.ceil(ids.length / 2);
+  return `<div class="hg">${ids.slice(0, half).map(card).join("")}</div><div class="hg">${ids.slice(half).map(card).join("")}</div>`;
+}
 // 戦闘中だけ、画面の下に全員のキャラと性能と勝ち数を、1 人ずつのカード（縦並び）で表示する
 function statsHtml() {
+  if (land) return landStatsHtml();
   let html = "";
   for (let i = 0; i < MAX_PLAYERS; i++) {
     const p = game.p[i];
@@ -1266,11 +1360,22 @@ function statsHtml() {
   }
   return `<div class="pcs">${html}</div>`;
 }
+// 横画面モード: タッチ操作の端末（スマホ・タブレット）を横持ちしているとき。URL に ?land=1 で強制オン、?land=0 で強制オフ（PC で見た目を確かめる用）
+let landForce = new URLSearchParams(location.search).get("land");
+const coarseMq = window.matchMedia("(pointer:coarse)");
+let land = false;
+function updateLand() {
+  const v = landForce === "1" || (landForce !== "0" && coarseMq.matches && window.innerWidth > window.innerHeight);
+  if (v === land) return;
+  land = v; cam.init = false; lastHud = "";
+  document.body.classList.toggle("land", land);
+  refreshHud();
+}
 let lastHud = "";
 function refreshHud() {
   const me = game.p[myId];
   const inBattle = !!(role && net === "ready" && me && game.ph !== "lobby");
-  const sig = (inBattle ? 1 : 0) + "|" + game.ph + "|" + myId + "|" +
+  const sig = (inBattle ? 1 : 0) + "|" + (land ? 1 : 0) + "|" + game.ph + "|" + myId + "|" +
     game.p.map(p => p ? [p.c ? 1 : 0, p.lk ? 1 : 0, p.ch, p.lv, p.w, p.n, p.bz > 0 ? 1 : 0, p.gt > 0 ? 1 : 0].join(",") : "-").join("|");
   if (sig === lastHud) return;
   lastHud = sig;
@@ -1301,12 +1406,12 @@ function paintSelect() {
 }
 function showSelect() {
   const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
-  ui.innerHTML = `<div class="panel setup"><h1>キャラ選択</h1>
+  ui.innerHTML = `<div class="panel setup"><div class="cols"><div class="colL"><h1>キャラ選択</h1>
     <p>部屋番号 <b style="color:#e5e7eb">${esc(roomCode)}</b> ／ 相手のキャラは開始まで非公開</p>
     <input id="pname" maxlength="8" placeholder="${esc("プレイヤー" + (myId + 1))}" value="${esc(draft.n)}">
-    <div class="chips">${chips}</div>
+    <div class="chips">${chips}</div></div><div class="colR">
     <div class="detail" id="detail"></div>
-    <button id="bOk">決定</button></div>`;
+    <button id="bOk">決定</button></div></div></div>`;
   const root = ui.querySelector(".setup");
   root.querySelectorAll(".chip").forEach(b => {
     const i = Number(b.dataset.i);
@@ -1331,10 +1436,10 @@ function showSelect() {
 
 function showSolo() {                       // CPU 戦の設定（自分の名前・キャラ、CPU の数・強さ・キャラ）
   const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
-  ui.innerHTML = `<div class="panel setup"><h1>CPU戦</h1>
+  ui.innerHTML = `<div class="panel setup"><div class="cols"><div class="colL"><h1>CPU戦</h1>
     <p>名前とキャラを選んで、ひとりで CPU と対戦します（ネット不要）</p>
     <input id="pname" maxlength="8" placeholder="${esc("プレイヤー1")}" value="${esc(draft.n)}">
-    <div class="chips">${chips}</div>
+    <div class="chips">${chips}</div></div><div class="colR">
     <div class="detail" id="detail"></div>
     <div class="cpuset">
       <div class="row"><span>CPU の数</span><span class="seg" id="segN">${[1, 2, 3].map(v => `<button data-v="${v}">${v}</button>`).join("")}</span></div>
@@ -1342,8 +1447,8 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
       <div class="hint" id="lvHint"></div>
       <div id="cpuRows"></div>
     </div>
-    <button id="bGo">戦闘開始</button>
-    <button id="bBack" class="sub">タイトルへ</button></div>`;
+    <div class="btns"><button id="bGo">戦闘開始</button>
+    <button id="bBack" class="sub">タイトルへ</button></div></div></div></div>`;
   const root = ui.querySelector(".setup");
   root.querySelectorAll(".chip").forEach(b => {
     const i = Number(b.dataset.i);
@@ -1384,16 +1489,16 @@ function showLobby() {
     ? `<div class="pl" style="color:${COLORS[i]}"><b>${esc(nameOf(i))}</b>${i === myId ? "（あなた）" : ""}<span class="${p.rd ? "ok" : "wt"}">${p.rd ? "✔ 準備OK" : "選択中…"}</span></div>` : "").join("");
   const n = connectedSlots().length, ready = readySlots().length;
   if (role === "host") {
-    ui.innerHTML = `<div class="panel"><h1>ロビー</h1>
+    ui.innerHTML = `<div class="panel lobby"><h1>ロビー</h1><div class="cols"><div class="colL">
       <p>部屋番号</p>
       <div class="code">${esc(roomCode)}</div>
       <p>この番号を友達に伝えるか、下の URL を送ってください</p>
       <input id="url" readonly value="${esc(shareUrl())}">
-      <button id="bCopy" class="sub">URLをコピー</button>
+      <button id="bCopy" class="sub">URLをコピー</button></div><div class="colR">
       <p>参加者 ${n}/4</p>${list}
       <button id="bStart" ${ready < 2 ? "disabled" : ""}>ゲーム開始</button>
       <button id="bEdit" class="sub">キャラを変更</button>
-      <p>${ready < 2 ? "準備OKが2人以上になると開始できます<br>" : ""}ホストはこの画面を開いたままにしてください<br>（他のアプリに切り替えると全員の画面が止まります）</p></div>`;
+      <p>${ready < 2 ? "準備OKが2人以上になると開始できます<br>" : ""}ホストはこの画面を開いたままにしてください<br>（他のアプリに切り替えると全員の画面が止まります）</p></div></div></div>`;
     document.getElementById("bCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(shareUrl()); };
     document.getElementById("bStart").onclick = hostStartMatch;
     document.getElementById("url").onclick = e => e.target.select();
@@ -1665,8 +1770,9 @@ function fxEvent(e) {
     Sfx.pop(); burst(x, y, 14, { v0: 1, v1: 5, l0: 12, l1: 24, s0: 3, s1: 6, colors: ["#f472b6", "#fbcfe8", "#ffffff"] });
   }
 }
-function koFx(p) {                                 // 場外に落ちた瞬間
-  const kx = Math.max(PX - 60, Math.min(PX + PW + 60, p.x + PLW / 2)), ky = PY + 70;
+function koFx(p) {                                 // 場外に落ちた瞬間: 出ていった場所（画面の端に近い側）に出す
+  const v = camView, m = 24 / cam.s;
+  const kx = clampN(p.x + PLW / 2, v.x0 + m, v.x1 - m), ky = clampN(p.y + PLH / 2, v.y0 + m, v.y1 - m);
   Sfx.ko(); shake(7); flashA = Math.max(flashA, 0.18);
   burst(kx, ky, 26, { v0: 3, v1: 11, l0: 18, l1: 32, s0: 3, s1: 7, g: 0.05, colors: ["#fde68a", "#fca5a5", "#ffffff"] });
   rings.push({ x: kx, y: ky, t: 0, max: 20, c: "#ffffff" });
@@ -1834,7 +1940,7 @@ function drawFlower(f, now) {
   cx.fillStyle = "#facc15"; cx.beginPath(); cx.arc(hx, hy, 2.4 * g, 0, 6.2832); cx.fill();
 }
 function banner(t, sub) {
-  const fs = Math.min(56, cw / 9), h = fs * 2.4, y = ch * 0.3;
+  const fs = land ? Math.min(44, ch / 8.5) : Math.min(56, cw / 9), h = fs * 2.4, y = ch * 0.3;
   const s = 1 + 0.45 * Math.max(0, 1 - fxBannerT / 9);                 // 出た瞬間だけ少し大きく弾む
   cx.save(); cx.translate(cw / 2, y + h / 2); cx.scale(s, s); cx.translate(-cw / 2, -(y + h / 2));
   cx.fillStyle = "rgba(0,0,0,0.45)"; cx.fillRect(0, y, cw, h);
@@ -1845,7 +1951,9 @@ function banner(t, sub) {
 // 画面上部の中央に、残り時間（サドンデス中は警告）を出す
 function drawTimer(now) {
   if (game.ph !== "play" && game.ph !== "count") return;
-  const fs = Math.max(16, Math.min(34, cw / 13)), blink = Math.floor(now / 250) % 2 === 0;
+  let fs = Math.max(16, Math.min(34, cw / 13)), ty = fs + 6;
+  if (land) { const num = game.sd <= 0; fs = num ? 30 : 17; ty = num ? 36 : 70; }     // 横画面: 数字は上のまん中（左右のカードのあいだ）、警告の文は、カードの下
+  const blink = Math.floor(now / 250) % 2 === 0;
   const E2 = SD_SHRINK_FRAMES, E3 = SD_SHRINK_FRAMES + SD_HOLD_FRAMES;
   let text, color;
   if (game.sd >= E3) { text = "足場が崩れた！"; color = blink ? "#fca5a5" : "#ef4444"; }
@@ -1856,13 +1964,173 @@ function drawTimer(now) {
     text = String(secs); color = secs <= 10 ? (blink ? "#fca5a5" : "#ef4444") : "rgba(255,255,255,0.9)";
   }
   cx.textAlign = "center"; cx.font = "bold " + fs + "px sans-serif"; cx.lineJoin = "round"; cx.lineWidth = 4; cx.strokeStyle = "rgba(0,0,0,0.55)";
-  cx.strokeText(text, cw / 2, fs + 6); cx.fillStyle = color; cx.fillText(text, cw / 2, fs + 6);
+  cx.strokeText(text, cw / 2, ty); cx.fillStyle = color; cx.fillText(text, cw / 2, ty);
 }
+// ---------- カメラ ----------
+// 通常（縦持ち・PC）: 以前どおり、ステージを画面幅いっぱいに映す。ただし戦っている人がその外（崖の外）へ出たら、その人が映るまで広げて引く。
+// 横画面モード（スマホの横持ち）: 戦っている全員を、操作ボタンと上部のカードに重ならない範囲で、できるだけ大きく映す。
+//   近づけばズームイン、離れたり崖の外へ出たりすればズームアウトし、カメラの位置も動く（solveLandCam）。
 const VIEW_W = 640;                                  // 画面幅いっぱいに映すワールドの幅（ステージ580＋余白）
 const VIEW_TOP = PY - 380, VIEW_BOTTOM = PY + 80;    // いつも映しておく縦の範囲（ワールド座標）。上の台に立っていても収まる
 let camTop = VIEW_TOP;                               // いま映している上端。高く跳んだ人がいると上がり、そのぶん画面が少し引く
+const cam = { s: 1, x: CENTER_X, y: (VIEW_TOP + VIEW_BOTTOM) / 2, init: false };   // いまのカメラ: 倍率 / 中心のワールド座標 / 横画面で初期化済みか
+let camView = { x0: 0, y0: 0, x1: W, y1: H };        // いま映しているワールドの範囲（撃墜の演出の位置に使う）
+const camVel = [null, null, null, null];             // 戦っている人の速度の推定（先読み用。参加者の画面には速度が届かないので、動きから測る）
+const camExp = { l: 0, r: 0, t: 0, b: 0 };           // 通常カメラで、戦っている人が映る範囲の外へ出たとき、範囲を広げているぶん（ワールド px）
+const LAND_FEET = 0.66;                              // 横画面: 足もとを置きたい高さ（画面の上から 66%。下の 3 割はステージの側面と崖の外）
+const camLead = v => Math.sign(v) * Math.min(14, Math.max(0, Math.abs(v) - 3)) * 8;   // 速く動いているとき、その少し先（最大 112px）まで映す
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+function boundsOf(list) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const b of list) { if (b.x0 < x0) x0 = b.x0; if (b.y0 < y0) y0 = b.y0; if (b.x1 > x1) x1 = b.x1; if (b.y1 > y1) y1 = b.y1; }
+  return { x0, y0, x1, y1 };
+}
+// 戦っている全員の範囲（ワールド座標）。outer: 画面に必ず収めたい範囲（名前・攻撃の届く距離・少し先の位置まで）/ inner: 操作ボタンに重ねたくない範囲（体のまわり）
+function camFighters(dt) {
+  const outer = [], inner = [], now = [];            // now: いまの位置（先読みなし）の範囲。画面から出さないための最後の保証に使う
+  let feet = -Infinity;
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const p = game.p[i];
+    if (!p || !p.c || !p.al) { camVel[i] = null; continue; }
+    let e = camVel[i];
+    if (!e || Math.abs(p.x - e.x) > 150 || Math.abs(p.y - e.y) > 150) e = camVel[i] = { x: p.x, y: p.y, vx: 0, vy: 0, t: 0 };   // 瞬間移動・復活は速度とみなさない
+    e.t += dt;
+    if (e.t >= 1) { e.vx += ((p.x - e.x) / e.t - e.vx) * 0.4; e.vy += ((p.y - e.y) / e.t - e.vy) * 0.4; e.x = p.x; e.y = p.y; e.t = 0; }
+    const sz = szOf(p), w = PLW * sz, h = PLH * sz, lx = camLead(e.vx), ly = camLead(e.vy);
+    const x0 = Math.min(p.x, p.x + lx), x1 = Math.max(p.x, p.x + lx) + w, y0 = Math.min(p.y, p.y + ly), y1 = Math.max(p.y, p.y + ly) + h, rc = 46 * sz + 8;
+    outer.push({ x0: x0 - rc, x1: x1 + rc, y0: y0 - 36, y1: y1 + 14 });
+    inner.push({ x0: x0 - 18, x1: x1 + 18, y0: y0 - 14, y1: y1 + 4 });
+    now.push({ x0: p.x - rc, x1: p.x + w + rc, y0: p.y - 36, y1: p.y + h + 14 });
+    feet = Math.max(feet, p.y + h);
+  }
+  return { outer, inner, now, feet };
+}
+// 通常カメラの基本の映し方（ステージ中央を画面幅いっぱいに。高く跳んだ人がいると上端が上がる）
+function classicView() {
+  const portrait = window.innerHeight > window.innerWidth;          // 縦持ち。映す範囲の上を少し詰めて、ステージを画面の上寄りにする（上の台に立つ人と名前は収まる高さ）
+  let top = portrait ? PY - 320 : VIEW_TOP;
+  for (const p of game.p) if (p && p.c && p.al) top = Math.min(top, p.y - 30);    // いちばん高い人の頭（名前の分の余白つき）まで映す
+  camTop += (top - camTop) * (top < camTop ? 0.2 : 0.08);
+  return { s: Math.min(cw / (VIEW_W * (game.nf >= 3 ? WIDE_SCALE : 1)), ch / (VIEW_BOTTOM - camTop)), x: CENTER_X, y: (camTop + VIEW_BOTTOM) / 2 };   // 3〜4 人のステージは広いので、そのぶん広く映す
+}
+function classicCam(fs, dt) {                        // 基本の映し方の外へ出た人がいたら、その人が映るまで広げる（出ていなければ基本のまま）
+  const base = classicView(), hw = cw / base.s / 2, hh = ch / base.s / 2;
+  const v = { x0: base.x - hw, x1: base.x + hw, y0: base.y - hh, y1: base.y + hh }, n = { l: 0, r: 0, t: 0, b: 0 };
+  for (const o of fs.inner) { n.l = Math.max(n.l, v.x0 - o.x0); n.r = Math.max(n.r, o.x1 - v.x1); n.t = Math.max(n.t, v.y0 - o.y0); n.b = Math.max(n.b, o.y1 - v.y1); }
+  for (const k in camExp) {                          // 広げるのは速く（0.45/フレーム）、戻すのはゆっくり（0.06/フレーム）
+    camExp[k] += (n[k] - camExp[k]) * (1 - Math.pow(n[k] > camExp[k] ? 0.55 : 0.94, dt));
+    if (n[k] === 0 && camExp[k] < 0.5) camExp[k] = 0;
+  }
+  if (!camExp.l && !camExp.r && !camExp.t && !camExp.b) return base;
+  const x0 = v.x0 - camExp.l, x1 = v.x1 + camExp.r, y0 = v.y0 - camExp.t, y1 = v.y1 + camExp.b;
+  return { s: Math.min(cw / (x1 - x0), ch / (y1 - y0)), x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+}
+// 横画面モードのカメラの狙いを決める。
+//   outer / inner: 戦っている人の範囲（camFighters）/ scr: 画面の大きさ（cw, ch）、キャラを置ける安全枠（safe）、避けたい範囲（forb: 操作ボタン）、ズームの下限と上限 / hint: 足もとの高さ（feet）と、いまのカメラ（prev）
+//   ボタンに重ならずに全員が収まる最大のズームを探し、そのズームで、足もとが画面の LAND_FEET の高さ・全員が中央になる位置にいちばん近いカメラ中心を返す。どうしても重なるなら、重なりが最小になる位置にする
+function solveLandCam(outer, inner, scr, hint) {
+  const { cw, ch, safe, forb, sMin, sMax } = scr, prev = hint.prev;
+  const ob = boundsOf(outer), ib = boundsOf(inner), hx = (ib.x0 + ib.x1) / 2;
+  const sFit = Math.max(0.02, Math.min((safe.x1 - safe.x0) / (ob.x1 - ob.x0), (safe.y1 - safe.y0) / (ob.y1 - ob.y0)));   // 安全枠にぎりぎり収まるズーム
+  const overlap = (s, X, Y) => {                     // カメラ中心を (X, Y)、倍率を s にしたとき、キャラ（inner）が避けたい範囲に重なる面積（画面 px²）
+    let a = 0;
+    for (const b of inner) {
+      const x0 = (b.x0 - X) * s + cw / 2, x1 = (b.x1 - X) * s + cw / 2, y0 = (b.y0 - Y) * s + ch / 2, y1 = (b.y1 - Y) * s + ch / 2;
+      for (const f of forb) {
+        const w = Math.min(x1, f.x1) - Math.max(x0, f.x0), h = Math.min(y1, f.y1) - Math.max(y0, f.y0);
+        if (w > 0 && h > 0) a += w * h;
+      }
+    }
+    return a;
+  };
+  const tryScale = s => {                            // 倍率 s で、カメラ中心の候補をいくつも試す
+    const xLo = ob.x1 - (safe.x1 - cw / 2) / s, xHi = ob.x0 + (cw / 2 - safe.x0) / s;       // 全員が安全枠に収まるカメラ中心の範囲
+    const yLo = ob.y1 - (safe.y1 - ch / 2) / s, yHi = ob.y0 + (ch / 2 - safe.y0) / s;
+    if (xLo > xHi + 1e-6 || yLo > yHi + 1e-6) return null;
+    const px = clampN(hx, xLo, xHi), py = clampN(hint.feet - (LAND_FEET - 0.5) * ch / s, yLo, yHi);   // 理想の位置
+    const xs = [px], ys = [py];
+    for (let k = 0; k <= 16; k++) xs.push(xLo + (xHi - xLo) * k / 16);
+    for (const f of forb) xs.push(clampN(ib.x0 - (f.x1 + 1 - cw / 2) / s, xLo, xHi), clampN(ib.x1 - (f.x0 - 1 - cw / 2) / s, xLo, xHi));   // ボタンのふちにぴったり寄せた位置
+    for (let k = 1; k <= 4; k++) ys.push(py + (yHi - py) * k / 4);                            // キャラを画面の上寄りへ
+    ys.push(py + (yLo - py) / 2, yLo);
+    let zero = null, any = null;
+    for (const X of xs) for (const Y of ys) {
+      const ov = overlap(s, X, Y);
+      const cost = ((X - px) * s) ** 2 + 0.5 * ((Y - py) * s) ** 2 + 0.15 * (((X - prev.x) * s) ** 2 + ((Y - prev.y) * s) ** 2);   // 理想の位置と、いまのカメラ（ちらつき防止）からの遠さ
+      if (ov === 0) { if (!zero || cost < zero.cost) zero = { x: X, y: Y, cost }; }
+      else if (!any || ov < any.ov || (ov === any.ov && cost < any.cost)) any = { x: X, y: Y, ov, cost };
+    }
+    return { zero, any };
+  };
+  const sHi = Math.min(sMax, sFit), sLo = Math.min(sMin, sFit), N = 16;
+  let upper = null, found = null;                    // upper: 一つ前の（重なった）ズーム
+  for (let k = 0; k <= N; k++) {                     // 最大のズームから少しずつ引いて、ボタンに重ならない最初のズームを探す
+    const s = sHi * Math.pow(sLo / sHi, k / N), r = tryScale(s);
+    if (r && r.zero) { found = { s, c: r.zero }; break; }
+    upper = s;
+  }
+  if (found && upper !== null) {                     // 重なるズームとの間を二分法で詰める
+    let a = found.s, b = upper;
+    for (let m = 0; m < 6; m++) { const mid = (a + b) / 2, r = tryScale(mid); if (r && r.zero) { a = mid; found = { s: mid, c: r.zero }; } else b = mid; }
+  }
+  if (found) return { s: found.s, x: found.c.x, y: found.c.y };
+  const r = tryScale(sLo), c = r && (r.zero || r.any);          // どこまで引いても重なる: 重なりが最小の位置
+  return c ? { s: sLo, x: c.x, y: c.y } : { s: sLo, x: (ob.x0 + ob.x1) / 2, y: (ob.y0 + ob.y1) / 2 };
+}
+const touchEls = Array.from(document.querySelectorAll("#touch .tb, #mute, #quit"));    // キャラを重ねたくないもの: 操作ボタン・音・「やめる」
+function landCamTarget(fs) {                         // 画面の実際のボタンの位置と、上部のカードの高さから、横画面のカメラの狙いを決める
+  const r = cv.getBoundingClientRect(), forb = [];
+  for (const el of touchEls) {
+    const b = el.getBoundingClientRect();
+    if (b.width > 0) forb.push({ x0: b.left - r.left - 6, y0: b.top - r.top - 6, x1: b.right - r.left + 6, y1: b.bottom - r.top + 6 });
+  }
+  const hb = stats.getBoundingClientRect(), top = Math.max(46, hb.height > 0 ? hb.bottom - r.top : 0) + 6;
+  const scr = { cw, ch, safe: { x0: 10, y0: top, x1: cw - 10, y1: ch - 8 }, forb, sMin: Math.min(cw / 1700, ch / 800), sMax: ch * 0.0034 };
+  return solveLandCam(fs.outer, fs.inner, scr, { feet: fs.feet, prev: cam });
+}
+function keepInView(outer) {                         // 速く飛ばされたなどでカメラが追いつかなくても、戦っている人を画面から出さない
+  const bb = boundsOf(outer), m = 6;
+  cam.s = Math.min(cam.s, (cw - 2 * m) / (bb.x1 - bb.x0), (ch - 2 * m) / (bb.y1 - bb.y0));
+  const hw = cw / 2 / cam.s, hh = ch / 2 / cam.s, mm = m / cam.s;
+  const xLo = bb.x1 - hw + mm, xHi = bb.x0 + hw - mm, yLo = bb.y1 - hh + mm, yHi = bb.y0 + hh - mm;
+  cam.x = xLo <= xHi ? clampN(cam.x, xLo, xHi) : (bb.x0 + bb.x1) / 2;
+  cam.y = yLo <= yHi ? clampN(cam.y, yLo, yHi) : (bb.y0 + bb.y1) / 2;
+}
+// なめらかな追従（臨界減衰のバネ）。出だしと止まりが急にならない。t: 追いつくまでの目安の秒数 / dt: 経過秒 / vmax: 動く速さの上限（1 秒あたり）。[新しい値, 新しい速度] を返す
+function smoothDamp(cur, target, vel, t, dt, vmax) {
+  const w = 2 / t, x = w * dt, e = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x), lim = vmax * t;
+  const change = clampN(cur - target, -lim, lim), near = cur - change, tmp = (vel + w * change) * dt;   // 遠いときは、近くの仮の狙いに向かう（速さの上限）
+  let v = (vel - w * tmp) * e, out = near + (change + tmp) * e;
+  if ((target - cur > 0) === (out > target)) { out = target; v = 0; }                              // 行き過ぎたら、そこで止める
+  return [out, v];
+}
+const camV = { x: 0, y: 0 };                         // カメラの動く速さ（位置）
+let camHold = 0;                                     // 引いたあと、寄るのを待つ残りフレーム（ジャンプのたびに伸び縮みしないように）
+function updateCamera(dt) {
+  const lobby = game.ph === "lobby";
+  if (lobby) camVel.fill(null);
+  const fs = lobby ? { outer: [], inner: [], now: [], feet: 0 } : camFighters(dt);
+  let tgt = land && fs.outer.length ? landCamTarget(fs) : classicCam(fs, dt);
+  if (!(tgt.s > 0) || !isFinite(tgt.x) || !isFinite(tgt.y)) tgt = classicView();         // 画面が極端に小さいときなどの保険（NaN になると画面が消えたままになる）
+  if (!land || !cam.init || !(cam.s > 0) || !isFinite(cam.x) || !isFinite(cam.y)) { cam.s = tgt.s; cam.x = tgt.x; cam.y = tgt.y; cam.init = land; camV.x = camV.y = 0; camHold = 0; }
+  else {                                             // 横画面では、狙いに向かってなめらかに動く（位置はバネ。ズームは行き過ぎないように指数的に、引くのは速く寄るのはゆっくり。引いた直後は寄らない）
+    const sec = dt / 60, ratio = tgt.s / cam.s;
+    if (ratio < 0.96) camHold = 24; else camHold = Math.max(0, camHold - dt);
+    let r;
+    const vmax = 1700 / cam.s;                       // 位置の動く速さの上限（画面で 1 秒に 1700px。振り向くような急な動きを避ける）
+    r = smoothDamp(cam.x, tgt.x, camV.x, 0.16, sec, vmax); cam.x = r[0]; camV.x = r[1];
+    r = smoothDamp(cam.y, tgt.y, camV.y, 0.16, sec, vmax); cam.y = r[0]; camV.y = r[1];
+    const tau = ratio < 1 ? 7 : camHold > 0 ? 120 : 26;
+    cam.s *= Math.pow(ratio, 1 - Math.exp(-dt / tau));
+    if (fs.now.length) keepInView(fs.now);
+  }
+  const hw = cw / cam.s / 2, hh = ch / cam.s / 2;
+  camView = { x0: cam.x - hw, x1: cam.x + hw, y0: cam.y - hh, y1: cam.y + hh };
+}
+const smoothClient = p => { if (p && p.tx !== undefined) { p.x += (p.tx - p.x) * 0.6; p.y += (p.ty - p.y) * 0.6; } };   // 参加者側: 届いた位置へ寄せて滑らかに見せる
 let lastT = performance.now();
 function render() {
+  updateLand();
   fitCanvas();
   const now = performance.now(), dt = Math.min(3, Math.max(0.2, (now - lastT) / 16.667));   // dt: 60fps を 1 としたときの経過フレーム数
   lastT = now;
@@ -1870,21 +2138,17 @@ function render() {
   if (role === "client" && !game.hsf) {              // 参加者側では、飛び道具をスナップショットの合間に先へ進めて滑らかに見せる
     for (const b of game.pj) { b.x += b.vx * dt; b.y += b.vy * dt; b.t += dt; if (b.k === 0) b.vy += 0.5 * dt; }
   }
+  if (role === "client") { game.p.forEach(smoothClient); game.cl.forEach(smoothClient); }
   const g = cx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
   cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
-  // いちばん高い人の頭（名前の分の余白つき）まで映す。範囲が広がったぶんだけ画面を引き、ステージは下端に残す
-  const portrait = window.innerHeight > window.innerWidth;          // 縦持ち。映す範囲の上を少し詰めて、ステージを画面の上寄りにする（上の台に立つ人と名前は収まる高さ）
-  let top = portrait ? PY - 320 : VIEW_TOP;
-  for (const p of game.p) if (p && p.c && p.al) top = Math.min(top, p.y - 30);
-  camTop += (top - camTop) * (top < camTop ? 0.2 : 0.08);
-  const sc = Math.min(cw / (VIEW_W * (game.nf >= 3 ? WIDE_SCALE : 1)), ch / (VIEW_BOTTOM - camTop));   // 3〜4 人のステージは広いので、そのぶん広く映す
+  updateCamera(dt);
   // 画面の揺れ（強さは毎フレーム減衰する）
   let ox = 0, oy = 0;
   if (shakeAmp > 0.25) { ox = (Math.random() * 2 - 1) * shakeAmp; oy = (Math.random() * 2 - 1) * shakeAmp; shakeAmp *= Math.pow(0.86, dt); }
   else shakeAmp = 0;
   cx.save();
-  cx.translate(ox + cw / 2 - (PX + PW / 2) * sc, oy + ch / 2 - ((camTop + VIEW_BOTTOM) / 2) * sc);
-  cx.scale(sc, sc);
+  cx.translate(ox + cw / 2 - cam.x * cam.s, oy + ch / 2 - cam.y * cam.s);
+  cx.scale(cam.s, cam.s);
   // ステージ（メイン＋人数に応じた上の台）。サドンデス中は縮んでいく端が赤く点滅する
   const sdOn = game.sd > 0, blink = Math.floor(now / 250) % 2 === 0;
   for (const pl of platforms()) {
@@ -1901,10 +2165,19 @@ function render() {
       cx.fillRect(pl.x, pl.y, 5, th); cx.fillRect(pl.x + pl.w - 5, pl.y, 5, th);
     }
   }
+  // 撃墜ライン: この外へ出ると脱落する。崖の外まで映っているときだけ、うっすら見える
+  if (game.ph !== "lobby" && (camView.x0 < KO_L || camView.x1 > KO_R || camView.y1 > KO_B)) {
+    const v = camView, top = Math.min(v.y0, KO_B);
+    cx.save(); cx.strokeStyle = "rgba(248,113,113,0.38)"; cx.lineWidth = 2 / cam.s; cx.setLineDash([12 / cam.s, 9 / cam.s]);
+    cx.beginPath();
+    if (v.x0 < KO_L) { cx.moveTo(KO_L, top); cx.lineTo(KO_L, KO_B); }
+    if (v.x1 > KO_R) { cx.moveTo(KO_R, top); cx.lineTo(KO_R, KO_B); }
+    if (v.y1 > KO_B) { cx.moveTo(Math.max(v.x0, KO_L), KO_B); cx.lineTo(Math.min(v.x1, KO_R), KO_B); }
+    cx.stroke(); cx.restore();
+  }
   for (const f of game.fl) drawFlower(f, now);
   // プレイヤーと分身（吹っ飛んでいる間は残像を引く）
   const drawWithTrail = (p, i, me) => {
-    if (role === "client" && p.tx !== undefined) { p.x += (p.tx - p.x) * 0.6; p.y += (p.ty - p.y) * 0.6; }
     const h = p.hist || (p.hist = []);
     h.push(p.x, p.y); if (h.length > 14) h.splice(0, 2);
     if (p.al && p.s > 0) {
@@ -1932,7 +2205,7 @@ function render() {
     else if (fxGoT > 0) banner("GO!");
     if (myId >= 0 && game.p[myId] && !game.p[myId].al) {
       cx.fillStyle = "rgba(255,255,255,.6)"; cx.font = "18px sans-serif"; cx.textAlign = "center";
-      cx.fillText("観戦中", cw / 2, Math.max(16, Math.min(34, cw / 13)) + 34);
+      cx.fillText("観戦中", cw / 2, land ? 96 : Math.max(16, Math.min(34, cw / 13)) + 34);
     }
   }
 }
