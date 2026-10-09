@@ -2,7 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<!-- ホーム画面に追加して開くと、アドレスバーなしで起動する（iPhone は全画面の機能がないので、これが画面を広く使う唯一の方法） -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="シールドファイト">
+<meta name="theme-color" content="#111827">
 <title>シールドファイト</title>
 <style>
   html,body{margin:0;height:100%;background:#111827;color:#e5e7eb;font-family:system-ui,"Yu Gothic",sans-serif;overflow:hidden}
@@ -31,8 +37,12 @@
   #box{position:relative;flex:1 1 0;min-height:0;width:100%}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   #ui{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
-  #mute{position:absolute;top:6px;right:8px;z-index:3;width:34px;height:34px;padding:0;margin:0;border-radius:50%;background:rgba(255,255,255,.14);font-size:16px;line-height:1}
-  #quit{display:none;position:absolute;top:6px;left:8px;z-index:3;height:34px;padding:0 12px;margin:0;border-radius:17px;background:rgba(255,255,255,.14);font-size:13px;line-height:1}
+  /* 画面の上のボタン。ホーム画面から開いた iPhone などでは、時計・電池の帯やカメラの切り欠き（safe-area）を避ける */
+  #mute{position:absolute;top:calc(6px + env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));z-index:3;width:34px;height:34px;padding:0;margin:0;border-radius:50%;background:rgba(255,255,255,.14);font-size:16px;line-height:1}
+  #fs{display:none;position:absolute;top:calc(6px + env(safe-area-inset-top));right:calc(max(8px,env(safe-area-inset-right)) + 40px);z-index:3;width:34px;height:34px;padding:0;margin:0;border-radius:50%;background:rgba(255,255,255,.14);line-height:0}
+  #fs svg{width:18px;height:18px}
+  body.fsok #fs{display:block}
+  #quit{display:none;position:absolute;top:calc(6px + env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));z-index:3;height:34px;padding:0 12px;margin:0;border-radius:17px;background:rgba(255,255,255,.14);font-size:13px;line-height:1}
   body.solo.battle #quit{display:block}
   #skillhint{display:none;position:absolute;left:50%;bottom:8px;transform:translateX(-50%);z-index:3;padding:4px 12px;border-radius:999px;background:rgba(0,0,0,.5);font-size:12px;pointer-events:none;white-space:nowrap}
   @media (pointer:fine){body.battle #skillhint{display:block}}
@@ -165,8 +175,10 @@
   body.land #stats{position:absolute;top:0;left:0;right:0;bottom:auto;transform:none;width:auto;max-width:none;min-height:0;margin:0;z-index:2;
     padding:max(4px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
     background:none;border-radius:0;align-items:flex-start;justify-content:space-between;pointer-events:none}
-  body.land #quit{top:48px}                                           /* 「やめる」は左のカードの下、音のボタンは上のまん中（残り時間の右） */
-  body.land #mute{top:6px;right:auto;left:calc(50% + 30px)}
+  body.land #quit{top:calc(48px + env(safe-area-inset-top))}          /* 「やめる」は左のカードの下、音のボタンは上のまん中（残り時間の右）、全画面ボタンは残り時間の左 */
+  body.land #mute{right:auto;left:calc(50% + 30px)}
+  body.land #fs{right:auto;left:calc(50% - 64px)}
+  body.fson.battle #fs{display:none}                                  /* 全画面で戦っている間は出さない（戻すのは画面の端から引く操作でもできる） */
   .hg{display:flex;gap:5px;min-width:0}
   .hc{display:flex;align-items:center;gap:6px;box-sizing:border-box;padding:3px 8px 4px;border-radius:8px;background:rgba(15,23,42,.55);border:1px solid rgba(255,255,255,.08);line-height:1.2;min-width:0}
   .hc.me{border-color:rgba(255,255,255,.4)}
@@ -210,7 +222,9 @@
   body.land .panel.setup .cpuset .row{margin:4px 0}
   body.land .panel.setup .cpuset .hint{margin:-2px 0 3px}
   body.land .panel.setup .seg button{padding:5px 11px}
-  body.land:not(.battle) #mute{left:auto;right:8px}
+  body.land:not(.battle) #mute{left:auto;right:max(8px,env(safe-area-inset-right))}
+  body.land:not(.battle) #fs{left:auto;right:calc(max(8px,env(safe-area-inset-right)) + 40px)}
+  .ioshint{margin-top:10px;font-size:11px;color:#9ca3af}
   @media (max-width:480px){
     .panel{padding:14px 16px}
     .panel h1{font-size:22px}
@@ -224,6 +238,7 @@
     <canvas id="cv"></canvas>
     <div id="ui"></div>
     <button id="mute" type="button" aria-label="効果音のオン・オフ">🔊</button>
+    <button id="fs" type="button" aria-label="全画面の切り替え"></button>
     <button id="quit" type="button" aria-label="CPU戦をやめる">やめる</button>
     <div id="skillhint"></div>
   </div>
@@ -1787,6 +1802,7 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
   root.querySelectorAll("#segN button").forEach(b => b.onclick = () => { soloCfg.n = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
   root.querySelectorAll("#segLv button").forEach(b => b.onclick = () => { soloCfg.lv = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
   root.querySelector("#bGo").onclick = () => {
+    autoFs();
     const prof = sanitizeProfile(draft);
     draft = prof; saveProfile();
     applyProfile(game.p[0], prof);
@@ -1816,7 +1832,7 @@ function showLobby() {
       <p>${ready < 2 ? "準備OKが2人以上になると開始できます<br>" : ""}ホストはこの画面を開いたままにしてください<br>（他のアプリに切り替えると全員の画面が止まります）</p></div></div></div>`;
     bindRounds(ui, "wr", renderUI);
     document.getElementById("bCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(shareUrl()); };
-    document.getElementById("bStart").onclick = hostStartMatch;
+    document.getElementById("bStart").onclick = () => { autoFs(); hostStartMatch(); };
     document.getElementById("url").onclick = e => e.target.select();
     document.getElementById("bEdit").onclick = () => { if (canEdit(game.p[0])) { game.p[0].rd = false; renderUI(); } };
   } else {
@@ -1850,10 +1866,11 @@ function renderUI() {
       <p>— または —</p>
       <input id="code" inputmode="numeric" maxlength="1" placeholder="部屋番号（1桁）" style="width:200px;text-align:center;font-size:20px" value="${/^\d$/.test(q || "") ? q : ""}">
       <button id="bJoin">参加する</button>
-      <p>操作: WASD / 矢印キーで移動（↑・W でジャンプ）、Space で攻撃、X でスキル</p></div>`;
-    document.getElementById("bHost").onclick = startHost;
-    document.getElementById("bSolo").onclick = startSolo;
-    const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d$/.test(c)) startClient(c); else document.getElementById("code").style.borderColor = "#ef4444"; };
+      <p>操作: WASD / 矢印キーで移動（↑・W でジャンプ）、Space で攻撃、X でスキル</p>
+      ${isIPhone && !standalone ? `<p class="ioshint">画面を広く使うには: 共有ボタン（□↑）→「ホーム画面に追加」で、ホーム画面のアイコンから開いてください（アドレスバーが消えます）</p>` : ""}</div>`;
+    document.getElementById("bHost").onclick = () => { autoFs(); startHost(); };
+    document.getElementById("bSolo").onclick = () => { autoFs(); startSolo(); };
+    const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d$/.test(c)) { autoFs(); startClient(c); } else document.getElementById("code").style.borderColor = "#ef4444"; };
     document.getElementById("bJoin").onclick = join;
     document.getElementById("code").onkeydown = e => { if (e.key === "Enter") join(); };
   } else if (key === "connecting") {
@@ -1987,6 +2004,56 @@ const paintMute = () => { muteBtn.textContent = Sfx.muted ? "🔇" : "🔊"; };
 muteBtn.onclick = () => { Sfx.init(); Sfx.setMuted(!Sfx.muted); paintMute(); Sfx.beep(false); muteBtn.blur(); };
 paintMute();
 ["pointerdown", "touchend", "click", "keydown"].forEach(ev => addEventListener(ev, () => Sfx.init(), { passive: true }));
+
+// 全画面: スマホのブラウザはアドレスバーを消せないので、全画面の機能（Android・iPad の Chrome など）でゲームを画面いっぱいにする。
+// iPhone はこの機能がないので、「ホーム画面に追加」から開いてもらう（<head> の apple-mobile-web-app-capable で、アドレスバーなしで起動する）。
+// ブラウザの決まりで、全画面はボタンを押したときにしか切り替えられない。最初に「部屋を作る」「参加する」「CPUと戦う」「戦闘開始」などを押したときに 1 回だけ自動で全画面にし、あとは全画面ボタンで切り替える
+const fsBtn = document.getElementById("fs"), docEl = document.documentElement;
+const standalone = (window.matchMedia && (matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches)) || navigator.standalone === true;   // ホーム画面から開いている
+const fsSupported = !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen) && !standalone;
+const isIPhone = /iPhone|iPod/.test(navigator.userAgent);
+const fsNow = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+let fsAutoDone = false;
+function enterFs() {
+  try {
+    const r = docEl.requestFullscreen ? docEl.requestFullscreen({ navigationUI: "hide" }) : docEl.webkitRequestFullscreen();
+    if (r && r.catch) r.catch(() => {});
+  } catch (e) {}
+}
+function exitFs() {
+  try {
+    const r = document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen && document.webkitExitFullscreen();
+    if (r && r.catch) r.catch(() => {});
+  } catch (e) {}
+}
+function autoFs() {                                  // スマホ・タブレットで、まだ全画面にしたことがなければ全画面にする
+  if (fsAutoDone || !fsSupported || !coarseMq.matches || fsNow()) return;
+  fsAutoDone = true; enterFs();
+}
+const FS_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const FS_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+function paintFs() {
+  const on = fsNow();
+  fsBtn.innerHTML = on ? FS_OFF : FS_ON;
+  fsBtn.setAttribute("aria-label", on ? "全画面をやめる" : "全画面にする");
+  document.body.classList.toggle("fson", on);
+  document.body.classList.toggle("fsok", fsSupported && coarseMq.matches);     // 全画面ボタンは、全画面にできるスマホ・タブレットでだけ出す
+}
+fsBtn.onclick = () => { fsAutoDone = true; if (fsNow()) exitFs(); else enterFs(); fsBtn.blur(); };
+["fullscreenchange", "webkitfullscreenchange"].forEach(ev => document.addEventListener(ev, () => { paintFs(); cam.init = false; }));
+paintFs();
+// ホーム画面のアイコン（iPhone の「ホーム画面に追加」用）。画像ファイルを増やさないよう、その場で描く
+try {
+  const ic = document.createElement("canvas"); ic.width = ic.height = 180;
+  const g = ic.getContext("2d");
+  g.fillStyle = "#111827"; g.fillRect(0, 0, 180, 180);
+  g.fillStyle = "#64748b"; g.fillRect(20, 132, 140, 16);
+  g.fillStyle = "#ef4444"; g.fillRect(52, 52, 52, 78);
+  g.fillStyle = "#111827"; g.fillRect(84, 68, 11, 11);
+  g.fillStyle = "#e2e8f0"; g.fillRect(110, 56, 12, 70);
+  const link = document.createElement("link"); link.rel = "apple-touch-icon"; link.href = ic.toDataURL("image/png");
+  document.head.appendChild(link);
+} catch (e) {}
 
 // 画面の演出: 火花・盾のかけら・衝撃波の輪・画面の揺れ・フラッシュ（座標はワールド）
 const parts = [], rings = [];
@@ -2491,7 +2558,7 @@ function solveLandCam(outer, inner, scr, hint) {
   const r = tryScale(sLo), c = r && (r.zero || r.any);          // どこまで引いても重なる: 重なりが最小の位置
   return c ? { s: sLo, x: c.x, y: c.y } : { s: sLo, x: (ob.x0 + ob.x1) / 2, y: (ob.y0 + ob.y1) / 2 };
 }
-const touchEls = Array.from(document.querySelectorAll("#touch .tb, #mute, #quit"));    // キャラを重ねたくないもの: 操作ボタン・音・「やめる」
+const touchEls = Array.from(document.querySelectorAll("#touch .tb, #mute, #fs, #quit"));    // キャラを重ねたくないもの: 操作ボタン・音・全画面・「やめる」
 function landCamTarget(fs) {                         // 画面の実際のボタンの位置と、上部のカードの高さから、横画面のカメラの狙いを決める
   const r = cv.getBoundingClientRect(), forb = [];
   for (const el of touchEls) {
