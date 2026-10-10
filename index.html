@@ -42,6 +42,9 @@
   #fs{display:none;position:absolute;top:calc(6px + env(safe-area-inset-top));right:calc(max(8px,env(safe-area-inset-right)) + 40px);z-index:3;width:34px;height:34px;padding:0;margin:0;border-radius:50%;background:rgba(255,255,255,.14);line-height:0}
   #fs svg{width:18px;height:18px}
   body.fsok #fs{display:block}
+  #rot{display:none;position:absolute;top:calc(6px + env(safe-area-inset-top));right:calc(max(8px,env(safe-area-inset-right)) + 80px);z-index:3;width:34px;height:34px;padding:0;margin:0;border-radius:50%;background:rgba(255,255,255,.14);line-height:0}
+  #rot svg{width:18px;height:18px}
+  body.rotok:not(.battle) #rot{display:block}                          /* 縦横の切り替えは、戦闘中以外に出す */
   #quit{display:none;position:absolute;top:calc(6px + env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));z-index:3;height:34px;padding:0 12px;margin:0;border-radius:17px;background:rgba(255,255,255,.14);font-size:13px;line-height:1}
   body.solo.battle #quit{display:block}
   #skillhint{display:none;position:absolute;left:50%;bottom:8px;transform:translateX(-50%);z-index:3;padding:4px 12px;border-radius:999px;background:rgba(0,0,0,.5);font-size:12px;pointer-events:none;white-space:nowrap}
@@ -157,9 +160,9 @@
   }
   /* 横画面モード（スマホの横持ち。JS が body.land を付ける）: 戦闘画面を画面いっぱいに使い、操作ボタンとプレイヤー情報は半透明で上に重ねる。
      ボタンは大きく（画面の高さに比例）、左下に ◀ ▶、右下に ジャンプ・攻撃・スキル（正三角形）。プレイヤー情報は上部に小さく、名前・キャラ名・勝ち数だけ */
-  body.land{--b:clamp(56px,24vh,100px);--g:10px}
+  body.land{--b:clamp(62px,27vh,116px);--g:10px;--bin:7vw}         /* --bin: 左右の端から、中央へ寄せるぶん */
   body.land.battle #touch{display:flex}
-  body.land #touch{position:absolute;left:0;right:0;bottom:0;padding:0 max(20px,env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}
+  body.land #touch{position:absolute;left:0;right:0;bottom:0;padding:0 calc(max(20px,env(safe-area-inset-right)) + var(--bin)) calc(12px + env(safe-area-inset-bottom)) calc(max(20px,env(safe-area-inset-left)) + var(--bin))}
   body.land #dpad{gap:calc(var(--g)*1.2)}
   body.land .tb{background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 2px rgba(255,255,255,.26)}
   body.land .tb:active{background:rgba(255,255,255,.32)}
@@ -232,6 +235,7 @@
   body.land .panel.setup .seg button{padding:5px 11px}
   body.land:not(.battle) #mute{left:auto;right:max(8px,env(safe-area-inset-right))}
   body.land:not(.battle) #fs{left:auto;right:calc(max(8px,env(safe-area-inset-right)) + 40px)}
+  body.land:not(.battle) #rot{left:auto;right:calc(max(8px,env(safe-area-inset-right)) + 80px)}
   .ioshint{margin-top:10px;font-size:11px;color:#9ca3af}
   @media (max-width:480px){
     .panel{padding:14px 16px}
@@ -247,6 +251,7 @@
     <div id="ui"></div>
     <button id="mute" type="button" aria-label="効果音のオン・オフ">🔊</button>
     <button id="fs" type="button" aria-label="全画面の切り替え"></button>
+    <button id="rot" type="button" aria-label="縦画面と横画面の切り替え"></button>
     <button id="quit" type="button" aria-label="CPU戦をやめる">やめる</button>
     <div id="skillhint"></div>
   </div>
@@ -340,6 +345,7 @@ const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 90;    // 花: 咲くま
 const DOGEZA_KNOCK = 0.5;            // 花で動けない（土下座）間に受ける吹っ飛びの倍率
 const CLONE_LIFE = 420;              // 分身が消えるまで
 const ARROW_SPEED = 0.7;              // 矢の速さの倍率（13〜22px/フレームに掛ける）
+const ARROW_MAX = 5, ARROW_REGEN = 60;   // アーチャーの矢: 持てる本数 / 1 本回復するまで（1 秒）。矢がないと撃てない
 const CLONE_STATS = { A: 2, D: 1, S: 2 };   // コペルニウムの分身の性能（本体とは別）
 const BZ_FRAMES = 360, BZ_BONUS = { A: 2, D: -2, S: 2 }; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値（防御は下がる）
 const CN_FRAMES = 24, CN_WHIFF = 18; // カウンター: 構えている時間 / 空振りしたときの隙
@@ -350,9 +356,12 @@ const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時�
 const RW_SPAN = 120, RW_SPEED = 4;   // 時計師の巻き戻し: さかのぼる長さ（2 秒）/ 早戻りの速さ（4 倍速。2 秒ぶんを 0.5 秒で戻る）
 // ローの ROOM: 押している間だけ円が広がり（上限なし）、離すとその場所に 5 秒残る。円の中では、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで入れ替える。
 // 円が消えるとクールタイム（2 秒＋半径 100px ごとに 1 秒）が始まり、その間は盾がなく、移動速度が 0.7 倍になる
-const ROOM_R0 = 40, ROOM_GROW = 4, ROOM_LIFE = 300, ROOM_SWAP_GAP = 6;    // 押した瞬間の半径 / 1 フレームに広がる量 / 円が残る時間（5 秒）/ 入れ替えの間隔（0.1 秒）
+const ROOM_R0 = 40, ROOM_LIFE = 300, ROOM_SWAP_GAP = 6;                  // 押した瞬間の半径 / 円が残る時間（5 秒）/ 入れ替えの間隔（0.1 秒）
+// 円の広がり方: 押した直後は 1 フレームに 12px と速く、広がるほど遅くなり、やがて 1 フレームに 1.5px で広がり続ける（上限なし）
+//   半径 = 40 + 10.5 × 25 × (1 − e^(−ため/25)) + 1.5 × ため（0.25 秒で約 240px、0.5 秒で約 320px、1 秒で約 390px、2 秒で約 550px）
+const ROOM_FAST = 10.5, ROOM_TAU = 25, ROOM_SLOWV = 1.5;
 const ROOM_CD_BASE = 120, ROOM_CD_PER100 = 60, ROOM_SLOW = 0.7;          // クールタイム: 基本 2 秒 + 半径 100px ごとに 1 秒 / クールタイム中の移動速度の倍率
-const roomR = ks => ROOM_R0 + ROOM_GROW * ks;
+const roomR = ks => ROOM_R0 + ROOM_FAST * ROOM_TAU * (1 - Math.exp(-ks / ROOM_TAU)) + ROOM_SLOWV * ks;
 const roomCd = r => Math.round(ROOM_CD_BASE + ROOM_CD_PER100 * r / 100);
 // レスラーのダッシュつかみ: 3 フレーム目から前へダッシュ（1 フレームに 9px、14 フレーム目まで。約 110px）し、4〜14 フレーム目に前 30px 以内の敵をつかむ
 const GRAB_ON = 4, GRAB_OFF = 14, GRAB_REACH = 30, GRAB_DASH_FROM = 3, GRAB_DASH_TO = 14, GRAB_DASH_V = 9;
@@ -374,7 +383,7 @@ const CHARS = [
   { id: "samurai", name: "侍", A: 5, D: 1, S: 3, tag: "攻撃力が高く、盾を一撃で割れる",
     skill: { name: "居合斬り", cd: 4, text: "少しためてから（約0.17秒）、いちばん近い敵の方向へ自動で踏み込んで斬る（約130px）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 3, tag: "遠くから矢を放つ",
-    skill: { name: "弓矢", cd: 0.1, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
+    skill: { name: "弓矢", cd: 0.1, hold: true, maxCharge: 36, openShield: true, text: "矢は最大5本まで持てて、1秒に1本ずつ回復する（矢がないと撃てない）。押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 4, tag: "瞬間移動で間合いを支配する",
     skill: { name: "テレポート", cd: 2, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
   { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 2, tag: "盾なし。スキルで攻撃と速さが上がるが、防御がなくなる", noShield: true,
@@ -458,6 +467,7 @@ function newPlayer() {
            jp: 0, dj: 0, ap: 0,                         // 前のフレームでジャンプ・攻撃ボタンが押されていたか / 空中ジャンプを使ったか
            bk: 0, ba: 0, bu: 0, jg: 0,                  // 先行入力の残り（スキル・攻撃・ジャンプ）/ ジャンプ直後に向きを変えられる残り
            tl: [], rw: 0, rwPath: null, rwI: 0,         // 時計師: 通り道の記録（ホストだけ）/ 早戻りの残りフレーム / 戻る道 / 戻る道の今の位置
+           am: ARROW_MAX, amT: 0,                       // アーチャーの矢の残り / 次の 1 本が回復するまでの経過
            km: 0, rmSw: 0,                              // クールタイムの長さ（ローは毎回変わる。スキルボタンの表示用）/ ローの入れ替えの間隔の残り
            gr: 0, grT: null, grH: 0, grD: 0, f0: 1, hd: 0,   // レスラー: つかみの経過フレーム / つかんでいる相手 / 持ち上げの残り / 投げる向き / つかみ始めの向き。hd: つかまれている（残りフレーム）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
@@ -543,7 +553,7 @@ function spawn(p, slot, n, battle) {
   p.f = (p.x + PLW / 2 < PX + PW / 2) ? 1 : -1; p.hit = [];
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
-  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0;
+  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -646,6 +656,7 @@ function fireHold(p) {                       // ためて離すスキル
   p.ks = 0;
   if (id === "law") { openRoom(p, ks); return; }   // ROOM を張る（クールタイムは円が消えてから）
   if (id === "archer") {
+    p.am = Math.max(0, p.am - 1);
     game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * ARROW_SPEED * (13 + 9 * c), vy: 0, own: p.own, pw: 0.35 + 0.85 * c, t: 0 });
     emit("ar", ecx(p) + p.f * 24, p.y + 24, p.f, c);
   } else if (id === "teleporter") {
@@ -796,7 +807,6 @@ function grabStep(p, inp) {                   // 前へダッシュしながら�
       best.hd = 2; best.a = 0; best.ak = 0; best.cd = 0; best.ks = 0; best.cn = 0; best.cnHit = true; best.s = 0; best.fz = 0; best.dz = 0; best.vx = best.vy = 0; best.ground = false;
       p.grT = best; p.grH = GRAB_HOLD; p.f0 = p.f; p.vx = 0;
       emit("gb", ecx(best), ecy(best));
-      game.hs = Math.max(game.hs, 4);
       return;
     }
   }
@@ -837,6 +847,7 @@ function physics(p, inp, neutral) {
   if (p.bf > 0) p.bf--;
   if (p.kc > 0) p.kc--;
   if (p.rmSw > 0) p.rmSw--;
+  if (chd.id === "archer") { if (p.am < ARROW_MAX) { if (++p.amT >= ARROW_REGEN) { p.am++; p.amT = 0; } } else p.amT = 0; }   // 矢は 1 秒に 1 本ずつ回復
   if (p.bz > 0) p.bz--;
   if (p.iv > 0) p.iv--;
   if (p.gh > 0 && --p.gh === 0) emit("gx", ecx(p), ecy(p));
@@ -950,7 +961,7 @@ function skillInput(p, chd, kin, kpress, dir, room) {
   }
   if (sk.hold) {
     if (p.ks > 0) { if (kin) p.ks = Math.min(p.ks + 1, sk.maxCharge); else { aim(); fireHold(p); } return false; }
-    if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0) { aim(); p.ks = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }
+    if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0 && (chd.id !== "archer" || p.am > 0)) { aim(); p.ks = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }
     return false;
   }
   if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0) { aim(); return useSkill(p) !== false; }
@@ -967,12 +978,26 @@ function knock(att, t, frac, dir) {
   t.ground = false; t.hf = 12; releaseGrab(t); t.hd = 0;
 }
 
-// 当たった瞬間: 効果音と演出を出し、全員の動きを一瞬止める（ヒットストップ）。kind: b=盾で受けた / k=盾が割れた / h=当たった
+// 吹っ飛ばされた人が、足場に戻れず崖の外まで飛ぶか（いまの速度で、何も操作しなかったときの軌道を先に計算する）
+function flyOut(t) {
+  const pls = platforms(), w = pwOf(t), h = phOf(t);
+  let x = t.x, y = t.y, vx = t.vx, vy = t.vy;
+  for (let f = 0; f < 180; f++) {
+    vx *= f < t.s ? 0.985 : 0.88;                // 硬直が解けたら、何も押さなければ横の勢いは止まる
+    vy = Math.min(18, vy + 0.6);
+    const pb = y + h; x += vx; y += vy;
+    if (vy >= 0) for (const pl of pls) if (pb <= pl.y + 0.01 && y + h >= pl.y && x + w > pl.x && x < pl.x + pl.w) return false;   // 足場に着地する
+    if (x + w / 2 < KO_L || x + w / 2 > KO_R || y > KO_B) return true;
+  }
+  return true;
+}
+// 当たった瞬間: 効果音と演出を出す。全員の動きを一瞬止める（ヒットストップ）のは、崖の外まで飛ぶような当たりだけ（多すぎて重く感じるため）
+// kind: b=盾で受けた / k=盾が割れた / h=当たった
 function impact(kind, att, t, frac, dir) {
   const d = dir === undefined ? att.f : dir;
   const x = kind === "h" ? ecx(t) : (t.f > 0 ? t.x + pwOf(t) + 4 : t.x - 4), y = ecy(t);   // 体の中心 / 盾の位置
   emit(kind, x, y, d, frac);
-  game.hs = Math.max(game.hs, kind === "b" ? 3 : kind === "k" ? 9 + Math.round(2 * frac) : 6 + Math.round(3 * frac));
+  if (kind === "h" && flyOut(t)) game.hs = Math.max(game.hs, 8 + Math.round(3 * frac));
 }
 
 // 騎士のカウンター: 受けた攻撃を、相手自身の攻撃力の 200% で相手に返す
@@ -982,7 +1007,7 @@ function counterHit(kn, att) {
   att.vy = -9; att.s = 48; att.a = 0; att.ak = 0; att.cd = 0; att.ks = 0; att.cn = 0; att.fz = 0; att.dz = 0; att.ground = false; att.hf = 14; releaseGrab(att); att.hd = 0;
   kn.cn = 0; kn.cnHit = true;
   emit("cn", ecx(kn), ecy(kn), dir);
-  game.hs = Math.max(game.hs, 12);
+  if (flyOut(att)) game.hs = Math.max(game.hs, 12);
 }
 
 // 近接攻撃と矢の命中処理。o: { dir 飛んでくる向き, frac 盾なしの強さ, recoil 反動, breaker 盾を一撃で壊す（吹っ飛ばさない）}
@@ -1032,9 +1057,9 @@ function explode(b, list) {
     const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
     e.vx = dir * KNOCK_BASE * atkMul(A) * defMul(effD(e)) * BOMB_KNOCK * dzMul(e) * (1 - 0.4 * dist / BOMB_BLAST);
     e.vy = -BOMB_LIFT; e.s = 34; e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0;
-    any = true;
+    if (flyOut(e)) any = true;
   }
-  game.hs = Math.max(game.hs, any ? 8 : 4);
+  if (any) game.hs = Math.max(game.hs, 8);   // 崖の外まで飛ばしたときだけ止める
 }
 
 function updateProjectiles(list) {
@@ -1086,7 +1111,6 @@ function updateFlowers(list) {
       if (Math.abs(e.y + phOf(e) - f.y) < 3 && e.x < f.x + 9 && e.x + pwOf(e) > f.x - 9) {      // 踏んだ人は土下座して動けなくなる
         e.fz = FLOWER_ROOT; e.dz = FLOWER_ROOT; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; releaseGrab(e);
         emit("fl", f.x, f.y);
-        game.hs = Math.max(game.hs, 4);
         game.fl.splice(i, 1);
         break;
       }
@@ -1145,12 +1169,12 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "okure": return g && face && sameLevel && t.ground && gap > 70 && gap < 240 ? KEY.k : 0;                      // 敵が来る道に花を置く
     case "wrestler": return g && face && sameLevel && gap < GRAB_REACH + 90 && t.a === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵へ、ダッシュしてつかむ
     case "tengu": return g && face && ((sameLevel && gap < 200) || (!t.ground && t.y + phOf(t) > PY + 4 && gap < 280)) ? KEY.k : 0;   // 戦う場所か、崖の外の敵へ風の場を出す
-    case "law": {                                                                                                       // 敵が近ければ、敵を包める大きさまで広げて ROOM を張る
-      if (!g || roomOf(c) || gap > 220) return 0;
+    case "law": {                                                                                                       // 敵が近づいたら、敵を包める大きさまで広げて ROOM を張る（円は速く広がるので、遠くから張ると円が消えたあとの隙を突かれやすい）
+      if (!g || roomOf(c) || gap > 110) return 0;
       c.aiCh = lawNeed(c, t); return KEY.k;
     }
     case "archer":                                                                                                      // 遠いほど長くためる
-      if (g && face && Math.abs(dyFeet) < 40 && gap >= 150 && gap <= 480) { c.aiCh = gap > 300 ? 36 : gap > 200 ? 24 : 14; return KEY.k; }
+      if (c.am > 0 && g && face && Math.abs(dyFeet) < 40 && gap >= 150 && gap <= 480) { c.aiCh = gap > 300 ? 36 : gap > 200 ? 24 : 14; return KEY.k; }
       return 0;
     case "teleporter":                                                                                                  // 盾を向けた敵の向こう側（背中）へ出る
       if (g && face && sameLevel && tFaces && gap > 90 && gap < 300) {
@@ -1164,7 +1188,8 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
 }
 function lawNeed(c, e) {                                // ローが敵 e を ROOM に入れて、少し動かれても外れないためる長さ
   const d = distToBody(ecx(c), ecy(c), e) + 90;
-  return Math.max(1, Math.ceil((d - ROOM_R0) / ROOM_GROW));
+  let ks = 1; while (roomR(ks) < d && ks < 2000) ks++;
+  return ks;
 }
 // ロー: ROOM の中での動き（入っていれば押すボタン、何もしなければ null）
 //   ・敵の盾がこちらを向いていて、敵の背後が足場の上なら、回り込み攻撃
@@ -1400,7 +1425,7 @@ function snapshot() {
   const inGame = game.ph !== "lobby";         // キャラは試合が始まるまで他のプレイヤーに送らない
   const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr,
     p: game.p.map(p => p ? Object.assign(serEnt(p),
-      { w: p.w, c: p.c ? 1 : 0, n: p.n, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, lv: p.lv },
+      { w: p.w, c: p.c ? 1 : 0, n: p.n, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, am: p.am, amT: p.amT, lv: p.lv },
       inGame ? { ch: p.ch } : null) : null),
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
     pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 ? Math.round(b.pw * 10) : 0]),
@@ -1559,7 +1584,7 @@ function applySnapshot(s) {
     let p = game.p[i];
     if (!p) { p = game.p[i] = newPlayer(); p.x = n.x; p.y = n.y; }
     readEnt(p, n);
-    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.lv = n.lv | 0; p.own = i;
+    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.am = n.am === undefined ? ARROW_MAX : n.am | 0; p.amT = n.amT | 0; p.lv = n.lv | 0; p.own = i;
     const cn = s.cl[i];
     if (!cn) game.cl[i] = null;
     else {
@@ -1956,8 +1981,10 @@ function updateSkillUI() {
       const room = chOf(me).id === "law" ? roomOf(me) : null;
       if (room) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(room.t / 60)); }   // ローの ROOM がある間（数字は円が消えるまでの秒数）
       else if (me.ks > 0) { state = "charge"; label = "ため中"; }
+      else if (chOf(me).id === "archer" && me.am <= 0) { state = "cool"; label = "矢なし"; ratio = 1 - me.amT / ARROW_REGEN; sec = "0"; }   // 矢がないとき: 次の 1 本までを円で出す
       else if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (me.km || sk.cd * 60)); sec = String(Math.ceil(me.kc / 60)); }
       else state = "ready";
+      if (chOf(me).id === "archer" && state !== "cool") sec = "×" + me.am;      // アーチャー: 残りの矢の本数
     }
   }
   const key = [state, label, sec, Math.round(ratio * 50)].join("|");
@@ -1965,7 +1992,7 @@ function updateSkillUI() {
   lastSk = key;
   skBtn.dataset.state = state; skBtn.style.setProperty("--p", ratio.toFixed(3));
   skBtn.querySelector("b").textContent = label; skBtn.querySelector("i").textContent = sec;
-  skHint.textContent = state === "none" ? "スキルなし" : "[X] " + label + (state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : "  あと " + sec + " 秒");
+  skHint.textContent = state === "none" ? "スキルなし" : "[X] " + label + (sec && sec[0] === "×" ? "  矢 " + sec : state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : label === "矢なし" ? "  1本回復するまで待つ" : "  あと " + sec + " 秒");
 }
 
 // ---------- 効果音と演出 ----------
@@ -2098,8 +2125,26 @@ function paintFs() {
   fsBtn.setAttribute("aria-label", on ? "全画面をやめる" : "全画面にする");
   document.body.classList.toggle("fson", on);
   document.body.classList.toggle("fsok", fsSupported && coarseMq.matches);     // 全画面ボタンは、全画面にできるスマホ・タブレットでだけ出す
+  document.body.classList.toggle("rotok", canLock && coarseMq.matches);       // 縦横の切り替えボタンも同じ
 }
 fsBtn.onclick = () => { fsAutoDone = true; if (fsNow()) exitFs(); else enterFs(); fsBtn.blur(); };
+// 縦画面 ↔ 横画面の切り替え: 画面の向きを固定する機能（screen.orientation.lock）を使う。ブラウザの決まりで全画面のときしか固定できないので、全画面にしてから固定する。
+// 全画面をやめると固定も外れ、スマホの自動回転に戻る。iPhone はこの機能がないので、ボタンを出さない
+const rotBtn = document.getElementById("rot");
+const canLock = fsSupported && !!(screen.orientation && screen.orientation.lock);
+rotBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5"/><path d="M3 4v5h5M21 20v-5h-5"/></svg>';
+function lockOrientation(land) {
+  try { const r = screen.orientation.lock(land ? "landscape" : "portrait"); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+}
+rotBtn.onclick = () => {
+  rotBtn.blur(); fsAutoDone = true;
+  const toLand = window.innerHeight > window.innerWidth;     // いまが縦なら横へ、横なら縦へ
+  if (fsNow()) { lockOrientation(toLand); return; }
+  try {
+    const r = docEl.requestFullscreen ? docEl.requestFullscreen({ navigationUI: "hide" }) : docEl.webkitRequestFullscreen();
+    if (r && r.then) r.then(() => lockOrientation(toLand), () => {}); else setTimeout(() => lockOrientation(toLand), 300);
+  } catch (e) {}
+};
 ["fullscreenchange", "webkitfullscreenchange"].forEach(ev => document.addEventListener(ev, () => { paintFs(); cam.init = false; }));
 paintFs();
 // ホーム画面のアイコン（iPhone の「ホーム画面に追加」用）。画像ファイルを増やさないよう、その場で描く
@@ -2618,7 +2663,7 @@ function solveLandCam(outer, inner, scr, hint) {
   const r = tryScale(sLo), c = r && (r.zero || r.any);          // どこまで引いても重なる: 重なりが最小の位置
   return c ? { s: sLo, x: c.x, y: c.y } : { s: sLo, x: (ob.x0 + ob.x1) / 2, y: (ob.y0 + ob.y1) / 2 };
 }
-const touchEls = Array.from(document.querySelectorAll("#touch .tb, #mute, #fs, #quit"));    // キャラを重ねたくないもの: 操作ボタン・音・全画面・「やめる」
+const touchEls = Array.from(document.querySelectorAll("#touch .tb, #mute, #fs, #rot, #quit"));    // キャラを重ねたくないもの: 操作ボタン・音・全画面・「やめる」
 function landCamTarget(fs) {                         // 画面の実際のボタンの位置と、上部のカードの高さから、横画面のカメラの狙いを決める
   const r = cv.getBoundingClientRect(), forb = [];
   for (const el of touchEls) {
