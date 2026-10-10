@@ -342,10 +342,14 @@ const ATK_COOLDOWN = 10;
 const STUN_SPEED = 2.0;              // 吹っ飛ばされたときの硬直 = 飛ばされた横の速さ × STUN_SPEED（フレーム。スマブラと同じく、強く飛ばされるほど長い）。ノーマルの通常攻撃で 23 フレーム（約 0.38 秒）
 const INPUT_BUF = 8;                 // 先行入力: 押した瞬間を覚えておくフレーム数（硬直が解ける少し前に押しても出る）
 const JUMP_TURN = 8;                 // ジャンプした直後、空中でも向きを変えられるフレーム数（反転ジャンプ）
-// 攻撃の種類: 0=通常 / 1=侍の居合斬り（少しためてから、踏み込みながら斬る）
+// 攻撃の種類: 0=通常 / 1=侍の居合斬り（少しためてから、踏み込みながら斬る）/ 2=槍兵の通常攻撃（長いが出が遅い）/ 3=槍兵の突進突き
+// frac: 盾なしの相手への吹っ飛ばしの倍率 / breaker: 盾で受けられたら盾を一撃で壊す（吹っ飛ばさない）/ aim: 踏み込む直前に近い敵へ向き直る
+// lock: 攻撃の間ずっと動けない（踏み込みだけ進む）/ hover: 空中で踏み込むとき、落ちる速さを抑えて真横へ進む
 const ATKS = [
   { total: 26, on: 7, off: 13, reach: 46 },
-  { total: 40, on: 14, off: 19, reach: 74, dash: 13, dashFrom: 10, dashTo: 19 },   // 10 フレームためてから踏み込む（踏み込みは約 130px）
+  { total: 40, on: 14, off: 19, reach: 74, dash: 13, dashFrom: 10, dashTo: 19, frac: 1.1, breaker: true, aim: true },   // 10 フレームためてから踏み込む（踏み込みは約 130px）
+  { total: 30, on: 10, off: 16, reach: 82 },                                                                             // ふつうの約 1.8 倍の長さ
+  { total: 34, on: 9, off: 18, reach: 82, dash: 12, dashFrom: 9, dashTo: 18, frac: 1.2, breaker: true, lock: true, hover: true },   // 8 フレーム構えて、10 フレーム突進（約 120px）。終わって 16 フレームは動けない
 ];
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
 
@@ -408,6 +412,18 @@ const GRAB_ON = 4, GRAB_OFF = 14, GRAB_REACH = 30, GRAB_DASH_FROM = 3, GRAB_DASH
 const GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.9;    // 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし（0.85 だとステージ中央から投げても崖の外まで届かなかった）
 const WIND_FRAMES = 300, WIND_W = 440, WIND_H = 280;    // 天狗の風の場: 続く時間（5 秒）/ 横幅 / 高さ
 const WIND_FOE_MV = 0.45, WIND_FOE_JP = 0.55, WIND_SELF_MV = 1.6, WIND_SELF_JP = 1.4;   // 場の中の 移動速度・ジャンプの高さ の倍率（敵 / 天狗自身）
+// ブーメラン使いの盾投げ: 約 260px 先までだんだん遅くなりながら飛び（初速 13、1 フレームに 0.325 ずつ遅くなる）、止まったら投げた人の今いる場所へ戻る
+const BOOM_V0 = 13, BOOM_DECEL = 13 * 13 / (2 * 260), BOOM_BACK_MAX = 14, BOOM_BACK_ACC = 0.8;   // 行きの初速 / 減速 / 帰りの速さの上限 / 帰りの加速
+const BOOM_LIFE = 120, BOOM_FRAC = 0.8, BOOM_HALF = 14;   // これだけたっても戻れなければ手元に戻る（2 秒）/ 吹っ飛ばし / 当たり判定の半分の大きさ
+// 蜘蛛の糸: 居場所で効果が変わる。クールタイムは効果ごとに別（0 = 崖へ戻る / 1 = 引き寄せ / 2 = 急降下）
+const WEB_CD = [240, 300, 120], WEB_WHIFF = 60;            // クールタイム（4 秒 / 5 秒 / 2 秒）/ 届かなかったとき（1 秒）
+const WEB_LEDGE = 300, WEB_UP_FRAMES = 15;                 // 崖へ戻る: 糸が届く距離 / 崖の上まで引き上げる時間（0.25 秒）
+const WEB_PULL = 250, WEB_PULL_FRAMES = 8, WEB_SLOW = 180; // 引き寄せ: 糸が届く距離 / 引き寄せる時間 / 引き寄せた敵のスピードが −1 になる時間（3 秒）
+const WEB_DIVE = 420, WEB_DIVE_V = 18, WEB_STOMP = 0.5, WEB_LAG = 9;   // 急降下: 糸が届く距離（斜め 45 度）/ 降りる速さ / 着地で足もとの敵を吹っ飛ばす強さ / 着地のあとの隙（0.15 秒）
+// 幽霊（脱落した人が、ラウンドが終わるまでステージの上空から爆弾を落として邪魔をする。人のプレイヤーだけ。復活はしない）
+const YUREI_Y = PY - 250, YUREI_SPEED = 5.5, YUREI_MARGIN = 60;   // 飛ぶ高さ（上の台より 100px 上）/ 左右の速さ / メインの端より外へ出られる幅
+const YUREI_CD = 180, YUREI_FIRST = 60;                           // 爆弾のクールタイム（3 秒）/ 幽霊になってから最初の爆弾まで（1 秒）
+const YUREI_R = 7, YUREI_BLAST = 60, YUREI_KNOCK = 0.45, YUREI_LIFT = 6;   // 爆弾の大きさ / 爆風の半径 / 吹っ飛ばし（盾は効かない）/ 上向きの初速
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
 // メインステージの端から 500px、足場の面から 300px の余裕を持たせる（以前は 340px / 260px で、飛ばされるとすぐ撃墜された）。左右はキャラの中心、下は頭の位置で判定する
 const KO_MARGIN = 500, KO_BOTTOM = 300;
@@ -449,10 +465,22 @@ const CHARS = [
     skill: { name: "ダッシュつかみ", cd: 5, text: "前へダッシュして（約110px）、ぶつかった敵を、盾やカウンターを無視してつかみ、持ち上げている間に押した方向へ投げる（押さなければ後ろへ）。空中でも使える。つかむ前に殴られると負け、空振りすると隙ができる" } },
   { id: "tengu", name: "天狗", A: 2, D: 2, S: 3, tag: "風の場で、敵を鈍らせ自分は速くなる",
     skill: { name: "羽うちわ", cd: 10, text: "前方の広い範囲に5秒間、風の吹く場を作る（使ったあとはすぐ動ける）。場の中では、敵は移動が0.45倍・ジャンプが0.55倍に下がり、自分は移動が1.6倍・ジャンプが1.4倍に上がる" } },
+  // 17〜20 体目（必ず末尾に足す）。atk: 通常攻撃の種類（ATKS の番号）/ forms: 形態ごとの性能（A/D/S は最初の形態の値）
+  { id: "boomer", name: "ブーメラン使い", A: 3, D: 2, S: 2, tag: "盾を投げて、行きと帰りで2回当てる",
+    skill: { name: "盾投げ", cd: 4, text: "自分の盾を前へ投げる。盾は約260px先まで飛んで、投げた人のところへ戻ってくる。行きと帰りで1回ずつ当たり、帰りは相手の背中に当たる（盾が効かない）。投げている間は自分の盾がない。盾が壊れている間は投げられない" } },
+  { id: "lancer", name: "槍兵", A: 3, D: 2, S: 1, atk: 2, tag: "長い槍で、遠くから突く",
+    skill: { name: "突進突き", cd: 5, text: "少し構えてから、槍を構えて前へ突進する（約120px）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は強く吹っ飛ばす。空中でも使える。突進のあとは少し動けず、盾も外れる。通常攻撃は届く距離がふつうの約1.8倍だが、出が遅い" } },
+  { id: "reversi", name: "リバーシ", A: 5, D: 1, S: 3, forms: [{ A: 5, D: 1, S: 3 }, { A: 1, D: 5, S: 1 }], tag: "攻めと守りの2つの姿を入れ替える",
+    skill: { name: "変身", cd: 3, text: "攻撃形態（攻撃5・防御1・スピード3）と守り形態（攻撃1・防御5・スピード1）を入れ替える。ラウンドの始めは攻撃形態。吹っ飛ばされている最中でも使える" } },
+  { id: "spider", name: "蜘蛛", A: 2, D: 1, S: 3, tag: "糸で崖に戻り、敵を引き寄せ、空から襲う",
+    skill: { name: "糸", cd: 4, cdText: "崖へ戻る 4秒・引き寄せ 5秒・急降下 2秒（効果ごとに別）",
+      text: "居場所で効果が変わる。崖の外: 近いほうの崖の角へ糸を飛ばして（300pxまで）、崖の上へ引き上げる（届かなければ1秒後にもう一度使える）。地上: 前へ糸を飛ばし（250pxまで）、当たった敵を目の前まで引き寄せる（盾があっても引き寄せる）。引き寄せた敵は3秒間スピードが−1。ステージの上の空中: 斜め下の地面へ糸を張って急降下し、着地で足もとの敵を軽く吹っ飛ばす（盾は効かない）。吹っ飛ばされている最中でも使える" } },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
-// 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる
-const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, (p.isClone ? CLONE_STATS[k] : chOf(p)[k]) + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0)));
+// もとの性能（リバーシは今の形態の値。分身は分身の性能）
+const baseStat = (p, k) => { if (p.isClone) return CLONE_STATS[k]; const c = chOf(p); return c.forms ? c.forms[p.fm ? 1 : 0][k] : c[k]; };
+// 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる。蜘蛛の糸で引き寄せられた間はスピードが −1
+const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, baseStat(p, k) + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0) - (k === "S" && p.slw > 0 ? 1 : 0)));
 const effA = p => statOf(p, "A");
 const effD = p => statOf(p, "D");
 const effS = p => statOf(p, "S");
@@ -510,6 +538,11 @@ function newPlayer() {
            am: ARROW_MAX, amT: 0,                       // アーチャーの矢の残り / 次の 1 本が回復するまでの経過
            km: 0, rmSw: 0, wa: 0,                              // クールタイムの長さ（スワッパーは毎回変わる。スキルボタンの表示用）/ スワッパーの入れ替えの間隔の残り
            gr: 0, grT: null, grH: 0, grD: 0, f0: 1, hd: 0,   // レスラー: つかみの経過フレーム / つかんでいる相手 / 持ち上げの残り / 投げる向き / つかみ始めの向き。hd: つかまれている（残りフレーム）
+           bt: 0, fm: 0,                                // ブーメラン使い: 盾を投げてからのフレーム（0 = 手元にある）/ リバーシ: 形態（0 = 攻撃 / 1 = 守り）
+           wk: [0, 0, 0], wkm: [0, 0, 0],               // 蜘蛛: 効果ごとのクールタイムの残り / その回の長さ（崖へ戻る・引き寄せ・急降下）
+           wb: 0, wbm: 0, wbx: 0, wby: 0, wl: null, wlt: 0, wlT: null,   // 蜘蛛: 糸で動いている残り / 動き方（1 = 崖へ戻る / 2 = 急降下）/ 行き先 / 糸の先 [x, y] / 糸を見せる残り / 引き寄せている相手
+           yk: 0, ykx: 0, yky: 0, slw: 0,               // 糸で引き寄せられている残り / 行き先 / スピード −1 の残り
+           yr: 0, yrx: 0, yrc: 0,                       // 幽霊（脱落したあと）か / 幽霊の x / 次の爆弾までの残り
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
            life: 0, isClone: false };
@@ -570,6 +603,7 @@ function shieldUp(p) {
   const c = chOf(p);
   if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0 || p.gr > 0 || p.hd > 0) return false;
+  if (p.bt > 0 || p.wb > 0 || p.yk > 0) return false;             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
   if (c.id === "swapper" && p.kc > 0) return false;                  // スワッパー: ゾーンが消えたあとのクールタイム中は盾がない
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
   return true;
@@ -594,6 +628,8 @@ function spawn(p, slot, n, battle) {
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
   p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0;
+  p.bt = 0; p.fm = 0; p.wk = [0, 0, 0]; p.wkm = [0, 0, 0]; stopWeb(p); p.slw = 0;   // リバーシはラウンドの始めは攻撃形態
+  p.yr = 0; p.yrc = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -614,7 +650,7 @@ function startRound() {
     const p = game.p[s], idx = fighters.indexOf(s);
     p.own = s;
     if (idx >= 0) { spawn(p, idx, fighters.length, true); p.al = true; p.lk = true; p.lv = chOf(p).lives || 0; }
-    else p.al = false;                    // 選んでいる最中の人は観戦（次のラウンドから参加）
+    else { p.al = false; p.yr = 0; }      // 選んでいる最中の人は観戦（次のラウンドから参加）
   }
   game.ph = "count"; game.tm = 180; game.win = -1;
 }
@@ -623,6 +659,7 @@ function hostStartMatch() {
   if (role !== "host" || game.ph !== "lobby" || readySlots().length < 2) return;
   readySlots().forEach(s => game.p[s].w = 0);
   game.wr = winRounds;                                     // 何本先取か（この試合の間は変わらない）
+  trainKO = 0;                                             // トレーニングの撃墜数は、始めるたびに 0 から
   startRound();
 }
 
@@ -686,6 +723,19 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     const feet = p.y + phOf(p), x = p.f > 0 ? ecx(p) - 30 : ecx(p) + 30 - WIND_W;
     game.wd = game.wd.filter(w => w.own !== p.own);
     game.wd.push({ own: p.own, x, y: feet + 60 - WIND_H, w: WIND_W, h: WIND_H, d: p.f, t: 0 });
+  } else if (id === "boomer") {                // 盾投げ: 盾が壊れている間・投げている間は投げられない（不発ならクールタイムなし）
+    if (p.sbk > 0 || p.bt > 0) return false;
+    p.bt = 1;
+    game.pj.push({ k: 2, x: ecx(p) + p.f * 26, y: ecy(p), vx: p.f * BOOM_V0, vy: 0, own: p.own, t: 0, ph: 0, hit: [[], []] });
+  } else if (id === "lancer") {                // 突進突き: 空中・吹っ飛び中でも使える（突進が吹っ飛びの勢いに代わる）。向きは自動では変わらない
+    p.a = 1; p.ak = 3; p.hit = []; p.s = 0;
+  } else if (id === "reversi") {              // 変身: 攻撃形態 ⇔ 守り形態
+    p.fm = p.fm ? 0 : 1;
+    p.kc = chOf(p).skill.cd * 60;
+    emit("sk", ecx(p), ecy(p), p.ch, p.fm);
+    return true;
+  } else if (id === "spider") {               // 糸: 居場所で効果が変わる（クールタイムは効果ごと。p.kc は使わない）
+    return webSkill(p);
   }
   p.kc = chOf(p).skill.cd * 60;
   emit("sk", ecx(p), ecy(p), p.ch);
@@ -735,7 +785,8 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.y = (pl ? pl.y : PY) - PLH - 50;
   p.vx = p.vy = 0; p.s = 0; p.a = 0; p.ak = 0; p.cd = 0; p.ks = 0; p.cn = 0; p.fz = 0; p.gh = 0; p.ground = false;
   p.sh = 1; p.sbk = 0; p.shi = 0; p.iv = RESPAWN_INV; p.dz = 0; p.gt = 0; p.gb = 0; p.dj = 0;
-  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0;
+  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
+  if (p.bt > 0) { p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own)); }   // 投げていた盾は手元に戻る
   emit("rv", ecx(p), ecy(p));
 }
 
@@ -804,7 +855,7 @@ function zoneSwap(p, m) {                      // 入れ替え: 自分も円の�
   emit("lw", m.x, m.y, m.r);
   mem.forEach((e, i) => {
     const s = spots[to[i]];
-    e.x = s.x - pwOf(e) / 2; e.y = s.y - phOf(e); e.vx = e.vy = 0; e.ground = false;
+    e.x = s.x - pwOf(e) / 2; e.y = s.y - phOf(e); e.vx = e.vy = 0; e.ground = false; stopWeb(e);
     emit("lwp", s.x, s.y - phOf(e) / 2);
   });
   return true;
@@ -844,7 +895,7 @@ function grabStep(p, inp) {                   // 前へダッシュしながら�
     }
     if (best) {                               // つかんだ: 盾もカウンターも関係ない
       releaseGrab(best);
-      best.hd = 2; best.a = 0; best.ak = 0; best.cd = 0; best.ks = 0; best.cn = 0; best.cnHit = true; best.s = 0; best.fz = 0; best.dz = 0; best.vx = best.vy = 0; best.ground = false;
+      best.hd = 2; best.a = 0; best.ak = 0; best.cd = 0; best.ks = 0; best.cn = 0; best.cnHit = true; best.s = 0; best.fz = 0; best.dz = 0; best.vx = best.vy = 0; best.ground = false; stopWeb(best);
       p.grT = best; p.grH = GRAB_HOLD; p.f0 = p.f; p.vx = 0;
       emit("gb", ecx(best), ecy(best));
       return;
@@ -880,6 +931,129 @@ function updateWinds() {
   for (let i = game.wd.length - 1; i >= 0; i--) if (++game.wd[i].t >= WIND_FRAMES) game.wd.splice(i, 1);
 }
 
+// ---- 蜘蛛: 糸 ----
+const mainPlat = () => platforms().find(q => q.main) || null;     // メインの足場（サドンデスで崩れたら null）
+// 蜘蛛の居場所（= 使う効果の番号）: 0 = 崖の外（体の中心がメインの左右の端より外、または足もとがメインの上面より下）/ 1 = 地上 / 2 = ステージの上の空中
+function webMode(p) {
+  if (p.ground) return 1;
+  const m = mainPlat(), x = ecx(p);
+  return !m || x < m.x || x > m.x + m.w || p.y + phOf(p) > m.y + 2 ? 0 : 2;
+}
+function stopWeb(p) { p.wb = 0; p.wbm = 0; p.wl = null; p.wlt = 0; p.wlT = null; p.yk = 0; }   // 糸の動きをやめる（殴られた・つかまれた等）
+function webSkill(p) {
+  const mode = webMode(p);
+  if (p.wk[mode] > 0 || p.wb > 0) return false;
+  const hx = ecx(p), hy = p.y + 20 * szOf(p);                      // 糸を出す手もと
+  let ok = false, end = null;
+  if (mode === 0) {                                                // 崖の外: 近いほうの崖の角へ糸を飛ばし、崖の上へ引き上げる
+    const m = mainPlat();
+    if (m) {
+      const cs = [[m.x, m.y], [m.x + m.w, m.y]], ds = cs.map(c => Math.hypot(c[0] - hx, c[1] - hy)), k = ds[0] <= ds[1] ? 0 : 1, c = cs[k];
+      if (ds[k] <= WEB_LEDGE) {
+        p.wb = WEB_UP_FRAMES; p.wbm = 1; p.wl = c; p.f = k === 0 ? 1 : -1;
+        p.wbx = k === 0 ? m.x + 4 : m.x + m.w - pwOf(p) - 4; p.wby = m.y - phOf(p);   // 崖の上に、内側を向いて立つ
+        ok = true;
+      } else end = [hx + (c[0] - hx) / ds[k] * WEB_LEDGE, hy + (c[1] - hy) / ds[k] * WEB_LEDGE];   // 届かない
+    } else end = [hx, hy - WEB_LEDGE];
+  } else if (mode === 1) {                                         // 地上: 前へ糸を飛ばし、最初に当たった敵を目の前まで引き寄せる（盾は関係ない）
+    const x0 = p.f > 0 ? p.x + pwOf(p) : p.x - WEB_PULL, x1 = x0 + WEB_PULL;
+    let best = null, bd = 1e9;
+    for (const e of ents()) {
+      if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0 || e.yk > 0) continue;
+      if (e.x + pwOf(e) < x0 || e.x > x1 || hy + 10 < e.y || hy - 10 > e.y + phOf(e)) continue;
+      const d = Math.abs(ecx(e) - hx);
+      if (d < bd) { bd = d; best = e; }
+    }
+    if (best) {
+      const e = best;
+      releaseGrab(e); stopWeb(e); e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.s = 0; e.fz = 0; e.dz = 0;
+      e.yk = WEB_PULL_FRAMES; e.ykx = p.f > 0 ? p.x + pwOf(p) + 2 : p.x - pwOf(e) - 2; e.yky = p.y + phOf(p) - phOf(e);
+      e.slw = WEB_SLOW;
+      p.wlT = e; p.wl = [ecx(e), ecy(e)];
+      ok = true;
+    } else end = [p.f > 0 ? x1 : x0, hy];
+  } else {                                                         // ステージの上の空中: 前方斜め下 45 度の地面へ糸を張り、そこへ急降下する
+    const fx = ecx(p), fy = p.y + phOf(p);
+    let best = null, bt = WEB_DIVE / Math.SQRT2;
+    for (const q of platforms()) {
+      const t = q.y - fy, x = fx + p.f * t;
+      if (t < 4 || t > bt || x < q.x + 6 || x > q.x + q.w - 6) continue;
+      bt = t; best = { x, y: q.y };
+    }
+    if (best) {
+      p.wb = Math.max(3, Math.ceil(bt * Math.SQRT2 / WEB_DIVE_V)); p.wbm = 2; p.wl = [best.x, best.y];
+      p.wbx = best.x - pwOf(p) / 2; p.wby = best.y - phOf(p);
+      ok = true;
+    } else end = [fx + p.f * bt, fy + bt];
+  }
+  if (ok) {
+    if (p.wb > 0) { p.s = 0; p.vx = p.vy = 0; p.a = 0; p.ak = 0; p.ks = 0; }   // 吹っ飛ばされている最中でも、糸で動き出す
+    p.wk[mode] = p.wkm[mode] = WEB_CD[mode];
+    emit("sk", ecx(p), ecy(p), p.ch, mode);
+  } else {                                                         // 空振り: 1 秒後にもう一度使える
+    p.wk[mode] = p.wkm[mode] = WEB_WHIFF; p.wl = end; p.wlt = 8;
+    emit("wm", hx, hy);
+  }
+  return true;
+}
+// 糸で動く（崖へ引き上げる・急降下する）。重力も入力も受けない。殴られると止まる（knock で解除）
+function webStep(p) {
+  const n = p.wb--;
+  p.x += (p.wbx - p.x) / n; p.y += (p.wby - p.y) / n; p.vx = p.vy = 0;
+  if (p.wb > 0) return;
+  p.x = p.wbx; p.y = p.wby; p.ground = true; p.dj = 0; p.wl = null;
+  if (p.wbm === 2) { webStomp(p); p.fz = WEB_LAG; }               // 急降下: 着地で足もとの敵を軽く吹っ飛ばし、少し隙ができる
+  p.wbm = 0;
+}
+function webStomp(p) {                       // 盾は効かない（真上から降ってくるため）
+  const x = ecx(p), feet = p.y + phOf(p), r = pwOf(p) / 2 + 24;
+  for (const e of ents()) {
+    if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0) continue;
+    if (e.x + pwOf(e) < x - r || e.x > x + r || e.y + phOf(e) < feet - 70 || e.y > feet + 4) continue;
+    const dir = Math.sign(ecx(e) - x) || p.f;
+    knock(p, e, WEB_STOMP, dir); impact("h", p, e, WEB_STOMP, dir);
+  }
+  emit("st", x, feet);
+}
+// ---- 幽霊（脱落した人）----
+// ラウンドが終わるまで、ステージの上空（YUREI_Y の高さ）を左右に飛び、攻撃かスキルのボタンで爆弾を真下へ落とす。爆弾は足場か人に当たると爆発し、盾に関係なく軽く吹っ飛ばす
+const yureiRange = () => { const m = LAYOUTS[Math.max(0, Math.min(4, game.nf | 0))].find(q => q.main) || MAIN_PLAT; return [m.x - YUREI_MARGIN, m.x + m.w + YUREI_MARGIN]; };
+function becomeYurei(p) {
+  const [x0, x1] = yureiRange();
+  p.yr = 1; p.yrx = Math.max(x0, Math.min(x1, ecx(p))); p.yrc = YUREI_FIRST;
+}
+function yureiStep(p, inp) {
+  const [x0, x1] = yureiRange(), dir = ((inp & KEY.r) ? 1 : 0) - ((inp & KEY.l) ? 1 : 0);
+  if (dir) p.f = dir;
+  p.yrx = Math.max(x0, Math.min(x1, p.yrx + dir * YUREI_SPEED));
+  if (p.yrc > 0) p.yrc--;
+  else if (inp & (KEY.a | KEY.k)) {
+    game.pj.push({ k: 3, x: p.yrx, y: YUREI_Y + 16, vx: 0, vy: 0, own: p.own, t: 0 });
+    p.yrc = YUREI_CD;
+    emit("yd", p.yrx, YUREI_Y + 16);
+  }
+}
+function yureiBlast(b, list) {               // 爆風の中の人を、盾を無視して外へ軽く吹っ飛ばす（騎士のカウンターも効かない）
+  emit("yx", b.x, b.y, YUREI_BLAST);
+  let any = false;
+  for (const e of list) {
+    if (e.own === b.own || untouchable(e)) continue;
+    const nx = Math.max(e.x, Math.min(b.x, e.x + pwOf(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e))), dist = Math.hypot(b.x - nx, b.y - ny);
+    if (dist > YUREI_BLAST) continue;
+    const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
+    e.vx = dir * KNOCK_BASE * defMul(effD(e)) * YUREI_KNOCK * dzMul(e) * (1 - 0.4 * dist / YUREI_BLAST);
+    e.vy = -YUREI_LIFT; e.s = Math.max(1, Math.round(Math.abs(e.vx) * STUN_SPEED));
+    e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0; stopWeb(e);
+    if (flyOut(e)) any = true;
+  }
+  if (any) game.hs = Math.max(game.hs, 8);
+}
+// 糸で引き寄せられている: 何もできず、蜘蛛の目の前へ動く
+function yankStep(p) {
+  const n = p.yk--;
+  p.x += (p.ykx - p.x) / n; p.y += (p.yky - p.y) / n; p.vx = p.vy = 0; p.ground = false;
+}
+
 function physics(p, inp, neutral) {
   if (!p.al) return;
   const chd = chOf(p), sk = chd.skill;
@@ -896,11 +1070,22 @@ function physics(p, inp, neutral) {
   if (p.a === 0) p.gb = 0;
   if (p.gt > 0 && --p.gt === 0) { p.x += PLW / 2; p.y += PLH; }     // 巨大化が終わる（足もとの中心を保つ）
   if (p.cn > 0 && --p.cn === 0 && !p.cnHit) p.fz = CN_WHIFF;       // 構えが空振りに終わると隙ができる
+  if (p.slw > 0) p.slw--;
+  if (chd.id === "spider") {                     // 蜘蛛: 効果ごとのクールタイムと、糸の見た目
+    for (let k = 0; k < 3; k++) if (p.wk[k] > 0) p.wk[k]--;
+    if (p.wlT) { if (p.wlT.yk > 0 && p.wlT.al) p.wl = [ecx(p.wlT), ecy(p.wlT)]; else { p.wlT = null; p.wl = null; } }   // 引き寄せている間は、糸が相手につながる
+    else if (p.wlt > 0 && --p.wlt === 0) p.wl = null;                                                                    // 空振りの糸
+  }
+  if (p.bt > 0 && !game.pj.some(b => b.k === 2 && b.own === p.own)) p.bt = 0;   // 念のため: 投げた盾がなくなっていたら手元に戻す
   // 盾の回復
   if (p.sbk > 0) { if (--p.sbk === 0) { p.sh = 1; p.shi = 0; } }
   else if (p.sh < 1 && ++p.shi >= SHIELD_STEP_FRAMES) { p.sh = p.sh + 1 / SHIELD_HITS > 0.999 ? 1 : p.sh + 1 / SHIELD_HITS; p.shi = 0; }   // 1 段階だけ回復して、また 5 秒数える
   if (p.hd > 0) {                                // レスラーにつかまれている: 何もできない（位置はレスラーが決める）
     p.hd--; p.vx = p.vy = 0; p.ks = 0; p.kp = (inp & KEY.k) ? 1 : 0; p.jp = (inp & KEY.u) ? 1 : 0;
+    return;
+  }
+  if (p.yk > 0) {                                // 蜘蛛の糸で引き寄せられている: 何もできない
+    yankStep(p); p.ks = 0; p.kp = (inp & KEY.k) ? 1 : 0; p.jp = (inp & KEY.u) ? 1 : 0;
     return;
   }
   const S = neutral ? BASE_STAT : effS(p);       // ロビーでは性能を悟られないよう標準の動きにする
@@ -921,6 +1106,7 @@ function physics(p, inp, neutral) {
   // 時計師の巻き戻し（吹っ飛ばされている最中でも使える。花で動けない間は使えない）
   if (kpress && chd.id === "clock" && p.kc === 0 && p.rw === 0 && p.fz === 0 && p.a === 0 && useSkill(p)) p.bk = 0;
   if (p.rw > 0) { rewindStep(p); return; }      // 早戻り中は、記録どおりに動くだけ
+  if (p.wb > 0) { webStep(p); return; }         // 蜘蛛: 糸で崖へ引き上げられている・急降下している間は、糸のとおりに動くだけ
   const wm = neutral ? { mv: 1, jp: 1 } : windMul(p);   // 天狗の風の場
   const zone = (chd.id === "swapper" && !neutral && !p.isClone) ? zoneOf(p) : null;   // スワッパー: 張っている ゾーン
   let canSkill = false;                          // スキルを使える状態か（ふつうのとき・吹っ飛ばされている最中）
@@ -936,7 +1122,9 @@ function physics(p, inp, neutral) {
     canSkill = true;
     let spm = p.a > 0 ? 0.44 : 1;
     const ak0 = ATKS[p.ak] || ATKS[0];
+    const lock = p.a > 0 && ak0.lock;            // 突進突き: 構え・突進・そのあとの隙の間は動けない（突進だけ進む）
     if (p.a > 0 && ak0.dash && p.a < ak0.dashFrom) spm = 0;     // 居合斬りのため中は動けない
+    if (lock) spm = 0;
     if (p.ks > 0) spm = Math.min(spm, 0.45);     // ためている間は動きが鈍る
     if (p.cn > 0) spm = 0;                       // カウンターの構え中は動かない
     if (chd.id === "swapper" && p.kc > 0 && !neutral) spm *= ZONE_SLOW;   // スワッパー: ゾーンのクールタイム中は動きが遅い
@@ -947,10 +1135,10 @@ function physics(p, inp, neutral) {
     if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0) p.f = dir;
     const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
-    if (upress && p.ground && p.cn === 0) {
+    if (upress && p.ground && p.cn === 0 && !lock) {
       p.vy = -jumpVel(jumpHeight(S) * wm.jp); p.ground = false; p.bu = 0; p.jg = JUMP_TURN;
       if (!p.isClone) emit("j", ecx(p), p.y + PLH);
-    } else if ((jrise || p.bu > 0) && !p.ground && !p.dj && p.cn === 0) {     // 二段ジャンプ: 空中で 1 回だけ（押した瞬間に左右を押していれば、その方向を向く）。先行入力でも出る
+    } else if ((jrise || p.bu > 0) && !p.ground && !p.dj && p.cn === 0 && !lock) {     // 二段ジャンプ: 空中で 1 回だけ（押した瞬間に左右を押していれば、その方向を向く）。先行入力でも出る
       p.vy = Math.min(p.vy, -jumpVel(jumpHeight(S) * AIR_JUMP * wm.jp)); p.dj = 1; p.bu = 0;   // 上昇中に押しても、いまの勢いより弱くはならない
       if (dir && p.a === 0 && p.ks === 0) p.f = dir;
       if (!p.isClone) emit("dj", ecx(p), p.y + phOf(p));
@@ -958,7 +1146,7 @@ function physics(p, inp, neutral) {
     if (apress && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0) {
       p.ba = 0;
       if (zone && inZone(zone, p)) zoneWarp(p, zone);           // 円の中なら、敵の背後へ回り込んでから攻撃する
-      p.a = 1; p.ak = 0; p.hit = [];
+      p.a = 1; p.ak = chd.atk || 0; p.hit = [];                 // 通常攻撃（槍兵は長い槍）
       if (p.gh > 0) { p.gh = 0; p.gb = 1; emit("gx", ecx(p), ecy(p)); }       // 自分から攻撃すると透過が解ける（この攻撃は 1.5 倍）
       emit("s", ecx(p), ecy(p));
     }
@@ -967,8 +1155,11 @@ function physics(p, inp, neutral) {
   const ak = ATKS[p.ak] || ATKS[0];
   if (p.a > 0) {
     p.a++;
-    if (ak.dash && p.a === ak.dashFrom) { aimAtFoe(p); emit("sl", ecx(p), ecy(p)); }      // 踏み込む直前にも、敵の方向へ向き直す
-    if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) p.vx = p.f * ak.dash;      // 居合斬りの踏み込み
+    if (ak.dash && p.a === ak.dashFrom) { if (ak.aim) aimAtFoe(p); emit("sl", ecx(p), ecy(p), p.ak); }      // 居合斬りは、踏み込む直前にも敵の方向へ向き直す（突進突きは真っすぐ）
+    if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) {                         // 居合斬りの踏み込み・突進突きの突進
+      p.vx = p.f * ak.dash;
+      if (ak.hover && !p.ground) p.vy = Math.min(p.vy, 1);
+    }
     if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ATK_COOLDOWN; p.wa = 0; }
   }
   if (p.cd > 0) p.cd--;
@@ -1016,8 +1207,9 @@ function knock(att, t, frac, dir) {
   frac = Math.min(1.3, frac);
   const mul = (att.gb > 0 ? GH_ATK_MUL : 1) * dzMul(t);          // 透過中の攻撃は強く、土下座中は飛びにくい
   t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul;
-  t.vy = -9; t.s = Math.max(1, Math.round(Math.abs(t.vx) * STUN_SPEED));   // 攻撃力・防御力・ため量・透過・土下座などで速さが変わると、硬直もそのぶん変わる t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0; t.dz = 0;
-  t.ground = false; t.hf = 12; releaseGrab(t); t.hd = 0; t.wa = 0;   // 吹っ飛ばされたら、回り込み攻撃も取り消し
+  t.vy = -9; t.s = Math.max(1, Math.round(Math.abs(t.vx) * STUN_SPEED));   // 攻撃力・防御力・ため量・透過・土下座などで速さが変わると、硬直もそのぶん変わる
+  t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0; t.dz = 0;
+  t.ground = false; t.hf = 12; releaseGrab(t); t.hd = 0; t.wa = 0; stopWeb(t);   // 吹っ飛ばされたら、回り込み攻撃・糸の動きも取り消し
 }
 
 // 吹っ飛ばされた人が、足場に戻れず崖の外まで飛ぶか（いまの速度で、何も操作しなかったときの軌道を先に計算する）
@@ -1046,7 +1238,7 @@ function impact(kind, att, t, frac, dir) {
 function counterHit(kn, att) {
   const dir = Math.sign(ecx(att) - ecx(kn)) || -kn.f;
   att.vx = dir * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(att)) * 2.0;
-  att.vy = -9; att.s = 48; att.a = 0; att.ak = 0; att.cd = 0; att.ks = 0; att.cn = 0; att.fz = 0; att.dz = 0; att.ground = false; att.hf = 14; releaseGrab(att); att.hd = 0;
+  att.vy = -9; att.s = 48; att.a = 0; att.ak = 0; att.cd = 0; att.ks = 0; att.cn = 0; att.fz = 0; att.dz = 0; att.ground = false; att.hf = 14; releaseGrab(att); att.hd = 0; stopWeb(att);
   kn.cn = 0; kn.cnHit = true;
   emit("cn", ecx(kn), ecy(kn), dir);
   if (flyOut(att)) game.hs = Math.max(game.hs, 12);
@@ -1081,7 +1273,7 @@ function resolveHits(list) {
       if (t === p || t.own === p.own || p.hit.includes(t) || !t.al || untouchable(t)) continue;
       if (hx1 < t.x || hx0 > t.x + pwOf(t) || hy1 < t.y || hy0 > t.y + phOf(t)) continue;
       p.hit.push(t);
-      strike(p, t, { dir: p.f, frac: ak.dash ? 1.1 : 1, recoil: true, breaker: !!ak.dash });
+      strike(p, t, { dir: p.f, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker });
     }
   }
 }
@@ -1098,7 +1290,7 @@ function explode(b, list) {
     if (dist > BOMB_BLAST) continue;
     const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
     e.vx = dir * KNOCK_BASE * atkMul(A) * defMul(effD(e)) * BOMB_KNOCK * dzMul(e) * (1 - 0.4 * dist / BOMB_BLAST);
-    e.vy = -BOMB_LIFT; e.s = 34; e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0;
+    e.vy = -BOMB_LIFT; e.s = 34; e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0; stopWeb(e);
     if (flyOut(e)) any = true;
   }
   if (any) game.hs = Math.max(game.hs, 8);   // 崖の外まで飛ばしたときだけ止める
@@ -1121,6 +1313,43 @@ function updateProjectiles(list) {
       const boom = b.t >= BOMB_FUSE;                         // 敵に当たっても爆発しない。導火線が尽きたときだけ爆発
       if (boom) { explode(b, list); game.pj.splice(i, 1); continue; }
       if (b.y > KO_B + 80 || b.x < KO_L - 60 || b.x > KO_R + 60) game.pj.splice(i, 1);
+    } else if (b.k === 3) {                                  // 幽霊の爆弾: 真下へ落ちて、足場か人に当たると爆発する
+      const oy = b.y;
+      b.vy = Math.min(14, b.vy + 0.5); b.y += b.vy;
+      const pl = pls.find(q => oy + YUREI_R <= q.y + 1 && b.y + YUREI_R >= q.y && b.x > q.x - 4 && b.x < q.x + q.w + 4);
+      let boom = !!pl;
+      if (pl) b.y = pl.y - YUREI_R;
+      else boom = list.some(e => e.own !== b.own && !untouchable(e) && b.x + YUREI_R > e.x && b.x - YUREI_R < e.x + pwOf(e) && b.y + YUREI_R > e.y && b.y - YUREI_R < e.y + phOf(e));
+      if (boom) { yureiBlast(b, list); game.pj.splice(i, 1); continue; }
+      if (b.y > KO_B + 80) game.pj.splice(i, 1);
+    } else if (b.k === 2) {                                  // ブーメラン使いの盾: 行き（だんだん遅く）→ 投げた人の今いる場所へ戻る
+      const o = game.p[b.own];
+      if (!o || !o.al || !o.bt) { if (o) o.bt = 0; game.pj.splice(i, 1); continue; }
+      let caught = false;
+      if (b.ph === 0) {
+        const sp = Math.abs(b.vx) - BOOM_DECEL;
+        if (sp > 0) b.vx = Math.sign(b.vx) * sp; else { b.vx = 0; b.ph = 1; }
+      } else {
+        const dx = ecx(o) - b.x, dy = ecy(o) - b.y, d = Math.hypot(dx, dy) || 1;
+        const sp = Math.min(BOOM_BACK_MAX, Math.hypot(b.vx, b.vy) + BOOM_BACK_ACC);
+        b.vx = dx / d * sp; b.vy = dy / d * sp;
+        if (d <= sp + 16) caught = true;                     // 体に戻った
+      }
+      const ox = b.x, oy = b.y;
+      b.x += b.vx; b.y += b.vy;
+      const xa = Math.min(ox, b.x) - BOOM_HALF, xb = Math.max(ox, b.x) + BOOM_HALF, ya = Math.min(oy, b.y) - BOOM_HALF, yb = Math.max(oy, b.y) + BOOM_HALF;
+      const done = b.hit[b.ph];                              // 同じ相手には、行き・帰りでそれぞれ 1 回まで
+      for (const e of list) {
+        if (e.own === b.own || !e.al || untouchable(e) || done.includes(e)) continue;
+        if (e.x > xb || e.x + pwOf(e) < xa || e.y > yb || e.y + phOf(e) < ya) continue;
+        done.push(e);
+        const dir = Math.abs(b.vx) > 1 ? Math.sign(b.vx) : (Math.sign(ecx(e) - ecx(o)) || 1);   // 盾の進む向き（真上・真下へ戻るときは、投げた人から離れる向き）
+        strike(o, e, { dir, frac: BOOM_FRAC, recoil: false });
+      }
+      if (caught || b.t >= BOOM_LIFE) {                      // 受け止めた / 2 秒たっても戻れない: 手元に戻る
+        o.bt = 0; game.pj.splice(i, 1);
+        emit("bc", ecx(o), ecy(o));
+      }
     } else {                                                 // 矢
       const ox = b.x;
       b.x += b.vx;
@@ -1151,7 +1380,7 @@ function updateFlowers(list) {
     for (const e of list) {
       if (e.own === f.own || untouchable(e) || !e.ground) continue;
       if (Math.abs(e.y + phOf(e) - f.y) < 3 && e.x < f.x + 9 && e.x + pwOf(e) > f.x - 9) {      // 踏んだ人は土下座して動けなくなる
-        e.fz = FLOWER_ROOT; e.dz = FLOWER_ROOT; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; releaseGrab(e);
+        e.fz = FLOWER_ROOT; e.dz = FLOWER_ROOT; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; releaseGrab(e); stopWeb(e);
         emit("fl", f.x, f.y);
         game.fl.splice(i, 1);
         break;
@@ -1204,13 +1433,25 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "bomber": return g && face && sameLevel && gap > 40 && gap < 230 ? KEY.k : 0;                                  // 前へ投げる
     case "samurai": return g && sameLevel && gap > 18 && gap < 170 && shieldUp(t) && tFaces && t.a === 0 && t.cd === 0 ? KEY.k : 0;   // 盾で固めた敵を、盾ごと割る
     case "berserker": return sameLevel && gap < 230 ? KEY.k : 0;
-    case "knight": return g && face && t.a >= 1 && t.a <= 6 && t.ak === 0 && gap <= tr + 10 ? KEY.k : 0;                // 敵が振りかぶった瞬間にカウンター
+    case "knight": return g && face && t.a >= 1 && t.a <= 6 && !(ATKS[t.ak] || ATKS[0]).dash && gap <= tr + 10 ? KEY.k : 0;                // 敵が振りかぶった瞬間にカウンター
     case "ghost": return sameLevel && gap > 50 && gap < 280 && (t.a > 0 || (shieldUp(t) && tFaces)) ? KEY.k : 0;
     case "giant": return gap < 260 ? KEY.k : 0;
     case "copern": return gap < 360 ? KEY.k : 0;
     case "okure": return g && face && sameLevel && t.ground && gap > 70 && gap < 240 ? KEY.k : 0;                      // 敵が来る道に花を置く
     case "wrestler": return g && face && sameLevel && gap < GRAB_REACH + 90 && t.a === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵へ、ダッシュしてつかむ
     case "tengu": return g && face && ((sameLevel && gap < 200) || (!t.ground && t.y + phOf(t) > PY + 4 && gap < 280)) ? KEY.k : 0;   // 戦う場所か、崖の外の敵へ風の場を出す
+    case "boomer":                                                                                                      // 盾をこちらへ向けた敵の向こうまで投げて、帰りで背中に当てる。盾を見て止まっている敵にも
+      return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
+    case "lancer": return g && face && sameLevel && shieldUp(t) && tFaces && gap >= 80 && gap <= 200 ? KEY.k : 0;              // 盾で待つ敵へ、突進して盾を割る
+    case "spider": {
+      if (g) {                                                                                                          // 地上: 離れた敵（盾で待つ相手・ためている相手・アーチャー）を引き寄せる
+        const hy = c.y + 20 * szOf(c), hit = hy + 10 >= t.y && hy - 10 <= t.y + phOf(t);
+        return c.wk[1] === 0 && face && hit && gap > 100 && gap < WEB_PULL - 10 && (chOf(t).id === "archer" || t.ks > 0 || (shieldUp(t) && tFaces)) ? KEY.k : 0;
+      }
+      if (c.wk[2] > 0 || webMode(c) !== 2 || !t.ground) return 0;                                                       // 空中: 敵が斜め 45 度の下にいたら急降下（着地で盾ごと吹っ飛ばす）
+      const dy = t.y + phOf(t) - (c.y + phOf(c));
+      return dy > 30 && Math.abs((ecx(t) - ecx(c)) - c.f * dy) < 26 ? KEY.k : 0;
+    }
     case "swapper": {                                                                                                       // 敵が近づいたら、敵を包める大きさまで広げて ゾーンを張る（円は速く広がるので、遠くから張ると円が消えたあとの隙を突かれやすい）
       if (!g || zoneOf(c) || gap > 110) return 0;
       c.aiCh = zoneNeed(c, t); return KEY.k;
@@ -1256,9 +1497,11 @@ function aiDodge(c, inp, ccx, feet) {                  // 爆弾から離れる 
   const cy = c.y + phOf(c) / 2;
   for (const b of game.pj) {
     if (b.own === c.own) continue;
-    if (b.k === 0) {
+    if (b.k === 3) {                                     // 幽霊の爆弾: 真上から落ちてくるものの下から離れる
+      if (b.y < c.y && c.y - b.y < 260 && Math.abs(ccx - b.x) < YUREI_BLAST) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
+    } else if (b.k === 0) {
       if (BOMB_FUSE - b.t < 50 && Math.abs(ccx - b.x) < BOMB_BLAST + 30 && Math.abs(cy - b.y) < BOMB_BLAST + 30) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
-    } else {
+    } else {                                             // 矢と、ブーメラン使いの盾: 向かってくるものを跳んでよける
       const dx = ccx - b.x;
       if (Math.sign(dx) === Math.sign(b.vx) && Math.abs(dx) > 70 && Math.abs(dx) < 280 && b.y > c.y - 6 && b.y < feet + 6) inp |= KEY.u;
     }
@@ -1271,7 +1514,8 @@ function aiDodge(c, inp, ccx, feet) {                  // 爆弾から離れる 
 }
 function aiThink(c, owner, pls, B) {
   const ch = chOf(c), id = ch.id, sk = ch.skill, sz = szOf(c);
-  const ccx = ecx(c), feet = c.y + phOf(c), cwid = pwOf(c), R = ATKS[0].reach * sz;
+  const ccx = ecx(c), feet = c.y + phOf(c), cwid = pwOf(c), R = ATKS[ch.atk || 0].reach * sz;   // 通常攻撃の届く距離（槍兵は長い）
+  const K = id === "lancer" ? 0.85 : 0.55;                       // 敵との間合い（届く距離に対する割合）。槍兵は 60〜80px 離れて突く
   const main = pls.find(q => q.main) || pls[pls.length - 1];
   const stayX = x => Math.max(main.x + 24, Math.min(main.x + main.w - 24, x));       // メインの上に収まる x
   let inp = 0;
@@ -1349,8 +1593,8 @@ function aiThink(c, owner, pls, B) {
   c.aiWait = hold ? c.aiWait + B.think : Math.max(0, c.aiWait - B.think);
   const turn = () => { const b = sgn > 0 ? KEY.r : KEY.l; inp |= b; c.aiOnce |= b; };   // 向きを変えるだけ（押し続けると敵をまたいでしまうので、1 回だけ）
   if (hold) { if (c.f !== sgn && c.ground) turn(); }
-  else if (rel !== want) steer(tcx + want * (sd + R * 0.55));    // 敵をまたいで反対側へ
-  else if (gap > R * 0.55 + 8) steer(tcx - sgn * (sd + R * 0.55));   // 殴れる間合いまで近づく（steer の不感帯 8px のぶん余裕を見て、向き直る処理へ必ず進めるようにする）
+  else if (rel !== want) steer(tcx + want * (sd + R * K));       // 敵をまたいで反対側へ
+  else if (gap > R * K + 8) steer(tcx - sgn * (sd + R * K));   // 殴れる間合いまで近づく（steer の不感帯 8px のぶん余裕を見て、向き直る処理へ必ず進めるようにする）
   else if (c.f !== sgn && c.ground) turn();                      // 向きだけ合わせる
   if (!c.ground) { inp &= ~(KEY.l | KEY.r); steer(stayX(tcx)); }     // 空中では、メインの上へ寄るだけ
   const faceDir = ((inp & (KEY.l | KEY.r)) && c.ground && c.a === 0) ? ((inp & KEY.r) ? 1 : -1) : c.f;
@@ -1359,12 +1603,33 @@ function aiThink(c, owner, pls, B) {
   const chip = !open && Math.random() < B.chip;                  // 盾の正面でも、ときどき殴って盾を削る（3 回で壊れる）
   if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0 && Math.random() >= B.miss) inp |= KEY.a;
   if (sk && B.skill > 0) { const k = aiSkill(c, t, { gap, sgn, sd, dyFeet, sameLevel, tr }, B); if (k) { inp |= k; inp &= ~KEY.a; } }   // スキルを使うときは、通常攻撃を押さない
+  // 蜘蛛: 盾をこちらへ向けた敵の少し手前で跳び、空中から急降下して盾ごと吹っ飛ばす
+  if (id === "spider" && B.skill > 0 && c.ground && !(inp & KEY.k) && c.wk[2] === 0 && sameLevel && c.f === sgn && gap > 60 && gap < 150 && shieldUp(t) && tFaces && Math.random() < B.skill * 0.5) inp = (inp & ~KEY.a) | KEY.u;
   if (id === "swapper" && B.skill > 0) { const k = aiZone(c, t, B); if (k) inp = (inp & ~(KEY.a | KEY.k)) | k; }   // スワッパー: ゾーンの中では、回り込み攻撃と入れ替え
   if (B.dodge && c.ground && Math.random() < B.dodge) inp = aiDodge(c, inp, ccx, feet);
   // 行き詰まり防止: 同じ高さで 2 秒（120 フレーム）も何も押していなければ、とにかく敵へ向かう（待ち・不感帯などで動けなくなる場合の保険）
   if (inp & (KEY.l | KEY.r | KEY.a | KEY.u | KEY.k)) c.aiIdle = 0; else c.aiIdle += B.think;
   if (c.aiIdle >= 120 && c.ground) { c.aiIdle = 0; c.aiOnce = 0; c.aiSideT = 0; c.aiGoal = tcx; inp = sgn > 0 ? KEY.r : KEY.l; }
   return inp;
+}
+// 吹っ飛ばされている最中・崖の外でも考える、キャラごとのスキル（KEY.k か 0）
+//   リバーシ: 崖の近く・崖の外・吹っ飛ばされている最中は守り形態、敵が近くて崖から遠いときは攻撃形態
+//   蜘蛛: 崖の外に出たら、崖の角へ糸を飛ばして戻る（届く距離のときだけ）
+function aiAlways(c, B, pls) {
+  const id = chOf(c).id;
+  if (B.skill <= 0 || c.kp || c.a > 0 || c.fz > 0 || c.hd > 0 || c.rw > 0) return 0;
+  const main = pls.find(q => q.main);
+  if (id === "reversi" && !c.kc && main) {
+    const x = ecx(c), edge = Math.min(x - main.x, main.x + main.w - x), feet = c.y + phOf(c);
+    const def = c.s > 0 || edge < 90 || (!c.ground && feet > main.y + 4);
+    const t = !def && c.ground && edge > 120 ? aiTarget(c, null, B, x, feet) : null;
+    const atk = t && Math.abs(ecx(t) - x) < 260;
+    if (((def && !c.fm) || (atk && c.fm)) && Math.random() < B.skill) return KEY.k;
+  } else if (id === "spider" && main && !c.wb && c.wk[0] === 0 && webMode(c) === 0) {
+    const hx = ecx(c), hy = c.y + 20 * szOf(c), d = Math.min(Math.hypot(main.x - hx, main.y - hy), Math.hypot(main.x + main.w - hx, main.y - hy));
+    if (d <= WEB_LEDGE - 4 && Math.random() < B.recover) return KEY.k;
+  }
+  return 0;
 }
 function aiInput(c, owner, B) {                                // 毎フレーム: ボタンの状態を返す
   const pls = platforms();
@@ -1376,6 +1641,7 @@ function aiInput(c, owner, B) {                                // 毎フレー�
     c.aiT = B.think;
     if (c.ks === 0) c.aiCh = 0;
     inp = aiThink(c, owner, pls, B);
+    if (!(inp & KEY.k)) inp |= aiAlways(c, B, pls);
     c.aiIn = inp & keep & ~c.aiOnce;
   }
   if ((inp & (KEY.l | KEY.r)) && c.ground && c.aiGoal !== null) {      // 目的地に着いたら止まる（行き過ぎて敵をまたがない）
@@ -1416,11 +1682,12 @@ function hostTick() {
     game.tm--;
     if (game.tm <= 0) game.ph = "play";
   } else if (game.ph === "play") {
-    if (game.rt > 0) game.rt--; else game.sd++;            // 制限時間が尽きたらサドンデス（足場が縮む）。ヒットストップ中も時間は進む
+    if (!training) { if (game.rt > 0) game.rt--; else game.sd++; }   // 制限時間が尽きたらサドンデス（足場が縮む）。ヒットストップ中も時間は進む。トレーニングには制限時間がない
     if (game.hs > 0) { game.hs--; return; }                // ヒットストップ中は全員の動きを止める
-    for (const i of slots) { const p = game.p[i]; if (p.cpu) inputs[i] = p.al ? aiInput(p, null, AI_LEVELS[p.cpuLv] || AI_LEVELS[1]) : 0; }   // CPU の頭脳
+    for (const i of slots) { const p = game.p[i]; if (p.cpu) inputs[i] = p.al && !training ? aiInput(p, null, AI_LEVELS[p.cpuLv] || AI_LEVELS[1]) : 0; }   // CPU の頭脳（トレーニングの相手は何も押さない）
     for (const i of slots) physics(game.p[i], inputs[i], false);
     for (const i of slots) tickClone(i);
+    for (const i of slots) { const p = game.p[i]; if (p.yr && !p.al) yureiStep(p, inputs[i]); }   // 幽霊
     const list = ents();
     updateFlowers(list);
     updateProjectiles(list);
@@ -1429,7 +1696,10 @@ function hostTick() {
     resolveHits(ents());
     for (const i of slots) {
       const p = game.p[i];
-      if (p.al && outOfBounds(p)) { if (p.lv > 0) respawn(p); else p.al = false; }
+      if (p.al && outOfBounds(p)) {
+        if (training) { if (p.cpu) trainKO++; respawn(p); p.lv = Math.max(0, p.lv); }   // トレーニング: 誰でもすぐ上から復活する（残機は減らない）
+        else if (p.lv > 0) respawn(p); else { p.al = false; if (!p.cpu) becomeYurei(p); }   // 人は幽霊になって、上空から邪魔できる
+      }
     }
     const alive = slots.filter(i => game.p[i].al);
     if (alive.length <= 1) {
@@ -1461,6 +1731,10 @@ function serEnt(p) {                                         // 見た目に必�
            sh: Math.round(p.sh * 100) / 100, sk: p.sbk, sg: shieldUp(p) ? 1 : 0,
            gh: p.gh, bz: p.bz, cn: p.cn, fz: p.fz, iv: p.iv, ks: p.ks, gt: p.gt, dz: p.dz, rw: p.rw, gs: grabState(p), hd: p.hd };
   if (p.tl && p.tl.length) o.rp = [r1(p.tl[0][0]), r1(p.tl[0][1])];   // 時計師だけ（戦闘中しか記録しないので、ロビーでキャラは漏れない）
+  if (p.fm) o.fm = 1;                                         // リバーシの守り形態（戦闘中しか変わらない）
+  if (p.slw > 0) o.slw = p.slw;                               // 蜘蛛の糸で引き寄せられて、スピードが −1 の間
+  if (p.wl) o.wl = [r1(p.wl[0]), r1(p.wl[1])];                // 蜘蛛の糸の先（糸を使っている間だけ）
+  if (p.yr) { o.yr = 1; o.yrx = r1(p.yrx); o.yrc = p.yrc; }   // 幽霊（脱落したあと）の位置と、次の爆弾までの残り
   return o;
 }
 function snapshot() {
@@ -1468,9 +1742,9 @@ function snapshot() {
   const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr,
     p: game.p.map(p => p ? Object.assign(serEnt(p),
       { w: p.w, c: p.c ? 1 : 0, n: p.n, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, am: p.am, amT: p.amT, lv: p.lv },
-      inGame ? { ch: p.ch } : null) : null),
+      inGame ? { ch: p.ch } : null, inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
-    pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 ? Math.round(b.pw * 10) : 0]),
+    pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 ? Math.round(b.pw * 10) : 0, b.own]),
     fl: game.fl.map(f => [r1(f.x), r1(f.y), f.t]),
     wd: game.wd.map(w => [r1(w.x), r1(w.y), w.w, w.h, w.d, w.t, w.own]),
     rm: game.rm.map(m => [r1(m.x), r1(m.y), r1(m.r), m.t, m.own]) };
@@ -1509,6 +1783,8 @@ function hostLoop() {
 // ---------- CPU 戦（ネットなし・ひとり用）----------
 // タイトルの「CPUと戦う」から始める。部屋も PeerJS も使わず、ホストと同じ計算（hostLoop）を自分のブラウザだけで回す。CPU の席は p.cpu = true で、頭脳（aiInput）が入力を作る
 let solo = false;
+// トレーニング（CPU 戦の一種）: 相手は一切動かない練習用の人形。制限時間もサドンデスもなく、落ちたら誰でもすぐ復活する（ラウンドの区切りがない）。trainKO: 相手を落とした回数
+let training = false, trainKO = 0;
 const soloCfg = { n: 1, lv: 1, chars: [-1, -1, -1] };      // CPU の数 / 強さ（AI_LEVELS の番号）/ CPU ごとのキャラ（-1 = ランダム）
 function sanitizeSolo(d) {
   d = d || {};
@@ -1536,7 +1812,9 @@ function rollCpuChars() {
     if (p && p.cpu) p.ch = soloCfg.chars[i - 1] >= 0 ? soloCfg.chars[i - 1] : Math.floor(Math.random() * CHARS.length);
   }
 }
-function startSolo() {
+function startTraining() { training = true; trainKO = 0; startSolo(true); }
+function startSolo(keepTraining) {
+  if (!keepTraining) training = false;
   solo = true; role = "host"; net = "ready"; myId = 0; roomCode = ""; game.wr = winRounds;
   document.body.classList.add("solo");
   const me = game.p[0] = newPlayer(); me.own = 0; me.n = draft.n; me.ch = draft.c; me.al = true;
@@ -1559,7 +1837,7 @@ function goTitle() {
   conns.forEach(quiet); quiet(hostConn);
   try { if (peer) { if (peer.removeAllListeners) peer.removeAllListeners(); peer.destroy(); } } catch (e) {}
   peer = null; conns = []; hostConn = null; hostTries = 0;
-  role = null; myId = -1; net = "idle"; netMsg = ""; roomCode = ""; solo = false;
+  role = null; myId = -1; net = "idle"; netMsg = ""; roomCode = ""; solo = false; training = false;
   document.body.classList.remove("solo");
   game.p = [null, null, null, null]; game.ph = "lobby"; game.tm = 0; game.win = -1; game.nf = 0; game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0; game.hsf = false;
   clearEntities(); evq.length = 0;
@@ -1630,6 +1908,8 @@ function readEnt(p, n) {                                     // スナップシ�
   p.sh = n.sh; p.sbk = n.sk; p.sg = n.sg;
   p.gh = n.gh | 0; p.bz = n.bz | 0; p.cn = n.cn | 0; p.fz = n.fz | 0; p.iv = n.iv | 0; p.ks = n.ks | 0; p.gt = n.gt | 0; p.dz = n.dz | 0;
   p.rw = n.rw | 0; p.gs = n.gs | 0; p.hd = n.hd | 0; p.rp = n.rp || null;
+  p.fm = n.fm | 0; p.slw = n.slw | 0; p.wl = n.wl || null;
+  p.yr = n.yr | 0; p.yrc = n.yrc | 0; if (p.yr) { p.yrt = n.yrx; if (p.yrx === undefined || Math.abs(p.yrx - n.yrx) > 120) p.yrx = n.yrx; }
   if (n.ch !== undefined) p.ch = n.ch;
 }
 function applySnapshot(s) {
@@ -1645,6 +1925,7 @@ function applySnapshot(s) {
     if (!p) { p = game.p[i] = newPlayer(); p.x = n.x; p.y = n.y; }
     readEnt(p, n);
     p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.am = n.am === undefined ? ARROW_MAX : n.am | 0; p.amT = n.amT | 0; p.lv = n.lv | 0; p.own = i;
+    p.wk = n.wk || [0, 0, 0]; p.wkm = n.wkm || [0, 0, 0]; p.wm = n.wm | 0;
     const cn = s.cl[i];
     if (!cn) game.cl[i] = null;
     else {
@@ -1653,7 +1934,7 @@ function applySnapshot(s) {
       readEnt(c, cn);
     }
   }
-  game.pj = s.pj.map(a => ({ k: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], t: a[5], pw: a[6] / 10 }));
+  game.pj = s.pj.map(a => ({ k: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], t: a[5], pw: a[6] / 10, own: a[7] | 0 }));
   game.fl = s.fl.map(a => ({ x: a[0], y: a[1], t: a[2] }));
   game.wd = (s.wd || []).map(a => ({ x: a[0], y: a[1], w: a[2], h: a[3], d: a[4], t: a[5], own: a[6] }));   // 古い版のホストは送らない
   game.rm = (s.rm || []).map(a => ({ x: a[0], y: a[1], r: a[2], t: a[3], own: a[4] }));
@@ -1803,8 +2084,10 @@ setInterval(() => { if (role === "client") { sentKeys = -1; pushKeys(); } }, 500
 
 // ---------- キャラの見た目（本体と飾り）----------
 // 本体は枠の色（プレイヤーごと）で、飾りでキャラを見分ける。c は描く先の 2D コンテキスト
-function deco(c, id, x, y, f) {
+// o: 状態で変わる見た目 { fm: リバーシの形態, atk: 槍兵が槍を前へ出している }
+function deco(c, id, x, y, f, o) {
   c.lineWidth = 1; c.setLineDash([]);
+  o = o || {};
   if (id === "bomber") {
     c.fillStyle = "#111827"; c.beginPath(); c.arc(x + 20, y + 42, 7, 0, 6.2832); c.fill();
     c.strokeStyle = "#a16207"; c.lineWidth = 2; c.beginPath(); c.moveTo(x + 21, y + 35); c.lineTo(x + 25, y + 30); c.stroke();
@@ -1871,14 +2154,57 @@ function deco(c, id, x, y, f) {
     const bx = f > 0 ? x + 4 : x + PLW - 4;
     c.strokeStyle = "#a16207"; c.lineWidth = 2; c.beginPath(); c.moveTo(bx, y + 46); c.lineTo(bx, y + 34); c.stroke();
     c.fillStyle = "#16a34a"; c.beginPath(); c.ellipse(bx, y + 28, 6, 8, 0, 0, 6.2832); c.fill();
+  } else if (id === "boomer") {                // 水色の鉢巻きと、腰の小さな盾
+    c.fillStyle = "#0ea5e9"; c.fillRect(x, y + 3, PLW, 5);
+    c.fillRect(f > 0 ? x - 6 : x + PLW, y + 5, 6, 3);
+    const bx = f > 0 ? x + 3 : x + PLW - 15;
+    c.fillStyle = "#e2e8f0"; c.fillRect(bx, y + 36, 12, 15);
+    c.strokeStyle = "#0ea5e9"; c.lineWidth = 2; c.strokeRect(bx, y + 36, 12, 15);
+    c.beginPath(); c.moveTo(bx + 3, y + 40); c.lineTo(bx + 6, y + 46); c.lineTo(bx + 9, y + 40); c.stroke();
+  } else if (id === "lancer") {                // 羽根付きの兜と、長い槍（茶色の柄と銀の穂先）
+    c.fillStyle = "#94a3b8"; c.fillRect(x + 2, y - 2, PLW - 4, 11);
+    c.fillStyle = "#334155"; c.fillRect(x + (f > 0 ? 20 : 4), y + 8, 16, 3);
+    c.fillStyle = "#dc2626"; c.beginPath(); c.ellipse(x + 20 - f * 6, y - 5, 10, 4, -f * 0.35, 0, 6.2832); c.fill();
+    if (!o.atk) {                              // 槍を前へ出していないときは、体の後ろに立てて持つ
+      const sx = f > 0 ? x + 3 : x + PLW - 3;
+      c.strokeStyle = "#92400e"; c.lineWidth = 3; c.beginPath(); c.moveTo(sx, y + 57); c.lineTo(sx, y - 1); c.stroke();
+      c.fillStyle = "#e5e7eb"; c.beginPath(); c.moveTo(sx, y - 10); c.lineTo(sx - 4, y); c.lineTo(sx + 4, y); c.fill();
+    }
+  } else if (id === "reversi") {              // 胸のリバーシの石（白黒が形態で入れ替わる）。攻撃形態は赤い角と牙、守り形態は灰色の鎧の板
+    const def = !!o.fm;
+    if (def) {
+      c.fillStyle = "#9ca3af"; c.fillRect(x - 3, y - 3, PLW + 6, 10); c.fillRect(x - 5, y + 22, 9, 16); c.fillRect(x + PLW - 4, y + 22, 9, 16);
+      c.strokeStyle = "#4b5563"; c.lineWidth = 1.5; c.strokeRect(x - 3, y - 3, PLW + 6, 10); c.strokeRect(x - 5, y + 22, 9, 16); c.strokeRect(x + PLW - 4, y + 22, 9, 16);
+    } else {
+      c.fillStyle = "#dc2626";
+      c.beginPath(); c.moveTo(x + 4, y); c.lineTo(x + 2, y - 10); c.lineTo(x + 12, y); c.fill();
+      c.beginPath(); c.moveTo(x + PLW - 4, y); c.lineTo(x + PLW - 2, y - 10); c.lineTo(x + PLW - 12, y); c.fill();
+      const mx = f > 0 ? x + 24 : x + 8;
+      c.fillStyle = "#f8fafc";
+      c.beginPath(); c.moveTo(mx, y + 23); c.lineTo(mx + 2, y + 29); c.lineTo(mx + 4, y + 23); c.fill();
+      c.beginPath(); c.moveTo(mx + 4, y + 23); c.lineTo(mx + 6, y + 29); c.lineTo(mx + 8, y + 23); c.fill();
+    }
+    c.fillStyle = def ? "#111827" : "#f8fafc"; c.beginPath(); c.arc(x + 20, y + 42, 8, Math.PI / 2, Math.PI * 1.5); c.fill();
+    c.fillStyle = def ? "#f8fafc" : "#111827"; c.beginPath(); c.arc(x + 20, y + 42, 8, -Math.PI / 2, Math.PI / 2); c.fill();
+    c.strokeStyle = "#64748b"; c.lineWidth = 1; c.beginPath(); c.arc(x + 20, y + 42, 8, 0, 6.2832); c.stroke();
+  } else if (id === "spider") {                // 背中に足を表す 4 本の線、胸に蜘蛛の印
+    const bx = f > 0 ? x : x + PLW, d = f > 0 ? -1 : 1;
+    c.strokeStyle = "#1f2937"; c.lineWidth = 2.5; c.beginPath();
+    for (let k = 0; k < 4; k++) { const yy = y + 18 + k * 9; c.moveTo(bx, yy); c.lineTo(bx + d * 6, yy - 5); c.lineTo(bx + d * 9, yy + 4); }
+    c.stroke();
+    c.strokeStyle = "#111827"; c.lineWidth = 1.5; c.beginPath();
+    for (let k = 0; k < 4; k++) { const yy = y + 36 + k * 3; c.moveTo(x + 20, y + 40); c.lineTo(x + 11, yy - 3); c.moveTo(x + 20, y + 40); c.lineTo(x + 29, yy - 3); }
+    c.stroke();
+    c.fillStyle = "#111827"; c.beginPath(); c.arc(x + 20, y + 42, 4.5, 0, 6.2832); c.fill(); c.beginPath(); c.arc(x + 20, y + 35, 3, 0, 6.2832); c.fill();
+    c.fillStyle = "#dc2626"; c.fillRect(x + 19, y + 41, 2, 3);
   }
 }
-function drawChar(c, idx, x, y, f, col, flash) {
+function drawChar(c, idx, x, y, f, col, flash, o) {
   c.fillStyle = flash ? "#ffffff" : col;
   c.fillRect(x, y, PLW, PLH);
   c.fillStyle = "#111827";
   c.fillRect(x + (f > 0 ? 24 : 8), y + 12, 8, 8);            // 目（向き）
-  deco(c, (CHARS[idx] || CHARS[0]).id, x, y, f);
+  deco(c, (CHARS[idx] || CHARS[0]).id, x, y, f, o);
 }
 
 // ---------- UI（DOM）----------
@@ -1903,7 +2229,7 @@ function landStatsHtml() {
   ids.sort((a, b) => a === myId ? -1 : b === myId ? 1 : a - b);
   const card = i => {
     const p = game.p[i], c = chOf(p), wins = Array.from({ length: game.wr }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
-    const vals = [effA(p), effD(p), effS(p)], bases = [c.A, c.D, c.S];
+    const vals = [effA(p), effD(p), effS(p)], bases = [baseStat(p, "A"), baseStat(p, "D"), baseStat(p, "S")];   // もとの値（リバーシは今の形態）
     const bars = i === myId && LAND_MY_STATS ? `<div class="hs">${STATS.map((st, k) => barHtml(vals[k], st.color, bases[k])).join("")}</div>` : "";
     return `<div class="hc${i === myId ? " me" : ""}" style="--c:${COLORS[i]}"><div><b>${esc(nameOf(i))}</b>` +
       `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn">${wins}</span></div></div>${bars}</div>`;
@@ -1919,7 +2245,7 @@ function statsHtml() {
     const p = game.p[i];
     if (!p || !p.c || !p.lk) continue;
     const c = chOf(p), wins = Array.from({ length: game.wr }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
-    const vals = [effA(p), effD(p), effS(p)], bases = [c.A, c.D, c.S];
+    const vals = [effA(p), effD(p), effS(p)], bases = [baseStat(p, "A"), baseStat(p, "D"), baseStat(p, "S")];   // もとの値（リバーシは今の形態）
     html +=`<div class="pc${i === myId ? " me" : ""}"><b style="color:${COLORS[i]}">${esc(nameOf(i))}</b>` +
       `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn" style="color:${COLORS[i]}">${wins}</span></div>` +
       STATS.map((st, k) => `<div class="pr"><span class="lb" style="color:${st.color}">${st.label}</span>${barHtml(vals[k], st.color, bases[k])}</div>`).join("") + `</div>`;
@@ -1944,7 +2270,7 @@ function refreshHud() {
   const me = game.p[myId];
   const inBattle = !!(role && net === "ready" && me && game.ph !== "lobby");
   const sig = (inBattle ? 1 : 0) + "|" + (land ? 1 : 0) + "|" + game.ph + "|" + game.wr + "|" + myId + "|" +
-    game.p.map(p => p ? [p.c ? 1 : 0, p.lk ? 1 : 0, p.ch, p.lv, p.w, p.n, p.bz > 0 ? 1 : 0, p.gt > 0 ? 1 : 0].join(",") : "-").join("|");
+    game.p.map(p => p ? [p.c ? 1 : 0, p.lk ? 1 : 0, p.ch, p.lv, p.w, p.n, p.bz > 0 ? 1 : 0, p.gt > 0 ? 1 : 0, p.fm ? 1 : 0, p.slw > 0 ? 1 : 0].join(",") : "-").join("|");
   if (sig === lastHud) return;
   lastHud = sig;
   document.body.classList.toggle("battle", inBattle);
@@ -1964,7 +2290,9 @@ function paintSelect() {
   const root = ui.querySelector(".setup"); if (!root) return;
   root.querySelectorAll(".chip").forEach(b => b.classList.toggle("on", Number(b.dataset.i) === draft.c));
   const c = CHARS[draft.c], vals = [c.A, c.D, c.S];
-  const traits = (c.noShield ? "<br><span class=\"trait\">盾を持たない</span>" : "") + (c.lives ? `<br><span class="trait">残機 +${c.lives}（落ちても1回だけ復活する）</span>` : "");
+  const traits = (c.noShield ? "<br><span class=\"trait\">盾を持たない</span>" : "") + (c.lives ? `<br><span class="trait">残機 +${c.lives}（落ちても1回だけ復活する）</span>` : "") +
+    (c.atk ? `<br><span class="trait">通常攻撃の届く距離が約${(ATKS[c.atk].reach / ATKS[0].reach).toFixed(1)}倍（出が遅い）</span>` : "") +
+    (c.forms ? `<br><span class="trait">性能の棒は攻撃形態。守り形態は 攻撃${c.forms[1].A}・防御${c.forms[1].D}・スピード${c.forms[1].S}</span>` : "");
   root.querySelector("#detail").innerHTML =
     `<h2>${esc(c.name)}</h2><div class="tag">${esc(c.tag)}</div>` +
     STATS.map((s, k) => `<div class="st-r"><span class="nm" style="color:${s.color}">${s.label}</span>${barHtml(vals[k], s.color)}</div>`).join("") +
@@ -2015,19 +2343,19 @@ function paintRounds(root, id) {
 }
 function showSolo() {                       // CPU 戦の設定（自分の名前・キャラ、CPU の数・強さ・キャラ、何本先取か）
   const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
-  ui.innerHTML = `<div class="panel setup"><div class="cols"><div class="colL"><h1>CPU戦</h1>
-    <p>名前とキャラを選んで、ひとりで CPU と対戦します（ネット不要）</p>
+  ui.innerHTML = `<div class="panel setup"><div class="cols"><div class="colL"><h1>${training ? "トレーニング" : "CPU戦"}</h1>
+    <p>${training ? "相手は一切動きません。制限時間はなく、落ちてもすぐ復活します（ネット不要）" : "名前とキャラを選んで、ひとりで CPU と対戦します（ネット不要）"}</p>
     <input id="pname" maxlength="8" placeholder="${esc("プレイヤー1")}" value="${esc(draft.n)}">
     <div class="chips">${chips}</div></div><div class="colR">
     <div class="detail" id="detail"></div>
     <div class="cpuset">
-      <div class="row"><span>CPU の数</span><span class="seg" id="segN">${[1, 2, 3].map(v => `<button data-v="${v}">${v}</button>`).join("")}</span></div>
-      <div class="row"><span>強さ</span><span class="seg" id="segLv">${AI_LEVELS.map((l, v) => `<button data-v="${v}">${esc(l.name)}</button>`).join("")}</span></div>
-      <div class="hint" id="lvHint"></div>
+      <div class="row"><span>${training ? "相手の数" : "CPU の数"}</span><span class="seg" id="segN">${[1, 2, 3].map(v => `<button data-v="${v}">${v}</button>`).join("")}</span></div>
+      <div class="row"${training ? ' style="display:none"' : ""}><span>強さ</span><span class="seg" id="segLv">${AI_LEVELS.map((l, v) => `<button data-v="${v}">${esc(l.name)}</button>`).join("")}</span></div>
+      <div class="hint" id="lvHint"${training ? ' style="display:none"' : ""}></div>
       <div id="cpuRows"></div>
-      <div class="row"><span>何本先取</span>${roundsHtml("wr")}</div>
+      <div class="row"${training ? ' style="display:none"' : ""}><span>何本先取</span>${roundsHtml("wr")}</div>
     </div>
-    <div class="btns"><button id="bGo">戦闘開始</button>
+    <div class="btns"><button id="bGo">${training ? "練習開始" : "戦闘開始"}</button>
     <button id="bBack" class="sub">タイトルへ</button></div></div></div></div>`;
   const root = ui.querySelector(".setup");
   root.querySelectorAll(".chip").forEach(b => {
@@ -2043,7 +2371,7 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
     root.querySelectorAll("#segLv button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === soloCfg.lv));
     root.querySelector("#lvHint").textContent = AI_LEVELS[soloCfg.lv].desc;
     root.querySelector("#cpuRows").innerHTML = Array.from({ length: soloCfg.n }, (_, k) =>
-      `<div class="row"><span>CPU${k + 1} のキャラ</span><select data-k="${k}">${opts}</select></div>`).join("");
+      `<div class="row"><span>${training ? "相手" : "CPU"}${k + 1} のキャラ</span><select data-k="${k}">${opts}</select></div>`).join("");
     root.querySelectorAll("#cpuRows select").forEach(sel => {
       const k = Number(sel.dataset.k);
       sel.value = String(soloCfg.chars[k]);
@@ -2117,6 +2445,7 @@ function renderUI() {
       <p>好きなキャラを選んで戦おう！スキルで逆転もできる<br>盾が外れた隙を突いて、相手をステージから落とせ（最大4人 / 何本先取かは設定できます）<br>制限時間は${ROUND_FRAMES / 60}秒。時間切れになるとステージが縮みます</p>
       <button id="bHost">部屋を作る（ホスト）</button>
       <button id="bSolo" class="sub">CPUと戦う（ひとりで遊ぶ）</button>
+      <br><button id="bTrain" class="sub">トレーニング（相手は動かない）</button>
       <p>— または —</p>
       <input id="code" inputmode="numeric" maxlength="1" placeholder="部屋番号（1桁）" style="width:200px;text-align:center;font-size:20px" value="${/^\d$/.test(q || "") ? q : ""}">
       <button id="bJoin">参加する</button>
@@ -2127,6 +2456,7 @@ function renderUI() {
       ${isIPhone && !standalone ? `<p class="ioshint">画面を広く使うには: 共有ボタン（□↑）→「ホーム画面に追加」で、ホーム画面のアイコンから開いてください（アドレスバーが消えます）</p>` : ""}</div>`;
     document.getElementById("bHost").onclick = () => { autoFs(); startHost(); };
     document.getElementById("bSolo").onclick = () => { autoFs(); startSolo(); };
+    document.getElementById("bTrain").onclick = () => { autoFs(); startTraining(); };
     const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d$/.test(c)) { autoFs(); startClient(c); } else document.getElementById("code").style.borderColor = "#ef4444"; };
     document.getElementById("bJoin").onclick = join;
     const bl = document.getElementById("bLayout"); if (bl) bl.onclick = openLayoutEditor;
@@ -2152,15 +2482,24 @@ let lastSk = "";
 function updateSkillUI() {
   const me = game.p[myId];
   let state = "none", label = "なし", sec = "", ratio = 0;
-  if (role && net === "ready" && me && game.ph !== "lobby") {
+  if (role && net === "ready" && me && game.ph !== "lobby" && me.yr && !me.al) {   // 幽霊: スキルボタンも爆弾（攻撃ボタンでも落とせる）
+    label = "爆弾";
+    if (me.yrc > 0) { state = "cool"; ratio = Math.min(1, me.yrc / YUREI_CD); sec = String(Math.ceil(me.yrc / 60)); } else state = "ready";
+  } else if (role && net === "ready" && me && game.ph !== "lobby") {
     const sk = chOf(me).skill;
     if (sk) {
       label = sk.name;
-      const zone = chOf(me).id === "swapper" ? zoneOf(me) : null;
-      if (zone) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(zone.t / 60)); }   // スワッパーの ゾーンがある間（数字は円が消えるまでの秒数）
+      const id = chOf(me).id, zone = id === "swapper" ? zoneOf(me) : null;
+      if (id === "spider") {                                     // 蜘蛛: 今の居場所で使う効果の名前と、その効果のクールタイム
+        const m = role === "client" ? (me.wm | 0) : webMode(me), k = me.wk[m] | 0;
+        label = ["崖へ", "引き寄せ", "急降下"][m] || sk.name;
+        if (k > 0) { state = "cool"; ratio = Math.min(1, k / (me.wkm[m] || WEB_CD[m])); sec = String(Math.ceil(k / 60)); } else state = "ready";
+      }
+      else if (zone) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(zone.t / 60)); }   // スワッパーの ゾーンがある間（数字は円が消えるまでの秒数）
       else if (me.ks > 0) { state = "charge"; label = "ため中"; }
-      else if (chOf(me).id === "archer" && me.am <= 0) { state = "cool"; label = "矢なし"; ratio = 1 - me.amT / ARROW_REGEN; sec = "0"; }   // 矢がないとき: 次の 1 本までを円で出す
+      else if (id === "archer" && me.am <= 0) { state = "cool"; label = "矢なし"; ratio = 1 - me.amT / ARROW_REGEN; sec = "0"; }   // 矢がないとき: 次の 1 本までを円で出す
       else if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (me.km || sk.cd * 60)); sec = String(Math.ceil(me.kc / 60)); }
+      else if (id === "boomer" && me.sbk > 0) { state = "cool"; label = "盾なし"; ratio = Math.min(1, me.sbk / SHIELD_BREAK_FRAMES); sec = String(Math.ceil(me.sbk / 60)); }   // 盾が壊れている間は投げられない
       else state = "ready";
       if (chOf(me).id === "archer" && state !== "cool") sec = "×" + me.am;      // アーチャー: 残りの矢の本数
     }
@@ -2252,6 +2591,17 @@ const Sfx = (() => {
     swapPop() { tone(900, 500, 0.08, "sine", 0.08); },
     grab() { noise(0.08, 0.22, "lowpass", 900, 300); tone(180, 120, 0.12, "square", 0.08); },
     gust() { noise(0.7, 0.18, "bandpass", 500, 2400); noise(0.5, 0.08, "highpass", 2000, 4500, 0.12); },
+    shieldThrow() { noise(0.28, 0.14, "bandpass", 600, 1900); tone(480, 900, 0.12, "triangle", 0.08); },
+    shieldCatch() { tone(1100, 1050, 0.08, "square", 0.07); tone(700, 680, 0.1, "triangle", 0.12, 0.02); },
+    thrust() { noise(0.18, 0.22, "bandpass", 1200, 4200); tone(700, 280, 0.16, "sawtooth", 0.09); },
+    transform(def) {
+      if (def) { tone(620, 300, 0.18, "square", 0.08); tone(300, 150, 0.22, "triangle", 0.14, 0.05); }      // 守り形態: 重く沈む音
+      else { tone(300, 760, 0.16, "sawtooth", 0.08); tone(760, 1250, 0.12, "triangle", 0.10, 0.06); }    // 攻撃形態: 鋭く上がる音
+    },
+    web() { tone(1900, 700, 0.09, "sine", 0.10); noise(0.08, 0.10, "highpass", 4000, 4000); },
+    stomp() { tone(160, 50, 0.25, "sine", 0.4); noise(0.2, 0.2, "lowpass", 900, 150); },
+    yureiDrop() { tone(820, 380, 0.22, "sine", 0.08); tone(560, 260, 0.25, "triangle", 0.05, 0.06); },
+    yureiBoom() { noise(0.45, 0.32, "lowpass", 1600, 120); tone(140, 40, 0.35, "sine", 0.35); },
   };
 })();
 // タイトルへ戻るボタン: 2 回押すと戻る（押し間違い防止）。オンラインでは部屋から抜ける（ホストなら部屋が消える）
@@ -2421,8 +2771,29 @@ function fxEvent(e) {
     else if (id === "clock") { Sfx.rewind(); rings.push({ x, y, t: 0, max: 14, c: "#93c5fd", r0: 44, sp: -2.8 }); burst(x, y, 10, { v0: 1, v1: 3, l0: 12, l1: 22, s0: 2, s1: 4, colors: ["#93c5fd", "#ffffff"] }); }   // 縮んでいく輪
     else if (id === "wrestler") Sfx.swing();
     else if (id === "tengu") { Sfx.gust(); burst(x, y, 12, { v0: 2, v1: 6, l0: 14, l1: 26, s0: 6, s1: 11, round: true, colors: ["#e0f2fe", "#ffffff", "#bae6fd"] }); }
+    else if (id === "boomer") Sfx.shieldThrow();
+    else if (id === "lancer") { Sfx.charge(); burst(x, y, 6, { v0: 1, v1: 3, l0: 10, l1: 18, s0: 2, s1: 4, colors: ["#fdba74", "#ffffff"] }); }
+    else if (id === "reversi") {                   // 変身: 光って、白黒のかけらが散る（e[4] = 変身後の形態）
+      const def = !!e[4];
+      Sfx.transform(def); flashA = Math.max(flashA, 0.12);
+      rings.push({ x, y, t: 0, max: 14, c: def ? "#9ca3af" : "#ef4444", r0: 10, sp: 5 });
+      burst(x, y, 14, { v0: 1.5, v1: 5, l0: 12, l1: 22, s0: 3, s1: 6, colors: ["#ffffff", "#111827", def ? "#9ca3af" : "#ef4444"] });
+    } else if (id === "spider") { Sfx.web(); rings.push({ x, y, t: 0, max: 10, c: "#f8fafc", r0: 6, sp: 3 }); }
   } else if (k === "sc") Sfx.charge();
-  else if (k === "sl") { Sfx.slash(); shake(3); }      // 居合斬りの踏み込み
+  else if (k === "sl") { if (e[3] === 3) Sfx.thrust(); else Sfx.slash(); shake(3); }      // 居合斬りの踏み込み / 突進突きの突進
+  else if (k === "bc") Sfx.shieldCatch();          // 投げた盾を受け止めた
+  else if (k === "wm") Sfx.web();                  // 糸が届かなかった
+  else if (k === "yd") Sfx.yureiDrop();            // 幽霊が爆弾を落とした
+  else if (k === "yx") {                           // 幽霊の爆弾が爆発した
+    Sfx.yureiBoom(); shake(7);
+    burst(x, y, 20, { v0: 2, v1: 8, l0: 14, l1: 26, s0: 3, s1: 7, g: 0.1, colors: ["#c4b5fd", "#a78bfa", "#f8fafc", "#4c1d95"] });
+    rings.push({ x, y, t: 0, max: 12, c: "#c4b5fd", r0: 8, sp: e[3] / 12 });
+  }
+  else if (k === "st") {                           // 蜘蛛の急降下の着地
+    Sfx.stomp(); shake(6);
+    rings.push({ x, y, t: 0, max: 14, c: "#e2e8f0", r0: 10, sp: 4.5, sy: 0.3 });
+    burst(x, y, 12, { dir: -Math.PI / 2, spread: 3, v0: 1, v1: 4, l0: 12, l1: 22, s0: 6, s1: 11, g: -0.01, round: true, colors: ["#cbd5e1", "#94a3b8"] });
+  }
   else if (k === "ar") {                           // 矢を放った
     Sfx.arrow(f);
     burst(x, y, 5, { dir: d > 0 ? 0 : Math.PI, spread: 0.8, v0: 2, v1: 5, l0: 8, l1: 14, s0: 2, s1: 4, colors: ["#fef3c7", "#ffffff"] });
@@ -2553,8 +2924,14 @@ function drawPlayer(p, i, me, now) {
   // 本体（花で動けない間は土下座の形につぶれる）
   const dg = p.dz > 0 && p.al;
   if (dg) { cx.save(); cx.translate(0, p.y + PLH); cx.scale(1, 0.55); cx.translate(0, -(p.y + PLH)); }
-  drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2);
+  const spear = p.a > 0 && p.ak >= 2;                             // 槍兵が槍を前へ出している
+  drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear });
   if (dg) cx.restore();
+  if (p.slw > 0 && p.al) {                                        // 蜘蛛の糸がからんでいる（スピード −1）
+    cx.strokeStyle = "rgba(248,250,252,0.7)"; cx.lineWidth = 1.2; cx.beginPath();
+    cx.moveTo(p.x - 2, p.y + 40); cx.lineTo(p.x + PLW + 2, p.y + 54); cx.moveTo(p.x - 2, p.y + 54); cx.lineTo(p.x + PLW + 2, p.y + 40);
+    cx.moveTo(p.x - 2, p.y + 47); cx.lineTo(p.x + PLW + 2, p.y + 47); cx.stroke();
+  }
   if (p.gt > 0 && p.al) { cx.strokeStyle = "rgba(251,191,36,0.8)"; cx.lineWidth = 2; cx.strokeRect(p.x - 1, p.y - 1, PLW + 2, PLH + 2); }
   // 盾 / 攻撃
   const sx = p.f > 0 ? p.x + PLW + 2 : p.x - 10;
@@ -2572,7 +2949,19 @@ function drawPlayer(p, i, me, now) {
     cx.strokeStyle = "rgba(248,113,113,0.85)"; cx.lineWidth = 1.5; cx.setLineDash([3, 3]);
     cx.strokeRect(sx + 0.5, p.y + 4.5, 7, PLH - 9); cx.setLineDash([]);
   }
-  if (p.a > 0) {
+  if (spear) {                                                    // 槍兵: 槍を前へ突き出す（当たる間は、届く距離いっぱいまで伸びる）
+    const ak = ATKS[p.ak], act = p.a >= ak.on && p.a <= ak.off;
+    const len = act ? ak.reach : p.a < ak.on ? 16 : Math.max(16, ak.reach * (1 - (p.a - ak.off) / (ak.total - ak.off)));
+    const front = p.f > 0 ? p.x + PLW : p.x, tip = front + p.f * len, back = p.f > 0 ? p.x + 4 : p.x + PLW - 4, sy = p.y + 30;
+    if (act) { cx.fillStyle = p.ak === 3 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)"; cx.fillRect(p.f > 0 ? front : front - ak.reach, p.y + 18, ak.reach, 22); }
+    cx.strokeStyle = "#92400e"; cx.lineWidth = 3.5; cx.beginPath(); cx.moveTo(back, sy); cx.lineTo(tip - p.f * 10, sy); cx.stroke();
+    cx.fillStyle = act ? "#ffffff" : "#e5e7eb"; cx.beginPath(); cx.moveTo(tip, sy); cx.lineTo(tip - p.f * 12, sy - 5); cx.lineTo(tip - p.f * 12, sy + 5); cx.fill();
+    if (p.ak === 3 && p.a < ak.dashFrom) {                        // 突進突きの構え: 橙の枠が締まっていく
+      const k = p.a / ak.dashFrom;
+      cx.strokeStyle = "rgba(251,146,60," + (0.4 + 0.5 * k).toFixed(2) + ")"; cx.lineWidth = 3;
+      cx.strokeRect(p.x - 8 + 6 * k, p.y - 8 + 6 * k, PLW + 16 - 12 * k, PLH + 16 - 12 * k);
+    }
+  } else if (p.a > 0) {
     const ak = ATKS[p.ak] || ATKS[0];
     if (p.a >= ak.on && p.a <= ak.off) {
       cx.fillStyle = p.ak === 1 ? "#fecaca" : "#fde68a";
@@ -2623,6 +3012,13 @@ function drawPlayer(p, i, me, now) {
     }
   }
   cx.restore();
+  if (p.wl && p.al) {                                             // 蜘蛛の糸（手もとから、糸の先まで）
+    const hx = p.x + PLW * sz / 2, hy = p.y + 20 * sz;
+    cx.save(); cx.strokeStyle = "rgba(248,250,252,0.9)"; cx.lineWidth = 1.6;
+    cx.beginPath(); cx.moveTo(hx, hy); cx.lineTo(p.wl[0], p.wl[1]); cx.stroke();
+    cx.fillStyle = "#f8fafc"; cx.beginPath(); cx.arc(p.wl[0], p.wl[1], 3, 0, 6.2832); cx.fill();
+    cx.restore();
+  }
   if (p.al) {
     cx.fillStyle = col; cx.font = "bold 16px sans-serif"; cx.textAlign = "center";
     const label = clone ? "分身" : nameOf(i) + (p.lv > 0 ? " ♥" : "") + (me ? " ▼" : "");
@@ -2644,6 +3040,35 @@ function drawArrow(b) {
   cx.beginPath(); cx.moveTo(b.x + d * 7, b.y); cx.lineTo(b.x, b.y - 4); cx.lineTo(b.x, b.y + 4); cx.fill();
   cx.strokeStyle = "#94a3b8"; cx.lineWidth = 1.5;
   cx.beginPath(); cx.moveTo(b.x - d * L, b.y); cx.lineTo(b.x - d * (L + 4), b.y - 4); cx.moveTo(b.x - d * L, b.y); cx.lineTo(b.x - d * (L + 4), b.y + 4); cx.stroke();
+}
+// 幽霊（脱落した人）: 上空をふわふわ飛ぶ。カメラが上を映していないときは、画面の上の端に出す。真下の足場に、爆弾が落ちる場所の印を出す（全員に見える）
+function drawYurei(p, i, me, now) {
+  const x = p.yrx, y = Math.max(YUREI_Y, camView.y0 + 80 / cam.s) + Math.sin(now / 260 + i) * 3, col = COLORS[i], ready = p.yrc <= 0;
+  const below = platforms().filter(q => x > q.x && x < q.x + q.w && q.y > YUREI_Y).sort((a, b) => a.y - b.y)[0];
+  if (below) {
+    cx.save(); cx.globalAlpha = ready ? 0.5 : 0.22; cx.strokeStyle = col; cx.lineWidth = 2;
+    cx.beginPath(); cx.ellipse(x, below.y - 2, 14, 4, 0, 0, 6.2832); cx.stroke(); cx.restore();
+  }
+  cx.save(); cx.globalAlpha = 0.62;
+  cx.fillStyle = "#f8fafc"; cx.strokeStyle = col; cx.lineWidth = 2.5;
+  cx.beginPath(); cx.arc(x, y - 4, 14, Math.PI, 0); cx.lineTo(x + 14, y + 14);
+  for (let k = 0; k < 4; k++) { const wx = x + 14 - (k + 0.5) * 7; cx.lineTo(wx, y + (k % 2 ? 14 : 9)); }
+  cx.lineTo(x - 14, y + 14); cx.closePath(); cx.fill(); cx.stroke();
+  cx.fillStyle = "#111827"; cx.fillRect(x - 6 + p.f * 2, y - 7, 3, 4); cx.fillRect(x + 3 + p.f * 2, y - 7, 3, 4);
+  if (ready) { cx.globalAlpha = 0.9; cx.fillStyle = "#4c1d95"; cx.beginPath(); cx.arc(x, y + 22, YUREI_R, 0, 6.2832); cx.fill(); }   // 次の爆弾を持っている
+  cx.globalAlpha = 0.8; cx.fillStyle = col; cx.font = "bold 13px sans-serif"; cx.textAlign = "center";
+  cx.fillText(nameOf(i) + (me ? " ▲" : ""), x, y + (ready ? 44 : 32));   // 名前は下に（上は残り時間の表示とぶつかる）
+  cx.restore();
+}
+function drawYureiBomb(b, now) {
+  cx.fillStyle = "#4c1d95"; cx.beginPath(); cx.arc(b.x, b.y, YUREI_R, 0, 6.2832); cx.fill();
+  cx.strokeStyle = Math.floor(now / 80) % 2 ? "#e9d5ff" : (COLORS[b.own] || "#ffffff"); cx.lineWidth = 2; cx.stroke();
+}
+function drawThrownShield(b) {                     // ブーメラン使いが投げた盾（回りながら飛ぶ。縁は持ち主の色）
+  cx.save(); cx.translate(b.x, b.y); cx.rotate(b.t * 0.45);
+  cx.fillStyle = "rgba(226,232,240,0.95)"; cx.fillRect(-4, -19, 8, 38);
+  cx.strokeStyle = COLORS[b.own] || "#ffffff"; cx.lineWidth = 2; cx.strokeRect(-4, -19, 8, 38);
+  cx.restore();
 }
 function drawFlower(f, now) {
   const g = Math.min(1, f.t / FLOWER_ARM), h = 16 * g, hx = f.x + Math.sin(now / 300 + f.x) * 1.5 * g, hy = f.y - h;
@@ -2717,6 +3142,7 @@ function drawTimer(now) {
   else {
     const secs = Math.max(0, Math.ceil(game.rt / 60));
     text = String(secs); color = secs <= 10 ? (blink ? "#fca5a5" : "#ef4444") : "rgba(255,255,255,0.9)";
+    if (training) { text = "撃墜 " + trainKO; color = "rgba(255,255,255,0.9)"; }   // トレーニング: 制限時間はなく、相手を落とした回数を出す
   }
   cx.textAlign = "center"; cx.font = "bold " + fs + "px sans-serif"; cx.lineJoin = "round"; cx.lineWidth = 4; cx.strokeStyle = "rgba(0,0,0,0.55)";
   cx.strokeText(text, cw / 2, ty); cx.fillStyle = color; cx.fillText(text, cw / 2, ty);
@@ -2914,8 +3340,12 @@ function updateCamera(dt) {
   const hw = cw / cam.s / 2, hh = ch / cam.s / 2;
   camView = { x0: cam.x - hw, x1: cam.x + hw, y0: cam.y - hh, y1: cam.y + hh };
 }
-const smoothClient = p => { if (p && p.tx !== undefined) { p.x += (p.tx - p.x) * 0.6; p.y += (p.ty - p.y) * 0.6; } };   // 参加者側: 届いた位置へ寄せて滑らかに見せる
+const smoothClient = p => {
+  if (p && p.tx !== undefined) { p.x += (p.tx - p.x) * 0.6; p.y += (p.ty - p.y) * 0.6; }
+  if (p && p.yr && p.yrt !== undefined) p.yrx += (p.yrt - p.yrx) * 0.6;                // 幽霊の位置も同じように
+};   // 参加者側: 届いた位置へ寄せて滑らかに見せる
 let lastT = performance.now();
+let yureiSince = 0;                                  // 自分が幽霊になった時刻（説明を少しの間だけ出す）
 function render() {
   updateLand();
   fitCanvas();
@@ -2923,7 +3353,7 @@ function render() {
   lastT = now;
   fxPhase(dt); updateFx(dt); updateSkillUI();
   if (role === "client" && !game.hsf) {              // 参加者側では、飛び道具をスナップショットの合間に先へ進めて滑らかに見せる
-    for (const b of game.pj) { b.x += b.vx * dt; b.y += b.vy * dt; b.t += dt; if (b.k === 0) b.vy += 0.5 * dt; }
+    for (const b of game.pj) { b.x += b.vx * dt; b.y += b.vy * dt; b.t += dt; if (b.k === 0 || b.k === 3) b.vy += 0.5 * dt; }
   }
   if (role === "client") { game.p.forEach(smoothClient); game.cl.forEach(smoothClient); }
   const g = cx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
@@ -2969,6 +3399,7 @@ function render() {
   drawRewindGhosts(dt);
   // プレイヤーと分身（吹っ飛んでいる間は残像を引く。巻き戻し中は、通った場所に青い残像を残す）
   const drawWithTrail = (p, i, me) => {
+    if (!p.al && p.yr) { drawYurei(p, i, me, now); return; }
     const h = p.hist || (p.hist = []);
     h.push(p.x, p.y); if (h.length > 14) h.splice(0, 2);
     if (p.al && p.rw > 0 && rwGhosts.length < 80) rwGhosts.push({ x: p.x, y: p.y, f: p.f, ch: p.ch, t: 0 });
@@ -2982,7 +3413,7 @@ function render() {
   };
   for (let i = 0; i < MAX_PLAYERS; i++) { const c = game.cl[i]; if (c) drawWithTrail(c, i, false); }
   for (let i = 0; i < MAX_PLAYERS; i++) { const p = game.p[i]; if (p && p.c) drawWithTrail(p, i, i === myId); }
-  for (const b of game.pj) { if (b.k === 0) drawBomb(b, now); else drawArrow(b); }
+  for (const b of game.pj) { if (b.k === 0) drawBomb(b, now); else if (b.k === 2) drawThrownShield(b); else if (b.k === 3) drawYureiBomb(b, now); else drawArrow(b); }
   drawFx();
   cx.restore();
   if (flashA > 0.02) { cx.fillStyle = "rgba(255,255,255," + flashA.toFixed(3) + ")"; cx.fillRect(0, 0, cw, ch); flashA *= Math.pow(0.8, dt); }
@@ -2995,9 +3426,11 @@ function render() {
   else if (game.ph === "play") {
     if (fxSdT > 0) banner("サドンデス！", "足場が縮みます");
     else if (fxGoT > 0) banner("GO!");
-    if (myId >= 0 && game.p[myId] && !game.p[myId].al) {
-      cx.fillStyle = "rgba(255,255,255,.6)"; cx.font = "18px sans-serif"; cx.textAlign = "center";
-      cx.fillText("観戦中", cw / 2, land ? 96 : Math.max(16, Math.min(34, cw / 13)) + 34);
+    const yr = myId >= 0 && game.p[myId] && !game.p[myId].al && game.p[myId].yr;
+    if (!yr) yureiSince = 0; else if (!yureiSince) yureiSince = now;
+    if (myId >= 0 && game.p[myId] && !game.p[myId].al && (!yr || now - yureiSince < 4000)) {   // 幽霊の説明は、なってから 4 秒だけ
+      cx.fillStyle = "rgba(255,255,255,.6)"; cx.font = (yr ? "15px" : "18px") + " sans-serif"; cx.textAlign = "center";
+      cx.fillText(yr ? "幽霊になった！ 攻撃ボタンで爆弾を落とす" : "観戦中", cw / 2, land ? 96 : Math.max(16, Math.min(34, cw / 13)) + 34);
     }
   }
 }
