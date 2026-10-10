@@ -9,6 +9,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="シールドファイト">
 <meta name="theme-color" content="#111827">
+<!-- アプリとしてインストールできるようにする（Android の Chrome など）。インストールしたアイコンから開くと、最初から全画面で起動し、全画面のお知らせも出ない -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>シールドファイト</title>
 <style>
   html,body{margin:0;height:100%;background:#111827;color:#e5e7eb;font-family:system-ui,"Yu Gothic",sans-serif;overflow:hidden}
@@ -175,6 +179,14 @@
   body.land .tb.jump{background:rgba(59,130,246,.28);font-size:calc(var(--b)*.16)}
   body.land .tb.atk{background:rgba(239,68,68,.28)}
   body.land .tb.skill{background:rgba(168,85,247,.3)}
+  /* 横画面の右のボタン: 画面の右下の角を中心とする円（半径 --R）の上に、下から 攻撃（15 度）・スキル（43 度）・ジャンプ（72 度）の順に並べる。
+     親指を右下の角あたりに置いたまま、弧を描くように届く。数字は cos / sin（例: 15 度 → 0.966 / 0.259） */
+  body.land{--R:calc(var(--b)*2.4)}
+  body.land #rbtns{position:absolute;right:0;bottom:0;width:0;height:0}
+  body.land #rbtns .tb{left:auto;top:auto}
+  body.land .tb.atk{right:calc(var(--R)*.966 - var(--b)/2 + env(safe-area-inset-right));bottom:calc(var(--R)*.259 - var(--b)/2 + env(safe-area-inset-bottom))}
+  body.land .tb.skill{right:calc(var(--R)*.731 - var(--b)/2 + env(safe-area-inset-right));bottom:calc(var(--R)*.682 - var(--b)/2 + env(safe-area-inset-bottom))}
+  body.land .tb.jump{right:calc(var(--R)*.309 - var(--b)/2 + env(safe-area-inset-right));bottom:calc(var(--R)*.951 - var(--b)/2 + env(safe-area-inset-bottom))}
   body.land .tb.skill b{font-size:calc(var(--b)*.16)}
   body.land .tb.jump:active{background:rgba(59,130,246,.55)}
   body.land .tb.atk:active{background:rgba(239,68,68,.55)}
@@ -370,16 +382,16 @@ const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛�
 const GIANT_FRAMES = 480, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
 const RW_SPAN = 120, RW_SPEED = 4;   // 時計師の巻き戻し: さかのぼる長さ（2 秒）/ 早戻りの速さ（4 倍速。2 秒ぶんを 0.5 秒で戻る）
-// ローの ROOM: 押している間だけ円が広がり（上限なし）、離すとその場所に 5 秒残る。円の中では、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで入れ替える。
+// スワッパーの ゾーン: 押している間だけ円が広がり（上限なし）、離すとその場所に 5 秒残る。円の中では、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで入れ替える。
 // 円が消えるとクールタイム（2 秒＋半径 100px ごとに 1 秒）が始まり、その間は盾がなく、移動速度が 0.7 倍になる
-const ROOM_R0 = 40, ROOM_LIFE = 300, ROOM_SWAP_GAP = 6;                  // 押した瞬間の半径 / 円が残る時間（5 秒）/ 入れ替えの間隔（0.1 秒）
+const ZONE_R0 = 40, ZONE_LIFE = 300, ZONE_SWAP_GAP = 6;                  // 押した瞬間の半径 / 円が残る時間（5 秒）/ 入れ替えの間隔（0.1 秒）
 // 円の広がり方: 押した直後は 1 フレームに 12px と速く、広がるほど遅くなり、やがて 1 フレームに 1.5px で広がり続ける（上限なし）
 //   半径 = 40 + 10.5 × 25 × (1 − e^(−ため/25)) + 1.5 × ため（0.25 秒で約 240px、0.5 秒で約 320px、1 秒で約 390px、2 秒で約 550px）
-const ROOM_FAST = 10.5, ROOM_TAU = 25, ROOM_SLOWV = 1.5;
-const ROOM_CD_BASE = 120, ROOM_CD_PER100 = 60, ROOM_SLOW = 0.7;          // クールタイム: 基本 2 秒 + 半径 100px ごとに 1 秒 / クールタイム中の移動速度の倍率
-const roomR = ks => ROOM_R0 + ROOM_FAST * ROOM_TAU * (1 - Math.exp(-ks / ROOM_TAU)) + ROOM_SLOWV * ks;
-const ROOM_WARP_MUL = 1.3;           // ROOM の回り込み攻撃の吹っ飛ばしの倍率（攻撃の強さの上限 1.3 倍と同じ。背後から当てても、相手がすぐ立て直して戻らないように）
-const roomCd = r => Math.round(ROOM_CD_BASE + ROOM_CD_PER100 * r / 100);
+const ZONE_FAST = 10.5, ZONE_TAU = 25, ZONE_SLOWV = 1.5;
+const ZONE_CD_BASE = 120, ZONE_CD_PER100 = 60, ZONE_SLOW = 0.7;          // クールタイム: 基本 2 秒 + 半径 100px ごとに 1 秒 / クールタイム中の移動速度の倍率
+const zoneR = ks => ZONE_R0 + ZONE_FAST * ZONE_TAU * (1 - Math.exp(-ks / ZONE_TAU)) + ZONE_SLOWV * ks;
+const ZONE_WARP_MUL = 1.3;           // ゾーンの回り込み攻撃の吹っ飛ばしの倍率（攻撃の強さの上限 1.3 倍と同じ。背後から当てても、相手がすぐ立て直して戻らないように）
+const zoneCd = r => Math.round(ZONE_CD_BASE + ZONE_CD_PER100 * r / 100);
 // レスラーのダッシュつかみ: 3 フレーム目から前へダッシュ（1 フレームに 9px、14 フレーム目まで。約 110px）し、4〜14 フレーム目に前 30px 以内の敵をつかむ
 const GRAB_ON = 4, GRAB_OFF = 14, GRAB_REACH = 30, GRAB_DASH_FROM = 3, GRAB_DASH_TO = 14, GRAB_DASH_V = 9;
 const GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.9;    // 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし（0.85 だとステージ中央から投げても崖の外まで届かなかった）
@@ -419,8 +431,8 @@ const CHARS = [
   // 13〜16 体目（通信ではキャラを番号で送るので、必ず末尾に足す）
   { id: "clock", name: "時計師", A: 2, D: 2, S: 2, tag: "時間を巻き戻して、ピンチから抜け出す",
     skill: { name: "巻き戻し", cd: 10, text: "2秒前までの通り道を、残像を残しながら早戻りでさかのぼる（約0.5秒）。戻っている間は無敵。吹っ飛ばされている最中でも使える" } },
-  { id: "law", name: "ロー", A: 2, D: 1, S: 3, tag: "ROOM の中では、回り込みも入れ替えも自由自在",
-    skill: { name: "ROOM", cd: 2, cdText: "2秒＋円の半径100pxごとに1秒（円が消えてから）", hold: true, maxCharge: 1e6,
+  { id: "swapper", name: "スワッパー", A: 2, D: 1, S: 3, tag: "ゾーンの中では、回り込みも入れ替えも自由自在",
+    skill: { name: "ゾーン", cd: 2, cdText: "2秒＋円の半径100pxごとに1秒（円が消えてから）", hold: true, maxCharge: 1e6,
       text: "押している間だけ、水色の円が広がり続ける。離すと、その場所に円が5秒間残る。円の中に自分と敵がいるとき、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで円の中の全員と位置を入れ替える（0.1秒ごと）。回り込み攻撃は、ふつうの攻撃より強く吹っ飛ばす。円が消えるとクールタイムが始まり、その間は盾がなく、動きが遅くなる（大きく広げるほど長い）" } },
   { id: "wrestler", name: "レスラー", A: 4, D: 3, S: 1, tag: "盾ごとつかんで投げ飛ばす",
     skill: { name: "ダッシュつかみ", cd: 5, text: "前へダッシュして（約110px）、ぶつかった敵を、盾やカウンターを無視してつかみ、持ち上げている間に押した方向へ投げる（押さなければ後ろへ）。空中でも使える。つかむ前に殴られると負け、空振りすると隙ができる" } },
@@ -438,7 +450,7 @@ const pwOf = p => PLW * szOf(p), phOf = p => PLH * szOf(p);
 const dzMul = t => t.dz > 0 ? DOGEZA_KNOCK : 1;              // 土下座中は吹っ飛びにくい
 
 // ---------- 状態 ----------
-const q = new URLSearchParams(location.search).get("room");
+const q = new URLSearchParams(location.search).get("zone");
 let role = null;         // "host" | "client"
 let myId = -1;           // 自分のスロット番号
 let peer = null, conns = [];   // host: conns[slot]
@@ -451,7 +463,7 @@ let netMsg = "";
 // nf: この試合で戦っている人数（ステージの形が決まる） / rt: 制限時間の残りフレーム / sd: サドンデス開始からのフレーム / hs: ヒットストップの残り（ホストだけが使う）
 // wr: 何本先取か（ロビーでは次の試合の設定。ホストが決めて、スナップショットで参加者へ届く）
 // pj: 飛び道具（ボム・矢） / fl: 花 / cl: 分身（持ち主のスロットごとに 1 つ） / wd: 天狗の風の場（持ち主ごとに 1 つまで）
-// rm: ローの ROOM（持ち主ごとに 1 つまで）
+// rm: スワッパーの ゾーン（持ち主ごとに 1 つまで）
 const game = { ph: "lobby", tm: 0, win: -1, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cl: [null, null, null, null], p: [null, null, null, null] };
 const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cl = [null, null, null, null]; };
 // いま使える足場。サドンデス中は縮む（上の台は早く消え、メインは最小幅まで縮んだあとすべて崩れる）
@@ -485,7 +497,7 @@ function newPlayer() {
            bk: 0, ba: 0, bu: 0, jg: 0,                  // 先行入力の残り（スキル・攻撃・ジャンプ）/ ジャンプ直後に向きを変えられる残り
            tl: [], rw: 0, rwPath: null, rwI: 0,         // 時計師: 通り道の記録（ホストだけ）/ 早戻りの残りフレーム / 戻る道 / 戻る道の今の位置
            am: ARROW_MAX, amT: 0,                       // アーチャーの矢の残り / 次の 1 本が回復するまでの経過
-           km: 0, rmSw: 0, wa: 0,                              // クールタイムの長さ（ローは毎回変わる。スキルボタンの表示用）/ ローの入れ替えの間隔の残り
+           km: 0, rmSw: 0, wa: 0,                              // クールタイムの長さ（スワッパーは毎回変わる。スキルボタンの表示用）/ スワッパーの入れ替えの間隔の残り
            gr: 0, grT: null, grH: 0, grD: 0, f0: 1, hd: 0,   // レスラー: つかみの経過フレーム / つかんでいる相手 / 持ち上げの残り / 投げる向き / つかみ始めの向き。hd: つかまれている（残りフレーム）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
@@ -547,7 +559,7 @@ function shieldUp(p) {
   const c = chOf(p);
   if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0 || p.gr > 0 || p.hd > 0) return false;
-  if (c.id === "law" && p.kc > 0) return false;                  // ロー: ROOM が消えたあとのクールタイム中は盾がない
+  if (c.id === "swapper" && p.kc > 0) return false;                  // スワッパー: ゾーンが消えたあとのクールタイム中は盾がない
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
   return true;
 }
@@ -671,7 +683,7 @@ function useSkill(p) {                       // 押した瞬間に発動する�
 function fireHold(p) {                       // ためて離すスキル
   const sk = chOf(p).skill, c = Math.min(1, p.ks / sk.maxCharge), id = chOf(p).id, ks = p.ks;
   p.ks = 0;
-  if (id === "law") { openRoom(p, ks); return; }   // ROOM を張る（クールタイムは円が消えてから）
+  if (id === "swapper") { openZone(p, ks); return; }   // ゾーンを張る（クールタイムは円が消えてから）
   if (id === "archer") {
     p.am = Math.max(0, p.am - 1);
     game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * ARROW_SPEED * (13 + 9 * c), vy: 0, own: p.own, pw: 0.35 + 0.85 * c, t: 0 });
@@ -727,36 +739,36 @@ function rewindStep(p) {
   if (--p.rw <= 0 || p.rwI >= path.length - 1) { p.rw = 0; p.dj = e[3]; p.ground = e[4]; p.rwPath = null; }
 }
 
-// ---- ロー: ROOM ----
+// ---- スワッパー: ゾーン ----
 // 体のいちばん近い点が、円の中心から r 以内なら「円の中」
 function distToBody(x, y, e) {
   const nx = Math.max(e.x, Math.min(x, e.x + pwOf(e))), ny = Math.max(e.y, Math.min(y, e.y + phOf(e)));
   return Math.hypot(x - nx, y - ny);
 }
-const roomOf = p => game.rm.find(m => m.own === p.own) || null;            // 自分の ROOM（なければ null）
-const inRoom = (m, e) => distToBody(m.x, m.y, e) <= m.r;
-// ROOM の中にいる敵（透過中・復活直後・巻き戻し中・つかまれている人は除く）
-const roomFoes = (p, m) => ents().filter(e => e !== p && e.own !== p.own && e.al && !untouchable(e) && e.hd === 0 && inRoom(m, e));
-function openRoom(p, ks) {                     // 離した場所に、広げた大きさの円を残す（クールタイムは円が消えてから）
-  const m = { own: p.own, x: ecx(p), y: ecy(p), r: roomR(ks), t: ROOM_LIFE };
+const zoneOf = p => game.rm.find(m => m.own === p.own) || null;            // 自分の ゾーン（なければ null）
+const inZone = (m, e) => distToBody(m.x, m.y, e) <= m.r;
+// ゾーンの中にいる敵（透過中・復活直後・巻き戻し中・つかまれている人は除く）
+const zoneFoes = (p, m) => ents().filter(e => e !== p && e.own !== p.own && e.al && !untouchable(e) && e.hd === 0 && inZone(m, e));
+function openZone(p, ks) {                     // 離した場所に、広げた大きさの円を残す（クールタイムは円が消えてから）
+  const m = { own: p.own, x: ecx(p), y: ecy(p), r: zoneR(ks), t: ZONE_LIFE };
   game.rm = game.rm.filter(o => o.own !== p.own); game.rm.push(m);
   p.rmSw = 0;
   emit("ro", m.x, m.y, m.r);
 }
-function updateRooms() {
+function updateZones() {
   for (let i = game.rm.length - 1; i >= 0; i--) {
     const m = game.rm[i];
     if (--m.t > 0) continue;
     game.rm.splice(i, 1);
     const p = game.p[m.own];
-    if (p) { p.kc = p.km = roomCd(m.r); }       // 円が消えたら、大きさに応じたクールタイム（その間は盾なし・動きが遅い）
+    if (p) { p.kc = p.km = zoneCd(m.r); }       // 円が消えたら、大きさに応じたクールタイム（その間は盾なし・動きが遅い）
     emit("rx", m.x, m.y, m.r);
   }
 }
 // 回り込み攻撃: 円の中でいちばん近い敵の背中側へ瞬間移動して、敵の背中を向いて攻撃を始める（当たるのは普通の攻撃と同じ 7 フレーム目から）
-function roomWarp(p, m) {
+function zoneWarp(p, m) {
   let best = null, bd = 1e9;
-  for (const e of roomFoes(p, m)) { const d = Math.abs(ecx(e) - ecx(p)) + Math.abs(ecy(e) - ecy(p)); if (d < bd) { bd = d; best = e; } }
+  for (const e of zoneFoes(p, m)) { const d = Math.abs(ecx(e) - ecx(p)) + Math.abs(ecy(e) - ecy(p)); if (d < bd) { bd = d; best = e; } }
   if (!best) return false;
   const x0 = ecx(p), y0 = ecy(p);
   p.x = best.f > 0 ? best.x - PLW - 4 : best.x + pwOf(best) + 4;      // 敵の背中側
@@ -774,8 +786,8 @@ function derange(n) {
   }
   return a.map((_, i) => (i + 1) % n);                  // 念のため（ひとつずつずらす）
 }
-function lawSwap(p, m) {                      // 入れ替え: 自分も円の中にいて、円の中に敵がいるときだけ
-  const inside = inRoom(m, p) ? roomFoes(p, m) : [];
+function zoneSwap(p, m) {                      // 入れ替え: 自分も円の中にいて、円の中に敵がいるときだけ
+  const inside = inZone(m, p) ? zoneFoes(p, m) : [];
   if (!inside.length) { emit("lw0", ecx(p), ecy(p)); return false; }
   const mem = [p, ...inside], spots = mem.map(e => ({ x: ecx(e), y: e.y + phOf(e) })), to = derange(mem.length);   // 足もとの中心を入れ替える
   emit("lw", m.x, m.y, m.r);
@@ -899,7 +911,7 @@ function physics(p, inp, neutral) {
   if (kpress && chd.id === "clock" && p.kc === 0 && p.rw === 0 && p.fz === 0 && p.a === 0 && useSkill(p)) p.bk = 0;
   if (p.rw > 0) { rewindStep(p); return; }      // 早戻り中は、記録どおりに動くだけ
   const wm = neutral ? { mv: 1, jp: 1 } : windMul(p);   // 天狗の風の場
-  const room = (chd.id === "law" && !neutral && !p.isClone) ? roomOf(p) : null;   // ロー: 張っている ROOM
+  const zone = (chd.id === "swapper" && !neutral && !p.isClone) ? zoneOf(p) : null;   // スワッパー: 張っている ゾーン
   let canSkill = false;                          // スキルを使える状態か（ふつうのとき・吹っ飛ばされている最中）
   if (p.s > 0) {                                 // 吹っ飛ばされ中: 動けないが、スキルは使える
     p.s--; p.vx *= p.ground ? 0.92 : 0.985;
@@ -916,7 +928,7 @@ function physics(p, inp, neutral) {
     if (p.a > 0 && ak0.dash && p.a < ak0.dashFrom) spm = 0;     // 居合斬りのため中は動けない
     if (p.ks > 0) spm = Math.min(spm, 0.45);     // ためている間は動きが鈍る
     if (p.cn > 0) spm = 0;                       // カウンターの構え中は動かない
-    if (chd.id === "law" && p.kc > 0 && !neutral) spm *= ROOM_SLOW;   // ロー: ROOM のクールタイム中は動きが遅い
+    if (chd.id === "swapper" && p.kc > 0 && !neutral) spm *= ZONE_SLOW;   // スワッパー: ゾーンのクールタイム中は動きが遅い
     const sp = spm * MOVE_BASE * moveMul(S) * wm.mv;
     // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
     // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
@@ -934,13 +946,13 @@ function physics(p, inp, neutral) {
     }
     if (apress && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0) {
       p.ba = 0;
-      if (room && inRoom(room, p)) roomWarp(p, room);           // 円の中なら、敵の背後へ回り込んでから攻撃する
+      if (zone && inZone(zone, p)) zoneWarp(p, zone);           // 円の中なら、敵の背後へ回り込んでから攻撃する
       p.a = 1; p.ak = 0; p.hit = [];
       if (p.gh > 0) { p.gh = 0; p.gb = 1; emit("gx", ecx(p), ecy(p)); }       // 自分から攻撃すると透過が解ける（この攻撃は 1.5 倍）
       emit("s", ecx(p), ecy(p));
     }
   }
-  if (canSkill && sk && !neutral && !p.isClone && chd.id !== "clock" && skillInput(p, chd, kin, kpress, dir, room)) p.bk = 0;   // スキル（時計師は上で処理する）
+  if (canSkill && sk && !neutral && !p.isClone && chd.id !== "clock" && skillInput(p, chd, kin, kpress, dir, zone)) p.bk = 0;   // スキル（時計師は上で処理する）
   const ak = ATKS[p.ak] || ATKS[0];
   if (p.a > 0) {
     p.a++;
@@ -970,11 +982,11 @@ function physics(p, inp, neutral) {
 
 // スキルボタンの処理（ふつうのときと、吹っ飛ばされている最中）。何か発動したら true（先行入力を消す）
 // 空中・吹っ飛び中は、左右を押しながら使うと、その方向を向いてから放つ（ためるスキルは、離す瞬間の向き）
-function skillInput(p, chd, kin, kpress, dir, room) {
+function skillInput(p, chd, kin, kpress, dir, zone) {
   const sk = chd.skill;
   const aim = () => { if (dir && (!p.ground || p.s > 0)) p.f = dir; };
-  if (room) {                                    // ローの ROOM がある間、スキルボタンは入れ替えボタン
-    if (kpress && p.rmSw === 0 && p.a === 0) { lawSwap(p, room); p.rmSw = ROOM_SWAP_GAP; return true; }
+  if (zone) {                                    // スワッパーの ゾーンがある間、スキルボタンは入れ替えボタン
+    if (kpress && p.rmSw === 0 && p.a === 0) { zoneSwap(p, zone); p.rmSw = ZONE_SWAP_GAP; return true; }
     return false;
   }
   if (sk.hold) {
@@ -989,7 +1001,7 @@ function skillInput(p, chd, kin, kpress, dir, room) {
 function breakShield(t) { t.sh = 0; t.sbk = SHIELD_BREAK_FRAMES; t.shi = 0; t.bf = 14; }
 // frac: 盾なしで当たったときの吹っ飛ばしに対する割合（0 なら横には飛ばず、少し浮いてよろけるだけ）
 function knock(att, t, frac, dir) {
-  if (att.wa) { frac *= ROOM_WARP_MUL; att.wa = 0; }               // ローの回り込み攻撃
+  if (att.wa) { frac *= ZONE_WARP_MUL; att.wa = 0; }               // スワッパーの回り込み攻撃
   frac = Math.min(1.3, frac);
   const mul = (att.gb > 0 ? GH_ATK_MUL : 1) * dzMul(t);          // 透過中の攻撃は強く、土下座中は飛びにくい
   t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul;
@@ -1188,9 +1200,9 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "okure": return g && face && sameLevel && t.ground && gap > 70 && gap < 240 ? KEY.k : 0;                      // 敵が来る道に花を置く
     case "wrestler": return g && face && sameLevel && gap < GRAB_REACH + 90 && t.a === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵へ、ダッシュしてつかむ
     case "tengu": return g && face && ((sameLevel && gap < 200) || (!t.ground && t.y + phOf(t) > PY + 4 && gap < 280)) ? KEY.k : 0;   // 戦う場所か、崖の外の敵へ風の場を出す
-    case "law": {                                                                                                       // 敵が近づいたら、敵を包める大きさまで広げて ROOM を張る（円は速く広がるので、遠くから張ると円が消えたあとの隙を突かれやすい）
-      if (!g || roomOf(c) || gap > 110) return 0;
-      c.aiCh = lawNeed(c, t); return KEY.k;
+    case "swapper": {                                                                                                       // 敵が近づいたら、敵を包める大きさまで広げて ゾーンを張る（円は速く広がるので、遠くから張ると円が消えたあとの隙を突かれやすい）
+      if (!g || zoneOf(c) || gap > 110) return 0;
+      c.aiCh = zoneNeed(c, t); return KEY.k;
     }
     case "archer":                                                                                                      // 遠いほど長くためる
       if (c.am > 0 && g && face && Math.abs(dyFeet) < 40 && gap >= 150 && gap <= 480) { c.aiCh = gap > 300 ? 36 : gap > 200 ? 24 : 14; return KEY.k; }
@@ -1205,17 +1217,17 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
   }
   return 0;
 }
-function lawNeed(c, e) {                                // ローが敵 e を ROOM に入れて、少し動かれても外れないためる長さ
+function zoneNeed(c, e) {                                // スワッパーが敵 e を ゾーンに入れて、少し動かれても外れないためる長さ
   const d = distToBody(ecx(c), ecy(c), e) + 90;
-  let ks = 1; while (roomR(ks) < d && ks < 2000) ks++;
+  let ks = 1; while (zoneR(ks) < d && ks < 2000) ks++;
   return ks;
 }
-// ロー: ROOM の中での動き（入っていれば押すボタン、何もしなければ null）
+// スワッパー: ゾーンの中での動き（入っていれば押すボタン、何もしなければ null）
 //   ・敵の盾がこちらを向いていて、敵の背後が足場の上なら、回り込み攻撃
 //   ・敵が崖の近くにいて自分が内側、または自分が落ちかけていて敵が足場の上にいるなら、入れ替え
-function aiRoom(c, t, B) {
-  const m = roomOf(c);
-  if (!m || !inRoom(m, c) || !t || !inRoom(m, t) || untouchable(t) || Math.random() < B.miss) return null;
+function aiZone(c, t, B) {
+  const m = zoneOf(c);
+  if (!m || !inZone(m, c) || !t || !inZone(m, t) || untouchable(t) || Math.random() < B.miss) return null;
   const pls = platforms(), ccx = ecx(c), tcx = ecx(t), feet = c.y + phOf(c);
   if (c.rmSw === 0 && !c.kp) {
     const tp = platformUnder(t), pl = platformUnder(c);
@@ -1281,8 +1293,8 @@ function aiThink(c, owner, pls, B) {
     // ためが長いと、そのぶん落ちたり二段ジャンプが遅れたりして届かない（人の最善の操作と同じ。ため 3・同時押しがいちばん遠くから戻れる）
     const tpOk = id === "teleporter" && B.skill > 0 && !c.kc && !c.kp && c.s === 0 && c.a === 0 && c.ks === 0 && Math.sign(main.x + main.w / 2 - ccx) === c.f;
     const jumpOk = !c.dj && !c.jp && c.vy > -3 && Math.random() < B.recover;
-    if (id === "law" && t && c.s === 0) {                                // ロー: ROOM の中なら、足場の上の敵と入れ替わって戻る（敵が崖の外へ出る）
-      const k = aiRoom(c, t, B);
+    if (id === "swapper" && t && c.s === 0) {                                // スワッパー: ゾーンの中なら、足場の上の敵と入れ替わって戻る（敵が崖の外へ出る）
+      const k = aiZone(c, t, B);
       if (k === KEY.k) { inp |= KEY.k; if (jumpOk) inp |= KEY.u; return inp; }
     }
     if (tpOk && !c.dj && Math.random() < B.skill) { c.aiCh = 3; inp |= KEY.k; if (jumpOk) inp |= KEY.u; }
@@ -1336,7 +1348,7 @@ function aiThink(c, owner, pls, B) {
   const chip = !open && Math.random() < B.chip;                  // 盾の正面でも、ときどき殴って盾を削る（3 回で壊れる）
   if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0 && Math.random() >= B.miss) inp |= KEY.a;
   if (sk && B.skill > 0) { const k = aiSkill(c, t, { gap, sgn, sd, dyFeet, sameLevel, tr }, B); if (k) { inp |= k; inp &= ~KEY.a; } }   // スキルを使うときは、通常攻撃を押さない
-  if (id === "law" && B.skill > 0) { const k = aiRoom(c, t, B); if (k) inp = (inp & ~(KEY.a | KEY.k)) | k; }   // ロー: ROOM の中では、回り込み攻撃と入れ替え
+  if (id === "swapper" && B.skill > 0) { const k = aiZone(c, t, B); if (k) inp = (inp & ~(KEY.a | KEY.k)) | k; }   // スワッパー: ゾーンの中では、回り込み攻撃と入れ替え
   if (B.dodge && c.ground && Math.random() < B.dodge) inp = aiDodge(c, inp, ccx, feet);
   // 行き詰まり防止: 同じ高さで 2 秒（120 フレーム）も何も押していなければ、とにかく敵へ向かう（待ち・不感帯などで動けなくなる場合の保険）
   if (inp & (KEY.l | KEY.r | KEY.a | KEY.u | KEY.k)) c.aiIdle = 0; else c.aiIdle += B.think;
@@ -1402,7 +1414,7 @@ function hostTick() {
     updateFlowers(list);
     updateProjectiles(list);
     updateWinds();
-    updateRooms();
+    updateZones();
     resolveHits(ents());
     for (const i of slots) {
       const p = game.p[i];
@@ -1524,7 +1536,7 @@ function startSolo() {
 
 // ---------- ネットワーク ----------
 function randCode() { return String(Math.floor(Math.random() * 10)); }
-const PREFIX = "shieldfight-room-";
+const PREFIX = "shieldfight-zone-";
 
 let hostTries = 0;
 // タイトルへ戻る: ページを読み込み直さずに、部屋の接続を切り、試合の状態を最初に戻す（読み込み直すと全画面が解除されるため）
@@ -1727,11 +1739,10 @@ function deco(c, id, x, y, f) {
     c.strokeStyle = "#1e3a8a"; c.lineWidth = 2; c.stroke();
     c.beginPath(); c.moveTo(x + 20, y + 38); c.lineTo(x + 20, y + 32); c.moveTo(x + 20, y + 38); c.lineTo(x + 15, y + 40); c.stroke();
     c.fillStyle = "#93c5fd"; c.fillRect(x + 17, y + 26, 6, 3);
-  } else if (id === "law") {                   // 白い帽子と、水色の円の印
-    c.fillStyle = "#f8fafc"; c.fillRect(x - 1, y - 6, PLW + 2, 10);
-    c.fillStyle = "#a16207"; c.fillRect(x + 6, y - 4, 4, 4); c.fillRect(x + 18, y - 3, 4, 4); c.fillRect(x + 30, y - 4, 4, 4);
-    c.strokeStyle = "#67e8f9"; c.lineWidth = 2; c.beginPath(); c.arc(x + 20, y + 40, 9, 0, 6.2832); c.stroke();
-    c.beginPath(); c.moveTo(x + 11, y + 40); c.lineTo(x + 29, y + 40); c.stroke();
+  } else if (id === "swapper") {                   // 紫のフード（水色の縁取り）と、胸に水色の点線の円（ゾーンの印）
+    c.fillStyle = "#4c1d95"; c.fillRect(x - 4, y - 7, PLW + 8, 12); c.fillRect(x - 4, y + 5, 7, 30); c.fillRect(x + PLW - 3, y + 5, 7, 30);
+    c.fillStyle = "#67e8f9"; c.fillRect(x + 3, y + 3, PLW - 6, 3);
+    c.strokeStyle = "#67e8f9"; c.lineWidth = 2; c.setLineDash([4, 3]); c.beginPath(); c.arc(x + 20, y + 44, 8, 0, 6.2832); c.stroke(); c.setLineDash([]);
   } else if (id === "wrestler") {              // 覆面とチャンピオンベルト
     c.fillStyle = "#7c3aed"; c.fillRect(x, y, PLW, 11);
     c.fillStyle = "#facc15"; c.fillRect(x + (f > 0 ? 21 : 5), y + 9, 14, 3);
@@ -1757,7 +1768,7 @@ function drawChar(c, idx, x, y, f, col, flash) {
 const ui = document.getElementById("ui"), stats = document.getElementById("stats");
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function shareUrl() {
-  const u = new URL(location.href); u.search = "?room=" + roomCode + "&openExternalBrowser=1"; u.hash = "";   // LINE で送っても、いつものブラウザで開く
+  const u = new URL(location.href); u.search = "?zone=" + roomCode + "&openExternalBrowser=1"; u.hash = "";   // LINE で送っても、いつものブラウザで開く
   return u.toString();
 }
 
@@ -1990,12 +2001,15 @@ function renderUI() {
       <input id="code" inputmode="numeric" maxlength="1" placeholder="部屋番号（1桁）" style="width:200px;text-align:center;font-size:20px" value="${/^\d$/.test(q || "") ? q : ""}">
       <button id="bJoin">参加する</button>
       <p>操作: WASD / 矢印キーで移動（↑・W でジャンプ）、Space で攻撃、X でスキル</p>
+      ${installEvt && !standalone ? `<button id="bInstall" class="sub">アプリとして入れる（全画面で遊べる）</button>` : ""}
       ${isLineApp ? `<p class="linehint">LINE の中のブラウザでは、横画面・全画面にできません。右上のメニュー（︙ や …）から「ブラウザで開く」（iPhone は「Safariで開く」）を選ぶか、<a href="${esc(extUrl())}">ここ</a>を押してください</p>` : ""}
       ${isIPhone && !standalone ? `<p class="ioshint">画面を広く使うには: 共有ボタン（□↑）→「ホーム画面に追加」で、ホーム画面のアイコンから開いてください（アドレスバーが消えます）</p>` : ""}</div>`;
     document.getElementById("bHost").onclick = () => { autoFs(); startHost(); };
     document.getElementById("bSolo").onclick = () => { autoFs(); startSolo(); };
     const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d$/.test(c)) { autoFs(); startClient(c); } else document.getElementById("code").style.borderColor = "#ef4444"; };
     document.getElementById("bJoin").onclick = join;
+    const bi = document.getElementById("bInstall");
+    if (bi) bi.onclick = () => { const e = installEvt; if (!e) return; e.prompt(); (e.userChoice || Promise.resolve()).then(() => { installEvt = null; uiKey = ""; renderUI(); }); };
     document.getElementById("code").onkeydown = e => { if (e.key === "Enter") join(); };
   } else if (key === "connecting") {
     ui.innerHTML = `<div class="panel"><h1>接続中…</h1></div>`;
@@ -2018,8 +2032,8 @@ function updateSkillUI() {
     const sk = chOf(me).skill;
     if (sk) {
       label = sk.name;
-      const room = chOf(me).id === "law" ? roomOf(me) : null;
-      if (room) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(room.t / 60)); }   // ローの ROOM がある間（数字は円が消えるまでの秒数）
+      const zone = chOf(me).id === "swapper" ? zoneOf(me) : null;
+      if (zone) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(zone.t / 60)); }   // スワッパーの ゾーンがある間（数字は円が消えるまでの秒数）
       else if (me.ks > 0) { state = "charge"; label = "ため中"; }
       else if (chOf(me).id === "archer" && me.am <= 0) { state = "cool"; label = "矢なし"; ratio = 1 - me.amT / ARROW_REGEN; sec = "0"; }   // 矢がないとき: 次の 1 本までを円で出す
       else if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (me.km || sk.cd * 60)); sec = String(Math.ceil(me.kc / 60)); }
@@ -2110,7 +2124,7 @@ const Sfx = (() => {
     pop() { tone(700, 300, 0.09, "sine", 0.08); },
     airJump() { tone(480, 1100, 0.11, "triangle", 0.11); noise(0.11, 0.10, "bandpass", 2000, 5200); tone(1300, 1900, 0.07, "sine", 0.05, 0.05); },
     rewind() { tone(1600, 260, 0.5, "sawtooth", 0.05); noise(0.5, 0.10, "bandpass", 4200, 800); [0, 0.12, 0.24, 0.36].forEach(d => tone(1200, 900, 0.05, "square", 0.04, d)); },   // テープの早戻し
-    room() { tone(300, 900, 0.2, "sine", 0.12); tone(1200, 1200, 0.1, "triangle", 0.08, 0.14); },
+    zone() { tone(300, 900, 0.2, "sine", 0.12); tone(1200, 1200, 0.1, "triangle", 0.08, 0.14); },
     swapPop() { tone(900, 500, 0.08, "sine", 0.08); },
     grab() { noise(0.08, 0.22, "lowpass", 900, 300); tone(180, 120, 0.12, "square", 0.08); },
     gust() { noise(0.7, 0.18, "bandpass", 500, 2400); noise(0.5, 0.08, "highpass", 2000, 4500, 0.12); },
@@ -2182,7 +2196,7 @@ fsBtn.onclick = () => { fsAutoDone = true; if (fsNow()) exitFs(); else enterFs()
 // 縦画面 ↔ 横画面の切り替え: 画面の向きを固定する機能（screen.orientation.lock）を使う。ブラウザの決まりで全画面のときしか固定できないので、全画面にしてから固定する。
 // 全画面をやめると固定も外れ、スマホの自動回転に戻る。iPhone はこの機能がないので、ボタンを出さない
 const rotBtn = document.getElementById("rot");
-const canLock = fsSupported && !!(screen.orientation && screen.orientation.lock);
+const canLock = (fsSupported || standalone) && !!(screen.orientation && screen.orientation.lock);   // インストールしたアプリの中では、全画面にしなくても固定できる
 rotBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5"/><path d="M3 4v5h5M21 20v-5h-5"/></svg>';
 function lockOrientation(land) {
   try { const r = screen.orientation.lock(land ? "landscape" : "portrait"); if (r && r.catch) r.catch(() => {}); } catch (e) {}
@@ -2190,7 +2204,7 @@ function lockOrientation(land) {
 rotBtn.onclick = () => {
   rotBtn.blur(); fsAutoDone = true;
   const toLand = window.innerHeight > window.innerWidth;     // いまが縦なら横へ、横なら縦へ
-  if (fsNow()) { lockOrientation(toLand); return; }
+  if (fsNow() || standalone) { lockOrientation(toLand); return; }
   try {
     const r = docEl.requestFullscreen ? docEl.requestFullscreen({ navigationUI: "hide" }) : docEl.webkitRequestFullscreen();
     if (r && r.then) r.then(() => lockOrientation(toLand), () => {}); else setTimeout(() => lockOrientation(toLand), 300);
@@ -2198,18 +2212,12 @@ rotBtn.onclick = () => {
 };
 ["fullscreenchange", "webkitfullscreenchange"].forEach(ev => document.addEventListener(ev, () => { paintFs(); cam.init = false; }));
 paintFs();
-// ホーム画面のアイコン（iPhone の「ホーム画面に追加」用）。画像ファイルを増やさないよう、その場で描く
-try {
-  const ic = document.createElement("canvas"); ic.width = ic.height = 180;
-  const g = ic.getContext("2d");
-  g.fillStyle = "#111827"; g.fillRect(0, 0, 180, 180);
-  g.fillStyle = "#64748b"; g.fillRect(20, 132, 140, 16);
-  g.fillStyle = "#ef4444"; g.fillRect(52, 52, 52, 78);
-  g.fillStyle = "#111827"; g.fillRect(84, 68, 11, 11);
-  g.fillStyle = "#e2e8f0"; g.fillRect(110, 56, 12, 70);
-  const link = document.createElement("link"); link.rel = "apple-touch-icon"; link.href = ic.toDataURL("image/png");
-  document.head.appendChild(link);
-} catch (e) {}
+// アプリとしてのインストール: サービスワーカー（sw.js）を登録する（Chrome がインストールできると判断するのに必要）。https か localhost のときだけ
+try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) {}
+// Chrome がインストールできると判断したら、タイトル画面に「アプリとして入れる」ボタンを出す（押すと Chrome の確認が出る）
+let installEvt = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; if (uiKey === "title") { uiKey = ""; renderUI(); } });
+addEventListener("appinstalled", () => { installEvt = null; if (uiKey === "title") { uiKey = ""; renderUI(); } });
 
 // 画面の演出: 火花・盾のかけら・衝撃波の輪・画面の揺れ・フラッシュ（座標はワールド）
 const parts = [], rings = [];
@@ -2316,12 +2324,12 @@ function fxEvent(e) {
     burst(x, y, 16, { v0: 1, v1: 5, l0: 18, l1: 30, s0: 3, s1: 6, colors: ["#ffffff", "#fde68a", "#bae6fd"] });
   } else if (k === "gx") {                         // 透過が解けた
     Sfx.ghostEnd(); burst(x, y, 10, { v0: 1, v1: 4, l0: 12, l1: 22, s0: 3, s1: 6, colors: ["#f8fafc", "#bae6fd"] });
-  } else if (k === "ro") {                         // ローが ROOM を張った: 円のふちが一瞬光る
-    Sfx.room(); rings.push({ x, y, t: 0, max: 12, c: "#cffafe", r0: e[3] * 0.92, sp: e[3] * 0.008 });
-  } else if (k === "rx") {                         // ROOM が消えた
+  } else if (k === "ro") {                         // スワッパーが ゾーンを張った: 円のふちが一瞬光る
+    Sfx.zone(); rings.push({ x, y, t: 0, max: 12, c: "#cffafe", r0: e[3] * 0.92, sp: e[3] * 0.008 });
+  } else if (k === "rx") {                         // ゾーンが消えた
     Sfx.pop(); rings.push({ x, y, t: 0, max: 12, c: "#67e8f9", r0: e[3], sp: -e[3] / 16 });
-  } else if (k === "lw") {                         // ローの入れ替え
-    Sfx.room(); shake(4);
+  } else if (k === "lw") {                         // スワッパーの入れ替え
+    Sfx.zone(); shake(4);
     rings.push({ x, y, t: 0, max: 10, c: "#ffffff", r0: e[3], sp: -e[3] / 40 });
   } else if (k === "lwp") {                        // 入れ替わった先
     Sfx.swapPop();
@@ -2480,8 +2488,8 @@ function drawPlayer(p, i, me, now) {
     if (gs === 1) { const ax = p.f > 0 ? p.x + PLW : p.x - 18; cx.fillRect(ax, p.y + 20, 18, 6); cx.fillRect(ax, p.y + 34, 18, 6); }
     else { cx.fillRect(p.x + 4, p.y - 14, 6, 18); cx.fillRect(p.x + PLW - 10, p.y - 14, 6, 18); }
   }
-  // ためている間のリングと、テレポートの行き先（ローは円そのものを、別に描く）
-  if (p.ks > 0 && chd.skill && chd.skill.hold && p.al && chd.id !== "law") {
+  // ためている間のリングと、テレポートの行き先（スワッパーは円そのものを、別に描く）
+  if (p.ks > 0 && chd.skill && chd.skill.hold && p.al && chd.id !== "swapper") {
     const c = Math.min(1, p.ks / chd.skill.maxCharge);
     cx.strokeStyle = c >= 1 ? "#fde047" : "#ffffff"; cx.lineWidth = 3;
     cx.beginPath(); cx.arc(p.x + PLW / 2, p.y + PLH / 2, 38, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); cx.stroke();
@@ -2539,18 +2547,18 @@ function drawWind(w, now) {
   }
   cx.stroke(); cx.restore();
 }
-// ローの ROOM: ためている間はローを中心に広がり（点線）、張ったあとはその場所に残る（実線。消える前の 1 秒は点滅）。全員に見える
-function drawRoomCircle(x, y, r, placed, alpha) {
+// スワッパーの ゾーン: ためている間はスワッパーを中心に広がり（点線）、張ったあとはその場所に残る（実線。消える前の 1 秒は点滅）。全員に見える
+function drawZoneCircle(x, y, r, placed, alpha) {
   cx.save(); cx.globalAlpha = alpha;
   cx.fillStyle = placed ? "rgba(103,232,249,0.14)" : "rgba(103,232,249,0.09)"; cx.strokeStyle = "rgba(103,232,249,0.85)"; cx.lineWidth = placed ? 2.5 : 2;
   if (!placed) cx.setLineDash([8, 6]);
   cx.beginPath(); cx.arc(x, y, r, 0, 6.2832); cx.fill(); cx.stroke();
   cx.restore();
 }
-function drawRoom(p) { drawRoomCircle(ecx(p), ecy(p), roomR(p.ks), false, 1); }
-function drawPlacedRoom(m, now) {
-  const fadeIn = Math.min(1, (ROOM_LIFE - m.t) / 6), blink = m.t < 60 && Math.floor(now / 120) % 2 ? 0.45 : 1;
-  drawRoomCircle(m.x, m.y, m.r, true, fadeIn * blink);
+function drawZone(p) { drawZoneCircle(ecx(p), ecy(p), zoneR(p.ks), false, 1); }
+function drawPlacedZone(m, now) {
+  const fadeIn = Math.min(1, (ZONE_LIFE - m.t) / 6), blink = m.t < 60 && Math.floor(now / 120) % 2 ? 0.45 : 1;
+  drawZoneCircle(m.x, m.y, m.r, true, fadeIn * blink);
 }
 // 時計師の巻き戻しの残像（各自の画面で作る）
 const rwGhosts = [];
@@ -2832,8 +2840,8 @@ function render() {
   }
   for (const w of game.wd) drawWind(w, now);
   for (const f of game.fl) drawFlower(f, now);
-  for (const m of game.rm) drawPlacedRoom(m, now);
-  for (const p of game.p) if (p && p.c && p.al && p.ks > 0 && chOf(p).id === "law") drawRoom(p);
+  for (const m of game.rm) drawPlacedZone(m, now);
+  for (const p of game.p) if (p && p.c && p.al && p.ks > 0 && chOf(p).id === "swapper") drawZone(p);
   drawRewindGhosts(dt);
   // プレイヤーと分身（吹っ飛んでいる間は残像を引く。巻き戻し中は、通った場所に青い残像を残す）
   const drawWithTrail = (p, i, me) => {
