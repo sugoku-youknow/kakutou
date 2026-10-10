@@ -203,9 +203,17 @@
   body.land .panel.setup{width:min(96%,880px)}
   body.land .panel.lobby{width:min(96%,700px)}
   body.land .panel.setup input{padding:6px 8px}
-  body.land .panel.setup .chips{margin:6px 0 0;gap:4px}
-  body.land .panel.setup .chip canvas{width:30px;height:42px}
-  body.land .panel.setup .chip{padding:4px 2px 3px}
+  /* キャラ一覧は 6 列（16 体で 3 段）。ブラウザのアドレスバーで高さが 280px ほどしかなくても収まるよう小さくし、それでも足りなければ左の列だけスクロールする */
+  body.land .panel.setup .colL{max-height:calc(100dvh - 40px);overflow:auto}
+  body.land .panel.setup .colL > p{display:none}
+  body.land .panel.setup .chips{grid-template-columns:repeat(6,1fr);margin:5px 0 0;gap:3px}
+  body.land .panel.setup .chip canvas{width:24px;height:34px}
+  body.land .panel.setup .chip{padding:3px 1px 2px;font-size:9px;white-space:nowrap;overflow:hidden}
+  body.land .panel.setup .chip span{max-width:100%;overflow:hidden}
+  body.land .panel.setup h1{font-size:17px;margin:0 0 2px}
+  /* 「決定」「戦闘開始」は、右の列をスクロールしなくても見えるよう、列の下端に貼り付ける */
+  body.land .panel.setup .colR > #bOk, body.land .panel.setup .btns{position:sticky;bottom:0;z-index:1;background:rgba(17,24,39,.97);box-shadow:0 -6px 8px rgba(17,24,39,.9)}
+  body.land .panel.setup .colR > #bOk{margin:4px 0 0}
   body.land .panel.setup .colR{display:flex;flex-direction:column;align-items:stretch;max-height:calc(100dvh - 44px);overflow:auto}
   body.land .panel.setup .detail{margin:0 0 4px;padding:8px 10px}
   body.land .panel.setup .detail .skl{font-size:11px;line-height:1.45;margin-top:5px}
@@ -288,6 +296,8 @@ const CLONE_COLOR = "#f472b6";                // コペルニウムの分身
 const MAX_PLAYERS = 4;
 const WIN_ROUNDS_DEFAULT = 3, WIN_ROUNDS_MIN = 1, WIN_ROUNDS_MAX = 9;   // 何本先取か（ホスト・CPU 戦で、始める前に決められる。標準 3 本先取）
 const ATK_COOLDOWN = 10;
+const INPUT_BUF = 8;                 // 先行入力: 押した瞬間を覚えておくフレーム数（硬直が解ける少し前に押しても出る）
+const JUMP_TURN = 8;                 // ジャンプした直後、空中でも向きを変えられるフレーム数（反転ジャンプ）
 // 攻撃の種類: 0=通常 / 1=侍の居合斬り（少しためてから、踏み込みながら斬る）
 const ATKS = [
   { total: 26, on: 7, off: 13, reach: 46 },
@@ -340,13 +350,15 @@ const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時�
 const RW_SPAN = 120, RW_SPEED = 4;   // 時計師の巻き戻し: さかのぼる長さ（2 秒）/ 早戻りの速さ（4 倍速。2 秒ぶんを 0.5 秒で戻る）
 // ローの ROOM: 押している間だけ円が広がり（上限なし）、離すとその場所に 5 秒残る。円の中では、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで入れ替える。
 // 円が消えるとクールタイム（2 秒＋半径 100px ごとに 1 秒）が始まり、その間は盾がなく、移動速度が 0.7 倍になる
-const ROOM_R0 = 40, ROOM_GROW = 4, ROOM_LIFE = 300, ROOM_SWAP_GAP = 30;   // 押した瞬間の半径 / 1 フレームに広がる量 / 円が残る時間（5 秒）/ 入れ替えの間隔（0.5 秒）
+const ROOM_R0 = 40, ROOM_GROW = 4, ROOM_LIFE = 300, ROOM_SWAP_GAP = 6;    // 押した瞬間の半径 / 1 フレームに広がる量 / 円が残る時間（5 秒）/ 入れ替えの間隔（0.1 秒）
 const ROOM_CD_BASE = 120, ROOM_CD_PER100 = 60, ROOM_SLOW = 0.7;          // クールタイム: 基本 2 秒 + 半径 100px ごとに 1 秒 / クールタイム中の移動速度の倍率
 const roomR = ks => ROOM_R0 + ROOM_GROW * ks;
 const roomCd = r => Math.round(ROOM_CD_BASE + ROOM_CD_PER100 * r / 100);
-const GRAB_ON = 8, GRAB_OFF = 12, GRAB_REACH = 40, GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.85;   // レスラーのつかみ: つかめる時間（フレーム目）/ 届く距離 / 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし
-const WIND_FRAMES = 300, WIND_W = 320, WIND_H = 220;    // 天狗の風の場: 続く時間（5 秒）/ 横幅 / 高さ
-const WIND_FOE_MV = 0.6, WIND_FOE_JP = 0.7, WIND_SELF_MV = 1.4, WIND_SELF_JP = 1.25;   // 場の中の 移動速度・ジャンプの高さ の倍率（敵 / 天狗自身）
+// レスラーのダッシュつかみ: 3 フレーム目から前へダッシュ（1 フレームに 9px、14 フレーム目まで。約 110px）し、4〜14 フレーム目に前 30px 以内の敵をつかむ
+const GRAB_ON = 4, GRAB_OFF = 14, GRAB_REACH = 30, GRAB_DASH_FROM = 3, GRAB_DASH_TO = 14, GRAB_DASH_V = 9;
+const GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.85;   // 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし
+const WIND_FRAMES = 300, WIND_W = 440, WIND_H = 280;    // 天狗の風の場: 続く時間（5 秒）/ 横幅 / 高さ
+const WIND_FOE_MV = 0.45, WIND_FOE_JP = 0.55, WIND_SELF_MV = 1.6, WIND_SELF_JP = 1.4;   // 場の中の 移動速度・ジャンプの高さ の倍率（敵 / 天狗自身）
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
 // メインステージの端から 500px、足場の面から 300px の余裕を持たせる（以前は 340px / 260px で、飛ばされるとすぐ撃墜された）。左右はキャラの中心、下は頭の位置で判定する
 const KO_MARGIN = 500, KO_BOTTOM = 300;
@@ -362,7 +374,7 @@ const CHARS = [
   { id: "samurai", name: "侍", A: 5, D: 1, S: 3, tag: "攻撃力が高く、盾を一撃で割れる",
     skill: { name: "居合斬り", cd: 4, text: "少しためてから（約0.17秒）、いちばん近い敵の方向へ自動で踏み込んで斬る（約130px）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 3, tag: "遠くから矢を放つ",
-    skill: { name: "弓矢", cd: 0.5, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
+    skill: { name: "弓矢", cd: 0.1, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 4, tag: "瞬間移動で間合いを支配する",
     skill: { name: "テレポート", cd: 2, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
   { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 2, tag: "盾なし。スキルで攻撃と速さが上がるが、防御がなくなる", noShield: true,
@@ -383,11 +395,11 @@ const CHARS = [
     skill: { name: "巻き戻し", cd: 10, text: "2秒前までの通り道を、残像を残しながら早戻りでさかのぼる（約0.5秒）。戻っている間は無敵。吹っ飛ばされている最中でも使える" } },
   { id: "law", name: "ロー", A: 2, D: 1, S: 3, tag: "ROOM の中では、回り込みも入れ替えも自由自在",
     skill: { name: "ROOM", cd: 2, cdText: "2秒＋円の半径100pxごとに1秒（円が消えてから）", hold: true, maxCharge: 1e6,
-      text: "押している間だけ、水色の円が広がり続ける。離すと、その場所に円が5秒間残る。円の中に自分と敵がいるとき、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで円の中の全員と位置を入れ替える（0.5秒ごと）。円が消えるとクールタイムが始まり、その間は盾がなく、動きが遅くなる（大きく広げるほど長い）" } },
+      text: "押している間だけ、水色の円が広がり続ける。離すと、その場所に円が5秒間残る。円の中に自分と敵がいるとき、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで円の中の全員と位置を入れ替える（0.1秒ごと）。円が消えるとクールタイムが始まり、その間は盾がなく、動きが遅くなる（大きく広げるほど長い）" } },
   { id: "wrestler", name: "レスラー", A: 4, D: 3, S: 1, tag: "盾ごとつかんで投げ飛ばす",
-    skill: { name: "つかみ投げ", cd: 5, text: "目の前の敵を、盾やカウンターを無視してつかみ、持ち上げている間に押した方向へ投げる（押さなければ後ろへ）。地上でだけ使える。つかむ前に殴られると負け、空振りすると隙ができる" } },
+    skill: { name: "ダッシュつかみ", cd: 5, text: "前へダッシュして（約110px）、ぶつかった敵を、盾やカウンターを無視してつかみ、持ち上げている間に押した方向へ投げる（押さなければ後ろへ）。空中でも使える。つかむ前に殴られると負け、空振りすると隙ができる" } },
   { id: "tengu", name: "天狗", A: 2, D: 2, S: 3, tag: "風の場で、敵を鈍らせ自分は速くなる",
-    skill: { name: "羽うちわ", cd: 10, text: "前方に5秒間、風の吹く場を作る（使ったあとはすぐ動ける）。場の中では、敵は移動が0.6倍・ジャンプが0.7倍に下がり、自分は移動が1.4倍・ジャンプが1.25倍に上がる" } },
+    skill: { name: "羽うちわ", cd: 10, text: "前方の広い範囲に5秒間、風の吹く場を作る（使ったあとはすぐ動ける）。場の中では、敵は移動が0.45倍・ジャンプが0.55倍に下がり、自分は移動が1.6倍・ジャンプが1.4倍に上がる" } },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる
@@ -443,7 +455,8 @@ function newPlayer() {
            gh: 0, bz: 0, cn: 0, cnHit: false,           // 透過 / 狂化 / カウンターの構え / 構え中に受けたか
            fz: 0, iv: 0, lv: 0,                         // 動けない時間 / 無敵 / 残機
            gt: 0, dz: 0, gb: 0,                         // 巨大化 / 土下座（花で動けない）/ 透過中に振った攻撃
-           jp: 0, dj: 0,                                // 前のフレームでジャンプボタンが押されていたか / 空中ジャンプを使ったか
+           jp: 0, dj: 0, ap: 0,                         // 前のフレームでジャンプ・攻撃ボタンが押されていたか / 空中ジャンプを使ったか
+           bk: 0, ba: 0, bu: 0, jg: 0,                  // 先行入力の残り（スキル・攻撃・ジャンプ）/ ジャンプ直後に向きを変えられる残り
            tl: [], rw: 0, rwPath: null, rwI: 0,         // 時計師: 通り道の記録（ホストだけ）/ 早戻りの残りフレーム / 戻る道 / 戻る道の今の位置
            km: 0, rmSw: 0,                              // クールタイムの長さ（ローは毎回変わる。スキルボタンの表示用）/ ローの入れ替えの間隔の残り
            gr: 0, grT: null, grH: 0, grD: 0, f0: 1, hd: 0,   // レスラー: つかみの経過フレーム / つかんでいる相手 / 持ち上げの残り / 投げる向き / つかみ始めの向き。hd: つかまれている（残りフレーム）
@@ -530,7 +543,7 @@ function spawn(p, slot, n, battle) {
   p.f = (p.x + PLW / 2 < PX + PW / 2) ? 1 : -1; p.hit = [];
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
-  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0;
+  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -617,13 +630,12 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     if (p.tl.length < 2) return false;
     p.rwPath = p.tl.slice().reverse(); p.tl = []; p.rwI = 0; p.rw = Math.ceil((p.rwPath.length - 1) / RW_SPEED);
     p.s = 0; p.vx = p.vy = 0; p.a = 0; p.ak = 0; p.cd = 0; p.ks = 0; p.fz = 0; p.ground = false;
-  } else if (id === "wrestler") {              // つかみ投げ: 地上でだけ
-    if (!p.ground) return false;
-    p.gr = 1; p.grT = null; p.grH = 0; p.grD = 0; p.f0 = p.f;
+  } else if (id === "wrestler") {              // ダッシュつかみ: 空中・吹っ飛び中でも使える（ダッシュが吹っ飛びの勢いに代わる）
+    p.gr = 1; p.grT = null; p.grH = 0; p.grD = 0; p.f0 = p.f; p.s = 0;
   } else if (id === "tengu") {                 // 風の場: 前方（体の中心から少し後ろを含む）に、足もとより少し下まで
     const feet = p.y + phOf(p), x = p.f > 0 ? ecx(p) - 30 : ecx(p) + 30 - WIND_W;
     game.wd = game.wd.filter(w => w.own !== p.own);
-    game.wd.push({ own: p.own, x, y: feet + 40 - WIND_H, w: WIND_W, h: WIND_H, d: p.f, t: 0 });
+    game.wd.push({ own: p.own, x, y: feet + 60 - WIND_H, w: WIND_W, h: WIND_H, d: p.f, t: 0 });
   }
   p.kc = chOf(p).skill.cd * 60;
   emit("sk", ecx(p), ecy(p), p.ch);
@@ -752,12 +764,12 @@ function releaseGrab(p) {                     // つかみをやめる（つか�
   if (p.grT) { p.grT.hd = 0; p.grT = null; }
   p.gr = 0; p.grH = 0;
 }
-function grabStep(p, inp) {                   // つかみに行く（8〜12 フレーム目につかむ）→ 持ち上げる（20 フレーム）→ 投げる
+function grabStep(p, inp) {                   // 前へダッシュしながらつかむ（4〜14 フレーム目）→ 持ち上げる（20 フレーム）→ 投げる
   const dir = ((inp & KEY.r) ? 1 : 0) - ((inp & KEY.l) ? 1 : 0);
   if (dir) p.grD = dir;                       // 投げる向き: 最後に押した左右（押さなければ後ろ）
-  p.vx *= 0.7;
   const t = p.grT;
   if (t) {
+    p.vx *= 0.5;
     if (!t.al || t.hd <= 0 || (t.isClone && game.cl[t.own] !== t)) { releaseGrab(p); return; }   // 相手がほかの人に飛ばされた・消えた
     if (p.grD) p.f = p.grD;                   // 投げる方を向く
     t.hd = 2; t.vx = t.vy = 0;
@@ -766,6 +778,10 @@ function grabStep(p, inp) {                   // つかみに行く（8〜12 フ
     return;
   }
   p.gr++;
+  if (p.gr >= GRAB_DASH_FROM && p.gr <= GRAB_DASH_TO) {      // ダッシュ（空中では、落ちる速さを抑えて横へ進む）
+    p.vx = p.f * GRAB_DASH_V;
+    if (!p.ground) p.vy = Math.min(p.vy, 1);
+  } else p.vx *= 0.7;
   if (p.gr >= GRAB_ON && p.gr <= GRAB_OFF) {
     const w = pwOf(p), hx0 = p.f > 0 ? p.x + w : p.x - GRAB_REACH, hx1 = hx0 + GRAB_REACH;
     let best = null, bd = 1e9;
@@ -778,7 +794,7 @@ function grabStep(p, inp) {                   // つかみに行く（8〜12 フ
     if (best) {                               // つかんだ: 盾もカウンターも関係ない
       releaseGrab(best);
       best.hd = 2; best.a = 0; best.ak = 0; best.cd = 0; best.ks = 0; best.cn = 0; best.cnHit = true; best.s = 0; best.fz = 0; best.dz = 0; best.vx = best.vy = 0; best.ground = false;
-      p.grT = best; p.grH = GRAB_HOLD; p.f0 = p.f;
+      p.grT = best; p.grH = GRAB_HOLD; p.f0 = p.f; p.vx = 0;
       emit("gb", ecx(best), ecy(best));
       game.hs = Math.max(game.hs, 4);
       return;
@@ -838,21 +854,34 @@ function physics(p, inp, neutral) {
   }
   const S = neutral ? BASE_STAT : effS(p);       // ロビーでは性能を悟られないよう標準の動きにする
   const l = inp & KEY.l, r = inp & KEY.r, u = inp & KEY.u, d = inp & KEY.d, a = inp & KEY.a;
+  const dir = (r ? 1 : 0) - (l ? 1 : 0);
   const kin = (neutral || p.isClone) ? 0 : (inp & KEY.k);
-  const rise = kin && !p.kp;                     // スキルボタンを押した瞬間
-  p.kp = kin ? 1 : 0;
-  // 時計師の巻き戻しだけは、吹っ飛ばされている最中でも使える（花で動けない間は使えない）
-  if (rise && chd.id === "clock" && p.kc === 0 && p.rw === 0 && p.fz === 0 && p.a === 0) useSkill(p);
+  // 先行入力: ボタンを押した瞬間を INPUT_BUF フレームだけ覚えておき、攻撃の戻りや着地の直前に押しても、動けるようになった瞬間に出す
+  const jrise = u && !p.jp;                      // ジャンプボタンを押した瞬間
+  if (kin && !p.kp) p.bk = INPUT_BUF;
+  if (a && !p.ap) p.ba = INPUT_BUF;
+  if (jrise) p.bu = INPUT_BUF;
+  p.kp = kin ? 1 : 0; p.ap = a ? 1 : 0; p.jp = u ? 1 : 0;
+  const kpress = p.bk > 0, apress = a || p.ba > 0, upress = u || p.bu > 0;
+  if (p.bk > 0) p.bk--;
+  if (p.ba > 0) p.ba--;
+  if (p.bu > 0) p.bu--;
+  if (p.jg > 0) p.jg--;
+  // 時計師の巻き戻し（吹っ飛ばされている最中でも使える。花で動けない間は使えない）
+  if (kpress && chd.id === "clock" && p.kc === 0 && p.rw === 0 && p.fz === 0 && p.a === 0 && useSkill(p)) p.bk = 0;
   if (p.rw > 0) { rewindStep(p); return; }      // 早戻り中は、記録どおりに動くだけ
   const wm = neutral ? { mv: 1, jp: 1 } : windMul(p);   // 天狗の風の場
-  if (p.s > 0) {                                 // 吹っ飛ばされ中
-    p.s--; p.vx *= p.ground ? 0.92 : 0.985; p.ks = 0; p.cn = 0;
+  const room = (chd.id === "law" && !neutral && !p.isClone) ? roomOf(p) : null;   // ロー: 張っている ROOM
+  let canSkill = false;                          // スキルを使える状態か（ふつうのとき・吹っ飛ばされている最中）
+  if (p.s > 0) {                                 // 吹っ飛ばされ中: 動けないが、スキルは使える
+    p.s--; p.vx *= p.ground ? 0.92 : 0.985;
+    canSkill = true;
   } else if (p.fz > 0) {                         // 動けない（花を踏んだ・カウンターの空振り・つかみの空振り）
     p.vx *= p.ground ? 0.8 : 0.985; p.ks = 0;
-  } else if (p.gr > 0) {                         // つかみに行っている・持ち上げている（その場から動かない）
+  } else if (p.gr > 0) {                         // つかみ（ダッシュしてつかむ・持ち上げている）
     grabStep(p, inp);
   } else {
-    const dir = (r ? 1 : 0) - (l ? 1 : 0);
+    canSkill = true;
     let spm = p.a > 0 ? 0.44 : 1;
     const ak0 = ATKS[p.ak] || ATKS[0];
     if (p.a > 0 && ak0.dash && p.a < ak0.dashFrom) spm = 0;     // 居合斬りのため中は動けない
@@ -860,31 +889,29 @@ function physics(p, inp, neutral) {
     if (p.cn > 0) spm = 0;                       // カウンターの構え中は動かない
     if (chd.id === "law" && p.kc > 0 && !neutral) spm *= ROOM_SLOW;   // ロー: ROOM のクールタイム中は動きが遅い
     const sp = spm * MOVE_BASE * moveMul(S) * wm.mv;
-    if (dir && p.a === 0 && p.ground && p.ks === 0 && p.cn === 0) p.f = dir;     // 向きを変えられるのは地面にいるときだけ（ため・構え中は固定）
-    const acc = p.ground ? 0.4 : 0.12;
+    // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
+    // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
+    const turnOk = p.ground || p.jg > 0;
+    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0) p.f = dir;
+    const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
-    const jrise = u && !p.jp; p.jp = u ? 1 : 0;                  // ジャンプボタンを押した瞬間
-    if (u && p.ground && p.cn === 0) { p.vy = -jumpVel(jumpHeight(S) * wm.jp); p.ground = false; if (!p.isClone) emit("j", ecx(p), p.y + PLH); }
-    else if (jrise && !p.ground && !p.dj && p.cn === 0) {       // 二段ジャンプ: 空中で 1 回だけ
-      p.vy = Math.min(p.vy, -jumpVel(jumpHeight(S) * AIR_JUMP * wm.jp)); p.dj = 1;   // 上昇中に押しても、いまの勢いより弱くはならない
+    if (upress && p.ground && p.cn === 0) {
+      p.vy = -jumpVel(jumpHeight(S) * wm.jp); p.ground = false; p.bu = 0; p.jg = JUMP_TURN;
+      if (!p.isClone) emit("j", ecx(p), p.y + PLH);
+    } else if (jrise && !p.ground && !p.dj && p.cn === 0) {     // 二段ジャンプ: 空中で 1 回だけ（押した瞬間に左右を押していれば、その方向を向く）
+      p.vy = Math.min(p.vy, -jumpVel(jumpHeight(S) * AIR_JUMP * wm.jp)); p.dj = 1; p.bu = 0;   // 上昇中に押しても、いまの勢いより弱くはならない
+      if (dir && p.a === 0 && p.ks === 0) p.f = dir;
       if (!p.isClone) emit("dj", ecx(p), p.y + phOf(p));
     }
-    const room = (chd.id === "law" && !neutral && !p.isClone) ? roomOf(p) : null;   // ロー: 張っている ROOM
-    if (a && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0) {
+    if (apress && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0) {
+      p.ba = 0;
       if (room && inRoom(room, p)) roomWarp(p, room);           // 円の中なら、敵の背後へ回り込んでから攻撃する
       p.a = 1; p.ak = 0; p.hit = [];
       if (p.gh > 0) { p.gh = 0; p.gb = 1; emit("gx", ecx(p), ecy(p)); }       // 自分から攻撃すると透過が解ける（この攻撃は 1.5 倍）
       emit("s", ecx(p), ecy(p));
     }
-    if (room) {                                  // ROOM がある間、スキルボタンは入れ替えボタン（0.5 秒ごと）
-      if (rise && p.rmSw === 0 && p.a === 0) { lawSwap(p, room); p.rmSw = ROOM_SWAP_GAP; }
-    } else if (sk && !neutral && !p.isClone && chd.id !== "clock") {   // スキル（時計師は上で処理する）
-      if (sk.hold) {
-        if (p.ks > 0) { if (kin) p.ks = Math.min(p.ks + 1, sk.maxCharge); else fireHold(p); }
-        else if (rise && p.kc === 0 && p.a === 0 && p.cn === 0) { p.ks = 1; emit("sc", ecx(p), ecy(p), p.ch); }
-      } else if (rise && p.kc === 0 && p.a === 0 && p.cn === 0) useSkill(p);
-    }
   }
+  if (canSkill && sk && !neutral && !p.isClone && chd.id !== "clock" && skillInput(p, chd, kin, kpress, dir, room)) p.bk = 0;   // スキル（時計師は上で処理する）
   const ak = ATKS[p.ak] || ATKS[0];
   if (p.a > 0) {
     p.a++;
@@ -910,6 +937,24 @@ function physics(p, inp, neutral) {
     p.tl.push([p.x, p.y, p.f, p.dj, p.ground]);
     if (p.tl.length > RW_SPAN) p.tl.shift();
   }
+}
+
+// スキルボタンの処理（ふつうのときと、吹っ飛ばされている最中）。何か発動したら true（先行入力を消す）
+// 空中・吹っ飛び中は、左右を押しながら使うと、その方向を向いてから放つ（ためるスキルは、離す瞬間の向き）
+function skillInput(p, chd, kin, kpress, dir, room) {
+  const sk = chd.skill;
+  const aim = () => { if (dir && (!p.ground || p.s > 0)) p.f = dir; };
+  if (room) {                                    // ローの ROOM がある間、スキルボタンは入れ替えボタン
+    if (kpress && p.rmSw === 0 && p.a === 0) { lawSwap(p, room); p.rmSw = ROOM_SWAP_GAP; return true; }
+    return false;
+  }
+  if (sk.hold) {
+    if (p.ks > 0) { if (kin) p.ks = Math.min(p.ks + 1, sk.maxCharge); else { aim(); fireHold(p); } return false; }
+    if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0) { aim(); p.ks = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }
+    return false;
+  }
+  if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0) { aim(); return useSkill(p) !== false; }
+  return false;
 }
 
 function breakShield(t) { t.sh = 0; t.sbk = SHIELD_BREAK_FRAMES; t.shi = 0; t.bf = 14; }
@@ -1098,7 +1143,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "giant": return gap < 260 ? KEY.k : 0;
     case "copern": return gap < 360 ? KEY.k : 0;
     case "okure": return g && face && sameLevel && t.ground && gap > 70 && gap < 240 ? KEY.k : 0;                      // 敵が来る道に花を置く
-    case "wrestler": return g && face && sameLevel && gap < GRAB_REACH - 4 && t.a === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵をつかむ
+    case "wrestler": return g && face && sameLevel && gap < GRAB_REACH + 90 && t.a === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵へ、ダッシュしてつかむ
     case "tengu": return g && face && ((sameLevel && gap < 200) || (!t.ground && t.y + phOf(t) > PY + 4 && gap < 280)) ? KEY.k : 0;   // 戦う場所か、崖の外の敵へ風の場を出す
     case "law": {                                                                                                       // 敵が近ければ、敵を包める大きさまで広げて ROOM を張る
       if (!g || roomOf(c) || gap > 220) return 0;
@@ -1304,8 +1349,8 @@ function hostTick() {
     game.tm--;
     if (game.tm <= 0) game.ph = "play";
   } else if (game.ph === "play") {
+    if (game.rt > 0) game.rt--; else game.sd++;            // 制限時間が尽きたらサドンデス（足場が縮む）。ヒットストップ中も時間は進む
     if (game.hs > 0) { game.hs--; return; }                // ヒットストップ中は全員の動きを止める
-    if (game.rt > 0) game.rt--; else game.sd++;            // 制限時間が尽きたらサドンデス（足場が縮む）
     for (const i of slots) { const p = game.p[i]; if (p.cpu) inputs[i] = p.al ? aiInput(p, null, AI_LEVELS[p.cpuLv] || AI_LEVELS[1]) : 0; }   // CPU の頭脳
     for (const i of slots) physics(game.p[i], inputs[i], false);
     for (const i of slots) tickClone(i);
@@ -1368,13 +1413,28 @@ function snapshot() {
 
 let tickCount = 0, lastPh = "", lastSig = "";
 const nameOf = i => (game.p[i] && game.p[i].n) || "プレイヤー" + (i + 1);
+// 入力: held = いま押されているボタン（ホスト自身は myKeys、参加者は届いた最新の状態）/ latch = 前の計算から今までに一度でも押されたボタン。
+// 1 回の計算（16.7ms）より短いタップや、押して離すが同時に届いたときも、押したことを 1 回ぶんは必ず計算に渡す
+const held = [0, 0, 0, 0], latch = [0, 0, 0, 0];
+const STEP_MS = 1000 / 60;
+let hostAcc = 0, hostLast = 0;
+// 1 秒に 60 回の計算を、経過時間に合わせて回す。スマホが重くてタイマーが遅れても、遅れたぶんをまとめて計算し、ゲームの時間がゆっくりにならない（1 回に最大 4 回ぶんまで）
 function hostLoop() {
-  inputs[0] = myKeys;
-  hostTick();
-  if (++tickCount % 2 === 0) {
-    if (conns.some(c => c && c.open)) { const snap = snapshot(); for (const c of conns) if (c && c.open) c.send(snap); }
-    else evq.length = 0;                   // 参加者がいない（CPU 戦など）ときは、出来事をためない
+  const now = performance.now();
+  if (!hostLast) hostLast = now - STEP_MS;
+  hostAcc += Math.min(250, now - hostLast); hostLast = now;
+  let n = 0;
+  while (hostAcc >= STEP_MS - 0.5 && n < 4) {
+    hostAcc -= STEP_MS; n++;
+    held[0] = myKeys;
+    for (let i = 0; i < MAX_PLAYERS; i++) { inputs[i] = held[i] | latch[i]; latch[i] = 0; }
+    hostTick();
+    if (++tickCount % 2 === 0) {
+      if (conns.some(c => c && c.open)) { const snap = snapshot(); for (const c of conns) if (c && c.open) c.send(snap); }
+      else evq.length = 0;                   // 参加者がいない（CPU 戦など）ときは、出来事をためない
+    }
   }
+  if (n >= 4) hostAcc = Math.min(hostAcc, STEP_MS);   // 大きく遅れたとき（タブが裏にあった等）は、追いつこうとしない
   if (game.ph !== lastPh) { lastPh = game.ph; renderUI(); }
   refreshHud();
 }
@@ -1414,7 +1474,7 @@ function startSolo() {
   document.body.classList.add("solo");
   const me = game.p[0] = newPlayer(); me.own = 0; me.n = draft.n; me.ch = draft.c; me.al = true;
   applySoloCfg();
-  hostTimer = setInterval(hostLoop, 1000 / 60);
+  hostLast = 0; hostTimer = setInterval(hostLoop, 1000 / 60);
   renderUI();
 }
 
@@ -1430,7 +1490,7 @@ function startHost() {
   peer.on("open", () => {
     net = "ready"; myId = 0; game.wr = winRounds;
     const me = game.p[0] = newPlayer(); me.own = 0; spawn(me, 0, 1); me.al = true;
-    hostTimer = setInterval(hostLoop, 1000 / 60);
+    hostLast = 0; hostTimer = setInterval(hostLoop, 1000 / 60);
     renderUI();
   });
   peer.on("error", e => {
@@ -1447,12 +1507,12 @@ function startHost() {
       const p = newPlayer(); p.own = slot; game.p[slot] = p;
       spawn(p, slot, connectedSlots().length);
       p.al = game.ph === "lobby";            // 試合中の参加は、キャラを選んで次のラウンドから
-      inputs[slot] = 0;
+      inputs[slot] = held[slot] = latch[slot] = 0;
       conn.send({ t: "hello", id: slot });
       renderUI();
       conn.on("data", d => {
         if (!d) return;
-        if (d.t === "in") inputs[slot] = d.k | 0;
+        if (d.t === "in") { held[slot] = d.k & 63; latch[slot] |= held[slot]; }
         else if (d.t === "prof") { applyProfile(p, sanitizeProfile(d)); renderUI(); }
         else if (d.t === "unprof") { if (canEdit(p)) p.rd = false; renderUI(); }
       });
@@ -1524,7 +1584,7 @@ const keyMap = { ArrowLeft: "l", KeyA: "l", ArrowRight: "r", KeyD: "r", ArrowUp:
 const down = new Set();
 function recalcKeys() {
   let k = 0; for (const c of down) k |= KEY[c];
-  myKeys = k;
+  myKeys = k; latch[0] |= k;                 // ホスト自身の短いタップも取りこぼさない
   pushKeys();
 }
 function pushKeys() {
