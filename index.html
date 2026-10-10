@@ -47,6 +47,12 @@
   body.rotok:not(.battle) #rot{display:block}                          /* 縦横の切り替えは、戦闘中以外に出す */
   #quit{display:none;position:absolute;top:calc(6px + env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));z-index:3;height:34px;padding:0 12px;margin:0;border-radius:17px;background:rgba(255,255,255,.14);font-size:13px;line-height:1}
   body.solo.battle #quit{display:block}
+  /* タイトルへ戻るボタン（家のマーク）: タイトル画面以外ではいつも左上に出す。2 回押すと戻る（1 回目で「もう一度押すとタイトルへ」と出る）。「やめる」はその右 */
+  #home{display:none;position:absolute;top:calc(6px + env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));z-index:4;min-width:34px;height:34px;padding:0;margin:0;border-radius:17px;background:rgba(255,255,255,.14);line-height:0}
+  #home svg{width:18px;height:18px}
+  #home.ask{padding:0 12px;background:rgba(239,68,68,.75);font-size:12px;line-height:1}
+  body.inapp #home{display:block}
+  body.inapp #quit{left:calc(max(8px,env(safe-area-inset-left)) + 42px)}
   #skillhint{display:none;position:absolute;left:50%;bottom:8px;transform:translateX(-50%);z-index:3;padding:4px 12px;border-radius:999px;background:rgba(0,0,0,.5);font-size:12px;pointer-events:none;white-space:nowrap}
   @media (pointer:fine){body.battle #skillhint{display:block}}
 
@@ -178,7 +184,8 @@
   body.land #stats{position:absolute;top:0;left:0;right:0;bottom:auto;transform:none;width:auto;max-width:none;min-height:0;margin:0;z-index:2;
     padding:max(4px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left));
     background:none;border-radius:0;align-items:flex-start;justify-content:space-between;pointer-events:none}
-  body.land #quit{top:calc(48px + env(safe-area-inset-top))}          /* 「やめる」は左のカードの下、音のボタンは上のまん中（残り時間の右）、全画面ボタンは残り時間の左 */
+  body.land #quit{top:calc(48px + env(safe-area-inset-top))}
+  body.land.battle #home{top:calc(48px + env(safe-area-inset-top))}  /* 横画面の戦闘中は、左上のカードの下 */          /* 「やめる」は左のカードの下、音のボタンは上のまん中（残り時間の右）、全画面ボタンは残り時間の左 */
   body.land #mute{right:auto;left:calc(50% + 30px)}
   body.land #fs{right:auto;left:calc(50% - 64px)}
   body.fson.battle #fs{display:none}                                  /* 全画面で戦っている間は出さない（戻すのは画面の端から引く操作でもできる） */
@@ -237,6 +244,8 @@
   body.land:not(.battle) #fs{left:auto;right:calc(max(8px,env(safe-area-inset-right)) + 40px)}
   body.land:not(.battle) #rot{left:auto;right:calc(max(8px,env(safe-area-inset-right)) + 80px)}
   .ioshint{margin-top:10px;font-size:11px;color:#9ca3af}
+  .linehint{margin:10px 0 0;padding:8px 10px;border-radius:8px;background:rgba(250,204,21,.12);border:1px solid rgba(250,204,21,.4);font-size:12px;color:#fde68a;text-align:left}
+  .linehint a{color:#facc15}
   @media (max-width:480px){
     .panel{padding:14px 16px}
     .panel h1{font-size:22px}
@@ -252,6 +261,7 @@
     <button id="mute" type="button" aria-label="効果音のオン・オフ">🔊</button>
     <button id="fs" type="button" aria-label="全画面の切り替え"></button>
     <button id="rot" type="button" aria-label="縦画面と横画面の切り替え"></button>
+    <button id="home" type="button" aria-label="タイトルへ戻る"></button>
     <button id="quit" type="button" aria-label="CPU戦をやめる">やめる</button>
     <div id="skillhint"></div>
   </div>
@@ -275,6 +285,11 @@
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 "use strict";
+// LINE の中のブラウザ（アプリ内ブラウザ）は、全画面にも横画面にもできない。LINE は URL に openExternalBrowser=1 が付いていると、
+// いつものブラウザ（Chrome / Safari）で開くので、LINE の中で開かれたら、それを付けて開き直す（1 回だけ。付いていても LINE の中に残ったら、タイトル画面で案内する）
+const isLineApp = /\bLine\//i.test(navigator.userAgent);
+const extUrl = () => { const u = new URL(location.href); u.searchParams.set("openExternalBrowser", "1"); return u.toString(); };
+if (isLineApp && !new URLSearchParams(location.search).has("openExternalBrowser")) location.replace(extUrl());
 // ---------- 定数 ----------
 const W = 960, H = 540;                       // 場外判定に使うワールド基準サイズ
 const PX = 190, PW = 580, PY = 400;           // メインステージ（上面の高さが PY）
@@ -301,6 +316,7 @@ const CLONE_COLOR = "#f472b6";                // コペルニウムの分身
 const MAX_PLAYERS = 4;
 const WIN_ROUNDS_DEFAULT = 3, WIN_ROUNDS_MIN = 1, WIN_ROUNDS_MAX = 9;   // 何本先取か（ホスト・CPU 戦で、始める前に決められる。標準 3 本先取）
 const ATK_COOLDOWN = 10;
+const STUN_SPEED = 2.0;              // 吹っ飛ばされたときの硬直 = 飛ばされた横の速さ × STUN_SPEED（フレーム。スマブラと同じく、強く飛ばされるほど長い）。ノーマルの通常攻撃で 23 フレーム（約 0.38 秒）
 const INPUT_BUF = 8;                 // 先行入力: 押した瞬間を覚えておくフレーム数（硬直が解ける少し前に押しても出る）
 const JUMP_TURN = 8;                 // ジャンプした直後、空中でも向きを変えられるフレーム数（反転ジャンプ）
 // 攻撃の種類: 0=通常 / 1=侍の居合斬り（少しためてから、踏み込みながら斬る）
@@ -362,10 +378,11 @@ const ROOM_R0 = 40, ROOM_LIFE = 300, ROOM_SWAP_GAP = 6;                  // 押�
 const ROOM_FAST = 10.5, ROOM_TAU = 25, ROOM_SLOWV = 1.5;
 const ROOM_CD_BASE = 120, ROOM_CD_PER100 = 60, ROOM_SLOW = 0.7;          // クールタイム: 基本 2 秒 + 半径 100px ごとに 1 秒 / クールタイム中の移動速度の倍率
 const roomR = ks => ROOM_R0 + ROOM_FAST * ROOM_TAU * (1 - Math.exp(-ks / ROOM_TAU)) + ROOM_SLOWV * ks;
+const ROOM_WARP_MUL = 1.3;           // ROOM の回り込み攻撃の吹っ飛ばしの倍率（攻撃の強さの上限 1.3 倍と同じ。背後から当てても、相手がすぐ立て直して戻らないように）
 const roomCd = r => Math.round(ROOM_CD_BASE + ROOM_CD_PER100 * r / 100);
 // レスラーのダッシュつかみ: 3 フレーム目から前へダッシュ（1 フレームに 9px、14 フレーム目まで。約 110px）し、4〜14 フレーム目に前 30px 以内の敵をつかむ
 const GRAB_ON = 4, GRAB_OFF = 14, GRAB_REACH = 30, GRAB_DASH_FROM = 3, GRAB_DASH_TO = 14, GRAB_DASH_V = 9;
-const GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.85;   // 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし
+const GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.9;    // 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし（0.85 だとステージ中央から投げても崖の外まで届かなかった）
 const WIND_FRAMES = 300, WIND_W = 440, WIND_H = 280;    // 天狗の風の場: 続く時間（5 秒）/ 横幅 / 高さ
 const WIND_FOE_MV = 0.45, WIND_FOE_JP = 0.55, WIND_SELF_MV = 1.6, WIND_SELF_JP = 1.4;   // 場の中の 移動速度・ジャンプの高さ の倍率（敵 / 天狗自身）
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
@@ -392,19 +409,19 @@ const CHARS = [
     skill: { name: "カウンター", cd: 4, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 3, tag: "透明になって攻撃をすり抜ける",
     skill: { name: "透過", cd: 8, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
-  { id: "giant", name: "巨人", A: 1, D: 1, S: 1, tag: "ふだんは弱いが、巨大化して暴れる",
-    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+5され（1/1/1 → 6/6/6）、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
+  { id: "giant", name: "巨人", A: 1, D: 2, S: 1, tag: "ふだんは弱いが、巨大化して暴れる",
+    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+5され（1/2/1 → 6/6/6。6が上限）、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
   { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 3, tag: "分身と一緒に戦う",
     skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分とは別に動き、敵を追いかけて攻撃してくれる味方になる。分身は盾を持たず、性能は攻撃2・防御1・スピード2" } },
   { id: "okure", name: "おくれたん", A: 2, D: 3, S: 2, tag: "花の罠で相手を足止めする",
     skill: { name: "花", cd: 1, text: "目の前に小さな花を咲かせる。踏んだ相手は1.5秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）" } },
-  { id: "nao", name: "なお", A: 1, D: 1, S: 2, tag: "弱いが、残機が1つ多い", skill: null, lives: 1 },
+  { id: "nao", name: "なお", A: 1, D: 3, S: 2, tag: "攻撃は弱いが打たれ強く、残機が1つ多い", skill: null, lives: 1 },
   // 13〜16 体目（通信ではキャラを番号で送るので、必ず末尾に足す）
   { id: "clock", name: "時計師", A: 2, D: 2, S: 2, tag: "時間を巻き戻して、ピンチから抜け出す",
     skill: { name: "巻き戻し", cd: 10, text: "2秒前までの通り道を、残像を残しながら早戻りでさかのぼる（約0.5秒）。戻っている間は無敵。吹っ飛ばされている最中でも使える" } },
   { id: "law", name: "ロー", A: 2, D: 1, S: 3, tag: "ROOM の中では、回り込みも入れ替えも自由自在",
     skill: { name: "ROOM", cd: 2, cdText: "2秒＋円の半径100pxごとに1秒（円が消えてから）", hold: true, maxCharge: 1e6,
-      text: "押している間だけ、水色の円が広がり続ける。離すと、その場所に円が5秒間残る。円の中に自分と敵がいるとき、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで円の中の全員と位置を入れ替える（0.1秒ごと）。円が消えるとクールタイムが始まり、その間は盾がなく、動きが遅くなる（大きく広げるほど長い）" } },
+      text: "押している間だけ、水色の円が広がり続ける。離すと、その場所に円が5秒間残る。円の中に自分と敵がいるとき、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで円の中の全員と位置を入れ替える（0.1秒ごと）。回り込み攻撃は、ふつうの攻撃より強く吹っ飛ばす。円が消えるとクールタイムが始まり、その間は盾がなく、動きが遅くなる（大きく広げるほど長い）" } },
   { id: "wrestler", name: "レスラー", A: 4, D: 3, S: 1, tag: "盾ごとつかんで投げ飛ばす",
     skill: { name: "ダッシュつかみ", cd: 5, text: "前へダッシュして（約110px）、ぶつかった敵を、盾やカウンターを無視してつかみ、持ち上げている間に押した方向へ投げる（押さなければ後ろへ）。空中でも使える。つかむ前に殴られると負け、空振りすると隙ができる" } },
   { id: "tengu", name: "天狗", A: 2, D: 2, S: 3, tag: "風の場で、敵を鈍らせ自分は速くなる",
@@ -468,7 +485,7 @@ function newPlayer() {
            bk: 0, ba: 0, bu: 0, jg: 0,                  // 先行入力の残り（スキル・攻撃・ジャンプ）/ ジャンプ直後に向きを変えられる残り
            tl: [], rw: 0, rwPath: null, rwI: 0,         // 時計師: 通り道の記録（ホストだけ）/ 早戻りの残りフレーム / 戻る道 / 戻る道の今の位置
            am: ARROW_MAX, amT: 0,                       // アーチャーの矢の残り / 次の 1 本が回復するまでの経過
-           km: 0, rmSw: 0,                              // クールタイムの長さ（ローは毎回変わる。スキルボタンの表示用）/ ローの入れ替えの間隔の残り
+           km: 0, rmSw: 0, wa: 0,                              // クールタイムの長さ（ローは毎回変わる。スキルボタンの表示用）/ ローの入れ替えの間隔の残り
            gr: 0, grT: null, grH: 0, grD: 0, f0: 1, hd: 0,   // レスラー: つかみの経過フレーム / つかんでいる相手 / 持ち上げの残り / 投げる向き / つかみ始めの向き。hd: つかまれている（残りフレーム）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
@@ -553,7 +570,7 @@ function spawn(p, slot, n, battle) {
   p.f = (p.x + PLW / 2 < PX + PW / 2) ? 1 : -1; p.hit = [];
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
-  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0;
+  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -744,7 +761,7 @@ function roomWarp(p, m) {
   const x0 = ecx(p), y0 = ecy(p);
   p.x = best.f > 0 ? best.x - PLW - 4 : best.x + pwOf(best) + 4;      // 敵の背中側
   p.y = best.y + phOf(best) - PLH;                                      // 足もとをそろえる
-  p.f = best.f; p.vx = p.vy = 0; p.ground = false;
+  p.f = best.f; p.vx = p.vy = 0; p.ground = false; p.wa = 1;     // wa: この攻撃は回り込み攻撃（吹っ飛ばしが強い）
   emit("tp", x0, y0, ecx(p), ecy(p));
   return true;
 }
@@ -886,6 +903,7 @@ function physics(p, inp, neutral) {
   let canSkill = false;                          // スキルを使える状態か（ふつうのとき・吹っ飛ばされている最中）
   if (p.s > 0) {                                 // 吹っ飛ばされ中: 動けないが、スキルは使える
     p.s--; p.vx *= p.ground ? 0.92 : 0.985;
+    if (u || p.bu > 0) p.bu = INPUT_BUF;         // 吹っ飛び中に押した（押している）ジャンプは、硬直が解けるまで覚えておき、解けた瞬間に出す
     canSkill = true;
   } else if (p.fz > 0) {                         // 動けない（花を踏んだ・カウンターの空振り・つかみの空振り）
     p.vx *= p.ground ? 0.8 : 0.985; p.ks = 0;
@@ -909,7 +927,7 @@ function physics(p, inp, neutral) {
     if (upress && p.ground && p.cn === 0) {
       p.vy = -jumpVel(jumpHeight(S) * wm.jp); p.ground = false; p.bu = 0; p.jg = JUMP_TURN;
       if (!p.isClone) emit("j", ecx(p), p.y + PLH);
-    } else if (jrise && !p.ground && !p.dj && p.cn === 0) {     // 二段ジャンプ: 空中で 1 回だけ（押した瞬間に左右を押していれば、その方向を向く）
+    } else if ((jrise || p.bu > 0) && !p.ground && !p.dj && p.cn === 0) {     // 二段ジャンプ: 空中で 1 回だけ（押した瞬間に左右を押していれば、その方向を向く）。先行入力でも出る
       p.vy = Math.min(p.vy, -jumpVel(jumpHeight(S) * AIR_JUMP * wm.jp)); p.dj = 1; p.bu = 0;   // 上昇中に押しても、いまの勢いより弱くはならない
       if (dir && p.a === 0 && p.ks === 0) p.f = dir;
       if (!p.isClone) emit("dj", ecx(p), p.y + phOf(p));
@@ -928,7 +946,7 @@ function physics(p, inp, neutral) {
     p.a++;
     if (ak.dash && p.a === ak.dashFrom) { aimAtFoe(p); emit("sl", ecx(p), ecy(p)); }      // 踏み込む直前にも、敵の方向へ向き直す
     if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) p.vx = p.f * ak.dash;      // 居合斬りの踏み込み
-    if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ATK_COOLDOWN; }
+    if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ATK_COOLDOWN; p.wa = 0; }
   }
   if (p.cd > 0) p.cd--;
   p.vy += 0.6;
@@ -971,11 +989,12 @@ function skillInput(p, chd, kin, kpress, dir, room) {
 function breakShield(t) { t.sh = 0; t.sbk = SHIELD_BREAK_FRAMES; t.shi = 0; t.bf = 14; }
 // frac: 盾なしで当たったときの吹っ飛ばしに対する割合（0 なら横には飛ばず、少し浮いてよろけるだけ）
 function knock(att, t, frac, dir) {
+  if (att.wa) { frac *= ROOM_WARP_MUL; att.wa = 0; }               // ローの回り込み攻撃
   frac = Math.min(1.3, frac);
   const mul = (att.gb > 0 ? GH_ATK_MUL : 1) * dzMul(t);          // 透過中の攻撃は強く、土下座中は飛びにくい
   t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul;
-  t.vy = -9; t.s = Math.round(16 + 16 * Math.min(1, frac)); t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0; t.dz = 0;
-  t.ground = false; t.hf = 12; releaseGrab(t); t.hd = 0;
+  t.vy = -9; t.s = Math.max(1, Math.round(Math.abs(t.vx) * STUN_SPEED));   // 攻撃力・防御力・ため量・透過・土下座などで速さが変わると、硬直もそのぶん変わる t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0; t.dz = 0;
+  t.ground = false; t.hf = 12; releaseGrab(t); t.hd = 0; t.wa = 0;   // 吹っ飛ばされたら、回り込み攻撃も取り消し
 }
 
 // 吹っ飛ばされた人が、足場に戻れず崖の外まで飛ぶか（いまの速度で、何も操作しなかったときの軌道を先に計算する）
@@ -1508,6 +1527,23 @@ function randCode() { return String(Math.floor(Math.random() * 10)); }
 const PREFIX = "shieldfight-room-";
 
 let hostTries = 0;
+// タイトルへ戻る: ページを読み込み直さずに、部屋の接続を切り、試合の状態を最初に戻す（読み込み直すと全画面が解除されるため）
+let sessionId = 0;
+function goTitle() {
+  sessionId++;
+  clearInterval(hostTimer); hostTimer = null;
+  const quiet = o => { try { if (o) { if (o.removeAllListeners) o.removeAllListeners(); if (o.close) o.close(); } } catch (e) {} };   // 切れたときの処理（エラー表示など）を先に外してから切る
+  conns.forEach(quiet); quiet(hostConn);
+  try { if (peer) { if (peer.removeAllListeners) peer.removeAllListeners(); peer.destroy(); } } catch (e) {}
+  peer = null; conns = []; hostConn = null; hostTries = 0;
+  role = null; myId = -1; net = "idle"; netMsg = ""; roomCode = ""; solo = false;
+  document.body.classList.remove("solo");
+  game.p = [null, null, null, null]; game.ph = "lobby"; game.tm = 0; game.win = -1; game.nf = 0; game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0; game.hsf = false;
+  clearEntities(); evq.length = 0;
+  inputs.fill(0); held.fill(0); latch.fill(0);
+  lastPh = ""; lastSig = ""; lastHud = ""; uiKey = "";
+  renderUI();
+}
 function startHost() {
   role = "host"; net = "connecting"; netMsg = ""; renderUI();
   roomCode = randCode();
@@ -1548,6 +1584,7 @@ function startHost() {
 
 function startClient(code) {
   role = "client"; roomCode = code; net = "connecting"; renderUI();
+  const sid = sessionId;
   peer = new Peer();
   peer.on("open", () => {
     hostConn = peer.connect(PREFIX + code, { reliable: true });
@@ -1558,7 +1595,7 @@ function startClient(code) {
       else if (d.t === "s") applySnapshot(d);
     });
     hostConn.on("close", () => { net = "error"; netMsg = "ホストとの接続が切れました"; renderUI(); });
-    setTimeout(() => { if (net === "connecting") { net = "error"; netMsg = "部屋が見つかりません（番号を確認してください）"; renderUI(); } }, 10000);
+    setTimeout(() => { if (sid === sessionId && net === "connecting") { net = "error"; netMsg = "部屋が見つかりません（番号を確認してください）"; renderUI(); } }, 10000);
   });
   peer.on("error", e => { net = "error"; netMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（ホストが閉じたか、番号が違います）" : "接続エラー: " + e.type; renderUI(); });
 }
@@ -1720,7 +1757,7 @@ function drawChar(c, idx, x, y, f, col, flash) {
 const ui = document.getElementById("ui"), stats = document.getElementById("stats");
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function shareUrl() {
-  const u = new URL(location.href); u.search = "?room=" + roomCode; u.hash = "";
+  const u = new URL(location.href); u.search = "?room=" + roomCode + "&openExternalBrowser=1"; u.hash = "";   // LINE で送っても、いつものブラウザで開く
   return u.toString();
 }
 
@@ -1894,7 +1931,7 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
     rollCpuChars();
     hostStartMatch();
   };
-  root.querySelector("#bBack").onclick = () => { location.href = location.pathname; };
+  root.querySelector("#bBack").onclick = goTitle;
   paintCfg();
   paintSelect();
 }
@@ -1943,6 +1980,7 @@ function renderUI() {
   else key = "none";
   if (key === uiKey && (key === "setup" || key === "solo" || key === "title" || key === "none")) return;   // 入力中の画面を作り直さない
   uiKey = key;
+  document.body.classList.toggle("inapp", key !== "title");     // タイトル画面以外では、タイトルへ戻るボタンを出す
   if (key === "title") {
     ui.innerHTML = `<div class="panel"><h1>シールドファイト</h1>
       <p>好きなキャラを選んで戦おう！スキルで逆転もできる<br>盾が外れた隙を突いて、相手をステージから落とせ（最大4人 / 何本先取かは設定できます）<br>制限時間は${ROUND_FRAMES / 60}秒。時間切れになるとステージが縮みます</p>
@@ -1952,6 +1990,7 @@ function renderUI() {
       <input id="code" inputmode="numeric" maxlength="1" placeholder="部屋番号（1桁）" style="width:200px;text-align:center;font-size:20px" value="${/^\d$/.test(q || "") ? q : ""}">
       <button id="bJoin">参加する</button>
       <p>操作: WASD / 矢印キーで移動（↑・W でジャンプ）、Space で攻撃、X でスキル</p>
+      ${isLineApp ? `<p class="linehint">LINE の中のブラウザでは、横画面・全画面にできません。右上のメニュー（︙ や …）から「ブラウザで開く」（iPhone は「Safariで開く」）を選ぶか、<a href="${esc(extUrl())}">ここ</a>を押してください</p>` : ""}
       ${isIPhone && !standalone ? `<p class="ioshint">画面を広く使うには: 共有ボタン（□↑）→「ホーム画面に追加」で、ホーム画面のアイコンから開いてください（アドレスバーが消えます）</p>` : ""}</div>`;
     document.getElementById("bHost").onclick = () => { autoFs(); startHost(); };
     document.getElementById("bSolo").onclick = () => { autoFs(); startSolo(); };
@@ -1961,7 +2000,8 @@ function renderUI() {
   } else if (key === "connecting") {
     ui.innerHTML = `<div class="panel"><h1>接続中…</h1></div>`;
   } else if (key === "error") {
-    ui.innerHTML = `<div class="panel"><h1>エラー</h1><p>${esc(netMsg)}</p><button onclick="location.href=location.pathname">トップへ</button></div>`;
+    ui.innerHTML = `<div class="panel"><h1>エラー</h1><p>${esc(netMsg)}</p><button id="bTop">トップへ</button></div>`;
+    document.getElementById("bTop").onclick = goTitle;
   } else if (key === "setup") showSelect();
   else if (key === "solo") showSolo();
   else if (key === "lobby") showLobby();
@@ -2076,6 +2116,17 @@ const Sfx = (() => {
     gust() { noise(0.7, 0.18, "bandpass", 500, 2400); noise(0.5, 0.08, "highpass", 2000, 4500, 0.12); },
   };
 })();
+// タイトルへ戻るボタン: 2 回押すと戻る（押し間違い防止）。オンラインでは部屋から抜ける（ホストなら部屋が消える）
+const homeBtn = document.getElementById("home"), HOME_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>';
+let homeT = 0;
+const paintHome = ask => { homeBtn.classList.toggle("ask", ask); homeBtn.innerHTML = ask ? (role === "host" && !solo ? "もう一度押すと部屋を閉じてタイトルへ" : "もう一度押すとタイトルへ") : HOME_ICON; };
+paintHome(false);
+homeBtn.onclick = () => {
+  homeBtn.blur();
+  if (!homeT) { paintHome(true); homeT = setTimeout(() => { homeT = 0; paintHome(false); }, 2500); return; }
+  clearTimeout(homeT); homeT = 0; paintHome(false);
+  goTitle();
+};
 // CPU 戦の「やめる」ボタン: 2 回押すと、いまの試合を終えて設定画面へ戻る（押し間違い防止）
 const quitBtn = document.getElementById("quit");
 let quitT = 0;
@@ -2663,7 +2714,7 @@ function solveLandCam(outer, inner, scr, hint) {
   const r = tryScale(sLo), c = r && (r.zero || r.any);          // どこまで引いても重なる: 重なりが最小の位置
   return c ? { s: sLo, x: c.x, y: c.y } : { s: sLo, x: (ob.x0 + ob.x1) / 2, y: (ob.y0 + ob.y1) / 2 };
 }
-const touchEls = Array.from(document.querySelectorAll("#touch .tb, #mute, #fs, #rot, #quit"));    // キャラを重ねたくないもの: 操作ボタン・音・全画面・「やめる」
+const touchEls = Array.from(document.querySelectorAll("#touch .tb, #mute, #fs, #rot, #home, #quit"));    // キャラを重ねたくないもの: 操作ボタン・音・全画面・「やめる」
 function landCamTarget(fs) {                         // 画面の実際のボタンの位置と、上部のカードの高さから、横画面のカメラの狙いを決める
   const r = cv.getBoundingClientRect(), forb = [];
   for (const el of touchEls) {
