@@ -236,7 +236,7 @@
   body.land .panel.setup{width:min(96%,880px)}
   body.land .panel.lobby{width:min(96%,700px)}
   body.land .panel.setup input{padding:6px 8px}
-  /* キャラ一覧は 6 列（16 体で 3 段）。ブラウザのアドレスバーで高さが 280px ほどしかなくても収まるよう小さくし、それでも足りなければ左の列だけスクロールする */
+  /* キャラ一覧は 6 列（22 体で 4 段）。ブラウザのアドレスバーで高さが 280px ほどしかなくても収まるよう小さくし、それでも足りなければ左の列だけスクロールする */
   body.land .panel.setup .colL{max-height:calc(100dvh - 40px);overflow:auto}
   body.land .panel.setup .colL > p{display:none}
   body.land .panel.setup .chips{grid-template-columns:repeat(6,1fr);margin:5px 0 0;gap:3px}
@@ -370,7 +370,7 @@ const moveMul = s => s >= BASE_STAT ? 1 + 1.8 * (s - BASE_STAT) / (MAX_STAT - BA
 const JUMP_MIN = 100, JUMP_MAX = 200, AIR_JUMP = 0.75;     // ジャンプの高さ(px): スピード 0 / 6 のとき / 二段目の割合
 const jumpHeight = s => JUMP_MIN + (JUMP_MAX - JUMP_MIN) * Math.max(0, Math.min(MAX_STAT, s)) / MAX_STAT;
 const jumpVel = h => 0.3 + Math.sqrt(0.09 + 1.2 * h);       // 高さ h(px) に届く初速（重力 0.6 を 1 フレームずつ足す計算に合わせた式）
-const SHIELD_HITS = 3;               // 盾が壊れるまでの回数（攻撃・防御の差に関係なく全員一律）
+const SHIELD_HITS = 3;               // 盾が壊れるまでの回数（攻撃・防御の差に関係なく一律。ゴブGだけ CHARS の shieldHits で 1 回）
 const SHIELD_BREAK_FRAMES = 300;     // 壊れた盾が元に戻るまで（60fps で 5 秒）
 const SHIELD_STEP_FRAMES = 300;      // 盾のダメージは、攻撃されないまま 5 秒たつごとに 1 段階（1 回ぶん）ずつ回復する
 
@@ -424,6 +424,17 @@ const WEB_DIVE = 420, WEB_DIVE_V = 18, WEB_STOMP = 0.5, WEB_LAG = 9;   // 急降
 const YUREI_Y = PY - 250, YUREI_SPEED = 5.5, YUREI_MARGIN = 60;   // 飛ぶ高さ（上の台より 100px 上）/ 左右の速さ / メインの端より外へ出られる幅
 const YUREI_CD = 180, YUREI_FIRST = 60;                           // 爆弾のクールタイム（3 秒）/ 幽霊になってから最初の爆弾まで（1 秒）
 const YUREI_R = 7, YUREI_BLAST = 60, YUREI_KNOCK = 0.45, YUREI_LIFT = 6;   // 爆弾の大きさ / 爆風の半径 / 吹っ飛ばし（盾は効かない）/ 上向きの初速
+// クロス使いのクロスボウ: 足場に置くと、射線（前方 450px）に敵が入るたびに矢を自動で撃つ。8 秒で壊れ、攻撃を 3 回受けても壊れる（クールタイムは置いた瞬間から 10 秒）
+const CB_W = 30, CB_H = 26, CB_BOLT = 22, CB_RANGE = 450;     // クロスボウの大きさ（左上の座標で持つ）/ 矢の高さ（足もとから）/ 射線の長さ
+const CB_RELOAD = 30, CB_ARM = 12, CB_LIFE = 480, CB_BLINK = 60, CB_HP = 3;   // 次の矢まで（0.5 秒）/ 足場に乗ってから最初の矢まで / 稼働（8 秒）/ 消える前の点滅 / 壊れるまでに受けられる回数
+const CB_PAD = 14;                                            // 矢・槍がクロスボウに当たる範囲を、下へ広げる幅（アーチャーの矢はクロスボウの上を通るので）
+const CB_ARROW_C = 0.5;                                    // 矢のため量（速さ 0.7 × (13 + 9 × 0.5)、威力 0.35 + 0.85 × 0.5）
+// ゴブG: 背中の 2 体が近くの敵へ小さな槍を自動で投げ、盾が壊れている間は手下を呼ぶ（スキルなし）
+const GOB_RANGE = 140, GOB_THROW_CD = 90, GOB_STAGGER = 45;   // 槍を投げる距離 / 1 体あたりの間隔（1.5 秒）/ 2 体のずれ
+const GOB_SPEAR_V = 8, GOB_SPEAR_LIFE = 26, GOB_SPEAR_FRAC = 0.3;   // 槍の速さ / 寿命 / 吹っ飛ばし
+const GOB_SUMMON_FIRST = 30, GOB_SUMMON_EVERY = 90;           // 盾が壊れてから最初の召喚まで / 召喚の間隔（盾が壊れている 5 秒の間に 3 体）
+const MN_W = 14, MN_H = 20, MN_SPEED = 2.2, MN_LIFE = 360, MN_MAX = 3;   // 手下の大きさ / 歩く速さ / 寿命（6 秒）/ ゴブG 1 体あたりの上限
+const MN_REACH = 18, MN_TOTAL = 18, MN_ON = 6, MN_OFF = 10, MN_FRAC = 0.74, MN_FALL = 60;   // 剣の届く距離 / 斬りの全体 / 当たるフレーム / 吹っ飛ばし / メインの上面からこれだけ落ちたら消える
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
 // メインステージの端から 500px、足場の面から 300px の余裕を持たせる（以前は 340px / 260px で、飛ばされるとすぐ撃墜された）。左右はキャラの中心、下は頭の位置で判定する
 const KO_MARGIN = 500, KO_BOTTOM = 300;
@@ -475,6 +486,12 @@ const CHARS = [
   { id: "spider", name: "蜘蛛", A: 2, D: 1, S: 3, tag: "糸で崖に戻り、敵を引き寄せ、空から襲う",
     skill: { name: "糸", cd: 4, cdText: "崖へ戻る 4秒・引き寄せ 5秒・急降下 2秒（効果ごとに別）",
       text: "居場所で効果が変わる。崖の外: 近いほうの崖の角へ糸を飛ばして（300pxまで）、崖の上へ引き上げる（届かなければ1秒後にもう一度使える）。地上: 前へ糸を飛ばし（250pxまで）、当たった敵を目の前まで引き寄せる（盾があっても引き寄せる）。引き寄せた敵は3秒間スピードが−1。ステージの上の空中: 斜め下の地面へ糸を張って急降下し、着地で足もとの敵を軽く吹っ飛ばす（盾は効かない）。吹っ飛ばされている最中でも使える" } },
+  // 21〜22 体目（必ず末尾に足す）。shieldHits: 盾が壊れるまでの回数（ふつうは SHIELD_HITS）/ back: 当たり判定を背中側へ広げる幅 / auto: スキルなしキャラの自動能力の説明
+  { id: "xbow", name: "クロス使い", A: 2, D: 2, S: 3, tag: "クロスボウを置いて、射線に入った敵を撃つ",
+    skill: { name: "クロスボウ", cd: 10, cdText: "10秒（置いてから。クロスボウは8秒で壊れる）",
+      text: "向いている方へクロスボウを置く（向きは固定）。空中で使うと真下へ落ちて足場に置かれる（崖の外なら落ちて消える）。450px先までの射線に敵が入ると、0.5秒ごとに矢を撃つ（盾で防げる）。攻撃を3回受けるか、8秒たつと壊れる" } },
+  { id: "gobg", name: "ゴブG", A: 3, D: 3, S: 2, shieldHits: 1, back: 14, tag: "背中の2体と手下で戦う。盾はもろい", skill: null,
+    auto: "背中の2体が、140px以内の敵へ小さな槍を自動で投げる（盾で防げる）。盾は1回受けると壊れ、壊れている間（5秒）は1.5秒ごとに手下を呼ぶ（最大3体）。手下は近くの敵へ歩いて行き、1回斬ると消える。背中の2体のぶん、当たり判定が後ろへ大きい" },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
@@ -486,6 +503,11 @@ const effD = p => statOf(p, "D");
 const effS = p => statOf(p, "S");
 const szOf = p => p.gt > 0 ? GIANT_SCALE : 1;                // 巨大化中は 2 倍の大きさ
 const pwOf = p => PLW * szOf(p), phOf = p => PLH * szOf(p);
+// 当たり判定の左右の端。ゴブGは、背中の 2 体のぶん、後ろ（向きと反対側）へ back だけ広い（分身は広げない）
+const backOf = p => p.isClone ? 0 : (chOf(p).back || 0) * szOf(p);
+const hbL = p => p.f > 0 ? p.x - backOf(p) : p.x;
+const hbR = p => p.f > 0 ? p.x + pwOf(p) : p.x + pwOf(p) + backOf(p);
+const shieldHitsOf = p => (!p.isClone && chOf(p).shieldHits) || SHIELD_HITS;   // 盾が壊れるまでの回数（ゴブGは 1 回）
 const dzMul = t => t.dz > 0 ? DOGEZA_KNOCK : 1;              // 土下座中は吹っ飛びにくい
 
 // ---------- 状態 ----------
@@ -502,9 +524,10 @@ let netMsg = "";
 // nf: この試合で戦っている人数（ステージの形が決まる） / rt: 制限時間の残りフレーム / sd: サドンデス開始からのフレーム / hs: ヒットストップの残り（ホストだけが使う）
 // wr: 何本先取か（ロビーでは次の試合の設定。ホストが決めて、スナップショットで参加者へ届く）
 // pj: 飛び道具（ボム・矢） / fl: 花 / cl: 分身（持ち主のスロットごとに 1 つ） / wd: 天狗の風の場（持ち主ごとに 1 つまで）
-// rm: スワッパーの ゾーン（持ち主ごとに 1 つまで）
-const game = { ph: "lobby", tm: 0, win: -1, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cl: [null, null, null, null], p: [null, null, null, null] };
-const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cl = [null, null, null, null]; };
+// rm: スワッパーの ゾーン（持ち主ごとに 1 つまで） / cb: クロス使いのクロスボウ（持ち主ごとに 1 つまで） / mn: ゴブGの手下
+const game = { ph: "lobby", tm: 0, win: -1, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cb: [], mn: [], cl: [null, null, null, null], p: [null, null, null, null] };
+const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cb = []; game.mn = []; game.cl = [null, null, null, null]; };
+let entSeq = 0;          // クロスボウの番号（ホストだけ。そのクロスボウが撃った矢を見分ける）
 // いま使える足場。サドンデス中は縮む（上の台は早く消え、メインは最小幅まで縮んだあとすべて崩れる）
 function platforms() {
   const base = LAYOUTS[Math.max(0, Math.min(4, game.nf | 0))], sd = game.sd | 0;
@@ -543,6 +566,7 @@ function newPlayer() {
            wb: 0, wbm: 0, wbx: 0, wby: 0, wl: null, wlt: 0, wlT: null,   // 蜘蛛: 糸で動いている残り / 動き方（1 = 崖へ戻る / 2 = 急降下）/ 行き先 / 糸の先 [x, y] / 糸を見せる残り / 引き寄せている相手
            yk: 0, ykx: 0, yky: 0, slw: 0,               // 糸で引き寄せられている残り / 行き先 / スピード −1 の残り
            yr: 0, yrx: 0, yrc: 0,                       // 幽霊（脱落したあと）か / 幽霊の x / 次の爆弾までの残り
+           gk: [0, 0],                                  // ゴブG: 背中の 2 体（上・下）が、次に槍を投げられるまでの残り
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
            life: 0, isClone: false };
@@ -589,6 +613,8 @@ function applyProfile(p, prof) {
 //   ["s",x,y] 攻撃 / ["j",x,y] ジャンプ / ["b",x,y,向き] 盾で受けた / ["h",x,y,向き,強さ] 当たった / ["k",x,y,向き,強さ] 盾が割れた
 //   ["sk",x,y,キャラ] スキル発動 / ["sc",x,y,キャラ] ため始め / ["ar",x,y,向き,ため] 矢 / ["x",x,y,半径] 爆発 / ["tp",x0,y0,x1,y1] 瞬間移動
 //   ["dj",x,y] 二段ジャンプ（足もとの座標） / ["sl",x,y] 居合斬りの踏み込み / ["fl",x,y] 花を踏んだ / ["cn",x,y,向き] カウンター成功 / ["rv",x,y] 残機で復活 / ["gx",x,y] 透過が解けた / ["cl",x,y] 分身が消えた
+//   ["xs",x,y,向き] クロスボウが撃った / ["xh",x,y] クロスボウが攻撃を受けた / ["xk",x,y] クロスボウが壊れた・消えた / ["gs",x,y,向き] ゴブGの背中の 2 体が槍を投げた
+//   ["gm",x,y] 手下を呼んだ / ["ms",x,y,向き] 手下が斬った / ["gmx",x,y,殴られたら1] 手下が消えた
 let evq = [];
 function emit(...e) {
   if (game.ph === "lobby") return;
@@ -630,6 +656,7 @@ function spawn(p, slot, n, battle) {
   p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0;
   p.bt = 0; p.fm = 0; p.wk = [0, 0, 0]; p.wkm = [0, 0, 0]; stopWeb(p); p.slw = 0;   // リバーシはラウンドの始めは攻撃形態
   p.yr = 0; p.yrc = 0;
+  p.gk = [0, battle && chOf(p).id === "gobg" ? GOB_STAGGER : 0];   // ゴブG: 背中の 2 体は、ずらして投げ始める
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -736,6 +763,10 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     return true;
   } else if (id === "spider") {               // 糸: 居場所で効果が変わる（クールタイムは効果ごと。p.kc は使わない）
     return webSkill(p);
+  } else if (id === "xbow") {                 // クロスボウ: 置いた瞬間からクールタイム（クロスボウが壊れても短くならない）。念のため、すでにあれば先に壊す
+    const old = cbOf(p);
+    if (old) removeCb(old);
+    placeCb(p);
   }
   p.kc = chOf(p).skill.cd * 60;
   emit("sk", ecx(p), ecy(p), p.ch);
@@ -787,6 +818,11 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.sh = 1; p.sbk = 0; p.shi = 0; p.iv = RESPAWN_INV; p.dz = 0; p.gt = 0; p.gb = 0; p.dj = 0;
   p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   if (p.bt > 0) { p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own)); }   // 投げていた盾は手元に戻る
+  const cb = cbOf(p);
+  if (cb) removeCb(cb);                                                                          // クロス使い: 置いたクロスボウは消える
+  p.gk = [0, chOf(p).id === "gobg" ? GOB_STAGGER : 0];                                           // ゴブG: 背中の 2 体は投げ直し。投げた槍と手下は消える
+  game.pj = game.pj.filter(b => !(b.k === 4 && b.own === p.own));
+  game.mn = game.mn.filter(m => m.own !== p.own);
   emit("rv", ecx(p), ecy(p));
 }
 
@@ -804,7 +840,7 @@ function rewindStep(p) {
 // ---- スワッパー: ゾーン ----
 // 体のいちばん近い点が、円の中心から r 以内なら「円の中」
 function distToBody(x, y, e) {
-  const nx = Math.max(e.x, Math.min(x, e.x + pwOf(e))), ny = Math.max(e.y, Math.min(y, e.y + phOf(e)));
+  const nx = Math.max(hbL(e), Math.min(x, hbR(e))), ny = Math.max(e.y, Math.min(y, e.y + phOf(e)));
   return Math.hypot(x - nx, y - ny);
 }
 const zoneOf = p => game.rm.find(m => m.own === p.own) || null;            // 自分の ゾーン（なければ null）
@@ -833,7 +869,7 @@ function zoneWarp(p, m) {
   for (const e of zoneFoes(p, m)) { const d = Math.abs(ecx(e) - ecx(p)) + Math.abs(ecy(e) - ecy(p)); if (d < bd) { bd = d; best = e; } }
   if (!best) return false;
   const x0 = ecx(p), y0 = ecy(p);
-  p.x = best.f > 0 ? best.x - PLW - 4 : best.x + pwOf(best) + 4;      // 敵の背中側
+  p.x = best.f > 0 ? hbL(best) - PLW - 4 : hbR(best) + 4;             // 敵の背中側（ゴブGは、背中の 2 体のぶん外側）
   p.y = best.y + phOf(best) - PLH;                                      // 足もとをそろえる
   p.f = best.f; p.vx = p.vy = 0; p.ground = false; p.wa = 1;     // wa: この攻撃は回り込み攻撃（吹っ飛ばしが強い）
   emit("tp", x0, y0, ecx(p), ecy(p));
@@ -889,7 +925,7 @@ function grabStep(p, inp) {                   // 前へダッシュしながら�
     let best = null, bd = 1e9;
     for (const e of ents()) {
       if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0) continue;
-      if (hx1 < e.x || hx0 > e.x + pwOf(e) || p.y + phOf(p) < e.y || p.y > e.y + phOf(e)) continue;
+      if (hx1 < hbL(e) || hx0 > hbR(e) || p.y + phOf(p) < e.y || p.y > e.y + phOf(e)) continue;
       const d = Math.abs(ecx(e) - ecx(p));
       if (d < bd) { bd = d; best = e; }
     }
@@ -960,7 +996,7 @@ function webSkill(p) {
     let best = null, bd = 1e9;
     for (const e of ents()) {
       if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0 || e.yk > 0) continue;
-      if (e.x + pwOf(e) < x0 || e.x > x1 || hy + 10 < e.y || hy - 10 > e.y + phOf(e)) continue;
+      if (hbR(e) < x0 || hbL(e) > x1 || hy + 10 < e.y || hy - 10 > e.y + phOf(e)) continue;
       const d = Math.abs(ecx(e) - hx);
       if (d < bd) { bd = d; best = e; }
     }
@@ -1009,7 +1045,7 @@ function webStomp(p) {                       // 盾は効かない（真上か�
   const x = ecx(p), feet = p.y + phOf(p), r = pwOf(p) / 2 + 24;
   for (const e of ents()) {
     if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0) continue;
-    if (e.x + pwOf(e) < x - r || e.x > x + r || e.y + phOf(e) < feet - 70 || e.y > feet + 4) continue;
+    if (hbR(e) < x - r || hbL(e) > x + r || e.y + phOf(e) < feet - 70 || e.y > feet + 4) continue;
     const dir = Math.sign(ecx(e) - x) || p.f;
     knock(p, e, WEB_STOMP, dir); impact("h", p, e, WEB_STOMP, dir);
   }
@@ -1038,7 +1074,7 @@ function yureiBlast(b, list) {               // 爆風の中の人を、盾を�
   let any = false;
   for (const e of list) {
     if (e.own === b.own || untouchable(e)) continue;
-    const nx = Math.max(e.x, Math.min(b.x, e.x + pwOf(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e))), dist = Math.hypot(b.x - nx, b.y - ny);
+    const nx = Math.max(hbL(e), Math.min(b.x, hbR(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e))), dist = Math.hypot(b.x - nx, b.y - ny);
     if (dist > YUREI_BLAST) continue;
     const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
     e.vx = dir * KNOCK_BASE * defMul(effD(e)) * YUREI_KNOCK * dzMul(e) * (1 - 0.4 * dist / YUREI_BLAST);
@@ -1046,12 +1082,173 @@ function yureiBlast(b, list) {               // 爆風の中の人を、盾を�
     e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0; stopWeb(e);
     if (flyOut(e)) any = true;
   }
+  blastObjs(b.own, b.x, b.y, YUREI_BLAST);
   if (any) game.hs = Math.max(game.hs, 8);
 }
 // 糸で引き寄せられている: 何もできず、蜘蛛の目の前へ動く
 function yankStep(p) {
   const n = p.yk--;
   p.x += (p.ykx - p.x) / n; p.y += (p.yky - p.y) / n; p.vx = p.vy = 0; p.ground = false;
+}
+
+// ---- クロス使い・ゴブG ----
+// 置き物（クロスボウ game.cb / ゴブGの手下 game.mn）は、攻撃・爆風・槍・ブーメランの盾に当たると壊れる。自動で出る攻撃（クロスボウの矢・背中の槍・手下の斬り）は autoStrike で当てる
+const cbOf = p => game.cb.find(c => c.own === p.own) || null;     // 持ち主のクロスボウ（なければ null）
+function removeCb(c) {                       // クロスボウが壊れる・消える（クールタイムは置いた瞬間から数えているので、ここでは何もしない）
+  const i = game.cb.indexOf(c);
+  if (i < 0) return;
+  game.cb.splice(i, 1);
+  emit("xk", c.x + CB_W / 2, c.y + CB_H / 2);
+}
+function hurtCb(c) {                         // 攻撃を 1 回受ける（CB_HP 回で壊れる）
+  c.hp--;
+  if (c.hp > 0) emit("xh", c.x + CB_W / 2, c.y + CB_H / 2);
+  else removeCb(c);
+}
+function killMinion(m, hit) {                // hit: 殴られて消えた（なら 1、ふつうの寿命・斬り終わりなら 0）
+  const i = game.mn.indexOf(m);
+  if (i < 0) return;
+  game.mn.splice(i, 1);
+  emit("gmx", m.x + MN_W / 2, m.y + MN_H / 2, hit ? 1 : 0);
+}
+// 長方形に重なる、持ち主が違う手下とクロスボウを壊す（手下は 1 発で消え、クロスボウは 1 回削れる）。done に入っているクロスボウには当てず、当てたら done に入れる（同じ攻撃で何度も削らない）。
+// noMinion: 手下を壊さない（手下どうしの斬り用）/ cbPad: クロスボウに対してだけ、長方形の下側を広げる幅（矢・槍は細いので、同じ足場のクロスボウの上を通り抜けないように。手下には効かない）。何か当たれば true
+function hitObjs(own, x0, y0, x1, y1, done, noMinion, cbPad) {
+  let any = false;
+  if (!noMinion) for (const m of game.mn.slice()) {
+    if (m.own === own || m.x + MN_W < x0 || m.x > x1 || m.y + MN_H < y0 || m.y > y1) continue;
+    killMinion(m, true); any = true;
+  }
+  for (const c of game.cb.slice()) {
+    if (c.own === own || (done && done.includes(c)) || c.x + CB_W < x0 || c.x > x1 || c.y + CB_H < y0 || c.y > y1 + (cbPad || 0)) continue;
+    if (done) done.push(c);
+    hurtCb(c); any = true;
+  }
+  return any;
+}
+function blastObjs(own, x, y, r) {           // 爆風（半径 r）: 長方形の最近点まで r 以内の手下は消え、クロスボウは 1 回削れる
+  const near = (ox, oy, w, h) => Math.hypot(x - Math.max(ox, Math.min(x, ox + w)), y - Math.max(oy, Math.min(y, oy + h))) <= r;
+  for (const m of game.mn.slice()) if (m.own !== own && near(m.x, m.y, MN_W, MN_H)) killMinion(m, true);
+  for (const c of game.cb.slice()) if (c.own !== own && near(c.x, c.y, CB_W, CB_H)) hurtCb(c);
+}
+// 自動で出る攻撃の命中処理（持ち主が戦っていなくても当てられる）。騎士が構えていたら、カウンターを成功させるだけで持ち主は飛ばさない（置き物・槍が消えるだけ）。
+// o: strike と同じ { dir, frac, recoil } / onCounter: カウンターを受けたときにすること（クロスボウを壊す・手下を消す）
+function autoStrike(own, t, o, onCounter) {
+  if (untouchable(t)) return;
+  if (t.cn > 0) { t.cn = 0; t.cnHit = true; emit("cn", ecx(t), ecy(t), -o.dir); if (onCounter) onCounter(); return; }
+  const ow = game.p[own];
+  strike({ al: false, ch: ow ? ow.ch : 0, f: o.dir, own, gb: 0, wa: 0, bz: 0, gt: 0, slw: 0, fm: 0 }, t, o);
+}
+// クロスボウ: 持ち主の足もとに置く。空中なら真下へ落ちて、足場に乗ったら撃ち始める
+function placeCb(p) {
+  game.cb.push({ id: ++entSeq, own: p.own, x: ecx(p) - CB_W / 2, y: p.y + phOf(p) - CB_H, f: p.f, t: 0, hp: CB_HP, rl: CB_ARM, vy: 0, g: false });
+}
+function updateCbs(list) {
+  const pls = platforms();
+  for (const c of game.cb.slice()) {
+    const o = game.p[c.own];
+    if (!o || !o.al || ++c.t >= CB_LIFE) { removeCb(c); continue; }
+    const pb = c.y + CB_H;                    // 落ちる前の下端（足場の上から乗れて、下からは通り抜ける）
+    c.vy = Math.min(18, c.vy + 0.6); c.y += c.vy; c.g = false;
+    for (const pl of pls) {
+      if (pb <= pl.y + 0.01 && c.y + CB_H >= pl.y && c.x + CB_W > pl.x && c.x < pl.x + pl.w) { c.y = pl.y - CB_H; c.vy = 0; c.g = true; break; }
+    }
+    if (c.y > KO_B) { removeCb(c); continue; }
+    if (!c.g) continue;                       // 足場に乗っているときだけ撃つ
+    if (c.rl > 0) { c.rl--; continue; }
+    const mx = c.f > 0 ? c.x + CB_W : c.x, by = c.y + CB_H - CB_BOLT, lo = Math.min(mx, mx + c.f * CB_RANGE), hi = Math.max(mx, mx + c.f * CB_RANGE);
+    const seen = list.some(e => e.own !== c.own && e.al && !untouchable(e) && hbR(e) > lo && hbL(e) < hi && by > e.y && by < e.y + phOf(e));
+    if (!seen) continue;                      // 射線（口から前方 CB_RANGE）に敵が入ったら撃つ。分身は狙い、手下は狙わない
+    game.pj.push({ k: 1, x: mx, y: by, vx: c.f * ARROW_SPEED * (13 + 9 * CB_ARROW_C), vy: 0, own: c.own, pw: 0.35 + 0.85 * CB_ARROW_C, t: 0, xid: c.id });
+    c.rl = CB_RELOAD;
+    emit("xs", mx, by, c.f);
+  }
+}
+// ゴブG: 背中の 2 体（上・下）が、近い敵へ槍を投げる。盾が壊れている間は、手下を呼ぶ
+function summonMinion(p) {
+  if (game.mn.filter(m => m.own === p.own).length >= MN_MAX) return;
+  const m = { own: p.own, x: ecx(p) - MN_W / 2, y: p.y + phOf(p) - MN_H, vx: 0, vy: 0, f: p.f, t: 0, a: 0, g: false, done: false, hit: [] };
+  game.mn.push(m);
+  emit("gm", m.x + MN_W / 2, m.y + MN_H / 2);
+}
+function updateGoblins(list) {
+  for (const p of game.p) {
+    if (!p || !p.c || !p.al || chOf(p).id !== "gobg" || (training && p.cpu)) continue;
+    const el = SHIELD_BREAK_FRAMES - p.sbk;   // 盾が壊れてからの経過（盾が壊れている間、最初は GOB_SUMMON_FIRST、あとは GOB_SUMMON_EVERY ごとに手下を呼ぶ）
+    if (p.sbk > 0 && el >= GOB_SUMMON_FIRST && (el - GOB_SUMMON_FIRST) % GOB_SUMMON_EVERY === 0) summonMinion(p);
+    const sz = szOf(p);
+    for (let k = 0; k < 2; k++) {
+      if (p.gk[k] > 0) { p.gk[k]--; continue; }
+      if (p.hd > 0 || p.yk > 0) continue;       // つかまれている間・糸で引き寄せられている間は投げない（槍でつかみがほどけないように）
+      const kx = p.f > 0 ? p.x - 7 * sz : p.x + pwOf(p) + 7 * sz, ky = p.y + (k ? 32 : 12) * sz;   // 背中の 2 体の手もと
+      let best = null, bd = GOB_RANGE + 1;
+      for (const e of list) {
+        if (e.own === p.own || !e.al || untouchable(e)) continue;
+        const d = distToBody(kx, ky, e);
+        if (d <= GOB_RANGE && d < bd) { bd = d; best = e; }
+      }
+      if (!best) continue;
+      const dx = ecx(best) - kx, dy = ecy(best) - ky, dd = Math.hypot(dx, dy) || 1, vx = dx / dd * GOB_SPEAR_V, vy = dy / dd * GOB_SPEAR_V;
+      game.pj.push({ k: 4, x: kx, y: ky, vx, vy, own: p.own, t: 0, pw: GOB_SPEAR_FRAC });
+      p.gk[k] = GOB_THROW_CD; p.gk[1 - k] = Math.max(p.gk[1 - k], GOB_STAGGER);
+      emit("gs", kx, ky, Math.sign(vx) || p.f);
+    }
+  }
+}
+// 手下: いちばん近い敵へ歩いて行き、届く距離で 1 回斬る。斬り終わると（当たっても外れても）消える。足場の下からは通り抜け、メインの端では止まる（上の台からは降りる）
+function updateMinions(list) {
+  const pls = platforms(), mp = pls.find(q => q.main) || null;
+  for (const m of game.mn.slice()) {
+    const o = game.p[m.own];
+    if (!o || !o.al || ++m.t > MN_LIFE) { killMinion(m, false); continue; }
+    const mcx = m.x + MN_W / 2;
+    if (m.a > 0) {                            // 斬っている間: MN_ON〜MN_OFF フレーム目に、前方 MN_REACH の長方形に当たり判定がある
+      m.a++; m.vx = 0;
+      if (m.a >= MN_ON && m.a <= MN_OFF) {
+        const x0 = m.f > 0 ? m.x + MN_W : m.x - MN_REACH, x1 = x0 + MN_REACH, y0 = m.y, y1 = m.y + MN_H;
+        if (!m.done) {
+          let t = null, bd = 1e9;
+          for (const e of list) {
+            if (e.own === m.own || !e.al || untouchable(e)) continue;
+            if (hbR(e) < x0 || hbL(e) > x1 || e.y + phOf(e) < y0 || e.y > y1) continue;
+            const d = Math.abs(ecx(e) - mcx);
+            if (d < bd) { bd = d; t = e; }
+          }
+          if (t) { m.done = true; autoStrike(m.own, t, { dir: m.f, frac: MN_FRAC, recoil: false }, () => killMinion(m, false)); }
+        }
+        if (game.mn.indexOf(m) >= 0) hitObjs(m.own, x0, y0, x1, y1, m.hit, true);     // 手下の斬りは、クロスボウだけ削る（敵の手下は壊さない。カウンターで消えた手下は削らない）
+      }
+      if (m.a > MN_TOTAL) killMinion(m, false);
+      if (game.mn.indexOf(m) < 0) continue;
+    } else if (m.g) {                         // 地上: いちばん近い敵（高さの違いは重く見る）へ向かう
+      let t = null, bd = 1e9;
+      for (const e of list) {
+        if (e.own === m.own || !e.al || untouchable(e)) continue;
+        const d = Math.abs(ecx(e) - mcx) + 1.5 * Math.abs(e.y + phOf(e) - (m.y + MN_H));
+        if (d < bd) { bd = d; t = e; }
+      }
+      m.vx = 0;
+      if (t) {
+        m.f = Math.sign(ecx(t) - mcx) || m.f;
+        const x0 = m.f > 0 ? m.x + MN_W : m.x - MN_REACH, x1 = x0 + MN_REACH;
+        if (hbR(t) >= x0 && hbL(t) <= x1 && t.y + phOf(t) >= m.y && t.y <= m.y + MN_H) { m.a = 1; m.done = false; m.hit = []; emit("ms", mcx, m.y + MN_H / 2, m.f); }
+        else m.vx = m.f * MN_SPEED;
+      }
+    }
+    const pb = m.y + MN_H;
+    m.vy = Math.min(18, m.vy + 0.6);
+    m.x += m.vx; m.y += m.vy;
+    if (m.g && m.vx) {                        // メインの端では止まる（2px 手前）
+      const pl = pls.find(q => Math.abs(pb - q.y) < 2 && m.x + MN_W > q.x && m.x < q.x + q.w);
+      if (pl && pl.main) { const nx = Math.max(pl.x + 2, Math.min(pl.x + pl.w - MN_W - 2, m.x)); if (nx !== m.x) { m.x = nx; m.vx = 0; } }
+    }
+    m.g = false;
+    for (const pl of pls) {
+      if (pb <= pl.y + 0.01 && m.y + MN_H >= pl.y && m.x + MN_W > pl.x && m.x < pl.x + pl.w) { m.y = pl.y - MN_H; m.vy = 0; m.g = true; break; }
+    }
+    const feet = m.y + MN_H;
+    if (m.y > KO_B || m.x < KO_L || m.x > KO_R || (!m.g && feet > (mp ? mp.y : PY) + MN_FALL)) killMinion(m, false);
+  }
 }
 
 function physics(p, inp, neutral) {
@@ -1079,7 +1276,7 @@ function physics(p, inp, neutral) {
   if (p.bt > 0 && !game.pj.some(b => b.k === 2 && b.own === p.own)) p.bt = 0;   // 念のため: 投げた盾がなくなっていたら手元に戻す
   // 盾の回復
   if (p.sbk > 0) { if (--p.sbk === 0) { p.sh = 1; p.shi = 0; } }
-  else if (p.sh < 1 && ++p.shi >= SHIELD_STEP_FRAMES) { p.sh = p.sh + 1 / SHIELD_HITS > 0.999 ? 1 : p.sh + 1 / SHIELD_HITS; p.shi = 0; }   // 1 段階だけ回復して、また 5 秒数える
+  else if (p.sh < 1 && ++p.shi >= SHIELD_STEP_FRAMES) { p.sh = p.sh + 1 / shieldHitsOf(p) > 0.999 ? 1 : p.sh + 1 / shieldHitsOf(p); p.shi = 0; }   // 1 段階だけ回復して、また 5 秒数える
   if (p.hd > 0) {                                // レスラーにつかまれている: 何もできない（位置はレスラーが決める）
     p.hd--; p.vx = p.vy = 0; p.ks = 0; p.kp = (inp & KEY.k) ? 1 : 0; p.jp = (inp & KEY.u) ? 1 : 0;
     return;
@@ -1253,8 +1450,8 @@ function strike(att, t, o) {
   if (o.breaker) {                                           // 居合斬り: 盾を壊すだけで、吹っ飛ばしはしない
     breakShield(t); impact("k", att, t, 0, o.dir); return;
   }
-  t.shi = 0;                                                 // 盾で受けた（攻撃・防御に関係なく 3 回で壊れる）
-  t.sh -= 1 / SHIELD_HITS;
+  t.shi = 0;                                                 // 盾で受けた（攻撃・防御に関係なく、決まった回数（ふつうは 3 回、ゴブGは 1 回）で壊れる）
+  t.sh -= 1 / shieldHitsOf(t);
   const broke = t.sh <= 0.001;
   if (broke) breakShield(t); else t.bf = 10;
   t.vx += o.dir * 3;
@@ -1271,10 +1468,11 @@ function resolveHits(list) {
     const hy0 = p.y + 8 * sz, hy1 = p.y + (PLH - 8) * sz;
     for (const t of list) {
       if (t === p || t.own === p.own || p.hit.includes(t) || !t.al || untouchable(t)) continue;
-      if (hx1 < t.x || hx0 > t.x + pwOf(t) || hy1 < t.y || hy0 > t.y + phOf(t)) continue;
+      if (hx1 < hbL(t) || hx0 > hbR(t) || hy1 < t.y || hy0 > t.y + phOf(t)) continue;
       p.hit.push(t);
       strike(p, t, { dir: p.f, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker });
     }
+    hitObjs(p.own, hx0, hy0, hx1, hy1, p.hit);                      // 手下とクロスボウにも当たる（クロスボウは 1 回の攻撃で 1 回だけ削る）
   }
 }
 
@@ -1285,7 +1483,7 @@ function explode(b, list) {
   let any = false;
   for (const e of list) {
     if (e.own === b.own || untouchable(e)) continue;
-    const nx = Math.max(e.x, Math.min(b.x, e.x + pwOf(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e)));
+    const nx = Math.max(hbL(e), Math.min(b.x, hbR(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e)));
     const dist = Math.hypot(b.x - nx, b.y - ny);
     if (dist > BOMB_BLAST) continue;
     const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
@@ -1293,6 +1491,7 @@ function explode(b, list) {
     e.vy = -BOMB_LIFT; e.s = 34; e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0; stopWeb(e);
     if (flyOut(e)) any = true;
   }
+  blastObjs(b.own, b.x, b.y, BOMB_BLAST);     // 手下は消え、クロスボウは 1 回削れる
   if (any) game.hs = Math.max(game.hs, 8);   // 崖の外まで飛ばしたときだけ止める
 }
 
@@ -1319,7 +1518,7 @@ function updateProjectiles(list) {
       const pl = pls.find(q => oy + YUREI_R <= q.y + 1 && b.y + YUREI_R >= q.y && b.x > q.x - 4 && b.x < q.x + q.w + 4);
       let boom = !!pl;
       if (pl) b.y = pl.y - YUREI_R;
-      else boom = list.some(e => e.own !== b.own && !untouchable(e) && b.x + YUREI_R > e.x && b.x - YUREI_R < e.x + pwOf(e) && b.y + YUREI_R > e.y && b.y - YUREI_R < e.y + phOf(e));
+      else boom = list.some(e => e.own !== b.own && !untouchable(e) && b.x + YUREI_R > hbL(e) && b.x - YUREI_R < hbR(e) && b.y + YUREI_R > e.y && b.y - YUREI_R < e.y + phOf(e));
       if (boom) { yureiBlast(b, list); game.pj.splice(i, 1); continue; }
       if (b.y > KO_B + 80) game.pj.splice(i, 1);
     } else if (b.k === 2) {                                  // ブーメラン使いの盾: 行き（だんだん遅く）→ 投げた人の今いる場所へ戻る
@@ -1341,15 +1540,32 @@ function updateProjectiles(list) {
       const done = b.hit[b.ph];                              // 同じ相手には、行き・帰りでそれぞれ 1 回まで
       for (const e of list) {
         if (e.own === b.own || !e.al || untouchable(e) || done.includes(e)) continue;
-        if (e.x > xb || e.x + pwOf(e) < xa || e.y > yb || e.y + phOf(e) < ya) continue;
+        if (hbL(e) > xb || hbR(e) < xa || e.y > yb || e.y + phOf(e) < ya) continue;
         done.push(e);
         const dir = Math.abs(b.vx) > 1 ? Math.sign(b.vx) : (Math.sign(ecx(e) - ecx(o)) || 1);   // 盾の進む向き（真上・真下へ戻るときは、投げた人から離れる向き）
         strike(o, e, { dir, frac: BOOM_FRAC, recoil: false });
       }
+      hitObjs(b.own, xa, ya, xb, yb, done);                  // 盾は手下とクロスボウにも当たる（飛び続ける）
       if (caught || b.t >= BOOM_LIFE) {                      // 受け止めた / 2 秒たっても戻れない: 手元に戻る
         o.bt = 0; game.pj.splice(i, 1);
         emit("bc", ecx(o), ecy(o));
       }
+    } else if (b.k === 4) {                                  // ゴブGの槍（背中の 2 体が投げる）: 重力なしで真っすぐ飛び、短い間だけ残る
+      const o = game.p[b.own];
+      if (!o || !o.al || b.t > GOB_SPEAR_LIFE) { game.pj.splice(i, 1); continue; }
+      const ox = b.x, oy = b.y;
+      b.x += b.vx; b.y += b.vy;
+      const xa = Math.min(ox, b.x) - 3, xb = Math.max(ox, b.x) + 3, ya = Math.min(oy, b.y) - 3, yb = Math.max(oy, b.y) + 3;
+      let hit = null;
+      for (const e of list) {
+        if (e.own === b.own || untouchable(e)) continue;
+        if (hbL(e) < xb && hbR(e) > xa && yb > e.y && ya < e.y + phOf(e)) { hit = e; break; }
+      }
+      if (hit) {
+        autoStrike(b.own, hit, { dir: Math.sign(b.vx) || (ecx(hit) >= b.x ? 1 : -1), frac: b.pw, recoil: false });
+        game.pj.splice(i, 1); continue;
+      }
+      if (hitObjs(b.own, xa, ya, xb, yb, null, false, CB_PAD)) game.pj.splice(i, 1);   // 手下・クロスボウに当たったら消える
     } else {                                                 // 矢
       const ox = b.x;
       b.x += b.vx;
@@ -1357,13 +1573,17 @@ function updateProjectiles(list) {
       let hit = null;
       for (const e of list) {
         if (e.own === b.own || untouchable(e)) continue;
-        if (e.x < xb && e.x + pwOf(e) > xa && b.y > e.y && b.y < e.y + phOf(e)) { hit = e; break; }
+        if (hbL(e) < xb && hbR(e) > xa && b.y > e.y && b.y < e.y + phOf(e)) { hit = e; break; }
       }
       if (hit) {
-        const owner = game.p[b.own] || { ch: 0, bz: 0, f: Math.sign(b.vx), al: false };
-        strike(owner, hit, { dir: Math.sign(b.vx), frac: b.pw, recoil: false });
+        if (b.xid) autoStrike(b.own, hit, { dir: Math.sign(b.vx), frac: b.pw, recoil: false }, () => { const c = game.cb.find(q => q.id === b.xid); if (c) removeCb(c); });   // クロスボウの矢: 騎士のカウンターでは、クロスボウが壊れるだけ
+        else {
+          const owner = game.p[b.own] || { ch: 0, bz: 0, f: Math.sign(b.vx), al: false };
+          strike(owner, hit, { dir: Math.sign(b.vx), frac: b.pw, recoil: false });
+        }
         game.pj.splice(i, 1); continue;
       }
+      if (hitObjs(b.own, xa, b.y - 1, xb, b.y + 1, null, false, CB_PAD)) { game.pj.splice(i, 1); continue; }   // 人に当たらなければ、手下・クロスボウに当たる（高さ CB_BOLT の矢は、同じ足場の手下の上を通る）
       if (b.x < KO_L - 60 || b.x > KO_R + 60 || b.t > 200) game.pj.splice(i, 1);
     }
   }
@@ -1443,8 +1663,13 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "boomer":                                                                                                      // 盾をこちらへ向けた敵の向こうまで投げて、帰りで背中に当てる。盾を見て止まっている敵にも
       return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
     case "lancer": return g && face && sameLevel && shieldUp(t) && tFaces && gap >= 80 && gap <= 200 ? KEY.k : 0;              // 盾で待つ敵へ、突進して盾を割る
+    case "xbow": {                                                                                                          // 同じ高さの敵が射線に入るところへ、クロスボウを置く（置いたものが残っている間は置かない）
+      if (!g || cbOf(c)) return 0;
+      const by = c.y + phOf(c) - CB_BOLT;
+      return face && by > t.y && by < t.y + phOf(t) && gap > 90 && gap < CB_RANGE - 40 ? KEY.k : 0;
+    }
     case "spider": {
-      if (g) {                                                                                                          // 地上: 離れた敵（盾で待つ相手・ためている相手・アーチャー）を引き寄せる
+      if (g) {                                                                                                       // 地上: 離れた敵（盾で待つ相手・ためている相手・アーチャー）を引き寄せる
         const hy = c.y + 20 * szOf(c), hit = hy + 10 >= t.y && hy - 10 <= t.y + phOf(t);
         return c.wk[1] === 0 && face && hit && gap > 100 && gap < WEB_PULL - 10 && (chOf(t).id === "archer" || t.ks > 0 || (shieldUp(t) && tFaces)) ? KEY.k : 0;
       }
@@ -1487,11 +1712,36 @@ function aiZone(c, t, B) {
     if ((!c.ground && feet > PY + 4 && t.ground) || (tp && tEdge < 90 && edge > tEdge + 80)) { c.aiOnce |= KEY.k; return KEY.k; }
   }
   if (c.a === 0 && c.cd === 0 && c.ks === 0) {
-    const bx = t.f > 0 ? t.x - PLW / 2 - 4 : t.x + pwOf(t) + PLW / 2 + 4, by = t.y + phOf(t);   // 回り込む先（足もとの中心）
+    const bx = t.f > 0 ? hbL(t) - PLW / 2 - 4 : hbR(t) + PLW / 2 + 4, by = t.y + phOf(t);   // 回り込む先（足もとの中心）
     const safe = pls.some(q => Math.abs(by - q.y) < 3 && bx > q.x + 6 && bx < q.x + q.w - 6);
     if (safe && t.s === 0 && (shieldUp(t) || t.a === 0)) return KEY.a;
   }
   return null;
+}
+// 敵の置き物（ゴブGの手下・クロス使いのクロスボウ）への対処。どのキャラの頭脳でも使う。何かするなら { goal: 向かう x（なければ null）, turn: 向きを変えるだけの入力（1 回）, hit: 殴るか } を返す
+//   ・手下: 前方（届く距離）に来たら殴って払う。背中側 24px 以内なら振り向く
+//   ・クロスボウ: 同じ高さで 160px 以内にあり、狙っている敵がまだ遠い（140px より先）なら、そばまで行って壊しに行く
+function aiObjects(c, B, ccx, feet, R, gap) {
+  const cw = pwOf(c), r = { goal: null, turn: 0, hit: false };
+  for (const m of game.mn) {
+    if (m.own === c.own || m.y + MN_H < c.y + 8 * szOf(c) || m.y > feet) continue;
+    const dx = m.x + MN_W / 2 - ccx, s = Math.sign(dx) || c.f, eg = Math.abs(dx) - (cw + MN_W) / 2;
+    if (s === c.f && eg <= R - 4) { r.hit = Math.random() >= B.miss; return r; }
+    if (s !== c.f && eg <= 24) { r.turn = s > 0 ? KEY.r : KEY.l; return r; }
+  }
+  if (gap <= 140) return null;
+  let best = null, bd = 160;
+  for (const b of game.cb) {
+    if (b.own === c.own || Math.abs(b.y + CB_H - feet) >= 4) continue;
+    const d = Math.abs(b.x + CB_W / 2 - ccx);
+    if (d < bd) { bd = d; best = b; }
+  }
+  if (!best) return null;
+  const bx = best.x + CB_W / 2, s = Math.sign(bx - ccx) || c.f, eg = Math.abs(bx - ccx) - (cw + CB_W) / 2;
+  if (eg > R - 6) r.goal = bx - s * ((cw + CB_W) / 2 + R * 0.5);
+  else if (c.f === s) r.hit = Math.random() >= B.miss;
+  else r.turn = s > 0 ? KEY.r : KEY.l;
+  return r;
 }
 function aiDodge(c, inp, ccx, feet) {                  // 爆弾から離れる / 矢を跳んでよける / 敵の花を跳び越す
   const cy = c.y + phOf(c) / 2;
@@ -1600,8 +1850,16 @@ function aiThink(c, owner, pls, B) {
   const faceDir = ((inp & (KEY.l | KEY.r)) && c.ground && c.a === 0) ? ((inp & KEY.r) ? 1 : -1) : c.f;
   const open = !shieldUp(t) || t.f !== -faceDir;                 // 盾が効かない（外れている・背中側）
   const near = c.y + (PLH - 8) * sz > t.y && c.y + 8 * sz < t.y + th;     // 高さが重なっている
-  const chip = !open && Math.random() < B.chip;                  // 盾の正面でも、ときどき殴って盾を削る（3 回で壊れる）
+  const chip = !open && Math.random() < B.chip;                  // 盾の正面でも、ときどき殴って盾を削る（ふつうは 3 回で壊れる）
   if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0 && Math.random() >= B.miss) inp |= KEY.a;
+  if (c.ground && c.a === 0 && c.s === 0 && c.fz === 0 && (game.mn.length || game.cb.length)) {   // 敵の手下を払う・クロスボウを壊しに行く
+    const ob = aiObjects(c, B, ccx, feet, R, gap);
+    if (ob) {
+      if (ob.goal !== null) { inp &= ~(KEY.l | KEY.r); steer(ob.goal); }
+      if (ob.turn) { inp = (inp & ~(KEY.l | KEY.r)) | ob.turn; c.aiOnce |= ob.turn; }
+      if (ob.hit && c.cd === 0 && c.ks === 0 && c.cn === 0) inp |= KEY.a;
+    }
+  }
   if (sk && B.skill > 0) { const k = aiSkill(c, t, { gap, sgn, sd, dyFeet, sameLevel, tr }, B); if (k) { inp |= k; inp &= ~KEY.a; } }   // スキルを使うときは、通常攻撃を押さない
   // 蜘蛛: 盾をこちらへ向けた敵の少し手前で跳び、空中から急降下して盾ごと吹っ飛ばす
   if (id === "spider" && B.skill > 0 && c.ground && !(inp & KEY.k) && c.wk[2] === 0 && sameLevel && c.f === sgn && gap > 60 && gap < 150 && shieldUp(t) && tFaces && Math.random() < B.skill * 0.5) inp = (inp & ~KEY.a) | KEY.u;
@@ -1691,6 +1949,7 @@ function hostTick() {
     const list = ents();
     updateFlowers(list);
     updateProjectiles(list);
+    updateCbs(list); updateGoblins(list); updateMinions(list);
     updateWinds();
     updateZones();
     resolveHits(ents());
@@ -1735,6 +1994,7 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.slw > 0) o.slw = p.slw;                               // 蜘蛛の糸で引き寄せられて、スピードが −1 の間
   if (p.wl) o.wl = [r1(p.wl[0]), r1(p.wl[1])];                // 蜘蛛の糸の先（糸を使っている間だけ）
   if (p.yr) { o.yr = 1; o.yrx = r1(p.yrx); o.yrc = p.yrc; }   // 幽霊（脱落したあと）の位置と、次の爆弾までの残り
+  if (p.gk && (p.gk[0] || p.gk[1])) o.gk = [p.gk[0], p.gk[1]];   // ゴブG: 背中の 2 体の、次に槍を投げられるまでの残り（腕の見た目用）
   return o;
 }
 function snapshot() {
@@ -1744,8 +2004,10 @@ function snapshot() {
       { w: p.w, c: p.c ? 1 : 0, n: p.n, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, am: p.am, amT: p.amT, lv: p.lv },
       inGame ? { ch: p.ch } : null, inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
-    pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 ? Math.round(b.pw * 10) : 0, b.own]),
+    pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 || b.k === 4 ? Math.round(b.pw * 10) : 0, b.own]),
     fl: game.fl.map(f => [r1(f.x), r1(f.y), f.t]),
+    cb: game.cb.map(c => [r1(c.x), r1(c.y), c.f, c.t, c.hp, c.own, c.g ? c.rl : -1, r1(c.vy)]),   // クロスボウ: 位置・向き・経過・耐久・持ち主・次の矢まで（-1 は落下中）・縦の速さ
+    mn: game.mn.map(m => [r1(m.x), r1(m.y), r1(m.vx), r1(m.vy), m.f, m.a, m.t, m.own]),          // ゴブGの手下: 位置・速度・向き・斬りの経過・経過・持ち主
     wd: game.wd.map(w => [r1(w.x), r1(w.y), w.w, w.h, w.d, w.t, w.own]),
     rm: game.rm.map(m => [r1(m.x), r1(m.y), r1(m.r), m.t, m.own]) };
   if (evq.length) s.ev = evq.splice(0);        // 前回の送信以降に起きた効果音・演出のきっかけ
@@ -1910,6 +2172,7 @@ function readEnt(p, n) {                                     // スナップシ�
   p.rw = n.rw | 0; p.gs = n.gs | 0; p.hd = n.hd | 0; p.rp = n.rp || null;
   p.fm = n.fm | 0; p.slw = n.slw | 0; p.wl = n.wl || null;
   p.yr = n.yr | 0; p.yrc = n.yrc | 0; if (p.yr) { p.yrt = n.yrx; if (p.yrx === undefined || Math.abs(p.yrx - n.yrx) > 120) p.yrx = n.yrx; }
+  p.gk = n.gk || [0, 0];
   if (n.ch !== undefined) p.ch = n.ch;
 }
 function applySnapshot(s) {
@@ -1938,6 +2201,8 @@ function applySnapshot(s) {
   game.fl = s.fl.map(a => ({ x: a[0], y: a[1], t: a[2] }));
   game.wd = (s.wd || []).map(a => ({ x: a[0], y: a[1], w: a[2], h: a[3], d: a[4], t: a[5], own: a[6] }));   // 古い版のホストは送らない
   game.rm = (s.rm || []).map(a => ({ x: a[0], y: a[1], r: a[2], t: a[3], own: a[4] }));
+  game.cb = (s.cb || []).map(a => ({ x: a[0], y: a[1], f: a[2], t: a[3], hp: a[4], own: a[5], rl: a[6], vy: a[7] }));   // 古い版のホストは送らない
+  game.mn = (s.mn || []).map(a => ({ x: a[0], y: a[1], vx: a[2], vy: a[3], f: a[4], a: a[5], t: a[6], own: a[7] }));
   const sig = game.p.map(p => p ? (p.c ? 1 : 0) + "," + (p.rd ? 1 : 0) + "," + p.n : "-").join("|");
   if (phChanged || wrChanged || sig !== lastSig) renderUI();
   lastSig = sig;
@@ -2084,7 +2349,7 @@ setInterval(() => { if (role === "client") { sentKeys = -1; pushKeys(); } }, 500
 
 // ---------- キャラの見た目（本体と飾り）----------
 // 本体は枠の色（プレイヤーごと）で、飾りでキャラを見分ける。c は描く先の 2D コンテキスト
-// o: 状態で変わる見た目 { fm: リバーシの形態, atk: 槍兵が槍を前へ出している }
+// o: 状態で変わる見た目 { fm: リバーシの形態, atk: 槍兵が槍を前へ出している, gk: ゴブGの背中の 2 体が次に投げられるまでの残り }
 function deco(c, id, x, y, f, o) {
   c.lineWidth = 1; c.setLineDash([]);
   o = o || {};
@@ -2197,6 +2462,52 @@ function deco(c, id, x, y, f, o) {
     c.stroke();
     c.fillStyle = "#111827"; c.beginPath(); c.arc(x + 20, y + 42, 4.5, 0, 6.2832); c.fill(); c.beginPath(); c.arc(x + 20, y + 35, 3, 0, 6.2832); c.fill();
     c.fillStyle = "#dc2626"; c.fillRect(x + 19, y + 41, 2, 3);
+  } else if (id === "xbow") {                  // 茶色の革帽子、琥珀色のゴーグル、体の前の小さなクロスボウ、背中の矢筒（矢の先が 3 本）
+    c.fillStyle = "#78350f"; c.fillRect(x - 1, y - 3, PLW + 2, 10); c.fillRect(x + 4, y - 8, PLW - 8, 6);
+    c.fillStyle = "#451a03"; c.fillRect(x, y + 14, PLW, 3);
+    const ex = f > 0 ? x + 24 : x + 8;
+    c.fillStyle = "#f59e0b"; c.fillRect(ex - 3, y + 9, 14, 14);
+    c.fillStyle = "#111827"; c.fillRect(ex, y + 12, 8, 8);
+    c.fillStyle = "#fde68a"; c.fillRect(ex + (f > 0 ? 6 : 1), y + 12, 2, 2);
+    const fx = f > 0 ? x + 38 : x + 2;
+    c.fillStyle = "#92400e"; c.fillRect(f > 0 ? x + 18 : x + 2, y + 32, 20, 4);
+    c.strokeStyle = "#451a03"; c.lineWidth = 2.5; c.beginPath(); c.moveTo(fx - f * 4, y + 24); c.quadraticCurveTo(fx + f * 5, y + 34, fx - f * 4, y + 44); c.stroke();
+    c.strokeStyle = "#e5e7eb"; c.lineWidth = 1; c.beginPath(); c.moveTo(fx - f * 4, y + 24); c.lineTo(fx - f * 4, y + 44); c.stroke();
+    const qx = f > 0 ? x - 6 : x + PLW;
+    c.fillStyle = "#78350f"; c.fillRect(qx, y + 16, 6, 22);
+    c.fillStyle = "#e5e7eb";
+    for (let k = 0; k < 3; k++) { c.beginPath(); c.moveTo(qx + k * 2, y + 16); c.lineTo(qx + k * 2 + 1, y + 10); c.lineTo(qx + k * 2 + 2, y + 16); c.fill(); }
+  } else if (id === "gobg") {                  // 緑の顔の面ととがった耳、黄色い目と牙、茶色の腰布。背中の木の背負子に、槍を持った緑の小鬼が 2 体（槍を投げた直後は腕を前へ出す）
+    c.fillStyle = "#16a34a"; c.fillRect(x + 2, y + 2, PLW - 4, 22);
+    c.beginPath(); c.moveTo(x + 2, y + 8); c.lineTo(x - 5, y + 5); c.lineTo(x + 2, y + 15); c.fill();
+    c.beginPath(); c.moveTo(x + PLW - 2, y + 8); c.lineTo(x + PLW + 5, y + 5); c.lineTo(x + PLW - 2, y + 15); c.fill();
+    const ex = f > 0 ? x + 24 : x + 8;
+    c.fillStyle = "#fde047"; c.fillRect(ex - 1, y + 11, 10, 10);
+    c.fillStyle = "#111827"; c.fillRect(ex + (f > 0 ? 4 : 2), y + 13, 4, 6);
+    c.fillStyle = "#f8fafc";
+    const fgx = f > 0 ? x + 22 : x + 10;
+    c.beginPath(); c.moveTo(fgx, y + 22); c.lineTo(fgx + 2, y + 28); c.lineTo(fgx + 4, y + 22); c.fill();
+    c.beginPath(); c.moveTo(fgx + 8, y + 22); c.lineTo(fgx + 10, y + 28); c.lineTo(fgx + 12, y + 22); c.fill();
+    c.fillStyle = "#92400e"; c.fillRect(x + 4, y + 42, PLW - 8, 10); c.fillRect(x + 8, y + 52, 8, 5); c.fillRect(x + 24, y + 52, 8, 5);
+    const bx = f > 0 ? x - 14 : x + PLW, gk = o.gk || [0, 0];
+    c.strokeStyle = "#78350f"; c.lineWidth = 2; c.strokeRect(bx + 1, y + 1, 12, 42);
+    c.beginPath(); c.moveTo(f > 0 ? bx + 13 : bx + 1, y + 20); c.lineTo(f > 0 ? bx + 17 : bx - 3, y + 20); c.stroke();
+    for (let k = 0; k < 2; k++) {
+      const gy = y + 3 + k * 20, gx = bx + 1, thr = gk[k] > GOB_THROW_CD - 10;
+      c.fillStyle = "#15803d"; c.fillRect(gx, gy, 12, 18);
+      c.fillStyle = "#16a34a"; c.fillRect(gx + 1, gy + 1, 10, 7);
+      c.beginPath(); c.moveTo(gx, gy + 3); c.lineTo(gx - 3, gy + 1); c.lineTo(gx, gy + 6); c.fill();
+      c.beginPath(); c.moveTo(gx + 12, gy + 3); c.lineTo(gx + 15, gy + 1); c.lineTo(gx + 12, gy + 6); c.fill();
+      c.fillStyle = "#fde047"; c.fillRect(f > 0 ? gx + 6 : gx + 2, gy + 3, 4, 3);
+      const hx = gx + 6, hy = gy + 11;
+      c.strokeStyle = "#92400e"; c.lineWidth = 2; c.beginPath();
+      if (thr) { c.moveTo(hx - f * 4, hy); c.lineTo(hx + f * 26, hy); } else { c.moveTo(hx + f * 4, hy + 6); c.lineTo(hx + f * 4, hy - 12); }
+      c.stroke();
+      c.fillStyle = "#cbd5e1"; c.beginPath();
+      if (thr) { c.moveTo(hx + f * 31, hy); c.lineTo(hx + f * 25, hy - 3); c.lineTo(hx + f * 25, hy + 3); }
+      else { c.moveTo(hx + f * 4, hy - 17); c.lineTo(hx + f * 4 - 3, hy - 11); c.lineTo(hx + f * 4 + 3, hy - 11); }
+      c.fill();
+    }
   }
 }
 function drawChar(c, idx, x, y, f, col, flash, o) {
@@ -2282,7 +2593,8 @@ function refreshHud() {
 // キャラ選択画面（名前＋キャラ）
 function drawPreview(canvas, idx) {
   const c = canvas.getContext("2d");
-  c.setTransform(1.4, 0, 0, 1.4, 8, 14);
+  if ((CHARS[idx] || CHARS[0]).back) c.setTransform(1.1, 0, 0, 1.1, 20, 14);   // 背中の広いキャラ（ゴブG）は、背中が欠けないよう少し小さく
+  else c.setTransform(1.4, 0, 0, 1.4, 8, 14);
   c.clearRect(-8, -14, 80, 110);
   drawChar(c, idx, 0, 0, 1, COLORS[myId] || COLORS[0], false);
 }
@@ -2292,13 +2604,15 @@ function paintSelect() {
   const c = CHARS[draft.c], vals = [c.A, c.D, c.S];
   const traits = (c.noShield ? "<br><span class=\"trait\">盾を持たない</span>" : "") + (c.lives ? `<br><span class="trait">残機 +${c.lives}（落ちても1回だけ復活する）</span>` : "") +
     (c.atk ? `<br><span class="trait">通常攻撃の届く距離が約${(ATKS[c.atk].reach / ATKS[0].reach).toFixed(1)}倍（出が遅い）</span>` : "") +
-    (c.forms ? `<br><span class="trait">性能の棒は攻撃形態。守り形態は 攻撃${c.forms[1].A}・防御${c.forms[1].D}・スピード${c.forms[1].S}</span>` : "");
+    (c.forms ? `<br><span class="trait">性能の棒は攻撃形態。守り形態は 攻撃${c.forms[1].A}・防御${c.forms[1].D}・スピード${c.forms[1].S}</span>` : "") +
+    (c.shieldHits ? `<br><span class="trait">盾は${c.shieldHits}回受けると壊れる（ふつうは${SHIELD_HITS}回）</span>` : "") +
+    (c.back ? `<br><span class="trait">背中の2体のぶん、当たり判定が後ろへ大きい</span>` : "");
   root.querySelector("#detail").innerHTML =
     `<h2>${esc(c.name)}</h2><div class="tag">${esc(c.tag)}</div>` +
     STATS.map((s, k) => `<div class="st-r"><span class="nm" style="color:${s.color}">${s.label}</span>${barHtml(vals[k], s.color)}</div>`).join("") +
     `<div class="skl">${c.skill
       ? `<b>スキル「${esc(c.skill.name)}」</b>（クールタイム ${esc(c.skill.cdText || c.skill.cd + "秒")}${c.skill.hold ? "・ためて発動" : ""}）<br>${esc(c.skill.text)}`
-      : "スキルなし"}${traits}</div>`;
+      : c.auto ? `<b>自動の能力</b><br>${esc(c.auto)}` : "スキルなし"}${traits}</div>`;
 }
 function showSelect() {
   const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
@@ -2487,7 +2801,10 @@ function updateSkillUI() {
     if (me.yrc > 0) { state = "cool"; ratio = Math.min(1, me.yrc / YUREI_CD); sec = String(Math.ceil(me.yrc / 60)); } else state = "ready";
   } else if (role && net === "ready" && me && game.ph !== "lobby") {
     const sk = chOf(me).skill;
-    if (sk) {
+    if (!sk && chOf(me).id === "gobg") {                         // ゴブG: スキルなし。盾が壊れている間は、手下を呼んでいる残り（盾が戻るまで）を出す
+      if (me.sbk > 0) { state = "cool"; label = "召喚中"; ratio = Math.min(1, me.sbk / SHIELD_BREAK_FRAMES); sec = String(Math.ceil(me.sbk / 60)); }
+      else { label = "自動"; const n = game.mn.filter(m => m.own === myId).length; if (n > 0) sec = "×" + n; }   // 場にいる手下の数
+    } else if (sk) {
       label = sk.name;
       const id = chOf(me).id, zone = id === "swapper" ? zoneOf(me) : null;
       if (id === "spider") {                                     // 蜘蛛: 今の居場所で使う効果の名前と、その効果のクールタイム
@@ -2509,7 +2826,7 @@ function updateSkillUI() {
   lastSk = key;
   skBtn.dataset.state = state; skBtn.style.setProperty("--p", ratio.toFixed(3));
   skBtn.querySelector("b").textContent = label; skBtn.querySelector("i").textContent = sec;
-  skHint.textContent = state === "none" ? "スキルなし" : "[X] " + label + (sec && sec[0] === "×" ? "  矢 " + sec : state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : label === "矢なし" ? "  1本回復するまで待つ" : "  あと " + sec + " 秒");
+  skHint.textContent = state === "none" ? (label === "自動" ? "スキルなし（背中の2体が自動で槍を投げる）" : "スキルなし") : "[X] " + label + (sec && sec[0] === "×" ? "  矢 " + sec : state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : label === "矢なし" ? "  1本回復するまで待つ" : "  あと " + sec + " 秒");
 }
 
 // ---------- 効果音と演出 ----------
@@ -2602,6 +2919,13 @@ const Sfx = (() => {
     stomp() { tone(160, 50, 0.25, "sine", 0.4); noise(0.2, 0.2, "lowpass", 900, 150); },
     yureiDrop() { tone(820, 380, 0.22, "sine", 0.08); tone(560, 260, 0.25, "triangle", 0.05, 0.06); },
     yureiBoom() { noise(0.45, 0.32, "lowpass", 1600, 120); tone(140, 40, 0.35, "sine", 0.35); },
+    cbSet() { tone(150, 70, 0.14, "triangle", 0.25); noise(0.1, 0.16, "lowpass", 900, 250); },                       // 木の「ゴトッ」
+    cbShot() { noise(0.03, 0.18, "highpass", 3000, 3000); tone(520, 260, 0.1, "triangle", 0.12); tone(1100, 700, 0.07, "sine", 0.06, 0.02); },   // カチッ＋弦
+    woodHit() { tone(240, 130, 0.07, "square", 0.08); noise(0.06, 0.14, "bandpass", 1200, 600); },
+    woodBreak() { noise(0.3, 0.26, "bandpass", 1500, 300); tone(200, 70, 0.22, "triangle", 0.2); tone(130, 60, 0.18, "square", 0.08, 0.05); },
+    spearToss() { noise(0.1, 0.1, "bandpass", 1800, 4200); tone(900, 1400, 0.07, "triangle", 0.05); },              // 小さく高い「ヒュッ」
+    goblinCall() { [520, 640, 780].forEach((f, i) => tone(f, f * 1.1, 0.06, "square", 0.07, i * 0.07)); },            // 「ケケケ」
+    minionSwing() { noise(0.07, 0.1, "highpass", 2500, 5000); },
   };
 })();
 // タイトルへ戻るボタン: 2 回押すと戻る（押し間違い防止）。オンラインでは部屋から抜ける（ホストなら部屋が消える）
@@ -2779,10 +3103,21 @@ function fxEvent(e) {
       rings.push({ x, y, t: 0, max: 14, c: def ? "#9ca3af" : "#ef4444", r0: 10, sp: 5 });
       burst(x, y, 14, { v0: 1.5, v1: 5, l0: 12, l1: 22, s0: 3, s1: 6, colors: ["#ffffff", "#111827", def ? "#9ca3af" : "#ef4444"] });
     } else if (id === "spider") { Sfx.web(); rings.push({ x, y, t: 0, max: 10, c: "#f8fafc", r0: 6, sp: 3 }); }
+    else if (id === "xbow") { Sfx.cbSet(); burst(x, y + 28, 8, { dir: -Math.PI / 2, spread: 2.6, v0: 1, v1: 3, l0: 12, l1: 22, s0: 5, s1: 9, g: 0.04, round: true, colors: ["#a16207", "#d6a35c", "#e2e8f0"] }); }   // 足もとの土ぼこり
   } else if (k === "sc") Sfx.charge();
   else if (k === "sl") { if (e[3] === 3) Sfx.thrust(); else Sfx.slash(); shake(3); }      // 居合斬りの踏み込み / 突進突きの突進
   else if (k === "bc") Sfx.shieldCatch();          // 投げた盾を受け止めた
   else if (k === "wm") Sfx.web();                  // 糸が届かなかった
+  else if (k === "xs") { Sfx.cbShot(); burst(x, y, 5, { dir: d > 0 ? 0 : Math.PI, spread: 0.8, v0: 2, v1: 5, l0: 8, l1: 14, s0: 2, s1: 4, colors: ["#fef3c7", "#fbbf24", "#ffffff"] }); }   // クロスボウが撃った（口から火花）
+  else if (k === "xh") { Sfx.woodHit(); shake(2); burst(x, y, 6, { v0: 1.5, v1: 4, l0: 10, l1: 18, s0: 2, s1: 4, g: 0.15, flat: true, colors: ["#a16207", "#78350f", "#d6a35c"] }); }   // クロスボウが攻撃を受けた
+  else if (k === "xk") { Sfx.woodBreak(); shake(3); burst(x, y, 14, { v0: 2, v1: 7, l0: 16, l1: 30, s0: 3, s1: 7, g: 0.2, flat: true, colors: ["#a16207", "#78350f", "#d6a35c", "#e2e8f0"] }); }   // クロスボウが壊れた・消えた
+  else if (k === "gs") Sfx.spearToss();            // ゴブGの背中の 2 体が槍を投げた
+  else if (k === "gm") {                           // 手下を呼んだ
+    Sfx.goblinCall(); rings.push({ x, y, t: 0, max: 12, c: "#4ade80", r0: 6, sp: 2.5 });
+    burst(x, y, 8, { v0: 0.5, v1: 2.5, l0: 14, l1: 24, s0: 5, s1: 9, g: -0.02, round: true, colors: ["#4ade80", "#bbf7d0", "#e2e8f0"] });
+  }
+  else if (k === "ms") Sfx.minionSwing();          // 手下が斬った
+  else if (k === "gmx") { Sfx.pop(); burst(x, y, e[3] === 1 ? 12 : 6, { v0: 1, v1: e[3] === 1 ? 5 : 3, l0: 12, l1: 24, s0: 4, s1: 8, g: 0.05, round: true, colors: ["#4ade80", "#16a34a", "#e2e8f0"] }); }   // 手下が消えた（1 は殴られた）
   else if (k === "yd") Sfx.yureiDrop();            // 幽霊が爆弾を落とした
   else if (k === "yx") {                           // 幽霊の爆弾が爆発した
     Sfx.yureiBoom(); shake(7);
@@ -2925,7 +3260,7 @@ function drawPlayer(p, i, me, now) {
   const dg = p.dz > 0 && p.al;
   if (dg) { cx.save(); cx.translate(0, p.y + PLH); cx.scale(1, 0.55); cx.translate(0, -(p.y + PLH)); }
   const spear = p.a > 0 && p.ak >= 2;                             // 槍兵が槍を前へ出している
-  drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear });
+  drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear, gk: p.gk });
   if (dg) cx.restore();
   if (p.slw > 0 && p.al) {                                        // 蜘蛛の糸がからんでいる（スピード −1）
     cx.strokeStyle = "rgba(248,250,252,0.7)"; cx.lineWidth = 1.2; cx.beginPath();
@@ -3068,6 +3403,60 @@ function drawThrownShield(b) {                     // ブーメラン使いが�
   cx.save(); cx.translate(b.x, b.y); cx.rotate(b.t * 0.45);
   cx.fillStyle = "rgba(226,232,240,0.95)"; cx.fillRect(-4, -19, 8, 38);
   cx.strokeStyle = COLORS[b.own] || "#ffffff"; cx.lineWidth = 2; cx.strokeRect(-4, -19, 8, 38);
+  cx.restore();
+}
+function drawSpear(b) {                            // ゴブGの槍（飛ぶ向きに回す。茶色の柄と灰色の穂先）
+  cx.save(); cx.translate(b.x, b.y); cx.rotate(Math.atan2(b.vy, b.vx));
+  cx.strokeStyle = "#92400e"; cx.lineWidth = 2.5; cx.beginPath(); cx.moveTo(-10, 0); cx.lineTo(5, 0); cx.stroke();
+  cx.fillStyle = "#cbd5e1"; cx.beginPath(); cx.moveTo(11, 0); cx.lineTo(4, -3.5); cx.lineTo(4, 3.5); cx.fill();
+  cx.restore();
+}
+// クロスボウ（置き物）: 茶色の台座と柱の上に、横向きのクロスボウ。台座に持ち主の色の帯、上に耐久の点。足場に乗っている間は、射線を持ち主の色の薄い点線で出す
+function drawCb(c, now) {
+  const f = c.f, x = c.x, y = c.y, col = COLORS[c.own] || "#ffffff", mx = f > 0 ? x + CB_W : x, on = c.rl >= 0;
+  const blink = c.t >= CB_LIFE - CB_BLINK && Math.floor(now / 120) % 2;
+  if (c.g !== undefined ? c.g : on) {              // 足場に乗っている間だけ（ホストは g、参加者は rl が -1 でないこと）
+    cx.save(); cx.globalAlpha = 0.15; cx.strokeStyle = col; cx.lineWidth = 2; cx.setLineDash([8, 8]);
+    cx.beginPath(); cx.moveTo(mx, y + 4); cx.lineTo(mx + f * CB_RANGE, y + 4); cx.stroke(); cx.restore();
+  }
+  cx.save();
+  if (blink) cx.globalAlpha = 0.3;
+  cx.fillStyle = "#78350f"; cx.beginPath(); cx.moveTo(x + 4, y + CB_H); cx.lineTo(x + CB_W - 4, y + CB_H); cx.lineTo(x + CB_W - 8, y + 19); cx.lineTo(x + 8, y + 19); cx.fill();
+  cx.fillStyle = col; cx.fillRect(x + 7, y + 22, CB_W - 14, 2);
+  cx.fillStyle = "#92400e"; cx.fillRect(x + CB_W / 2 - 2, y + 5, 4, 14);
+  cx.fillStyle = "#a16207"; cx.fillRect(x + 2, y + 2, CB_W - 4, 4);
+  cx.strokeStyle = "#451a03"; cx.lineWidth = 2.5; cx.beginPath(); cx.moveTo(mx - f * 5, y - 1); cx.quadraticCurveTo(mx + f * 4, y + 4, mx - f * 5, y + 9); cx.stroke();
+  cx.strokeStyle = "#e5e7eb"; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(mx - f * 5, y - 1); cx.lineTo(mx - f * 5, y + 9); cx.stroke();
+  if (c.rl === 0) {                                // 矢を装填している
+    cx.strokeStyle = "#e5e7eb"; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(mx - f * 22, y + 4); cx.lineTo(mx + f * 1, y + 4); cx.stroke();
+    cx.fillStyle = "#cbd5e1"; cx.beginPath(); cx.moveTo(mx + f * 6, y + 4); cx.lineTo(mx + f * 1, y + 1); cx.lineTo(mx + f * 1, y + 7); cx.fill();
+  }
+  if (c.hp < CB_HP) {                              // ひび
+    cx.strokeStyle = "rgba(15,23,42,0.8)"; cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(x + 10, y + 19); cx.lineTo(x + 13, y + 23); cx.lineTo(x + 11, y + CB_H);
+    if (c.hp < CB_HP - 1) { cx.moveTo(x + 20, y + 19); cx.lineTo(x + 17, y + 22); cx.lineTo(x + 20, y + CB_H); }
+    cx.stroke();
+  }
+  for (let k = 0; k < CB_HP; k++) { cx.fillStyle = k < c.hp ? col : "rgba(255,255,255,0.2)"; cx.beginPath(); cx.arc(x + CB_W / 2 + (k - 1) * 7, y - 9, 2.5, 0, 6.2832); cx.fill(); }
+  cx.restore();
+}
+// ゴブGの手下: 緑の体に、持ち主の色の縁取り。前に小さな剣。斬る間は、黄色い弧が出る。残り 1 秒は点滅
+function drawMinion(m, now) {
+  const f = m.f, x = m.x, y = m.y, col = COLORS[m.own] || "#ffffff";
+  cx.save();
+  if (m.t >= MN_LIFE - 60 && Math.floor(now / 120) % 2) cx.globalAlpha = 0.4;
+  cx.fillStyle = "#16a34a"; cx.fillRect(x, y, MN_W, MN_H);
+  cx.strokeStyle = col; cx.lineWidth = 2; cx.strokeRect(x + 1, y + 1, MN_W - 2, MN_H - 2);
+  cx.fillStyle = "#16a34a"; cx.beginPath(); cx.moveTo(x, y + 3); cx.lineTo(x - 4, y + 1); cx.lineTo(x, y + 7); cx.fill();
+  cx.beginPath(); cx.moveTo(x + MN_W, y + 3); cx.lineTo(x + MN_W + 4, y + 1); cx.lineTo(x + MN_W, y + 7); cx.fill();
+  cx.fillStyle = "#fde047"; cx.fillRect(f > 0 ? x + 8 : x + 2, y + 5, 4, 4);
+  cx.fillStyle = "#111827"; cx.fillRect(f > 0 ? x + 10 : x + 2, y + 6, 2, 2);
+  const hx = f > 0 ? x + MN_W : x, hy = y + 12, ang = m.a > 0 ? -1.2 + 2.2 * Math.min(1, m.a / MN_OFF) : -0.4;
+  cx.strokeStyle = "#cbd5e1"; cx.lineWidth = 2.5; cx.beginPath(); cx.moveTo(hx, hy); cx.lineTo(hx + f * Math.cos(ang) * 12, hy + Math.sin(ang) * 12); cx.stroke();
+  if (m.a >= MN_ON && m.a <= MN_OFF) {
+    cx.strokeStyle = "#fde047"; cx.lineWidth = 3; cx.beginPath();
+    cx.arc(hx, hy, MN_REACH - 2, f > 0 ? -1.1 : Math.PI - 1.1, f > 0 ? 1.1 : Math.PI + 1.1); cx.stroke();
+  }
   cx.restore();
 }
 function drawFlower(f, now) {
@@ -3354,6 +3743,8 @@ function render() {
   fxPhase(dt); updateFx(dt); updateSkillUI();
   if (role === "client" && !game.hsf) {              // 参加者側では、飛び道具をスナップショットの合間に先へ進めて滑らかに見せる
     for (const b of game.pj) { b.x += b.vx * dt; b.y += b.vy * dt; b.t += dt; if (b.k === 0 || b.k === 3) b.vy += 0.5 * dt; }
+    for (const m of game.mn) { m.x += m.vx * dt; m.t += dt; }          // 手下は横へ、クロスボウは経過（点滅）だけ先へ進める（y はホストの値のまま）
+    for (const c of game.cb) c.t += dt;
   }
   if (role === "client") { game.p.forEach(smoothClient); game.cl.forEach(smoothClient); }
   const g = cx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
@@ -3395,6 +3786,7 @@ function render() {
   for (const w of game.wd) drawWind(w, now);
   for (const f of game.fl) drawFlower(f, now);
   for (const m of game.rm) drawPlacedZone(m, now);
+  for (const c of game.cb) drawCb(c, now);
   for (const p of game.p) if (p && p.c && p.al && p.ks > 0 && chOf(p).id === "swapper") drawZone(p);
   drawRewindGhosts(dt);
   // プレイヤーと分身（吹っ飛んでいる間は残像を引く。巻き戻し中は、通った場所に青い残像を残す）
@@ -3413,7 +3805,8 @@ function render() {
   };
   for (let i = 0; i < MAX_PLAYERS; i++) { const c = game.cl[i]; if (c) drawWithTrail(c, i, false); }
   for (let i = 0; i < MAX_PLAYERS; i++) { const p = game.p[i]; if (p && p.c) drawWithTrail(p, i, i === myId); }
-  for (const b of game.pj) { if (b.k === 0) drawBomb(b, now); else if (b.k === 2) drawThrownShield(b); else if (b.k === 3) drawYureiBomb(b, now); else drawArrow(b); }
+  for (const m of game.mn) drawMinion(m, now);
+  for (const b of game.pj) { if (b.k === 0) drawBomb(b, now); else if (b.k === 2) drawThrownShield(b); else if (b.k === 3) drawYureiBomb(b, now); else if (b.k === 4) drawSpear(b); else drawArrow(b); }
   drawFx();
   cx.restore();
   if (flashA > 0.02) { cx.fillStyle = "rgba(255,255,255," + flashA.toFixed(3) + ")"; cx.fillRect(0, 0, cw, ch); flashA *= Math.pow(0.8, dt); }
