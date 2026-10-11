@@ -345,9 +345,10 @@ const JUMP_TURN = 8;                 // ジャンプした直後、空中でも�
 // 攻撃の種類: 0=通常 / 1=侍の居合斬り（少しためてから、踏み込みながら斬る）/ 2=槍兵の通常攻撃（長いが出が遅い）/ 3=槍兵の突進突き
 // frac: 盾なしの相手への吹っ飛ばしの倍率 / breaker: 盾で受けられたら盾を一撃で壊す（吹っ飛ばさない）/ aim: 踏み込む直前に近い敵へ向き直る
 // lock: 攻撃の間ずっと動けない（踏み込みだけ進む）/ hover: 空中で踏み込むとき、落ちる速さを抑えて真横へ進む
+// stop: 踏み込み中、向かう先の敵の体に触れたら手前で止まる（すり抜けない。dashStop）
 const ATKS = [
   { total: 26, on: 7, off: 13, reach: 46 },
-  { total: 40, on: 14, off: 19, reach: 74, dash: 13, dashFrom: 10, dashTo: 19, frac: 1.1, breaker: true, aim: true },   // 10 フレームためてから踏み込む（踏み込みは約 130px）
+  { total: 40, on: 14, off: 19, reach: 74, dash: 15.6, dashFrom: 10, dashTo: 19, frac: 1.1, breaker: true, aim: true, stop: true },   // 10 フレームためてから踏み込む（踏み込みは約 156px）。敵の体に触れたら手前で止まる
   { total: 30, on: 10, off: 16, reach: 82 },                                                                             // ふつうの約 1.8 倍の長さ
   { total: 34, on: 9, off: 18, reach: 82, dash: 12, dashFrom: 9, dashTo: 18, frac: 1.2, breaker: true, lock: true, hover: true },   // 8 フレーム構えて、10 フレーム突進（約 120px）。終わって 16 フレームは動けない
 ];
@@ -370,7 +371,7 @@ const moveMul = s => s >= BASE_STAT ? 1 + 1.8 * (s - BASE_STAT) / (MAX_STAT - BA
 const JUMP_MIN = 100, JUMP_MAX = 200, AIR_JUMP = 0.75;     // ジャンプの高さ(px): スピード 0 / 6 のとき / 二段目の割合
 const jumpHeight = s => JUMP_MIN + (JUMP_MAX - JUMP_MIN) * Math.max(0, Math.min(MAX_STAT, s)) / MAX_STAT;
 const jumpVel = h => 0.3 + Math.sqrt(0.09 + 1.2 * h);       // 高さ h(px) に届く初速（重力 0.6 を 1 フレームずつ足す計算に合わせた式）
-const SHIELD_HITS = 3;               // 盾が壊れるまでの回数（攻撃・防御の差に関係なく一律。ゴブGだけ CHARS の shieldHits で 1 回）
+const SHIELD_HITS = 3;               // 盾が壊れるまでの回数（攻撃・防御の差に関係なく全員一律）
 const SHIELD_BREAK_FRAMES = 300;     // 壊れた盾が元に戻るまで（60fps で 5 秒）
 const SHIELD_STEP_FRAMES = 300;      // 盾のダメージは、攻撃されないまま 5 秒たつごとに 1 段階（1 回ぶん）ずつ回復する
 
@@ -385,6 +386,7 @@ const SD_HOLD_FRAMES = 6 * 60;       // 最小幅になってから、足場が�
 const BOMB_FUSE = 120, BOMB_R = 9, BOMB_BLAST = 85;     // ボム: 導火線の長さ（2 秒）/ 大きさ / 爆風の半径
 const BOMB_KNOCK = 0.475, BOMB_LIFT = 5.5;              // ボムの吹っ飛び（横の強さ / 上向きの初速）。以前の半分
 const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 90;    // 花: 咲くまで / 残る時間 / 踏んだ人が動けない時間（1.5 秒）
+const FLOWER_HALF = 9, FLOWER_BIG_P = 0.2, FLOWER_BIG_ROOT = 180, FLOWER_BIG_SCALE = 1.6, FLOWER_BIG_HALF = 14;   // 花を踏む判定の幅（半分）/ 大きな花になる確率 / 大きな花で動けない時間（3 秒）/ 見た目の倍率 / 判定の幅（半分）
 const DOGEZA_KNOCK = 0.5;            // 花で動けない（土下座）間に受ける吹っ飛びの倍率
 const CLONE_LIFE = 420;              // 分身が消えるまで
 const ARROW_SPEED = 0.7;              // 矢の速さの倍率（13〜22px/フレームに掛ける）
@@ -396,6 +398,7 @@ const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
 const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛ばし力の倍率
 const GIANT_FRAMES = 480, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
+const RW_PUSH = 0.45;   // 巻き戻しの通り道にいた敵を、ステージの外側へ弾く強さ（盾・カウンター無視。ノーマルに当てて硬直約 10 フレーム）
 const RW_SPAN = 120, RW_SPEED = 4;   // 時計師の巻き戻し: さかのぼる長さ（2 秒）/ 早戻りの速さ（4 倍速。2 秒ぶんを 0.5 秒で戻る）
 // スワッパーの ゾーン: 押している間だけ円が広がり（上限なし）、離すとその場所に 5 秒残る。円の中では、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで入れ替える。
 // 円が消えるとクールタイム（2 秒＋半径 100px ごとに 1 秒）が始まり、その間は盾がなく、移動速度が 0.7 倍になる
@@ -407,8 +410,8 @@ const ZONE_CD_BASE = 120, ZONE_CD_PER100 = 60, ZONE_SLOW = 0.7;          // ク�
 const zoneR = ks => ZONE_R0 + ZONE_FAST * ZONE_TAU * (1 - Math.exp(-ks / ZONE_TAU)) + ZONE_SLOWV * ks;
 const ZONE_WARP_MUL = 1.3;           // ゾーンの回り込み攻撃の吹っ飛ばしの倍率（攻撃の強さの上限 1.3 倍と同じ。背後から当てても、相手がすぐ立て直して戻らないように）
 const zoneCd = r => Math.round(ZONE_CD_BASE + ZONE_CD_PER100 * r / 100);
-// レスラーのダッシュつかみ: 3 フレーム目から前へダッシュ（1 フレームに 9px、14 フレーム目まで。約 110px）し、4〜14 フレーム目に前 30px 以内の敵をつかむ
-const GRAB_ON = 4, GRAB_OFF = 14, GRAB_REACH = 30, GRAB_DASH_FROM = 3, GRAB_DASH_TO = 14, GRAB_DASH_V = 9;
+// レスラーのダッシュつかみ: 3 フレーム目から前へダッシュ（1 フレームに 13px、14 フレーム目まで。約 156px）し、4〜14 フレーム目に前 30px 以内の敵をつかむ
+const GRAB_ON = 4, GRAB_OFF = 14, GRAB_REACH = 30, GRAB_DASH_FROM = 3, GRAB_DASH_TO = 14, GRAB_DASH_V = 13;
 const GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.9;    // 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし（0.85 だとステージ中央から投げても崖の外まで届かなかった）
 const WIND_FRAMES = 300, WIND_W = 440, WIND_H = 280;    // 天狗の風の場: 続く時間（5 秒）/ 横幅 / 高さ
 const WIND_FOE_MV = 0.45, WIND_FOE_JP = 0.55, WIND_SELF_MV = 1.6, WIND_SELF_JP = 1.4;   // 場の中の 移動速度・ジャンプの高さ の倍率（敵 / 天狗自身）
@@ -424,15 +427,15 @@ const WEB_DIVE = 420, WEB_DIVE_V = 18, WEB_STOMP = 0.5, WEB_LAG = 9;   // 急降
 const YUREI_Y = PY - 250, YUREI_SPEED = 5.5, YUREI_MARGIN = 60;   // 飛ぶ高さ（上の台より 100px 上）/ 左右の速さ / メインの端より外へ出られる幅
 const YUREI_CD = 180, YUREI_FIRST = 60;                           // 爆弾のクールタイム（3 秒）/ 幽霊になってから最初の爆弾まで（1 秒）
 const YUREI_R = 7, YUREI_BLAST = 60, YUREI_KNOCK = 0.45, YUREI_LIFT = 6;   // 爆弾の大きさ / 爆風の半径 / 吹っ飛ばし（盾は効かない）/ 上向きの初速
-// クロス使いのクロスボウ: 足場に置くと、射線（前方 450px）に敵が入るたびに矢を自動で撃つ。8 秒で壊れ、攻撃を 3 回受けても壊れる（クールタイムは置いた瞬間から 10 秒）
+// クロス使いのクロスボウ: 足場に置くと、射線（前方 450px）に敵が入るたびに矢を自動で撃つ。8 秒で壊れ、攻撃を 3 回受けても壊れる（クールタイムは置いた瞬間から 12 秒）
 const CB_W = 30, CB_H = 26, CB_BOLT = 22, CB_RANGE = 450;     // クロスボウの大きさ（左上の座標で持つ）/ 矢の高さ（足もとから）/ 射線の長さ
 const CB_RELOAD = 30, CB_ARM = 12, CB_LIFE = 480, CB_BLINK = 60, CB_HP = 3;   // 次の矢まで（0.5 秒）/ 足場に乗ってから最初の矢まで / 稼働（8 秒）/ 消える前の点滅 / 壊れるまでに受けられる回数
 const CB_PAD = 14;                                            // 矢・槍がクロスボウに当たる範囲を、下へ広げる幅（アーチャーの矢はクロスボウの上を通るので）
 const CB_ARROW_C = 0.5;                                    // 矢のため量（速さ 0.7 × (13 + 9 × 0.5)、威力 0.35 + 0.85 × 0.5）
-// ゴブG: 背中の 2 体が近くの敵へ小さな槍を自動で投げ、盾が壊れている間は手下を呼ぶ（スキルなし）
-const GOB_RANGE = 140, GOB_THROW_CD = 90, GOB_STAGGER = 45;   // 槍を投げる距離 / 1 体あたりの間隔（1.5 秒）/ 2 体のずれ
+// ゴブG: 背中のゴブリンが近くの敵へ小さな槍を自動で投げる。スキル「召喚」で手下を 3 体呼ぶ
+const GOB_RANGE = 140, GOB_THROW_CD = 90;                     // 槍を投げる距離 / 投げる間隔（1.5 秒）
 const GOB_SPEAR_V = 8, GOB_SPEAR_LIFE = 26, GOB_SPEAR_FRAC = 0.3;   // 槍の速さ / 寿命 / 吹っ飛ばし
-const GOB_SUMMON_FIRST = 30, GOB_SUMMON_EVERY = 90;           // 盾が壊れてから最初の召喚まで / 召喚の間隔（盾が壊れている 5 秒の間に 3 体）
+const GOB_SUMMON_N = 3, GOB_SUMMON_EVERY = 90;                // 召喚: 呼ぶ数 / 間隔（1.5 秒）
 const MN_W = 14, MN_H = 20, MN_SPEED = 2.2, MN_LIFE = 360, MN_MAX = 3;   // 手下の大きさ / 歩く速さ / 寿命（6 秒）/ ゴブG 1 体あたりの上限
 const MN_REACH = 18, MN_TOTAL = 18, MN_ON = 6, MN_OFF = 10, MN_FRAC = 0.74, MN_FALL = 60;   // 剣の届く距離 / 斬りの全体 / 当たるフレーム / 吹っ飛ばし / メインの上面からこれだけ落ちたら消える
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
@@ -445,53 +448,54 @@ const outOfBounds = p => { const x = p.x + pwOf(p) / 2; return x < KO_L || x > K
 // A/D/S = 攻撃/防御/スピード。skill.cd = クールタイム(秒)、スキルが強いほど長い。hold = 押している間ためて離すと発動
 const CHARS = [
   { id: "normal", name: "ノーマル", A: 2, D: 2, S: 2, tag: "練習用。すべて普通で、スキルはない", skill: null },
-  { id: "bomber", name: "ボマー", A: 2, D: 2, S: 3, tag: "爆弾で周りを吹っ飛ばす",
-    skill: { name: "ボム", cd: 3, text: "爆弾を短く山なりに投げる。敵に当たっても爆発せず、2秒後に爆発して周りを軽く吹っ飛ばす。盾は効かない（自分は無傷）" } },
-  { id: "samurai", name: "侍", A: 5, D: 1, S: 3, tag: "攻撃力が高く、盾を一撃で割れる",
-    skill: { name: "居合斬り", cd: 4, text: "少しためてから（約0.17秒）、いちばん近い敵の方向へ自動で踏み込んで斬る（約130px）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
-  { id: "archer", name: "アーチャー", A: 2, D: 1, S: 3, tag: "遠くから矢を放つ",
+  { id: "bomber", name: "ボマー", A: 2, D: 2, S: 4, tag: "爆弾で周りを吹っ飛ばす",
+    skill: { name: "ボム", cd: 2, text: "爆弾を短く山なりに投げる。敵に当たっても爆発せず、2秒後に爆発して周りを軽く吹っ飛ばす。盾は効かない（自分は無傷）" } },
+  { id: "samurai", name: "侍", A: 5, D: 1, S: 4, tag: "攻撃力が高く、盾を一撃で割れる",
+    skill: { name: "居合斬り", cd: 4, text: "少しためてから（約0.17秒）、いちばん近い敵の方向へ自動で踏み込んで斬る（約156px。敵の体に触れたら手前で止まる）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
+  { id: "archer", name: "アーチャー", A: 2, D: 1, S: 4, tag: "遠くから矢を放つ",
     skill: { name: "弓矢", cd: 0.1, hold: true, maxCharge: 36, openShield: true, text: "矢は最大5本まで持てて、1秒に1本ずつ回復する（矢がないと撃てない）。押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
-  { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 4, tag: "瞬間移動で間合いを支配する",
+  { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 5, tag: "瞬間移動で間合いを支配する",
     skill: { name: "テレポート", cd: 2, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
-  { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 2, tag: "盾なし。スキルで攻撃と速さが上がるが、防御がなくなる", noShield: true,
-    skill: { name: "狂化", cd: 14, text: "6秒間、攻撃+2・スピード+2になるが、防御が−2（0）になる（4/2/2 → 6/0/4）。吹っ飛ばされやすくなる" } },
-  { id: "knight", name: "騎士", A: 3, D: 5, S: 1, tag: "とても硬い。攻撃を2倍にして返す",
+  { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 3, tag: "盾なし。スキルで攻撃と速さが上がるが、防御がなくなる", noShield: true,
+    skill: { name: "狂化", cd: 14, text: "6秒間、攻撃+2・スピード+2になるが、防御が−2（0）になる（4/2/3 → 6/0/5）。吹っ飛ばされやすくなる" } },
+  { id: "knight", name: "騎士", A: 3, D: 5, S: 2, tag: "とても硬い。攻撃を2倍にして返す",
     skill: { name: "カウンター", cd: 4, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
-  { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 3, tag: "透明になって攻撃をすり抜ける",
+  { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 4, tag: "透明になって攻撃をすり抜ける",
     skill: { name: "透過", cd: 8, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
-  { id: "giant", name: "巨人", A: 1, D: 2, S: 1, tag: "ふだんは弱いが、巨大化して暴れる",
-    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+5され（1/2/1 → 6/6/6。6が上限）、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
-  { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 3, tag: "分身と一緒に戦う",
+  { id: "giant", name: "巨人", A: 1, D: 2, S: 2, tag: "ふだんは弱いが、巨大化して暴れる",
+    skill: { name: "巨大化", cd: 15, text: "8秒間、全ステータスが+5され（1/2/2 → 6/6/6。6が上限）、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒間は使えない" } },
+  { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 4, tag: "分身と一緒に戦う",
     skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分とは別に動き、敵を追いかけて攻撃してくれる味方になる。分身は盾を持たず、性能は攻撃2・防御1・スピード2" } },
-  { id: "okure", name: "おくれたん", A: 2, D: 3, S: 2, tag: "花の罠で相手を足止めする",
-    skill: { name: "花", cd: 1, text: "目の前に小さな花を咲かせる。踏んだ相手は1.5秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）" } },
-  { id: "nao", name: "なお", A: 1, D: 3, S: 2, tag: "攻撃は弱いが打たれ強く、残機が1つ多い", skill: null, lives: 1 },
+  { id: "okure", name: "おくれたん", A: 2, D: 3, S: 3, tag: "花の罠で相手を足止めする",
+    skill: { name: "花", cd: 1, text: "目の前に小さな花を咲かせる。踏んだ相手は1.5秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）。ときどき（5回に1回くらい）大きな花が咲き、踏むと3秒間動けない" } },
+  { id: "nao", name: "なお", A: 1, D: 3, S: 3, tag: "攻撃は弱いが打たれ強く、残機が1つ多い", skill: null, lives: 1 },
   // 13〜16 体目（通信ではキャラを番号で送るので、必ず末尾に足す）
-  { id: "clock", name: "時計師", A: 2, D: 2, S: 2, tag: "時間を巻き戻して、ピンチから抜け出す",
-    skill: { name: "巻き戻し", cd: 10, text: "2秒前までの通り道を、残像を残しながら早戻りでさかのぼる（約0.5秒）。戻っている間は無敵。吹っ飛ばされている最中でも使える" } },
-  { id: "swapper", name: "スワッパー", A: 2, D: 1, S: 3, tag: "ゾーンの中では、回り込みも入れ替えも自由自在",
+  { id: "clock", name: "時計師", A: 2, D: 2, S: 3, tag: "時間を巻き戻して、ピンチから抜け出す",
+    skill: { name: "巻き戻し", cd: 10, text: "2秒前までの通り道を、残像を残しながら早戻りでさかのぼる（約0.5秒）。戻っている間は無敵で、戻る途中でぶつかった敵を外側へ軽く弾く。吹っ飛ばされている最中でも使える" } },
+  { id: "swapper", name: "スワッパー", A: 2, D: 1, S: 4, tag: "ゾーンの中では、回り込みも入れ替えも自由自在",
     skill: { name: "ゾーン", cd: 2, cdText: "2秒＋円の半径100pxごとに1秒（円が消えてから）", hold: true, maxCharge: 1e6,
       text: "押している間だけ、水色の円が広がり続ける。離すと、その場所に円が5秒間残る。円の中に自分と敵がいるとき、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで円の中の全員と位置を入れ替える（0.1秒ごと）。回り込み攻撃は、ふつうの攻撃より強く吹っ飛ばす。円が消えるとクールタイムが始まり、その間は盾がなく、動きが遅くなる（大きく広げるほど長い）" } },
-  { id: "wrestler", name: "レスラー", A: 4, D: 3, S: 1, tag: "盾ごとつかんで投げ飛ばす",
-    skill: { name: "ダッシュつかみ", cd: 5, text: "前へダッシュして（約110px）、ぶつかった敵を、盾やカウンターを無視してつかみ、持ち上げている間に押した方向へ投げる（押さなければ後ろへ）。空中でも使える。つかむ前に殴られると負け、空振りすると隙ができる" } },
-  { id: "tengu", name: "天狗", A: 2, D: 2, S: 3, tag: "風の場で、敵を鈍らせ自分は速くなる",
+  { id: "wrestler", name: "レスラー", A: 4, D: 3, S: 2, tag: "盾ごとつかんで投げ飛ばす",
+    skill: { name: "ダッシュつかみ", cd: 5, text: "前へダッシュして（約160px）、ぶつかった敵を、盾やカウンターを無視してつかみ、持ち上げている間に押した方向へ投げる（押さなければ後ろへ）。空中でも使える。つかむ前に殴られると負け、空振りすると隙ができる" } },
+  { id: "tengu", name: "天狗", A: 2, D: 2, S: 4, tag: "風の場で、敵を鈍らせ自分は速くなる",
     skill: { name: "羽うちわ", cd: 10, text: "前方の広い範囲に5秒間、風の吹く場を作る（使ったあとはすぐ動ける）。場の中では、敵は移動が0.45倍・ジャンプが0.55倍に下がり、自分は移動が1.6倍・ジャンプが1.4倍に上がる" } },
   // 17〜20 体目（必ず末尾に足す）。atk: 通常攻撃の種類（ATKS の番号）/ forms: 形態ごとの性能（A/D/S は最初の形態の値）
-  { id: "boomer", name: "ブーメラン使い", A: 3, D: 2, S: 2, tag: "盾を投げて、行きと帰りで2回当てる",
+  { id: "boomer", name: "ブーメラン使い", A: 3, D: 2, S: 3, tag: "盾を投げて、行きと帰りで2回当てる",
     skill: { name: "盾投げ", cd: 4, text: "自分の盾を前へ投げる。盾は約260px先まで飛んで、投げた人のところへ戻ってくる。行きと帰りで1回ずつ当たり、帰りは相手の背中に当たる（盾が効かない）。投げている間は自分の盾がない。盾が壊れている間は投げられない" } },
-  { id: "lancer", name: "槍兵", A: 3, D: 2, S: 1, atk: 2, tag: "長い槍で、遠くから突く",
+  { id: "lancer", name: "槍兵", A: 3, D: 2, S: 2, atk: 2, tag: "長い槍で、遠くから突く",
     skill: { name: "突進突き", cd: 5, text: "少し構えてから、槍を構えて前へ突進する（約120px）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は強く吹っ飛ばす。空中でも使える。突進のあとは少し動けず、盾も外れる。通常攻撃は届く距離がふつうの約1.8倍だが、出が遅い" } },
-  { id: "reversi", name: "リバーシ", A: 5, D: 1, S: 3, forms: [{ A: 5, D: 1, S: 3 }, { A: 1, D: 5, S: 1 }], tag: "攻めと守りの2つの姿を入れ替える",
-    skill: { name: "変身", cd: 3, text: "攻撃形態（攻撃5・防御1・スピード3）と守り形態（攻撃1・防御5・スピード1）を入れ替える。ラウンドの始めは攻撃形態。吹っ飛ばされている最中でも使える" } },
-  { id: "spider", name: "蜘蛛", A: 2, D: 1, S: 3, tag: "糸で崖に戻り、敵を引き寄せ、空から襲う",
+  { id: "reversi", name: "リバーシ", A: 5, D: 1, S: 4, forms: [{ A: 5, D: 1, S: 4 }, { A: 1, D: 5, S: 2 }], tag: "攻めと守りの2つの姿を入れ替える",
+    skill: { name: "変身", cd: 3, text: "攻撃形態（攻撃5・防御1・スピード4）と守り形態（攻撃1・防御5・スピード2）を入れ替える。ラウンドの始めは攻撃形態。吹っ飛ばされている最中でも使える" } },
+  { id: "spider", name: "蜘蛛", A: 2, D: 1, S: 4, tag: "糸で崖に戻り、敵を引き寄せ、空から襲う",
     skill: { name: "糸", cd: 4, cdText: "崖へ戻る 4秒・引き寄せ 5秒・急降下 2秒（効果ごとに別）",
       text: "居場所で効果が変わる。崖の外: 近いほうの崖の角へ糸を飛ばして（300pxまで）、崖の上へ引き上げる（届かなければ1秒後にもう一度使える）。地上: 前へ糸を飛ばし（250pxまで）、当たった敵を目の前まで引き寄せる（盾があっても引き寄せる）。引き寄せた敵は3秒間スピードが−1。ステージの上の空中: 斜め下の地面へ糸を張って急降下し、着地で足もとの敵を軽く吹っ飛ばす（盾は効かない）。吹っ飛ばされている最中でも使える" } },
-  // 21〜22 体目（必ず末尾に足す）。shieldHits: 盾が壊れるまでの回数（ふつうは SHIELD_HITS）/ back: 当たり判定を背中側へ広げる幅 / auto: スキルなしキャラの自動能力の説明
-  { id: "xbow", name: "クロス使い", A: 2, D: 2, S: 3, tag: "クロスボウを置いて、射線に入った敵を撃つ",
-    skill: { name: "クロスボウ", cd: 10, cdText: "10秒（置いてから。クロスボウは8秒で壊れる）",
+  // 21〜22 体目（必ず末尾に足す）。back: 当たり判定を背中側へ広げる幅 / auto: スキルとは別の、自動で働く能力の説明
+  { id: "xbow", name: "クロス使い", A: 2, D: 2, S: 4, tag: "クロスボウを置いて、射線に入った敵を撃つ",
+    skill: { name: "クロスボウ", cd: 12, cdText: "12秒（置いてから。クロスボウは8秒で壊れる）",
       text: "向いている方へクロスボウを置く（向きは固定）。空中で使うと真下へ落ちて足場に置かれる（崖の外なら落ちて消える）。450px先までの射線に敵が入ると、0.5秒ごとに矢を撃つ（盾で防げる）。攻撃を3回受けるか、8秒たつと壊れる" } },
-  { id: "gobg", name: "ゴブG", A: 3, D: 3, S: 2, shieldHits: 1, back: 14, tag: "背中の2体と手下で戦う。盾はもろい", skill: null,
-    auto: "背中の2体が、140px以内の敵へ小さな槍を自動で投げる（盾で防げる）。盾は1回受けると壊れ、壊れている間（5秒）は1.5秒ごとに手下を呼ぶ（最大3体）。手下は近くの敵へ歩いて行き、1回斬ると消える。背中の2体のぶん、当たり判定が後ろへ大きい" },
+  { id: "gobg", name: "ゴブG", A: 3, D: 3, S: 3, back: 14, tag: "背中のゴブリンと、呼び出した手下で戦う",
+    skill: { name: "召喚", cd: 10, cdText: "10秒（使った瞬間から）", text: "押すと手下を呼ぶ。すぐに1体、そのあと1.5秒ごとに1体ずつ、合計3体。手下は近くの敵へ歩いて行き、1回斬ると消える。吹っ飛ばされても呼び続けるが、落ちて復活すると残りは取り消し" },
+    auto: "背中のゴブリンが、140px以内の敵へ小さな槍を1.5秒ごとに自動で投げる（盾で防げる）" },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
@@ -503,11 +507,10 @@ const effD = p => statOf(p, "D");
 const effS = p => statOf(p, "S");
 const szOf = p => p.gt > 0 ? GIANT_SCALE : 1;                // 巨大化中は 2 倍の大きさ
 const pwOf = p => PLW * szOf(p), phOf = p => PLH * szOf(p);
-// 当たり判定の左右の端。ゴブGは、背中の 2 体のぶん、後ろ（向きと反対側）へ back だけ広い（分身は広げない）
+// 当たり判定の左右の端。ゴブGは、背中のゴブリンのぶん、後ろ（向きと反対側）へ back だけ広い（分身は広げない）
 const backOf = p => p.isClone ? 0 : (chOf(p).back || 0) * szOf(p);
 const hbL = p => p.f > 0 ? p.x - backOf(p) : p.x;
 const hbR = p => p.f > 0 ? p.x + pwOf(p) : p.x + pwOf(p) + backOf(p);
-const shieldHitsOf = p => (!p.isClone && chOf(p).shieldHits) || SHIELD_HITS;   // 盾が壊れるまでの回数（ゴブGは 1 回）
 const dzMul = t => t.dz > 0 ? DOGEZA_KNOCK : 1;              // 土下座中は吹っ飛びにくい
 
 // ---------- 状態 ----------
@@ -558,6 +561,7 @@ function newPlayer() {
            jp: 0, dj: 0, ap: 0,                         // 前のフレームでジャンプ・攻撃ボタンが押されていたか / 空中ジャンプを使ったか
            bk: 0, ba: 0, bu: 0, jg: 0,                  // 先行入力の残り（スキル・攻撃・ジャンプ）/ ジャンプ直後に向きを変えられる残り
            tl: [], rw: 0, rwPath: null, rwI: 0,         // 時計師: 通り道の記録（ホストだけ）/ 早戻りの残りフレーム / 戻る道 / 戻る道の今の位置
+           rwHit: [],                                   // 時計師: この巻き戻しで、通り道にいて弾いた敵（ホストだけ。同じ敵は 1 回まで）
            am: ARROW_MAX, amT: 0,                       // アーチャーの矢の残り / 次の 1 本が回復するまでの経過
            km: 0, rmSw: 0, wa: 0,                              // クールタイムの長さ（スワッパーは毎回変わる。スキルボタンの表示用）/ スワッパーの入れ替えの間隔の残り
            gr: 0, grT: null, grH: 0, grD: 0, f0: 1, hd: 0,   // レスラー: つかみの経過フレーム / つかんでいる相手 / 持ち上げの残り / 投げる向き / つかみ始めの向き。hd: つかまれている（残りフレーム）
@@ -566,7 +570,7 @@ function newPlayer() {
            wb: 0, wbm: 0, wbx: 0, wby: 0, wl: null, wlt: 0, wlT: null,   // 蜘蛛: 糸で動いている残り / 動き方（1 = 崖へ戻る / 2 = 急降下）/ 行き先 / 糸の先 [x, y] / 糸を見せる残り / 引き寄せている相手
            yk: 0, ykx: 0, yky: 0, slw: 0,               // 糸で引き寄せられている残り / 行き先 / スピード −1 の残り
            yr: 0, yrx: 0, yrc: 0,                       // 幽霊（脱落したあと）か / 幽霊の x / 次の爆弾までの残り
-           gk: [0, 0],                                  // ゴブG: 背中の 2 体（上・下）が、次に槍を投げられるまでの残り
+           gk: 0, sm: 0, smT: 0,                        // ゴブG: 背中のゴブリンが次に槍を投げられるまで / 召喚の残りの数 / 次の召喚までの残り（ホストだけ）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
            life: 0, isClone: false };
@@ -612,8 +616,8 @@ function applyProfile(p, prof) {
 // 効果音・演出のきっかけ。ホスト自身が鳴らし、同じ内容を次のスナップショットで参加者にも届ける
 //   ["s",x,y] 攻撃 / ["j",x,y] ジャンプ / ["b",x,y,向き] 盾で受けた / ["h",x,y,向き,強さ] 当たった / ["k",x,y,向き,強さ] 盾が割れた
 //   ["sk",x,y,キャラ] スキル発動 / ["sc",x,y,キャラ] ため始め / ["ar",x,y,向き,ため] 矢 / ["x",x,y,半径] 爆発 / ["tp",x0,y0,x1,y1] 瞬間移動
-//   ["dj",x,y] 二段ジャンプ（足もとの座標） / ["sl",x,y] 居合斬りの踏み込み / ["fl",x,y] 花を踏んだ / ["cn",x,y,向き] カウンター成功 / ["rv",x,y] 残機で復活 / ["gx",x,y] 透過が解けた / ["cl",x,y] 分身が消えた
-//   ["xs",x,y,向き] クロスボウが撃った / ["xh",x,y] クロスボウが攻撃を受けた / ["xk",x,y] クロスボウが壊れた・消えた / ["gs",x,y,向き] ゴブGの背中の 2 体が槍を投げた
+//   ["dj",x,y] 二段ジャンプ（足もとの座標） / ["sl",x,y] 居合斬りの踏み込み / ["fl",x,y,大きな花なら1] 花を踏んだ / ["cn",x,y,向き] カウンター成功 / ["rv",x,y] 残機で復活 / ["gx",x,y] 透過が解けた / ["cl",x,y] 分身が消えた
+//   ["xs",x,y,向き] クロスボウが撃った / ["xh",x,y] クロスボウが攻撃を受けた / ["xk",x,y] クロスボウが壊れた・消えた / ["gs",x,y,向き] ゴブGの背中のゴブリンが槍を投げた
 //   ["gm",x,y] 手下を呼んだ / ["ms",x,y,向き] 手下が斬った / ["gmx",x,y,殴られたら1] 手下が消えた
 let evq = [];
 function emit(...e) {
@@ -653,10 +657,10 @@ function spawn(p, slot, n, battle) {
   p.f = (p.x + PLW / 2 < PX + PW / 2) ? 1 : -1; p.hit = [];
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
-  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0;
+  p.rwHit = []; p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0;
   p.bt = 0; p.fm = 0; p.wk = [0, 0, 0]; p.wkm = [0, 0, 0]; stopWeb(p); p.slw = 0;   // リバーシはラウンドの始めは攻撃形態
   p.yr = 0; p.yrc = 0;
-  p.gk = [0, battle && chOf(p).id === "gobg" ? GOB_STAGGER : 0];   // ゴブG: 背中の 2 体は、ずらして投げ始める
+  p.gk = 0; p.sm = 0; p.smT = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -721,6 +725,19 @@ function aimAtFoe(p) {                       // 居合斬り: 右を向いてい
   const sg = best ? Math.sign(ecx(best) - ecx(p)) : 0;
   if (sg) p.f = sg;
 }
+// 踏み込み（stop のある攻撃）: 向かう先の敵（透過中・復活直後・巻き戻し中・つかまれている人は除く）の体に触れたら、その手前で止まる（すり抜けない）。手下・クロスボウでは止まらない
+function dashStop(p, vx) {
+  const front = p.f > 0 ? p.x + pwOf(p) : p.x;
+  let lim = Math.abs(vx);
+  const py = p.y + (p.ground ? 0 : p.vy + 0.6);                          // 空中では、このフレームの落下ぶんも見込んで高さを比べる（斜めに入ってめりこまないように）
+  for (const e of ents()) {
+    if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0) continue;
+    if (py + phOf(p) <= e.y || py >= e.y + phOf(e)) continue;            // 高さが重ならない
+    if (Math.sign(ecx(e) - ecx(p)) !== p.f) continue;                    // 向かう先にいる敵だけ
+    lim = Math.min(lim, Math.max(0, p.f > 0 ? hbL(e) - front : front - hbR(e)));
+  }
+  return p.f * lim;
+}
 function useSkill(p) {                       // 押した瞬間に発動するスキル
   const id = chOf(p).id;
   if (id === "bomber") {
@@ -742,7 +759,7 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     p.gt = GIANT_FRAMES; p.x -= PLW / 2; p.y -= PLH;     // 足もとの中心を保ったまま 2 倍の大きさになる
   } else if (id === "clock") {                 // 巻き戻し: 記録した通り道を、新しい順に早戻りでたどる（吹っ飛びも止まる）
     if (p.tl.length < 2) return false;
-    p.rwPath = p.tl.slice().reverse(); p.tl = []; p.rwI = 0; p.rw = Math.ceil((p.rwPath.length - 1) / RW_SPEED);
+    p.rwHit = []; p.rwPath = p.tl.slice().reverse(); p.tl = []; p.rwI = 0; p.rw = Math.ceil((p.rwPath.length - 1) / RW_SPEED);
     p.s = 0; p.vx = p.vy = 0; p.a = 0; p.ak = 0; p.cd = 0; p.ks = 0; p.fz = 0; p.ground = false;
   } else if (id === "wrestler") {              // ダッシュつかみ: 空中・吹っ飛び中でも使える（ダッシュが吹っ飛びの勢いに代わる）
     p.gr = 1; p.grT = null; p.grH = 0; p.grD = 0; p.f0 = p.f; p.s = 0;
@@ -763,6 +780,9 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     return true;
   } else if (id === "spider") {               // 糸: 居場所で効果が変わる（クールタイムは効果ごと。p.kc は使わない）
     return webSkill(p);
+  } else if (id === "gobg") {                  // 召喚: すぐ 1 体、あとは GOB_SUMMON_EVERY ごとに 1 体ずつ（updateGoblins で呼ぶ）
+    p.sm = GOB_SUMMON_N - 1; p.smT = GOB_SUMMON_EVERY + 1;     // この同じフレームの updateGoblins でも 1 減るので、+1 して 2 体目をちょうど 90 フレーム後にする
+    summonMinion(p);
   } else if (id === "xbow") {                 // クロスボウ: 置いた瞬間からクールタイム（クロスボウが壊れても短くならない）。念のため、すでにあれば先に壊す
     const old = cbOf(p);
     if (old) removeCb(old);
@@ -798,7 +818,7 @@ function plantFlower(p) {                    // 足場の上でだけ置ける�
   const fx = Math.max(pl.x + 8, Math.min(pl.x + pl.w - 8, ecx(p) + p.f * 52));
   const mine = game.fl.filter(f => f.own === p.own);
   if (mine.length >= 2) game.fl.splice(game.fl.indexOf(mine[0]), 1);   // 置けるのは 2 つまで。古いものから消える
-  game.fl.push({ x: fx, y: pl.y, own: p.own, t: 0 });
+  game.fl.push({ x: fx, y: pl.y, own: p.own, t: 0, big: Math.random() < FLOWER_BIG_P ? 1 : 0 });   // ときどき大きな花（踏むと 3 秒動けない）
   return true;
 }
 function summonClone(p) {
@@ -816,11 +836,11 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.y = (pl ? pl.y : PY) - PLH - 50;
   p.vx = p.vy = 0; p.s = 0; p.a = 0; p.ak = 0; p.cd = 0; p.ks = 0; p.cn = 0; p.fz = 0; p.gh = 0; p.ground = false;
   p.sh = 1; p.sbk = 0; p.shi = 0; p.iv = RESPAWN_INV; p.dz = 0; p.gt = 0; p.gb = 0; p.dj = 0;
-  p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
+  p.rwHit = []; p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   if (p.bt > 0) { p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own)); }   // 投げていた盾は手元に戻る
   const cb = cbOf(p);
   if (cb) removeCb(cb);                                                                          // クロス使い: 置いたクロスボウは消える
-  p.gk = [0, chOf(p).id === "gobg" ? GOB_STAGGER : 0];                                           // ゴブG: 背中の 2 体は投げ直し。投げた槍と手下は消える
+  p.gk = 0; p.sm = 0; p.smT = 0;                                                                 // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
   game.pj = game.pj.filter(b => !(b.k === 4 && b.own === p.own));
   game.mn = game.mn.filter(m => m.own !== p.own);
   emit("rv", ecx(p), ecy(p));
@@ -831,10 +851,24 @@ function respawn(p) {                        // 残機で復活: いちばん上
 function rewindStep(p) {
   const path = p.rwPath;
   if (!path || !path.length) { p.rw = 0; p.rwPath = null; return; }
+  const i0 = p.rwI;
   p.rwI = Math.min(path.length - 1, p.rwI + RW_SPEED);
   const e = path[p.rwI];
   p.x = e[0]; p.y = e[1]; p.f = e[2]; p.vx = p.vy = 0;
-  if (--p.rw <= 0 || p.rwI >= path.length - 1) { p.rw = 0; p.dj = e[3]; p.ground = e[4]; p.rwPath = null; }
+  for (let k = i0; k <= p.rwI; k++) rewindPush(p, path[k][0], path[k][1]);   // 通った場所にいた敵を弾く
+  if (--p.rw <= 0 || p.rwI >= path.length - 1) { p.rw = 0; p.dj = e[3]; p.ground = e[4]; p.rwPath = null; p.rwHit = []; }
+}
+// 巻き戻しの通り道にいた敵を、ステージの外側（中央から見て敵のいる側）へ小さく弾く。盾もカウンターも関係ない。同じ敵は 1 回の巻き戻しで 1 回まで。手下は消え、クロスボウは 1 回削れる
+function rewindPush(p, x, y) {
+  const w = pwOf(p), h = phOf(p);
+  for (const e of ents()) {
+    if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0 || p.rwHit.includes(e)) continue;
+    if (hbR(e) < x || hbL(e) > x + w || e.y + phOf(e) < y || e.y > y + h) continue;
+    p.rwHit.push(e);
+    const dir = Math.sign(ecx(e) - CENTER_X) || (ecx(e) >= x + w / 2 ? 1 : -1);
+    knock(p, e, RW_PUSH, dir); impact("h", p, e, RW_PUSH, dir);
+  }
+  hitObjs(p.own, x, y, x + w, y + h, p.rwHit);
 }
 
 // ---- スワッパー: ゾーン ----
@@ -869,7 +903,7 @@ function zoneWarp(p, m) {
   for (const e of zoneFoes(p, m)) { const d = Math.abs(ecx(e) - ecx(p)) + Math.abs(ecy(e) - ecy(p)); if (d < bd) { bd = d; best = e; } }
   if (!best) return false;
   const x0 = ecx(p), y0 = ecy(p);
-  p.x = best.f > 0 ? hbL(best) - PLW - 4 : hbR(best) + 4;             // 敵の背中側（ゴブGは、背中の 2 体のぶん外側）
+  p.x = best.f > 0 ? hbL(best) - PLW - 4 : hbR(best) + 4;             // 敵の背中側（ゴブGは、背中のゴブリンのぶん外側）
   p.y = best.y + phOf(best) - PLH;                                      // 足もとをそろえる
   p.f = best.f; p.vx = p.vy = 0; p.ground = false; p.wa = 1;     // wa: この攻撃は回り込み攻撃（吹っ飛ばしが強い）
   emit("tp", x0, y0, ecx(p), ecy(p));
@@ -1164,35 +1198,31 @@ function updateCbs(list) {
     emit("xs", mx, by, c.f);
   }
 }
-// ゴブG: 背中の 2 体（上・下）が、近い敵へ槍を投げる。盾が壊れている間は、手下を呼ぶ
 function summonMinion(p) {
   if (game.mn.filter(m => m.own === p.own).length >= MN_MAX) return;
   const m = { own: p.own, x: ecx(p) - MN_W / 2, y: p.y + phOf(p) - MN_H, vx: 0, vy: 0, f: p.f, t: 0, a: 0, g: false, done: false, hit: [] };
   game.mn.push(m);
   emit("gm", m.x + MN_W / 2, m.y + MN_H / 2);
 }
+// ゴブG: スキル「召喚」の続き（1.5 秒ごとに 1 体ずつ。吹っ飛ばされている間も続ける）と、背中のゴブリンが近い敵へ槍を投げる処理
 function updateGoblins(list) {
   for (const p of game.p) {
     if (!p || !p.c || !p.al || chOf(p).id !== "gobg" || (training && p.cpu)) continue;
-    const el = SHIELD_BREAK_FRAMES - p.sbk;   // 盾が壊れてからの経過（盾が壊れている間、最初は GOB_SUMMON_FIRST、あとは GOB_SUMMON_EVERY ごとに手下を呼ぶ）
-    if (p.sbk > 0 && el >= GOB_SUMMON_FIRST && (el - GOB_SUMMON_FIRST) % GOB_SUMMON_EVERY === 0) summonMinion(p);
-    const sz = szOf(p);
-    for (let k = 0; k < 2; k++) {
-      if (p.gk[k] > 0) { p.gk[k]--; continue; }
-      if (p.hd > 0 || p.yk > 0) continue;       // つかまれている間・糸で引き寄せられている間は投げない（槍でつかみがほどけないように）
-      const kx = p.f > 0 ? p.x - 7 * sz : p.x + pwOf(p) + 7 * sz, ky = p.y + (k ? 32 : 12) * sz;   // 背中の 2 体の手もと
-      let best = null, bd = GOB_RANGE + 1;
-      for (const e of list) {
-        if (e.own === p.own || !e.al || untouchable(e)) continue;
-        const d = distToBody(kx, ky, e);
-        if (d <= GOB_RANGE && d < bd) { bd = d; best = e; }
-      }
-      if (!best) continue;
-      const dx = ecx(best) - kx, dy = ecy(best) - ky, dd = Math.hypot(dx, dy) || 1, vx = dx / dd * GOB_SPEAR_V, vy = dy / dd * GOB_SPEAR_V;
-      game.pj.push({ k: 4, x: kx, y: ky, vx, vy, own: p.own, t: 0, pw: GOB_SPEAR_FRAC });
-      p.gk[k] = GOB_THROW_CD; p.gk[1 - k] = Math.max(p.gk[1 - k], GOB_STAGGER);
-      emit("gs", kx, ky, Math.sign(vx) || p.f);
+    if (p.sm > 0 && p.hd === 0 && p.yk === 0 && --p.smT <= 0) { summonMinion(p); p.sm--; p.smT = GOB_SUMMON_EVERY; }
+    if (p.gk > 0) { p.gk--; continue; }
+    if (p.hd > 0 || p.yk > 0) continue;       // つかまれている間・糸で引き寄せられている間は投げない（槍でつかみがほどけないように）
+    const sz = szOf(p), kx = p.f > 0 ? p.x - 7 * sz : p.x + pwOf(p) + 7 * sz, ky = p.y + 22 * sz;   // 背中のゴブリンの手もと
+    let best = null, bd = GOB_RANGE + 1;
+    for (const e of list) {
+      if (e.own === p.own || !e.al || untouchable(e)) continue;
+      const d = distToBody(kx, ky, e);
+      if (d <= GOB_RANGE && d < bd) { bd = d; best = e; }
     }
+    if (!best) continue;
+    const dx = ecx(best) - kx, dy = ecy(best) - ky, dd = Math.hypot(dx, dy) || 1, vx = dx / dd * GOB_SPEAR_V, vy = dy / dd * GOB_SPEAR_V;
+    game.pj.push({ k: 4, x: kx, y: ky, vx, vy, own: p.own, t: 0, pw: GOB_SPEAR_FRAC });
+    p.gk = GOB_THROW_CD;
+    emit("gs", kx, ky, Math.sign(vx) || p.f);
   }
 }
 // 手下: いちばん近い敵へ歩いて行き、届く距離で 1 回斬る。斬り終わると（当たっても外れても）消える。足場の下からは通り抜け、メインの端では止まる（上の台からは降りる）
@@ -1276,7 +1306,7 @@ function physics(p, inp, neutral) {
   if (p.bt > 0 && !game.pj.some(b => b.k === 2 && b.own === p.own)) p.bt = 0;   // 念のため: 投げた盾がなくなっていたら手元に戻す
   // 盾の回復
   if (p.sbk > 0) { if (--p.sbk === 0) { p.sh = 1; p.shi = 0; } }
-  else if (p.sh < 1 && ++p.shi >= SHIELD_STEP_FRAMES) { p.sh = p.sh + 1 / shieldHitsOf(p) > 0.999 ? 1 : p.sh + 1 / shieldHitsOf(p); p.shi = 0; }   // 1 段階だけ回復して、また 5 秒数える
+  else if (p.sh < 1 && ++p.shi >= SHIELD_STEP_FRAMES) { p.sh = p.sh + 1 / SHIELD_HITS > 0.999 ? 1 : p.sh + 1 / SHIELD_HITS; p.shi = 0; }   // 1 段階だけ回復して、また 5 秒数える
   if (p.hd > 0) {                                // レスラーにつかまれている: 何もできない（位置はレスラーが決める）
     p.hd--; p.vx = p.vy = 0; p.ks = 0; p.kp = (inp & KEY.k) ? 1 : 0; p.jp = (inp & KEY.u) ? 1 : 0;
     return;
@@ -1355,8 +1385,9 @@ function physics(p, inp, neutral) {
     if (ak.dash && p.a === ak.dashFrom) { if (ak.aim) aimAtFoe(p); emit("sl", ecx(p), ecy(p), p.ak); }      // 居合斬りは、踏み込む直前にも敵の方向へ向き直す（突進突きは真っすぐ）
     if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) {                         // 居合斬りの踏み込み・突進突きの突進
       p.vx = p.f * ak.dash;
+      if (ak.stop) p.vx = dashStop(p, p.vx);
       if (ak.hover && !p.ground) p.vy = Math.min(p.vy, 1);
-    }
+    } else if (ak.stop && p.a > ak.dashTo && p.vx * p.f > 0) p.vx = dashStop(p, p.vx);   // 踏み込みのあとの惰性でも、敵の体にめりこまない（向きが逆・0 のときはそのまま）
     if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ATK_COOLDOWN; p.wa = 0; }
   }
   if (p.cd > 0) p.cd--;
@@ -1450,8 +1481,8 @@ function strike(att, t, o) {
   if (o.breaker) {                                           // 居合斬り: 盾を壊すだけで、吹っ飛ばしはしない
     breakShield(t); impact("k", att, t, 0, o.dir); return;
   }
-  t.shi = 0;                                                 // 盾で受けた（攻撃・防御に関係なく、決まった回数（ふつうは 3 回、ゴブGは 1 回）で壊れる）
-  t.sh -= 1 / shieldHitsOf(t);
+  t.shi = 0;                                                 // 盾で受けた（攻撃・防御に関係なく 3 回で壊れる）
+  t.sh -= 1 / SHIELD_HITS;
   const broke = t.sh <= 0.001;
   if (broke) breakShield(t); else t.bf = 10;
   t.vx += o.dir * 3;
@@ -1550,7 +1581,7 @@ function updateProjectiles(list) {
         o.bt = 0; game.pj.splice(i, 1);
         emit("bc", ecx(o), ecy(o));
       }
-    } else if (b.k === 4) {                                  // ゴブGの槍（背中の 2 体が投げる）: 重力なしで真っすぐ飛び、短い間だけ残る
+    } else if (b.k === 4) {                                  // ゴブGの槍（背中のゴブリンが投げる）: 重力なしで真っすぐ飛び、短い間だけ残る
       const o = game.p[b.own];
       if (!o || !o.al || b.t > GOB_SPEAR_LIFE) { game.pj.splice(i, 1); continue; }
       const ox = b.x, oy = b.y;
@@ -1597,11 +1628,12 @@ function updateFlowers(list) {
     const sup = pls.some(pl => Math.abs(pl.y - f.y) < 1 && f.x > pl.x + 2 && f.x < pl.x + pl.w - 2);   // 足場が縮んで無くなったら枯れる
     if (!sup || f.t > FLOWER_LIFE) { game.fl.splice(i, 1); continue; }
     if (f.t < FLOWER_ARM) continue;                          // 咲くまでは無害
+    const hw = f.big ? FLOWER_BIG_HALF : FLOWER_HALF, rt = f.big ? FLOWER_BIG_ROOT : FLOWER_ROOT;
     for (const e of list) {
       if (e.own === f.own || untouchable(e) || !e.ground) continue;
-      if (Math.abs(e.y + phOf(e) - f.y) < 3 && e.x < f.x + 9 && e.x + pwOf(e) > f.x - 9) {      // 踏んだ人は土下座して動けなくなる
-        e.fz = FLOWER_ROOT; e.dz = FLOWER_ROOT; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; releaseGrab(e); stopWeb(e);
-        emit("fl", f.x, f.y);
+      if (Math.abs(e.y + phOf(e) - f.y) < 3 && e.x < f.x + hw && e.x + pwOf(e) > f.x - hw) {      // 踏んだ人は土下座して動けなくなる
+        e.fz = rt; e.dz = rt; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; releaseGrab(e); stopWeb(e);
+        emit("fl", f.x, f.y, f.big ? 1 : 0);
         game.fl.splice(i, 1);
         break;
       }
@@ -1651,7 +1683,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
   const { gap, sgn, sd, dyFeet, sameLevel, tr } = X, g = c.ground, face = c.f === sgn, tFaces = t.f === -sgn;
   switch (id) {
     case "bomber": return g && face && sameLevel && gap > 40 && gap < 230 ? KEY.k : 0;                                  // 前へ投げる
-    case "samurai": return g && sameLevel && gap > 18 && gap < 170 && shieldUp(t) && tFaces && t.a === 0 && t.cd === 0 ? KEY.k : 0;   // 盾で固めた敵を、盾ごと割る
+    case "samurai": return g && sameLevel && gap > 18 && gap < 200 && shieldUp(t) && tFaces && t.a === 0 && t.cd === 0 ? KEY.k : 0;   // 盾で固めた敵を、盾ごと割る
     case "berserker": return sameLevel && gap < 230 ? KEY.k : 0;
     case "knight": return g && face && t.a >= 1 && t.a <= 6 && !(ATKS[t.ak] || ATKS[0]).dash && gap <= tr + 10 ? KEY.k : 0;                // 敵が振りかぶった瞬間にカウンター
     case "ghost": return sameLevel && gap > 50 && gap < 280 && (t.a > 0 || (shieldUp(t) && tFaces)) ? KEY.k : 0;
@@ -1662,6 +1694,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "tengu": return g && face && ((sameLevel && gap < 200) || (!t.ground && t.y + phOf(t) > PY + 4 && gap < 280)) ? KEY.k : 0;   // 戦う場所か、崖の外の敵へ風の場を出す
     case "boomer":                                                                                                      // 盾をこちらへ向けた敵の向こうまで投げて、帰りで背中に当てる。盾を見て止まっている敵にも
       return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
+    case "gobg": return g && sameLevel && t.ground && gap < 300 ? KEY.k : 0;                                                         // 地上の敵が近いとき、手下を呼ぶ
     case "lancer": return g && face && sameLevel && shieldUp(t) && tFaces && gap >= 80 && gap <= 200 ? KEY.k : 0;              // 盾で待つ敵へ、突進して盾を割る
     case "xbow": {                                                                                                          // 同じ高さの敵が射線に入るところへ、クロスボウを置く（置いたものが残っている間は置かない）
       if (!g || cbOf(c)) return 0;
@@ -1758,7 +1791,7 @@ function aiDodge(c, inp, ccx, feet) {                  // 爆弾から離れる 
   }
   for (const f of game.fl) {
     const df = f.x - ccx;
-    if (f.own !== c.own && f.t >= FLOWER_ARM && Math.abs(f.y - feet) < 3 && Math.abs(df) > 6 && Math.abs(df) < 64 && (inp & (df > 0 ? KEY.r : KEY.l))) inp |= KEY.u;
+    if (f.own !== c.own && f.t >= FLOWER_ARM && Math.abs(f.y - feet) < 3 && Math.abs(df) > 6 && Math.abs(df) < 55 + (f.big ? FLOWER_BIG_HALF : FLOWER_HALF) && (inp & (df > 0 ? KEY.r : KEY.l))) inp |= KEY.u;
   }
   return inp;
 }
@@ -1850,7 +1883,7 @@ function aiThink(c, owner, pls, B) {
   const faceDir = ((inp & (KEY.l | KEY.r)) && c.ground && c.a === 0) ? ((inp & KEY.r) ? 1 : -1) : c.f;
   const open = !shieldUp(t) || t.f !== -faceDir;                 // 盾が効かない（外れている・背中側）
   const near = c.y + (PLH - 8) * sz > t.y && c.y + 8 * sz < t.y + th;     // 高さが重なっている
-  const chip = !open && Math.random() < B.chip;                  // 盾の正面でも、ときどき殴って盾を削る（ふつうは 3 回で壊れる）
+  const chip = !open && Math.random() < B.chip;                  // 盾の正面でも、ときどき殴って盾を削る（3 回で壊れる）
   if (faceDir === sgn && gap <= R - 6 && gap > -tw && near && (open || chip) && c.a === 0 && c.cd === 0 && Math.random() >= B.miss) inp |= KEY.a;
   if (c.ground && c.a === 0 && c.s === 0 && c.fz === 0 && (game.mn.length || game.cb.length)) {   // 敵の手下を払う・クロスボウを壊しに行く
     const ob = aiObjects(c, B, ccx, feet, R, gap);
@@ -1994,7 +2027,7 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.slw > 0) o.slw = p.slw;                               // 蜘蛛の糸で引き寄せられて、スピードが −1 の間
   if (p.wl) o.wl = [r1(p.wl[0]), r1(p.wl[1])];                // 蜘蛛の糸の先（糸を使っている間だけ）
   if (p.yr) { o.yr = 1; o.yrx = r1(p.yrx); o.yrc = p.yrc; }   // 幽霊（脱落したあと）の位置と、次の爆弾までの残り
-  if (p.gk && (p.gk[0] || p.gk[1])) o.gk = [p.gk[0], p.gk[1]];   // ゴブG: 背中の 2 体の、次に槍を投げられるまでの残り（腕の見た目用）
+  if (p.gk) o.gk = p.gk;                                      // ゴブG: 背中のゴブリンが、次に槍を投げられるまでの残り（腕の見た目用）
   return o;
 }
 function snapshot() {
@@ -2005,7 +2038,7 @@ function snapshot() {
       inGame ? { ch: p.ch } : null, inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
     pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 || b.k === 4 ? Math.round(b.pw * 10) : 0, b.own]),
-    fl: game.fl.map(f => [r1(f.x), r1(f.y), f.t]),
+    fl: game.fl.map(f => [r1(f.x), r1(f.y), f.t, f.big ? 1 : 0]),
     cb: game.cb.map(c => [r1(c.x), r1(c.y), c.f, c.t, c.hp, c.own, c.g ? c.rl : -1, r1(c.vy)]),   // クロスボウ: 位置・向き・経過・耐久・持ち主・次の矢まで（-1 は落下中）・縦の速さ
     mn: game.mn.map(m => [r1(m.x), r1(m.y), r1(m.vx), r1(m.vy), m.f, m.a, m.t, m.own]),          // ゴブGの手下: 位置・速度・向き・斬りの経過・経過・持ち主
     wd: game.wd.map(w => [r1(w.x), r1(w.y), w.w, w.h, w.d, w.t, w.own]),
@@ -2172,7 +2205,7 @@ function readEnt(p, n) {                                     // スナップシ�
   p.rw = n.rw | 0; p.gs = n.gs | 0; p.hd = n.hd | 0; p.rp = n.rp || null;
   p.fm = n.fm | 0; p.slw = n.slw | 0; p.wl = n.wl || null;
   p.yr = n.yr | 0; p.yrc = n.yrc | 0; if (p.yr) { p.yrt = n.yrx; if (p.yrx === undefined || Math.abs(p.yrx - n.yrx) > 120) p.yrx = n.yrx; }
-  p.gk = n.gk || [0, 0];
+  p.gk = n.gk | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
 function applySnapshot(s) {
@@ -2198,7 +2231,7 @@ function applySnapshot(s) {
     }
   }
   game.pj = s.pj.map(a => ({ k: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], t: a[5], pw: a[6] / 10, own: a[7] | 0 }));
-  game.fl = s.fl.map(a => ({ x: a[0], y: a[1], t: a[2] }));
+  game.fl = s.fl.map(a => ({ x: a[0], y: a[1], t: a[2], big: a[3] | 0 }));
   game.wd = (s.wd || []).map(a => ({ x: a[0], y: a[1], w: a[2], h: a[3], d: a[4], t: a[5], own: a[6] }));   // 古い版のホストは送らない
   game.rm = (s.rm || []).map(a => ({ x: a[0], y: a[1], r: a[2], t: a[3], own: a[4] }));
   game.cb = (s.cb || []).map(a => ({ x: a[0], y: a[1], f: a[2], t: a[3], hp: a[4], own: a[5], rl: a[6], vy: a[7] }));   // 古い版のホストは送らない
@@ -2349,7 +2382,7 @@ setInterval(() => { if (role === "client") { sentKeys = -1; pushKeys(); } }, 500
 
 // ---------- キャラの見た目（本体と飾り）----------
 // 本体は枠の色（プレイヤーごと）で、飾りでキャラを見分ける。c は描く先の 2D コンテキスト
-// o: 状態で変わる見た目 { fm: リバーシの形態, atk: 槍兵が槍を前へ出している, gk: ゴブGの背中の 2 体が次に投げられるまでの残り }
+// o: 状態で変わる見た目 { fm: リバーシの形態, atk: 槍兵が槍を前へ出している, gk: ゴブGの背中のゴブリンが次に投げられるまでの残り }
 function deco(c, id, x, y, f, o) {
   c.lineWidth = 1; c.setLineDash([]);
   o = o || {};
@@ -2477,7 +2510,7 @@ function deco(c, id, x, y, f, o) {
     c.fillStyle = "#78350f"; c.fillRect(qx, y + 16, 6, 22);
     c.fillStyle = "#e5e7eb";
     for (let k = 0; k < 3; k++) { c.beginPath(); c.moveTo(qx + k * 2, y + 16); c.lineTo(qx + k * 2 + 1, y + 10); c.lineTo(qx + k * 2 + 2, y + 16); c.fill(); }
-  } else if (id === "gobg") {                  // 緑の顔の面ととがった耳、黄色い目と牙、茶色の腰布。背中の木の背負子に、槍を持った緑の小鬼が 2 体（槍を投げた直後は腕を前へ出す）
+  } else if (id === "gobg") {                  // 緑の顔の面ととがった耳、黄色い目と牙、茶色の腰布。背中の木の背負子に、槍を持った緑の小鬼が 1 体（槍を投げた直後は腕を前へ出す）
     c.fillStyle = "#16a34a"; c.fillRect(x + 2, y + 2, PLW - 4, 22);
     c.beginPath(); c.moveTo(x + 2, y + 8); c.lineTo(x - 5, y + 5); c.lineTo(x + 2, y + 15); c.fill();
     c.beginPath(); c.moveTo(x + PLW - 2, y + 8); c.lineTo(x + PLW + 5, y + 5); c.lineTo(x + PLW - 2, y + 15); c.fill();
@@ -2489,11 +2522,11 @@ function deco(c, id, x, y, f, o) {
     c.beginPath(); c.moveTo(fgx, y + 22); c.lineTo(fgx + 2, y + 28); c.lineTo(fgx + 4, y + 22); c.fill();
     c.beginPath(); c.moveTo(fgx + 8, y + 22); c.lineTo(fgx + 10, y + 28); c.lineTo(fgx + 12, y + 22); c.fill();
     c.fillStyle = "#92400e"; c.fillRect(x + 4, y + 42, PLW - 8, 10); c.fillRect(x + 8, y + 52, 8, 5); c.fillRect(x + 24, y + 52, 8, 5);
-    const bx = f > 0 ? x - 14 : x + PLW, gk = o.gk || [0, 0];
+    const bx = f > 0 ? x - 14 : x + PLW, gk = o.gk || 0;
     c.strokeStyle = "#78350f"; c.lineWidth = 2; c.strokeRect(bx + 1, y + 1, 12, 42);
     c.beginPath(); c.moveTo(f > 0 ? bx + 13 : bx + 1, y + 20); c.lineTo(f > 0 ? bx + 17 : bx - 3, y + 20); c.stroke();
-    for (let k = 0; k < 2; k++) {
-      const gy = y + 3 + k * 20, gx = bx + 1, thr = gk[k] > GOB_THROW_CD - 10;
+    {
+      const gy = y + 13, gx = bx + 1, thr = gk > GOB_THROW_CD - 10;
       c.fillStyle = "#15803d"; c.fillRect(gx, gy, 12, 18);
       c.fillStyle = "#16a34a"; c.fillRect(gx + 1, gy + 1, 10, 7);
       c.beginPath(); c.moveTo(gx, gy + 3); c.lineTo(gx - 3, gy + 1); c.lineTo(gx, gy + 6); c.fill();
@@ -2605,14 +2638,13 @@ function paintSelect() {
   const traits = (c.noShield ? "<br><span class=\"trait\">盾を持たない</span>" : "") + (c.lives ? `<br><span class="trait">残機 +${c.lives}（落ちても1回だけ復活する）</span>` : "") +
     (c.atk ? `<br><span class="trait">通常攻撃の届く距離が約${(ATKS[c.atk].reach / ATKS[0].reach).toFixed(1)}倍（出が遅い）</span>` : "") +
     (c.forms ? `<br><span class="trait">性能の棒は攻撃形態。守り形態は 攻撃${c.forms[1].A}・防御${c.forms[1].D}・スピード${c.forms[1].S}</span>` : "") +
-    (c.shieldHits ? `<br><span class="trait">盾は${c.shieldHits}回受けると壊れる（ふつうは${SHIELD_HITS}回）</span>` : "") +
-    (c.back ? `<br><span class="trait">背中の2体のぶん、当たり判定が後ろへ大きい</span>` : "");
+    (c.back ? `<br><span class="trait">背中のゴブリンのぶん、当たり判定が後ろへ大きい</span>` : "");
   root.querySelector("#detail").innerHTML =
     `<h2>${esc(c.name)}</h2><div class="tag">${esc(c.tag)}</div>` +
     STATS.map((s, k) => `<div class="st-r"><span class="nm" style="color:${s.color}">${s.label}</span>${barHtml(vals[k], s.color)}</div>`).join("") +
     `<div class="skl">${c.skill
       ? `<b>スキル「${esc(c.skill.name)}」</b>（クールタイム ${esc(c.skill.cdText || c.skill.cd + "秒")}${c.skill.hold ? "・ためて発動" : ""}）<br>${esc(c.skill.text)}`
-      : c.auto ? `<b>自動の能力</b><br>${esc(c.auto)}` : "スキルなし"}${traits}</div>`;
+      : "スキルなし"}${c.auto ? `<br><b>自動の能力</b><br>${esc(c.auto)}` : ""}${traits}</div>`;
 }
 function showSelect() {
   const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
@@ -2801,10 +2833,7 @@ function updateSkillUI() {
     if (me.yrc > 0) { state = "cool"; ratio = Math.min(1, me.yrc / YUREI_CD); sec = String(Math.ceil(me.yrc / 60)); } else state = "ready";
   } else if (role && net === "ready" && me && game.ph !== "lobby") {
     const sk = chOf(me).skill;
-    if (!sk && chOf(me).id === "gobg") {                         // ゴブG: スキルなし。盾が壊れている間は、手下を呼んでいる残り（盾が戻るまで）を出す
-      if (me.sbk > 0) { state = "cool"; label = "召喚中"; ratio = Math.min(1, me.sbk / SHIELD_BREAK_FRAMES); sec = String(Math.ceil(me.sbk / 60)); }
-      else { label = "自動"; const n = game.mn.filter(m => m.own === myId).length; if (n > 0) sec = "×" + n; }   // 場にいる手下の数
-    } else if (sk) {
+    if (sk) {
       label = sk.name;
       const id = chOf(me).id, zone = id === "swapper" ? zoneOf(me) : null;
       if (id === "spider") {                                     // 蜘蛛: 今の居場所で使う効果の名前と、その効果のクールタイム
@@ -2826,7 +2855,7 @@ function updateSkillUI() {
   lastSk = key;
   skBtn.dataset.state = state; skBtn.style.setProperty("--p", ratio.toFixed(3));
   skBtn.querySelector("b").textContent = label; skBtn.querySelector("i").textContent = sec;
-  skHint.textContent = state === "none" ? (label === "自動" ? "スキルなし（背中の2体が自動で槍を投げる）" : "スキルなし") : "[X] " + label + (sec && sec[0] === "×" ? "  矢 " + sec : state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : label === "矢なし" ? "  1本回復するまで待つ" : "  あと " + sec + " 秒");
+  skHint.textContent = state === "none" ? "スキルなし" : "[X] " + label + (sec && sec[0] === "×" ? "  矢 " + sec : state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : label === "矢なし" ? "  1本回復するまで待つ" : "  あと " + sec + " 秒");
 }
 
 // ---------- 効果音と演出 ----------
@@ -3111,7 +3140,7 @@ function fxEvent(e) {
   else if (k === "xs") { Sfx.cbShot(); burst(x, y, 5, { dir: d > 0 ? 0 : Math.PI, spread: 0.8, v0: 2, v1: 5, l0: 8, l1: 14, s0: 2, s1: 4, colors: ["#fef3c7", "#fbbf24", "#ffffff"] }); }   // クロスボウが撃った（口から火花）
   else if (k === "xh") { Sfx.woodHit(); shake(2); burst(x, y, 6, { v0: 1.5, v1: 4, l0: 10, l1: 18, s0: 2, s1: 4, g: 0.15, flat: true, colors: ["#a16207", "#78350f", "#d6a35c"] }); }   // クロスボウが攻撃を受けた
   else if (k === "xk") { Sfx.woodBreak(); shake(3); burst(x, y, 14, { v0: 2, v1: 7, l0: 16, l1: 30, s0: 3, s1: 7, g: 0.2, flat: true, colors: ["#a16207", "#78350f", "#d6a35c", "#e2e8f0"] }); }   // クロスボウが壊れた・消えた
-  else if (k === "gs") Sfx.spearToss();            // ゴブGの背中の 2 体が槍を投げた
+  else if (k === "gs") Sfx.spearToss();            // ゴブGの背中のゴブリンが槍を投げた
   else if (k === "gm") {                           // 手下を呼んだ
     Sfx.goblinCall(); rings.push({ x, y, t: 0, max: 12, c: "#4ade80", r0: 6, sp: 2.5 });
     burst(x, y, 8, { v0: 0.5, v1: 2.5, l0: 14, l1: 24, s0: 5, s1: 9, g: -0.02, round: true, colors: ["#4ade80", "#bbf7d0", "#e2e8f0"] });
@@ -3143,8 +3172,9 @@ function fxEvent(e) {
     burst(e[3], e[4], 12, { v0: 1, v1: 5, l0: 12, l1: 22, s0: 3, s1: 6, colors: col });
     rings.push({ x: e[3], y: e[4], t: 0, max: 12, c: "#22d3ee" });
   } else if (k === "fl") {                         // 花を踏んだ
-    Sfx.rooted(); shake(3);
-    burst(x, y - 10, 14, { dir: -Math.PI / 2, spread: 3.2, v0: 1.5, v1: 5, l0: 16, l1: 28, s0: 3, s1: 5, g: 0.1, colors: ["#f472b6", "#f9a8d4", "#16a34a"] });
+    const big = e[3] === 1;                        // 大きな花: 演出を多めに
+    Sfx.rooted(); shake(big ? 5 : 3);
+    burst(x, y - 10, big ? 22 : 14, { dir: -Math.PI / 2, spread: 3.2, v0: 1.5, v1: 5, l0: 16, l1: 28, s0: 3, s1: 5, g: 0.1, colors: ["#f472b6", "#f9a8d4", "#16a34a"] });
   } else if (k === "cn") {                         // カウンター成功
     Sfx.counter(); shake(10); flashA = Math.max(flashA, 0.3);
     rings.push({ x, y, t: 0, max: 14, c: "#facc15", r0: 10, sp: 6 });
@@ -3460,12 +3490,13 @@ function drawMinion(m, now) {
   cx.restore();
 }
 function drawFlower(f, now) {
-  const g = Math.min(1, f.t / FLOWER_ARM), h = 16 * g, hx = f.x + Math.sin(now / 300 + f.x) * 1.5 * g, hy = f.y - h;
-  cx.strokeStyle = "#16a34a"; cx.lineWidth = 2.5; cx.beginPath(); cx.moveTo(f.x, f.y); cx.lineTo(hx, hy); cx.stroke();
-  cx.fillStyle = "#16a34a"; cx.fillRect(f.x - 6, f.y - 5, 6, 2); cx.fillRect(f.x + 1, f.y - 8, 6, 2);
+  const s = f.big ? FLOWER_BIG_SCALE : 1;                  // 大きな花は 1.6 倍（色は同じ）
+  const g = Math.min(1, f.t / FLOWER_ARM), h = 16 * g * s, hx = f.x + Math.sin(now / 300 + f.x) * 1.5 * g * s, hy = f.y - h;
+  cx.strokeStyle = "#16a34a"; cx.lineWidth = 2.5 * s; cx.beginPath(); cx.moveTo(f.x, f.y); cx.lineTo(hx, hy); cx.stroke();
+  cx.fillStyle = "#16a34a"; cx.fillRect(f.x - 6 * s, f.y - 5 * s, 6 * s, 2 * s); cx.fillRect(f.x + 1 * s, f.y - 8 * s, 6 * s, 2 * s);
   cx.fillStyle = f.t >= FLOWER_ARM ? "#f472b6" : "#fbcfe8";
-  for (let k = 0; k < 5; k++) { const a = k * 1.2566; cx.beginPath(); cx.arc(hx + Math.cos(a) * 4 * g, hy + Math.sin(a) * 4 * g, 3.4 * g, 0, 6.2832); cx.fill(); }
-  cx.fillStyle = "#facc15"; cx.beginPath(); cx.arc(hx, hy, 2.4 * g, 0, 6.2832); cx.fill();
+  for (let k = 0; k < 5; k++) { const a = k * 1.2566; cx.beginPath(); cx.arc(hx + Math.cos(a) * 4 * g * s, hy + Math.sin(a) * 4 * g * s, 3.4 * g * s, 0, 6.2832); cx.fill(); }
+  cx.fillStyle = "#facc15"; cx.beginPath(); cx.arc(hx, hy, 2.4 * g * s, 0, 6.2832); cx.fill();
 }
 // 天狗の風の場: うっすら色のついた範囲に、風下へ流れる線（出るときと消えるときはふわっと）
 function drawWind(w, now) {
