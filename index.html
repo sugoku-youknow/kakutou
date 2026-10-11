@@ -390,7 +390,7 @@ const FLOWER_HALF = 9, FLOWER_BIG_P = 0.2, FLOWER_BIG_ROOT = 180, FLOWER_BIG_SCA
 const DOGEZA_KNOCK = 0.5;            // 花で動けない（土下座）間に受ける吹っ飛びの倍率
 const CLONE_LIFE = 420;              // 分身が消えるまで
 const ARROW_SPEED = 0.7;              // 矢の速さの倍率（13〜22px/フレームに掛ける）
-const ARROW_MAX = 5, ARROW_REGEN = 60;   // アーチャーの矢: 持てる本数 / 1 本回復するまで（1 秒）。矢がないと撃てない
+const ARROW_MAX = 5, ARROW_REGEN = 60;   // アーチャーの矢: 持てる本数（ラウンド開始時の本数。ラストスパート中の上限は LATE_ARROW_MAX）/ 1 本回復するまで（1 秒）。矢がないと撃てない
 const CLONE_STATS = { A: 2, D: 1, S: 2 };   // コペルニウムの分身の性能（本体とは別）
 const BZ_FRAMES = 360, BZ_BONUS = { A: 2, D: -2, S: 2 }; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値（防御は下がる）
 const CN_FRAMES = 24, CN_WHIFF = 18; // カウンター: 構えている時間 / 空振りしたときの隙
@@ -423,11 +423,16 @@ const WEB_CD = [240, 300, 120], WEB_WHIFF = 60;            // クールタイム
 const WEB_LEDGE = 300, WEB_UP_FRAMES = 15;                 // 崖へ戻る: 糸が届く距離 / 崖の上まで引き上げる時間（0.25 秒）
 const WEB_PULL = 250, WEB_PULL_FRAMES = 8, WEB_SLOW = 180; // 引き寄せ: 糸が届く距離 / 引き寄せる時間 / 引き寄せた敵のスピードが −1 になる時間（3 秒）
 const WEB_DIVE = 420, WEB_DIVE_V = 18, WEB_STOMP = 0.5, WEB_LAG = 9;   // 急降下: 糸が届く距離（斜め 45 度）/ 降りる速さ / 着地で足もとの敵を吹っ飛ばす強さ / 着地のあとの隙（0.15 秒）
-// 幽霊（脱落した人が、ラウンドが終わるまでステージの上空から爆弾を落として邪魔をする。人のプレイヤーだけ。復活はしない）
-const YUREI_Y = PY - 250, YUREI_SPEED = 5.5, YUREI_MARGIN = 60;   // 飛ぶ高さ（上の台より 100px 上）/ 左右の速さ / メインの端より外へ出られる幅
-const YUREI_CD = 180, YUREI_FIRST = 60;                           // 爆弾のクールタイム（3 秒）/ 幽霊になってから最初の爆弾まで（1 秒）
-const YUREI_R = 7, YUREI_BLAST = 60, YUREI_KNOCK = 0.45, YUREI_LIFT = 6;   // 爆弾の大きさ / 爆風の半径 / 吹っ飛ばし（盾は効かない）/ 上向きの初速
-// クロス使いのクロスボウ: 足場に置くと、射線（前方 450px）に敵が入るたびに矢を自動で撃つ。8 秒で壊れ、攻撃を 3 回受けても壊れる（クールタイムは置いた瞬間から 12 秒）
+// 幽霊（脱落した人が、ラウンドが終わるまで足場の上を歩いて、爆弾を置いて邪魔をする。人のプレイヤーだけ。場外へ落ちても、メインの真ん中から幽霊のまま復活する）
+// 誰にも当たらず、誰からも当たられない。爆弾はその場に置かれ、1 秒後に爆発する
+const YUREI_SPEED = 4.5, YUREI_JUMP = jumpVel(jumpHeight(BASE_STAT)), YUREI_H = 32;   // 歩く速さ / ジャンプの初速（スピード 2 の人と同じ高さ。1 回だけ）/ 体の高さ（見た目）
+const YUREI_CD = 180, YUREI_FIRST = 60, YUREI_FUSE = 60;          // 爆弾のクールタイム（3 秒）/ 幽霊になってから最初の爆弾まで（1 秒）/ 置いてから爆発するまで（1 秒）
+const YUREI_R = 7, YUREI_BLAST = 75, YUREI_KNOCK = 0.45, YUREI_LIFT = 6;   // 爆弾の大きさ / 爆風の半径 / 吹っ飛ばし（盾は効かない）/ 上向きの初速
+// ラストスパート: ラウンドの残りが 20 秒以下（サドンデス中も含む）の間。スキルのクールタイムが半分になり、キャラごとの強化が入る（トレーニングにはない）
+const LATE_FRAMES = 20 * 60;
+const LATE_GHOST_CD = 6 * 60;        // ゴースト（透過）は半分の 4 秒だとほぼ無敵になるので、ラスト中は 6 秒
+const LATE_ARROW_MAX = 10, LATE_FLOWERS = 4, LATE_XBOWS = 2, LATE_NAO_BONUS = 2;   // アーチャーの矢の上限 / おくれたんの花の数 / クロス使いのクロスボウの数 / なおの攻撃・防御・スピード
+// クロス使いのクロスボウ: 足場に置くと、射線（前方 450px）に敵が入るたびに矢を自動で撃つ。8 秒で壊れ、攻撃を 3 回受けても壊れる（クールタイムは置いた瞬間から 12 秒。ラストスパート中は 6 秒で、2 台まで同時に置ける）
 const CB_W = 30, CB_H = 26, CB_BOLT = 22, CB_RANGE = 450;     // クロスボウの大きさ（左上の座標で持つ）/ 矢の高さ（足もとから）/ 射線の長さ
 const CB_RELOAD = 30, CB_ARM = 12, CB_LIFE = 480, CB_BLINK = 60, CB_HP = 3;   // 次の矢まで（0.5 秒）/ 足場に乗ってから最初の矢まで / 稼働（8 秒）/ 消える前の点滅 / 壊れるまでに受けられる回数
 const CB_PAD = 14;                                            // 矢・槍がクロスボウに当たる範囲を、下へ広げる幅（アーチャーの矢はクロスボウの上を通るので）
@@ -501,7 +506,8 @@ const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
 const baseStat = (p, k) => { if (p.isClone) return CLONE_STATS[k]; const c = chOf(p); return c.forms ? c.forms[p.fm ? 1 : 0][k] : c[k]; };
 // 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる。蜘蛛の糸で引き寄せられた間はスピードが −1
-const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, baseStat(p, k) + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0) - (k === "S" && p.slw > 0 ? 1 : 0)));
+// ラストスパート中は、なおの攻撃・防御・スピードが +2（分身には付かない）
+const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, baseStat(p, k) + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0) - (k === "S" && p.slw > 0 ? 1 : 0) + (!p.isClone && chOf(p).id === "nao" && late() ? LATE_NAO_BONUS : 0)));
 const effA = p => statOf(p, "A");
 const effD = p => statOf(p, "D");
 const effS = p => statOf(p, "S");
@@ -527,9 +533,17 @@ let netMsg = "";
 // nf: この試合で戦っている人数（ステージの形が決まる） / rt: 制限時間の残りフレーム / sd: サドンデス開始からのフレーム / hs: ヒットストップの残り（ホストだけが使う）
 // wr: 何本先取か（ロビーでは次の試合の設定。ホストが決めて、スナップショットで参加者へ届く）
 // pj: 飛び道具（ボム・矢） / fl: 花 / cl: 分身（持ち主のスロットごとに 1 つ） / wd: 天狗の風の場（持ち主ごとに 1 つまで）
-// rm: スワッパーの ゾーン（持ち主ごとに 1 つまで） / cb: クロス使いのクロスボウ（持ち主ごとに 1 つまで） / mn: ゴブGの手下
+// rm: スワッパーの ゾーン（持ち主ごとに 1 つまで） / cb: クロス使いのクロスボウ（持ち主ごとに 1 つまで。ラストスパート中は 2 つまで） / mn: ゴブGの手下
 const game = { ph: "lobby", tm: 0, win: -1, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cb: [], mn: [], cl: [null, null, null, null], p: [null, null, null, null] };
 const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cb = []; game.mn = []; game.cl = [null, null, null, null]; };
+// ラストスパート（残り 20 秒以下。サドンデス中も含む。トレーニングにはない）。参加者の画面でも、届いた game.rt で同じように判定できる
+const late = () => game.ph === "play" && !training && game.rt <= LATE_FRAMES;
+const cdMul = () => late() ? 0.5 : 1;                                                   // スキルのクールタイムの倍率
+// スキルのクールタイム（フレーム）。ゴーストだけは半分でなく 6 秒固定
+const skCd = p => { const sk = chOf(p).skill; return !sk ? 0 : late() && chOf(p).id === "ghost" ? LATE_GHOST_CD : Math.round(sk.cd * 60 * cdMul()); };
+const arrowMax = () => late() ? LATE_ARROW_MAX : ARROW_MAX;                             // アーチャーの矢の上限
+const flowerMax = () => late() ? LATE_FLOWERS : 2;                                      // おくれたんが置ける花の数
+const xbowMax = () => late() ? LATE_XBOWS : 1;                                          // クロス使いが同時に置けるクロスボウの数
 let entSeq = 0;          // クロスボウの番号（ホストだけ。そのクロスボウが撃った矢を見分ける）
 // いま使える足場。サドンデス中は縮む（上の台は早く消え、メインは最小幅まで縮んだあとすべて崩れる）
 function platforms() {
@@ -569,7 +583,7 @@ function newPlayer() {
            wk: [0, 0, 0], wkm: [0, 0, 0],               // 蜘蛛: 効果ごとのクールタイムの残り / その回の長さ（崖へ戻る・引き寄せ・急降下）
            wb: 0, wbm: 0, wbx: 0, wby: 0, wl: null, wlt: 0, wlT: null,   // 蜘蛛: 糸で動いている残り / 動き方（1 = 崖へ戻る / 2 = 急降下）/ 行き先 / 糸の先 [x, y] / 糸を見せる残り / 引き寄せている相手
            yk: 0, ykx: 0, yky: 0, slw: 0,               // 糸で引き寄せられている残り / 行き先 / スピード −1 の残り
-           yr: 0, yrx: 0, yrc: 0,                       // 幽霊（脱落したあと）か / 幽霊の x / 次の爆弾までの残り
+           yr: 0, yrx: 0, yry: 0, yrvy: 0, yrg: false, yrc: 0,   // 幽霊（脱落したあと）か / 幽霊の x / 足もとの y / 縦の速さ / 地面に立っているか（ホストだけ）/ 次の爆弾までの残り
            gk: 0, sm: 0, smT: 0,                        // ゴブG: 背中のゴブリンが次に槍を投げられるまで / 召喚の残りの数 / 次の召喚までの残り（ホストだけ）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
@@ -659,7 +673,7 @@ function spawn(p, slot, n, battle) {
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0;
   p.bt = 0; p.fm = 0; p.wk = [0, 0, 0]; p.wkm = [0, 0, 0]; stopWeb(p); p.slw = 0;   // リバーシはラウンドの始めは攻撃形態
-  p.yr = 0; p.yrc = 0;
+  p.yr = 0; p.yrc = 0; p.yry = 0; p.yrvy = 0; p.yrg = false;
   p.gk = 0; p.sm = 0; p.smT = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
@@ -775,7 +789,7 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     p.a = 1; p.ak = 3; p.hit = []; p.s = 0;
   } else if (id === "reversi") {              // 変身: 攻撃形態 ⇔ 守り形態
     p.fm = p.fm ? 0 : 1;
-    p.kc = chOf(p).skill.cd * 60;
+    p.kc = skCd(p);
     emit("sk", ecx(p), ecy(p), p.ch, p.fm);
     return true;
   } else if (id === "spider") {               // 糸: 居場所で効果が変わる（クールタイムは効果ごと。p.kc は使わない）
@@ -783,12 +797,12 @@ function useSkill(p) {                       // 押した瞬間に発動する�
   } else if (id === "gobg") {                  // 召喚: すぐ 1 体、あとは GOB_SUMMON_EVERY ごとに 1 体ずつ（updateGoblins で呼ぶ）
     p.sm = GOB_SUMMON_N - 1; p.smT = GOB_SUMMON_EVERY + 1;     // この同じフレームの updateGoblins でも 1 減るので、+1 して 2 体目をちょうど 90 フレーム後にする
     summonMinion(p);
-  } else if (id === "xbow") {                 // クロスボウ: 置いた瞬間からクールタイム（クロスボウが壊れても短くならない）。念のため、すでにあれば先に壊す
-    const old = cbOf(p);
-    if (old) removeCb(old);
+  } else if (id === "xbow") {                 // クロスボウ: 置いた瞬間からクールタイム（クロスボウが壊れても短くならない）。上限（ふだん 1 台、ラストスパート中は 2 台）に達しているときだけ、いちばん古い 1 台を先に壊す
+    const mine = cbsOf(p);
+    while (mine.length >= xbowMax()) removeCb(mine.shift());
     placeCb(p);
   }
-  p.kc = chOf(p).skill.cd * 60;
+  p.kc = skCd(p);
   emit("sk", ecx(p), ecy(p), p.ch);
   return true;
 }
@@ -809,7 +823,7 @@ function fireHold(p) {                       // ためて離すスキル
     p.vx = 0;
     emit("tp", x0, y0, ecx(p), ecy(p));
   }
-  p.kc = sk.cd * 60;
+  p.kc = skCd(p);
 }
 function plantFlower(p) {                    // 足場の上でだけ置ける。置けなければ不発（クールタイムなし）
   if (!p.ground) return false;
@@ -817,7 +831,7 @@ function plantFlower(p) {                    // 足場の上でだけ置ける�
   if (!pl) return false;
   const fx = Math.max(pl.x + 8, Math.min(pl.x + pl.w - 8, ecx(p) + p.f * 52));
   const mine = game.fl.filter(f => f.own === p.own);
-  if (mine.length >= 2) game.fl.splice(game.fl.indexOf(mine[0]), 1);   // 置けるのは 2 つまで。古いものから消える
+  if (mine.length >= flowerMax()) game.fl.splice(game.fl.indexOf(mine[0]), 1);   // 置けるのは 2 つまで（ラストスパート中は 4 つ）。古いものから消える
   game.fl.push({ x: fx, y: pl.y, own: p.own, t: 0, big: Math.random() < FLOWER_BIG_P ? 1 : 0 });   // ときどき大きな花（踏むと 3 秒動けない）
   return true;
 }
@@ -838,8 +852,7 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.sh = 1; p.sbk = 0; p.shi = 0; p.iv = RESPAWN_INV; p.dz = 0; p.gt = 0; p.gb = 0; p.dj = 0;
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   if (p.bt > 0) { p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own)); }   // 投げていた盾は手元に戻る
-  const cb = cbOf(p);
-  if (cb) removeCb(cb);                                                                          // クロス使い: 置いたクロスボウは消える
+  for (const cb of cbsOf(p)) removeCb(cb);                                                       // クロス使い: 置いたクロスボウは（2 台あっても）全部消える
   p.gk = 0; p.sm = 0; p.smT = 0;                                                                 // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
   game.pj = game.pj.filter(b => !(b.k === 4 && b.own === p.own));
   game.mn = game.mn.filter(m => m.own !== p.own);
@@ -893,7 +906,7 @@ function updateZones() {
     if (--m.t > 0) continue;
     game.rm.splice(i, 1);
     const p = game.p[m.own];
-    if (p) { p.kc = p.km = zoneCd(m.r); }       // 円が消えたら、大きさに応じたクールタイム（その間は盾なし・動きが遅い）
+    if (p) { p.kc = p.km = Math.round(zoneCd(m.r) * cdMul()); }       // 円が消えたら、大きさに応じたクールタイム（その間は盾なし・動きが遅い。ラストスパート中は半分）
     emit("rx", m.x, m.y, m.r);
   }
 }
@@ -1058,10 +1071,10 @@ function webSkill(p) {
   }
   if (ok) {
     if (p.wb > 0) { p.s = 0; p.vx = p.vy = 0; p.a = 0; p.ak = 0; p.ks = 0; }   // 吹っ飛ばされている最中でも、糸で動き出す
-    p.wk[mode] = p.wkm[mode] = WEB_CD[mode];
+    p.wk[mode] = p.wkm[mode] = Math.round(WEB_CD[mode] * cdMul());
     emit("sk", ecx(p), ecy(p), p.ch, mode);
   } else {                                                         // 空振り: 1 秒後にもう一度使える
-    p.wk[mode] = p.wkm[mode] = WEB_WHIFF; p.wl = end; p.wlt = 8;
+    p.wk[mode] = p.wkm[mode] = Math.round(WEB_WHIFF * cdMul()); p.wl = end; p.wlt = 8;
     emit("wm", hx, hy);
   }
   return true;
@@ -1086,21 +1099,36 @@ function webStomp(p) {                       // 盾は効かない（真上か�
   emit("st", x, feet);
 }
 // ---- 幽霊（脱落した人）----
-// ラウンドが終わるまで、ステージの上空（YUREI_Y の高さ）を左右に飛び、攻撃かスキルのボタンで爆弾を真下へ落とす。爆弾は足場か人に当たると爆発し、盾に関係なく軽く吹っ飛ばす
-const yureiRange = () => { const m = LAYOUTS[Math.max(0, Math.min(4, game.nf | 0))].find(q => q.main) || MAIN_PLAT; return [m.x - YUREI_MARGIN, m.x + m.w + YUREI_MARGIN]; };
+// ラウンドが終わるまで、普通のキャラのように足場の上を歩き（左右＋ジャンプ 1 回）、攻撃かスキルのボタンで足もとに爆弾を置く。爆弾は動かず、1 秒後に爆発して、盾に関係なく軽く吹っ飛ばす。
+// 幽霊は誰にも当たらず、誰からも当たられない（ents に入らない）。場外へ落ちたら、メインの真ん中から幽霊のまま何度でも復活する。位置は足もとの y（yry）で持つ
+function yureiSpawn(p) {                     // メインの足場の真ん中（面の少し上）から降りてくる。足場がなければ、元のメインの位置の上。足場があれば true
+  const pl = mainPlat() || platforms()[0];
+  p.yrx = pl ? pl.x + pl.w / 2 : CENTER_X; p.yry = (pl ? pl.y : PY) - 40; p.yrvy = 0; p.yrg = false;
+  return !!pl;
+}
 function becomeYurei(p) {
-  const [x0, x1] = yureiRange();
-  p.yr = 1; p.yrx = Math.max(x0, Math.min(x1, ecx(p))); p.yrc = YUREI_FIRST;
+  p.yr = 1; p.yrc = YUREI_FIRST; yureiSpawn(p);
 }
 function yureiStep(p, inp) {
-  const [x0, x1] = yureiRange(), dir = ((inp & KEY.r) ? 1 : 0) - ((inp & KEY.l) ? 1 : 0);
+  const dir = ((inp & KEY.r) ? 1 : 0) - ((inp & KEY.l) ? 1 : 0);
   if (dir) p.f = dir;
-  p.yrx = Math.max(x0, Math.min(x1, p.yrx + dir * YUREI_SPEED));
+  p.yrx += dir * YUREI_SPEED;
+  if ((inp & KEY.u) && p.yrg) { p.yrvy = -YUREI_JUMP; p.yrg = false; }        // ジャンプは地面からの 1 回だけ（二段ジャンプなし）
+  const prev = p.yry;
+  p.yrvy = Math.min(18, p.yrvy + 0.6); p.yry += p.yrvy;
+  p.yrg = false;
+  if (p.yrvy >= 0) for (const pl of platforms()) {                                // 上からは乗れて、下からは通り抜ける（人と同じ）
+    if (prev <= pl.y + 0.01 && p.yry >= pl.y && p.yrx > pl.x && p.yrx < pl.x + pl.w) { p.yry = pl.y; p.yrvy = 0; p.yrg = true; break; }
+  }
+  if (p.yrx < KO_L || p.yrx > KO_R || p.yry - PLH > KO_B) {                       // 人と同じ撃墜ライン（左右は中心、下は頭）: また幽霊として復活する
+    if (yureiSpawn(p)) emit("yv", p.yrx, p.yry);                                  // 足場がすべて崩れたあとは、落ちて戻るだけ（出来事を出し続けない）
+    return;
+  }
   if (p.yrc > 0) p.yrc--;
-  else if (inp & (KEY.a | KEY.k)) {
-    game.pj.push({ k: 3, x: p.yrx, y: YUREI_Y + 16, vx: 0, vy: 0, own: p.own, t: 0 });
+  else if (inp & (KEY.a | KEY.k)) {                                               // 足もとにその場で置く（空中なら空中に固定）。1 秒後に爆発する
+    game.pj.push({ k: 3, x: p.yrx, y: p.yry - YUREI_R, vx: 0, vy: 0, own: p.own, t: 0 });
     p.yrc = YUREI_CD;
-    emit("yd", p.yrx, YUREI_Y + 16);
+    emit("yd", p.yrx, p.yry - YUREI_R);
   }
 }
 function yureiBlast(b, list) {               // 爆風の中の人を、盾を無視して外へ軽く吹っ飛ばす（騎士のカウンターも効かない）
@@ -1127,7 +1155,7 @@ function yankStep(p) {
 
 // ---- クロス使い・ゴブG ----
 // 置き物（クロスボウ game.cb / ゴブGの手下 game.mn）は、攻撃・爆風・槍・ブーメランの盾に当たると壊れる。自動で出る攻撃（クロスボウの矢・背中の槍・手下の斬り）は autoStrike で当てる
-const cbOf = p => game.cb.find(c => c.own === p.own) || null;     // 持ち主のクロスボウ（なければ null）
+const cbsOf = p => game.cb.filter(c => c.own === p.own);          // 持ち主のクロスボウ（古い順。なければ空）
 function removeCb(c) {                       // クロスボウが壊れる・消える（クールタイムは置いた瞬間から数えているので、ここでは何もしない）
   const i = game.cb.indexOf(c);
   if (i < 0) return;
@@ -1288,7 +1316,7 @@ function physics(p, inp, neutral) {
   if (p.bf > 0) p.bf--;
   if (p.kc > 0) p.kc--;
   if (p.rmSw > 0) p.rmSw--;
-  if (chd.id === "archer") { if (p.am < ARROW_MAX) { if (++p.amT >= ARROW_REGEN) { p.am++; p.amT = 0; } } else p.amT = 0; }   // 矢は 1 秒に 1 本ずつ回復
+  if (chd.id === "archer") { if (p.am < arrowMax()) { if (++p.amT >= ARROW_REGEN) { p.am++; p.amT = 0; } } else p.amT = 0; }   // 矢は 1 秒に 1 本ずつ回復
   if (p.bz > 0) p.bz--;
   if (p.iv > 0) p.iv--;
   if (p.gh > 0 && --p.gh === 0) emit("gx", ecx(p), ecy(p));
@@ -1543,15 +1571,8 @@ function updateProjectiles(list) {
       const boom = b.t >= BOMB_FUSE;                         // 敵に当たっても爆発しない。導火線が尽きたときだけ爆発
       if (boom) { explode(b, list); game.pj.splice(i, 1); continue; }
       if (b.y > KO_B + 80 || b.x < KO_L - 60 || b.x > KO_R + 60) game.pj.splice(i, 1);
-    } else if (b.k === 3) {                                  // 幽霊の爆弾: 真下へ落ちて、足場か人に当たると爆発する
-      const oy = b.y;
-      b.vy = Math.min(14, b.vy + 0.5); b.y += b.vy;
-      const pl = pls.find(q => oy + YUREI_R <= q.y + 1 && b.y + YUREI_R >= q.y && b.x > q.x - 4 && b.x < q.x + q.w + 4);
-      let boom = !!pl;
-      if (pl) b.y = pl.y - YUREI_R;
-      else boom = list.some(e => e.own !== b.own && !untouchable(e) && b.x + YUREI_R > hbL(e) && b.x - YUREI_R < hbR(e) && b.y + YUREI_R > e.y && b.y - YUREI_R < e.y + phOf(e));
-      if (boom) { yureiBlast(b, list); game.pj.splice(i, 1); continue; }
-      if (b.y > KO_B + 80) game.pj.splice(i, 1);
+    } else if (b.k === 3) {                                  // 幽霊の爆弾: 置かれた場所から動かず（重力なし）、YUREI_FUSE フレーム後に爆発する（足場が崩れても、その場で爆発）
+      if (b.t >= YUREI_FUSE) { yureiBlast(b, list); game.pj.splice(i, 1); continue; }
     } else if (b.k === 2) {                                  // ブーメラン使いの盾: 行き（だんだん遅く）→ 投げた人の今いる場所へ戻る
       const o = game.p[b.own];
       if (!o || !o.al || !o.bt) { if (o) o.bt = 0; game.pj.splice(i, 1); continue; }
@@ -1696,8 +1717,8 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
       return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
     case "gobg": return g && sameLevel && t.ground && gap < 300 ? KEY.k : 0;                                                         // 地上の敵が近いとき、手下を呼ぶ
     case "lancer": return g && face && sameLevel && shieldUp(t) && tFaces && gap >= 80 && gap <= 200 ? KEY.k : 0;              // 盾で待つ敵へ、突進して盾を割る
-    case "xbow": {                                                                                                          // 同じ高さの敵が射線に入るところへ、クロスボウを置く（置いたものが残っている間は置かない）
-      if (!g || cbOf(c)) return 0;
+    case "xbow": {                                                                                                          // 同じ高さの敵が射線に入るところへ、クロスボウを置く（置ける数（ふだん 1 台、ラストスパート中は 2 台）に達している間は置かない）
+      if (!g || cbsOf(c).length >= xbowMax()) return 0;
       const by = c.y + phOf(c) - CB_BOLT;
       return face && by > t.y && by < t.y + phOf(t) && gap > 90 && gap < CB_RANGE - 40 ? KEY.k : 0;
     }
@@ -1776,12 +1797,12 @@ function aiObjects(c, B, ccx, feet, R, gap) {
   else r.turn = s > 0 ? KEY.r : KEY.l;
   return r;
 }
-function aiDodge(c, inp, ccx, feet) {                  // 爆弾から離れる / 矢を跳んでよける / 敵の花を跳び越す
+function aiDodge(c, inp, ccx, feet) {                  // 爆弾（ボマーのボム・幽霊の置いた爆弾）から離れる / 矢を跳んでよける / 敵の花を跳び越す
   const cy = c.y + phOf(c) / 2;
   for (const b of game.pj) {
     if (b.own === c.own) continue;
-    if (b.k === 3) {                                     // 幽霊の爆弾: 真上から落ちてくるものの下から離れる
-      if (b.y < c.y && c.y - b.y < 260 && Math.abs(ccx - b.x) < YUREI_BLAST) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
+    if (b.k === 3) {                                     // 幽霊の置いた爆弾: 爆発の前に、近くにあれば（横 YUREI_BLAST+20px 以内で、高さもおおむね重なる）そこから離れる
+      if (b.t < YUREI_FUSE && Math.abs(ccx - b.x) < YUREI_BLAST + 20 && Math.abs(cy - b.y) < YUREI_BLAST + 30) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
     } else if (b.k === 0) {
       if (BOMB_FUSE - b.t < 50 && Math.abs(ccx - b.x) < BOMB_BLAST + 30 && Math.abs(cy - b.y) < BOMB_BLAST + 30) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
     } else {                                             // 矢と、ブーメラン使いの盾: 向かってくるものを跳んでよける
@@ -1959,6 +1980,16 @@ function tickClone(i) {                                      // 分身は自分�
   physics(c, cloneInput(c, owner), false);
 }
 
+// ラストスパートに入った瞬間（game.rt が LATE_FRAMES になったフレーム。1 ラウンドに 1 回）: すでに数えている途中のクールタイムも半分にする。
+// ゴースト（透過）はラスト中のクールタイムが 6 秒（通常 8 秒の 3/4）なので、残りも 3/4 にする。アーチャーの矢・ホストだけの状態は触らない
+function enterLate() {
+  for (const i of connectedSlots()) {
+    const p = game.p[i], k = chOf(p).id === "ghost" ? LATE_GHOST_CD / (chOf(p).skill.cd * 60) : 0.5;
+    p.kc = Math.ceil(p.kc * k); p.km = Math.ceil(p.km * k);
+    p.wk = p.wk.map(v => Math.ceil(v * 0.5)); p.wkm = p.wkm.map(v => Math.ceil(v * 0.5));
+  }
+}
+
 function hostTick() {
   const slots = connectedSlots();
   if (game.ph !== "play") for (const i of slots) if (game.p[i].cpu) inputs[i] = 0;      // CPU は戦闘中だけ動く
@@ -1973,12 +2004,12 @@ function hostTick() {
     game.tm--;
     if (game.tm <= 0) game.ph = "play";
   } else if (game.ph === "play") {
-    if (!training) { if (game.rt > 0) game.rt--; else game.sd++; }   // 制限時間が尽きたらサドンデス（足場が縮む）。ヒットストップ中も時間は進む。トレーニングには制限時間がない
+    if (!training) { if (game.rt > 0) { if (--game.rt === LATE_FRAMES) enterLate(); } else game.sd++; }   // 制限時間が尽きたらサドンデス（足場が縮む）。ヒットストップ中も時間は進む。トレーニングには制限時間がない。残り 20 秒になった瞬間にラストスパート
     if (game.hs > 0) { game.hs--; return; }                // ヒットストップ中は全員の動きを止める
     for (const i of slots) { const p = game.p[i]; if (p.cpu) inputs[i] = p.al && !training ? aiInput(p, null, AI_LEVELS[p.cpuLv] || AI_LEVELS[1]) : 0; }   // CPU の頭脳（トレーニングの相手は何も押さない）
     for (const i of slots) physics(game.p[i], inputs[i], false);
     for (const i of slots) tickClone(i);
-    for (const i of slots) { const p = game.p[i]; if (p.yr && !p.al) yureiStep(p, inputs[i]); }   // 幽霊
+    for (const i of slots) { const p = game.p[i]; if (p.yr && !p.al) yureiStep(p, inputs[i]); }   // 幽霊（足場の上を歩く）
     const list = ents();
     updateFlowers(list);
     updateProjectiles(list);
@@ -1990,7 +2021,7 @@ function hostTick() {
       const p = game.p[i];
       if (p.al && outOfBounds(p)) {
         if (training) { if (p.cpu) trainKO++; respawn(p); p.lv = Math.max(0, p.lv); }   // トレーニング: 誰でもすぐ上から復活する（残機は減らない）
-        else if (p.lv > 0) respawn(p); else { p.al = false; if (!p.cpu) becomeYurei(p); }   // 人は幽霊になって、上空から邪魔できる
+        else if (p.lv > 0) respawn(p); else { p.al = false; if (!p.cpu) becomeYurei(p); }   // 人は幽霊になって、足場の上を歩いて爆弾で邪魔できる
       }
     }
     const alive = slots.filter(i => game.p[i].al);
@@ -2026,7 +2057,7 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.fm) o.fm = 1;                                         // リバーシの守り形態（戦闘中しか変わらない）
   if (p.slw > 0) o.slw = p.slw;                               // 蜘蛛の糸で引き寄せられて、スピードが −1 の間
   if (p.wl) o.wl = [r1(p.wl[0]), r1(p.wl[1])];                // 蜘蛛の糸の先（糸を使っている間だけ）
-  if (p.yr) { o.yr = 1; o.yrx = r1(p.yrx); o.yrc = p.yrc; }   // 幽霊（脱落したあと）の位置と、次の爆弾までの残り
+  if (p.yr) { o.yr = 1; o.yrx = r1(p.yrx); o.yry = r1(p.yry); o.yrvy = r1(p.yrvy); o.yrc = p.yrc; }   // 幽霊（脱落したあと）の位置（足もとの y）・縦の速さと、次の爆弾までの残り
   if (p.gk) o.gk = p.gk;                                      // ゴブG: 背中のゴブリンが、次に槍を投げられるまでの残り（腕の見た目用）
   return o;
 }
@@ -2054,8 +2085,10 @@ const nameOf = i => (game.p[i] && game.p[i].n) || "プレイヤー" + (i + 1);
 const held = [0, 0, 0, 0], latch = [0, 0, 0, 0];
 const STEP_MS = 1000 / 60;
 let hostAcc = 0, hostLast = 0;
+let hostPause = false;                       // 参加者側: ホストが画面を離れて、ゲームが止まっている
 // 1 秒に 60 回の計算を、経過時間に合わせて回す。スマホが重くてタイマーが遅れても、遅れたぶんをまとめて計算し、ゲームの時間がゆっくりにならない（1 回に最大 4 回ぶんまで）
 function hostLoop() {
+  if (document.hidden) { hostLast = 0; hostAcc = 0; return; }      // 裏にいる間は何も進めない（時間もカウントダウンも止まる）。戻ったとき、裏にいた間を追いつこうとしない
   const now = performance.now();
   if (!hostLast) hostLast = now - STEP_MS;
   hostAcc += Math.min(250, now - hostLast); hostLast = now;
@@ -2070,7 +2103,7 @@ function hostLoop() {
       else evq.length = 0;                   // 参加者がいない（CPU 戦など）ときは、出来事をためない
     }
   }
-  if (n >= 4) hostAcc = Math.min(hostAcc, STEP_MS);   // 大きく遅れたとき（タブが裏にあった等）は、追いつこうとしない
+  if (n >= 4) hostAcc = Math.min(hostAcc, STEP_MS);   // 大きく遅れたとき（端末が重い等）は、追いつこうとしない
   if (game.ph !== lastPh) { lastPh = game.ph; renderUI(); }
   refreshHud();
 }
@@ -2136,7 +2169,7 @@ function goTitle() {
   document.body.classList.remove("solo");
   game.p = [null, null, null, null]; game.ph = "lobby"; game.tm = 0; game.win = -1; game.nf = 0; game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0; game.hsf = false;
   clearEntities(); evq.length = 0;
-  inputs.fill(0); held.fill(0); latch.fill(0);
+  inputs.fill(0); held.fill(0); latch.fill(0); hostPause = false; hostLast = 0; hostAcc = 0;
   lastPh = ""; lastSig = ""; lastHud = ""; uiKey = "";
   renderUI();
 }
@@ -2166,6 +2199,7 @@ function startHost() {
       p.al = game.ph === "lobby";            // 試合中の参加は、キャラを選んで次のラウンドから
       inputs[slot] = held[slot] = latch[slot] = 0;
       conn.send({ t: "hello", id: slot });
+      if (document.hidden) conn.send({ t: "pause", v: 1 });
       renderUI();
       conn.on("data", d => {
         if (!d) return;
@@ -2189,6 +2223,7 @@ function startClient(code) {
       if (d.t === "hello") { myId = d.id; net = "ready"; renderUI(); }
       else if (d.t === "full") { net = "error"; netMsg = "この部屋は満員です（最大4人）"; renderUI(); }
       else if (d.t === "s") applySnapshot(d);
+      else if (d.t === "pause") { hostPause = !!d.v; }               // ホストが画面を離れた / 戻った
     });
     hostConn.on("close", () => { net = "error"; netMsg = "ホストとの接続が切れました"; renderUI(); });
     setTimeout(() => { if (sid === sessionId && net === "connecting") { net = "error"; netMsg = "部屋が見つかりません（番号を確認してください）"; renderUI(); } }, 10000);
@@ -2204,23 +2239,28 @@ function readEnt(p, n) {                                     // スナップシ�
   p.gh = n.gh | 0; p.bz = n.bz | 0; p.cn = n.cn | 0; p.fz = n.fz | 0; p.iv = n.iv | 0; p.ks = n.ks | 0; p.gt = n.gt | 0; p.dz = n.dz | 0;
   p.rw = n.rw | 0; p.gs = n.gs | 0; p.hd = n.hd | 0; p.rp = n.rp || null;
   p.fm = n.fm | 0; p.slw = n.slw | 0; p.wl = n.wl || null;
-  p.yr = n.yr | 0; p.yrc = n.yrc | 0; if (p.yr) { p.yrt = n.yrx; if (p.yrx === undefined || Math.abs(p.yrx - n.yrx) > 120) p.yrx = n.yrx; }
+  p.yr = n.yr | 0; p.yrc = n.yrc | 0; p.yrvy = n.yrvy || 0;
+  if (p.yr) {                                                // 幽霊: 位置は x・y とも届いた値へ寄せる（大きく離れたとき = 復活したときは、すぐ移す）
+    p.yrt = n.yrx; p.yrty = n.yry;
+    if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
+  }
   p.gk = n.gk | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
 function applySnapshot(s) {
+  hostPause = false;                                                   // スナップショットが届くのは、ホストが動いているとき（一時停止の知らせの取りこぼし対策）
   const phChanged = game.ph !== s.ph;
   game.ph = s.ph; game.tm = s.tm; game.win = s.win; game.nf = s.nf | 0; game.rt = s.rt | 0; game.sd = s.sd | 0; game.hsf = !!s.hs;
   const wrChanged = game.wr !== sanitizeRounds(s.wr);                 // 古い版のホストは wr を送らない（標準の 3 本先取として扱う）
   game.wr = sanitizeRounds(s.wr);
-  if (s.ev) for (const e of s.ev) fxEvent(e);
+  if (s.ev && !document.hidden) for (const e of s.ev) fxEvent(e);   // 自分が裏にいる間は、効果音や演出をためない
   for (let i = 0; i < MAX_PLAYERS; i++) {
     const n = s.p[i];
     if (!n) { game.p[i] = null; continue; }
     let p = game.p[i];
     if (!p) { p = game.p[i] = newPlayer(); p.x = n.x; p.y = n.y; }
     readEnt(p, n);
-    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.am = n.am === undefined ? ARROW_MAX : n.am | 0; p.amT = n.amT | 0; p.lv = n.lv | 0; p.own = i;
+    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.am = n.am === undefined ? arrowMax() : n.am | 0; p.amT = n.amT | 0; p.lv = n.lv | 0; p.own = i;
     p.wk = n.wk || [0, 0, 0]; p.wkm = n.wkm || [0, 0, 0]; p.wm = n.wm | 0;
     const cn = s.cl[i];
     if (!cn) game.cl[i] = null;
@@ -2267,6 +2307,16 @@ addEventListener("keyup", e => {
   down.delete(k); recalcKeys();
 });
 addEventListener("blur", () => { down.clear(); recalcKeys(); });
+// タブ・アプリが裏になったとき（document.hidden）: 自分の押しているボタンをすべて離す（キャラが走り続けたり、押しっぱなしになったりしない）。音も止める。
+// ホストは、hostLoop が計算を一切進めなくなるので、参加者へ「一時停止」を知らせる。戻ったら解除を送る。キーの状態は 0 から。裏にいた間の時間は追いつかない（hostLast / hostAcc を戻す）
+function onVisibility() {
+  const hid = document.hidden;
+  down.clear(); myKeys = 0; held[0] = 0; latch[0] = 0; sentKeys = -1; pushKeys();
+  hostLast = 0; hostAcc = 0;
+  if (hid) Sfx.suspend(); else Sfx.resume();
+  if (role === "host") for (const c of conns) if (c && c.open) { try { c.send({ t: "pause", v: hid ? 1 : 0 }); } catch (e) {} }
+}
+document.addEventListener("visibilitychange", onVisibility);
 document.querySelectorAll(".tb").forEach(el => {
   const k = el.dataset.k;
   el.addEventListener("pointerdown", e => { e.preventDefault(); if (editing) { startBtnDrag(e, k); return; } down.add(k); recalcKeys(); });
@@ -2613,7 +2663,7 @@ let lastHud = "";
 function refreshHud() {
   const me = game.p[myId];
   const inBattle = !!(role && net === "ready" && me && game.ph !== "lobby");
-  const sig = (inBattle ? 1 : 0) + "|" + (land ? 1 : 0) + "|" + game.ph + "|" + game.wr + "|" + myId + "|" +
+  const sig = (inBattle ? 1 : 0) + "|" + (land ? 1 : 0) + "|" + (late() ? 1 : 0) + "|" + game.ph + "|" + game.wr + "|" + myId + "|" +
     game.p.map(p => p ? [p.c ? 1 : 0, p.lk ? 1 : 0, p.ch, p.lv, p.w, p.n, p.bz > 0 ? 1 : 0, p.gt > 0 ? 1 : 0, p.fm ? 1 : 0, p.slw > 0 ? 1 : 0].join(",") : "-").join("|");
   if (sig === lastHud) return;
   lastHud = sig;
@@ -2788,7 +2838,7 @@ function renderUI() {
   document.body.classList.toggle("inapp", key !== "title");     // タイトル画面以外では、タイトルへ戻るボタンを出す
   if (key === "title") {
     ui.innerHTML = `<div class="panel"><h1>シールドファイト</h1>
-      <p>好きなキャラを選んで戦おう！スキルで逆転もできる<br>盾が外れた隙を突いて、相手をステージから落とせ（最大4人 / 何本先取かは設定できます）<br>制限時間は${ROUND_FRAMES / 60}秒。時間切れになるとステージが縮みます</p>
+      <p>好きなキャラを選んで戦おう！スキルで逆転もできる<br>盾が外れた隙を突いて、相手をステージから落とせ（最大4人 / 何本先取かは設定できます）<br>制限時間は${ROUND_FRAMES / 60}秒。残り${LATE_FRAMES / 60}秒でラストスパート（スキルのクールタイムが半分、キャラごとの強化）。時間切れになるとステージが縮みます</p>
       <button id="bHost">部屋を作る（ホスト）</button>
       <button id="bSolo" class="sub">CPUと戦う（ひとりで遊ぶ）</button>
       <br><button id="bTrain" class="sub">トレーニング（相手は動かない）</button>
@@ -2839,12 +2889,12 @@ function updateSkillUI() {
       if (id === "spider") {                                     // 蜘蛛: 今の居場所で使う効果の名前と、その効果のクールタイム
         const m = role === "client" ? (me.wm | 0) : webMode(me), k = me.wk[m] | 0;
         label = ["崖へ", "引き寄せ", "急降下"][m] || sk.name;
-        if (k > 0) { state = "cool"; ratio = Math.min(1, k / (me.wkm[m] || WEB_CD[m])); sec = String(Math.ceil(k / 60)); } else state = "ready";
+        if (k > 0) { state = "cool"; ratio = Math.min(1, k / (me.wkm[m] || Math.round(WEB_CD[m] * cdMul()))); sec = String(Math.ceil(k / 60)); } else state = "ready";
       }
       else if (zone) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(zone.t / 60)); }   // スワッパーの ゾーンがある間（数字は円が消えるまでの秒数）
       else if (me.ks > 0) { state = "charge"; label = "ため中"; }
       else if (id === "archer" && me.am <= 0) { state = "cool"; label = "矢なし"; ratio = 1 - me.amT / ARROW_REGEN; sec = "0"; }   // 矢がないとき: 次の 1 本までを円で出す
-      else if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (me.km || sk.cd * 60)); sec = String(Math.ceil(me.kc / 60)); }
+      else if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (me.km || skCd(me))); sec = String(Math.ceil(me.kc / 60)); }
       else if (id === "boomer" && me.sbk > 0) { state = "cool"; label = "盾なし"; ratio = Math.min(1, me.sbk / SHIELD_BREAK_FRAMES); sec = String(Math.ceil(me.sbk / 60)); }   // 盾が壊れている間は投げられない
       else state = "ready";
       if (chOf(me).id === "archer" && state !== "cool") sec = "×" + me.am;      // アーチャー: 残りの矢の本数
@@ -2880,21 +2930,24 @@ const Sfx = (() => {
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   };
   function tone(f0, f1, dur, type, vol, delay) {                           // f0 → f1 に音程が動く音
-    if (!ac || muted) return;
+    if (!ac || muted || document.hidden) return;                           // 裏にいる間は鳴らさない（止まった AudioContext に予約がたまって、戻ったときに一斉に鳴らないように）
     const t0 = ac.currentTime + (delay || 0), o = ac.createOscillator(), g = ac.createGain();
     o.type = type; o.frequency.setValueAtTime(f0, t0);
     if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
     env(g, t0, dur, vol); o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + 0.03);
   }
   function noise(dur, vol, type, f0, f1, delay) {                          // フィルターを通したノイズ
-    if (!ac || muted) return;
+    if (!ac || muted || document.hidden) return;
     const t0 = ac.currentTime + (delay || 0), s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
     s.buffer = buf; f.type = type; f.Q.value = 1; f.frequency.setValueAtTime(f0, t0);
     if (f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
     env(g, t0, dur, vol); s.connect(f); f.connect(g); g.connect(master); s.start(t0, Math.random() * 0.3); s.stop(t0 + dur + 0.03);
   }
+  // 裏（タブ・アプリが見えない）になったら AudioContext を止め、表に戻ったら再開する
+  function suspend() { try { if (ac && ac.state === "running") { const r = ac.suspend(); if (r && r.catch) r.catch(() => {}); } } catch (e) {} }
+  function resume() { try { if (ac && ac.state === "suspended") { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); } } catch (e) {} }
   return {
-    init,
+    init, suspend, resume,
     get muted() { return muted; },
     setMuted(m) {
       muted = !!m;
@@ -2946,7 +2999,9 @@ const Sfx = (() => {
     },
     web() { tone(1900, 700, 0.09, "sine", 0.10); noise(0.08, 0.10, "highpass", 4000, 4000); },
     stomp() { tone(160, 50, 0.25, "sine", 0.4); noise(0.2, 0.2, "lowpass", 900, 150); },
-    yureiDrop() { tone(820, 380, 0.22, "sine", 0.08); tone(560, 260, 0.25, "triangle", 0.05, 0.06); },
+    yureiDrop() { tone(820, 380, 0.22, "sine", 0.08); tone(560, 260, 0.25, "triangle", 0.05, 0.06); },   // 幽霊が爆弾を置いた
+    yureiBack() { tone(300, 900, 0.3, "sine", 0.07); tone(450, 1350, 0.25, "triangle", 0.04, 0.06); },   // 幽霊が復活した
+    lastSpurt() { tone(520, 520, 0.1, "square", 0.08); tone(780, 780, 0.1, "square", 0.08, 0.1); tone(1040, 1040, 0.22, "square", 0.09, 0.2); },   // ラストスパート突入
     yureiBoom() { noise(0.45, 0.32, "lowpass", 1600, 120); tone(140, 40, 0.35, "sine", 0.35); },
     cbSet() { tone(150, 70, 0.14, "triangle", 0.25); noise(0.1, 0.16, "lowpass", 900, 250); },                       // 木の「ゴトッ」
     cbShot() { noise(0.03, 0.18, "highpass", 3000, 3000); tone(520, 260, 0.1, "triangle", 0.12); tone(1100, 700, 0.07, "sine", 0.06, 0.02); },   // カチッ＋弦
@@ -3147,7 +3202,12 @@ function fxEvent(e) {
   }
   else if (k === "ms") Sfx.minionSwing();          // 手下が斬った
   else if (k === "gmx") { Sfx.pop(); burst(x, y, e[3] === 1 ? 12 : 6, { v0: 1, v1: e[3] === 1 ? 5 : 3, l0: 12, l1: 24, s0: 4, s1: 8, g: 0.05, round: true, colors: ["#4ade80", "#16a34a", "#e2e8f0"] }); }   // 手下が消えた（1 は殴られた）
-  else if (k === "yd") Sfx.yureiDrop();            // 幽霊が爆弾を落とした
+  else if (k === "yd") {                           // 幽霊が爆弾を置いた
+    Sfx.yureiDrop(); burst(x, y, 6, { dir: -Math.PI / 2, spread: 3, v0: 0.5, v1: 2, l0: 12, l1: 20, s0: 4, s1: 7, g: 0, round: true, colors: ["#c4b5fd", "#e9d5ff", "#ffffff"] });
+  } else if (k === "yv") {                         // 幽霊が場外から復活した（メインの真ん中）
+    Sfx.yureiBack(); rings.push({ x, y, t: 0, max: 14, c: "#c4b5fd", r0: 6, sp: 3 });
+    burst(x, y, 12, { v0: 0.8, v1: 3, l0: 16, l1: 28, s0: 5, s1: 9, g: -0.03, round: true, colors: ["#e9d5ff", "#c4b5fd", "#ffffff"] });
+  }
   else if (k === "yx") {                           // 幽霊の爆弾が爆発した
     Sfx.yureiBoom(); shake(7);
     burst(x, y, 20, { v0: 2, v1: 8, l0: 14, l1: 26, s0: 3, s1: 7, g: 0.1, colors: ["#c4b5fd", "#a78bfa", "#f8fafc", "#4c1d95"] });
@@ -3211,10 +3271,15 @@ function koFx(p) {                                 // 場外に落ちた瞬間: 
 }
 
 // 試合の状態の変わり目（カウントダウン・残り時間・サドンデス・脱落）から鳴らす音と演出。全員が自分の画面で同じ状態を見て出す
-const fxPrev = { ph: "", sec: -1, rt: -1, sd: 0, al: [false, false, false, false] };
-let fxBannerT = 99, fxGoT = 0, fxSdT = 0;          // 見出しが出てからのフレーム / 「GO!」・「サドンデス！」の表示の残り
+const fxPrev = { ph: "", sec: -1, rt: -1, rtRaw: -1, sd: 0, al: [false, false, false, false] };
+let fxBannerT = 99, fxGoT = 0, fxSdT = 0, fxLateT = 0;   // 見出しが出てからのフレーム / 「GO!」・「サドンデス！」の表示の残り / 「ラストスパート！」の表示の残り（約 3 秒）
 function fxPhase(dt) {
-  fxBannerT += dt; fxGoT = Math.max(0, fxGoT - dt); fxSdT = Math.max(0, fxSdT - dt);
+  fxBannerT += dt; fxGoT = Math.max(0, fxGoT - dt); fxSdT = Math.max(0, fxSdT - dt); fxLateT = Math.max(0, fxLateT - dt);
+  // ラストスパート突入: 戦闘中に game.rt が LATE_FRAMES をまたぐのを見て、ラウンドごとに 1 回だけ出す（途中参加・再接続で、すでに過ぎたあとに突然出さない）
+  const prevRt = fxPrev.rtRaw;
+  fxPrev.rtRaw = game.ph === "play" ? game.rt : -1;
+  if (game.ph !== "play") fxLateT = 0;
+  else if (prevRt > LATE_FRAMES && game.rt <= LATE_FRAMES && game.rt > LATE_FRAMES - 120 && !training) { fxLateT = 180; Sfx.lastSpurt(); shake(3); }
   if (game.ph !== fxPrev.ph) {
     if (game.ph === "play" && fxPrev.ph === "count") { Sfx.beep(true); fxGoT = 40; fxBannerT = 0; }
     else if (game.ph === "round") { Sfx.roundEnd(game.win >= 0); fxBannerT = 0; }
@@ -3406,28 +3471,33 @@ function drawArrow(b) {
   cx.strokeStyle = "#94a3b8"; cx.lineWidth = 1.5;
   cx.beginPath(); cx.moveTo(b.x - d * L, b.y); cx.lineTo(b.x - d * (L + 4), b.y - 4); cx.moveTo(b.x - d * L, b.y); cx.lineTo(b.x - d * (L + 4), b.y + 4); cx.stroke();
 }
-// 幽霊（脱落した人）: 上空をふわふわ飛ぶ。カメラが上を映していないときは、画面の上の端に出す。真下の足場に、爆弾が落ちる場所の印を出す（全員に見える）
+// 幽霊（脱落した人）: 足場の上に立つ半透明の幽霊（足もとが少し浮いて、ゆらゆら揺れる。跳ぶと縦に少し伸びる）。置ける爆弾を持っているときは、横に爆弾を出す
 function drawYurei(p, i, me, now) {
-  const x = p.yrx, y = Math.max(YUREI_Y, camView.y0 + 80 / cam.s) + Math.sin(now / 260 + i) * 3, col = COLORS[i], ready = p.yrc <= 0;
-  const below = platforms().filter(q => x > q.x && x < q.x + q.w && q.y > YUREI_Y).sort((a, b) => a.y - b.y)[0];
-  if (below) {
-    cx.save(); cx.globalAlpha = ready ? 0.5 : 0.22; cx.strokeStyle = col; cx.lineWidth = 2;
-    cx.beginPath(); cx.ellipse(x, below.y - 2, 14, 4, 0, 0, 6.2832); cx.stroke(); cx.restore();
-  }
+  const x = p.yrx, feet = p.yry, hover = 3 + Math.sin(now / 260 + i) * 1.5, y = feet - hover - 14, col = COLORS[i], ready = p.yrc <= 0;
+  const st = 1 + Math.min(0.18, Math.abs(p.yrvy || 0) * 0.012);
   cx.save(); cx.globalAlpha = 0.62;
+  cx.translate(x, feet); cx.scale(1 / st, st); cx.translate(-x, -feet);
   cx.fillStyle = "#f8fafc"; cx.strokeStyle = col; cx.lineWidth = 2.5;
   cx.beginPath(); cx.arc(x, y - 4, 14, Math.PI, 0); cx.lineTo(x + 14, y + 14);
   for (let k = 0; k < 4; k++) { const wx = x + 14 - (k + 0.5) * 7; cx.lineTo(wx, y + (k % 2 ? 14 : 9)); }
   cx.lineTo(x - 14, y + 14); cx.closePath(); cx.fill(); cx.stroke();
   cx.fillStyle = "#111827"; cx.fillRect(x - 6 + p.f * 2, y - 7, 3, 4); cx.fillRect(x + 3 + p.f * 2, y - 7, 3, 4);
-  if (ready) { cx.globalAlpha = 0.9; cx.fillStyle = "#4c1d95"; cx.beginPath(); cx.arc(x, y + 22, YUREI_R, 0, 6.2832); cx.fill(); }   // 次の爆弾を持っている
-  cx.globalAlpha = 0.8; cx.fillStyle = col; cx.font = "bold 13px sans-serif"; cx.textAlign = "center";
-  cx.fillText(nameOf(i) + (me ? " ▲" : ""), x, y + (ready ? 44 : 32));   // 名前は下に（上は残り時間の表示とぶつかる）
+  if (ready) { cx.globalAlpha = 0.9; cx.fillStyle = "#4c1d95"; cx.beginPath(); cx.arc(x + p.f * 20, y + 8, YUREI_R, 0, 6.2832); cx.fill(); }   // 次の爆弾を持っている（進む向きの横）
+  cx.restore();
+  cx.save(); cx.globalAlpha = 0.8; cx.fillStyle = col; cx.font = "bold 13px sans-serif"; cx.textAlign = "center";
+  cx.fillText(nameOf(i) + (me ? " ▲" : ""), x, y - 26);
   cx.restore();
 }
+// 置かれた幽霊の爆弾: 爆風の範囲（点線の輪）の中で、置いた人の色の円が広がっていき（爆発の瞬間に輪いっぱい）、爆弾は爆発が近いほど速く点滅する
 function drawYureiBomb(b, now) {
-  cx.fillStyle = "#4c1d95"; cx.beginPath(); cx.arc(b.x, b.y, YUREI_R, 0, 6.2832); cx.fill();
-  cx.strokeStyle = Math.floor(now / 80) % 2 ? "#e9d5ff" : (COLORS[b.own] || "#ffffff"); cx.lineWidth = 2; cx.stroke();
+  const left = Math.max(0, 1 - b.t / YUREI_FUSE), col = COLORS[b.own] || "#ffffff";
+  cx.save();
+  cx.globalAlpha = 0.16 + 0.1 * (1 - left); cx.fillStyle = col; cx.beginPath(); cx.arc(b.x, b.y, YUREI_BLAST * (1 - left), 0, 6.2832); cx.fill();
+  cx.globalAlpha = 0.45; cx.strokeStyle = col; cx.lineWidth = 2; cx.setLineDash([6, 5]); cx.beginPath(); cx.arc(b.x, b.y, YUREI_BLAST, 0, 6.2832); cx.stroke(); cx.setLineDash([]);
+  cx.restore();
+  const flash = Math.floor(b.t / Math.max(2, Math.round(3 + 9 * left))) % 2 === 0;       // 点滅の間隔が、14 フレーム → 3 フレームへ縮む
+  cx.fillStyle = flash ? "#4c1d95" : "#f8fafc"; cx.beginPath(); cx.arc(b.x, b.y, YUREI_R, 0, 6.2832); cx.fill();
+  cx.strokeStyle = flash ? "#e9d5ff" : col; cx.lineWidth = 2; cx.stroke();
 }
 function drawThrownShield(b) {                     // ブーメラン使いが投げた盾（回りながら飛ぶ。縁は持ち主の色）
   cx.save(); cx.translate(b.x, b.y); cx.rotate(b.t * 0.45);
@@ -3561,7 +3631,7 @@ function drawTimer(now) {
   else if (game.sd > 0) { text = "SUDDEN DEATH"; color = blink ? "#fca5a5" : "#ef4444"; }
   else {
     const secs = Math.max(0, Math.ceil(game.rt / 60));
-    text = String(secs); color = secs <= 10 ? (blink ? "#fca5a5" : "#ef4444") : "rgba(255,255,255,0.9)";
+    text = String(secs); color = secs <= 10 ? (blink ? "#fca5a5" : "#ef4444") : late() ? "#fb923c" : "rgba(255,255,255,0.9)";   // ラストスパート中は橙（残り 10 秒からは赤の点滅）
     if (training) { text = "撃墜 " + trainKO; color = "rgba(255,255,255,0.9)"; }   // トレーニング: 制限時間はなく、相手を落とした回数を出す
   }
   cx.textAlign = "center"; cx.font = "bold " + fs + "px sans-serif"; cx.lineJoin = "round"; cx.lineWidth = 4; cx.strokeStyle = "rgba(0,0,0,0.55)";
@@ -3602,7 +3672,8 @@ function camFighters(dt) {
   const outer = [], inner = [], now = [], body = [], cls = [];   // now: いまの位置（先読みなし）に名前・攻撃の届く距離までつけた範囲 / body: 体だけ（どちらも、画面から出さないための最後の保証に使う）/ cls: 通常カメラが、範囲を広げるかどうかを見るための範囲
   let feet = -Infinity, big = 1;                     // big: いちばん大きいキャラの大きさ（ふつう 1、巨大化中 2）
   for (let i = 0; i < MAX_PLAYERS; i++) {
-    const p = game.p[i];
+    let p = game.p[i];
+    if (p && p.c && !p.al && p.yr && i === myId && p.yry < PY + 40) p = { x: p.yrx - PLW / 2, y: p.yry - PLH, gt: 0, c: true, al: true };   // 自分の幽霊が足場の近くを歩いているときは、戦っている人と同じようにカメラに入れる（落ちている間は入れない）
     if (!p || !p.c || !p.al) { camVel[i] = null; continue; }
     let e = camVel[i];
     if (!e || Math.abs(p.x - e.x) > 150 || Math.abs(p.y - e.y) > 150) e = camVel[i] = { x: p.x, y: p.y, vx: 0, vy: 0, t: 0 };   // 瞬間移動・復活は速度とみなさない
@@ -3762,7 +3833,7 @@ function updateCamera(dt) {
 }
 const smoothClient = p => {
   if (p && p.tx !== undefined) { p.x += (p.tx - p.x) * 0.6; p.y += (p.ty - p.y) * 0.6; }
-  if (p && p.yr && p.yrt !== undefined) p.yrx += (p.yrt - p.yrx) * 0.6;                // 幽霊の位置も同じように
+  if (p && p.yr && p.yrt !== undefined) { p.yrx += (p.yrt - p.yrx) * 0.6; p.yry += (p.yrty - p.yry) * 0.6; }   // 幽霊の位置も同じように
 };   // 参加者側: 届いた位置へ寄せて滑らかに見せる
 let lastT = performance.now();
 let yureiSince = 0;                                  // 自分が幽霊になった時刻（説明を少しの間だけ出す）
@@ -3773,7 +3844,7 @@ function render() {
   lastT = now;
   fxPhase(dt); updateFx(dt); updateSkillUI();
   if (role === "client" && !game.hsf) {              // 参加者側では、飛び道具をスナップショットの合間に先へ進めて滑らかに見せる
-    for (const b of game.pj) { b.x += b.vx * dt; b.y += b.vy * dt; b.t += dt; if (b.k === 0 || b.k === 3) b.vy += 0.5 * dt; }
+    for (const b of game.pj) { b.x += b.vx * dt; b.y += b.vy * dt; b.t += dt; if (b.k === 0) b.vy += 0.5 * dt; }
     for (const m of game.mn) { m.x += m.vx * dt; m.t += dt; }          // 手下は横へ、クロスボウは経過（点滅）だけ先へ進める（y はホストの値のまま）
     for (const c of game.cb) c.t += dt;
   }
@@ -3852,10 +3923,29 @@ function render() {
     else if (fxGoT > 0) banner("GO!");
     const yr = myId >= 0 && game.p[myId] && !game.p[myId].al && game.p[myId].yr;
     if (!yr) yureiSince = 0; else if (!yureiSince) yureiSince = now;
+    const hintY = land ? 96 : Math.max(16, Math.min(34, cw / 13)) + 34;
+    let lateY = hintY;                                     // ラストスパートの文の位置（幽霊の説明が出ているときは、その下）
     if (myId >= 0 && game.p[myId] && !game.p[myId].al && (!yr || now - yureiSince < 4000)) {   // 幽霊の説明は、なってから 4 秒だけ
-      cx.fillStyle = "rgba(255,255,255,.6)"; cx.font = (yr ? "15px" : "18px") + " sans-serif"; cx.textAlign = "center";
-      cx.fillText(yr ? "幽霊になった！ 攻撃ボタンで爆弾を落とす" : "観戦中", cw / 2, land ? 96 : Math.max(16, Math.min(34, cw / 13)) + 34);
+      cx.fillStyle = "rgba(255,255,255,.6)"; cx.textAlign = "center";
+      if (yr) {
+        cx.font = Math.min(15, cw / 28) + "px sans-serif";
+        cx.fillText("幽霊になった！ 攻撃ボタンで爆弾を置く（1秒後に爆発）", cw / 2, hintY);
+        cx.fillText("落ちても幽霊で復活", cw / 2, hintY + 18); lateY = hintY + 40;
+      } else { cx.font = "18px sans-serif"; cx.fillText("観戦中", cw / 2, hintY); lateY = hintY + 26; }
     }
+    if (fxLateT > 0) {                                      // ラストスパート突入の知らせ（約 3 秒。最後の 0.5 秒で消える）
+      const a = Math.min(1, fxLateT / 30), pop = 1 + 0.25 * Math.max(0, 1 - (180 - fxLateT) / 8), fs = Math.min(26, cw / 15) * pop;
+      cx.save(); cx.globalAlpha = a; cx.textAlign = "center"; cx.lineJoin = "round"; cx.lineWidth = 4; cx.strokeStyle = "rgba(0,0,0,0.55)";
+      cx.font = "bold " + fs + "px sans-serif"; cx.strokeText("ラストスパート！", cw / 2, lateY + 6); cx.fillStyle = "#fb923c"; cx.fillText("ラストスパート！", cw / 2, lateY + 6);
+      cx.font = Math.min(15, cw / 26) + "px sans-serif"; cx.lineWidth = 3;
+      cx.strokeText("スキルのクールタイムが半分に", cw / 2, lateY + 28); cx.fillStyle = "#fed7aa"; cx.fillText("スキルのクールタイムが半分に", cw / 2, lateY + 28);
+      cx.restore();
+    }
+  }
+  if (role === "client" && hostPause) {                    // ホストが画面を離れている間は、ゲームが止まっている
+    cx.fillStyle = "rgba(0,0,0,0.55)"; cx.fillRect(0, 0, cw, ch);
+    cx.fillStyle = "#fff"; cx.textAlign = "center"; cx.font = "bold " + Math.max(12, Math.min(24, (cw - 20) / 21)) + "px sans-serif";
+    cx.fillText("ホストが画面を離れているため一時停止中", cw / 2, ch / 2);
   }
 }
 function loop() { render(); requestAnimationFrame(loop); }
