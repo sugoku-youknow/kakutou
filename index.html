@@ -1856,8 +1856,8 @@ function aiThink(c, owner, pls, B) {
     const ob = aiObjects(c, B, ccx, feet, R, gap);
     if (ob) {
       if (ob.goal !== null) { inp &= ~(KEY.l | KEY.r); steer(ob.goal); }
-      if (ob.turn) { inp = (inp & ~(KEY.l | KEY.r)) | ob.turn; c.aiOnce |= ob.turn; }
-      if (ob.hit && c.cd === 0 && c.ks === 0 && c.cn === 0) inp |= KEY.a;
+      if (ob.turn) { inp = (inp & ~(KEY.l | KEY.r)) | ob.turn; c.aiOnce |= ob.turn; c.aiGoal = null; }   // 向きを変えるだけ（向かう場所があると aiInput が左右を消してしまうので、消しておく）
+      if (ob.hit && c.cd === 0 && c.ks === 0 && c.cn === 0) { inp = (inp & ~(KEY.l | KEY.r)) | KEY.a; c.aiGoal = null; }   // 払うときは、向きを変えずにその場で振る
     }
   }
   if (sk && B.skill > 0) { const k = aiSkill(c, t, { gap, sgn, sd, dyFeet, sameLevel, tr }, B); if (k) { inp |= k; inp &= ~KEY.a; } }   // スキルを使うときは、通常攻撃を押さない
