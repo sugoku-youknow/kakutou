@@ -340,6 +340,10 @@ function layoutFor(n) {
 const LAYOUTS = [layoutFor(2), layoutFor(2), layoutFor(2), layoutFor(3), layoutFor(4)];   // 人数 0〜4
 const PLW = 40, PLH = 60;                     // プレイヤー
 const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308"];
+// チーム（0 = チームなし / 1〜4 = 赤・青・緑・黄）。同じチームどうしは攻撃・罠・置き物が当たらない。チーム戦では、体の色をチームの色の濃淡にし、体のまわりにチームの色の光を出す
+const TEAM_NAMES = ["なし", "赤", "青", "緑", "黄"];
+const TEAM_COLORS = [null, "#ef4444", "#3b82f6", "#22c55e", "#eab308"];
+const TEAM_SHADES = [null, ["#ef4444", "#fb7185", "#b91c1c", "#fda4af"], ["#3b82f6", "#38bdf8", "#1d4ed8", "#93c5fd"], ["#22c55e", "#86efac", "#15803d", "#a3e635"], ["#eab308", "#fde047", "#ca8a04", "#fdba74"]];
 const CLONE_COLOR = "#f472b6";                // コペルニウムの分身
 const MAX_PLAYERS = 4;
 const WIN_ROUNDS_DEFAULT = 3, WIN_ROUNDS_MIN = 1, WIN_ROUNDS_MAX = 9;   // 何本先取か（ホスト・CPU 戦で、始める前に決められる。標準 3 本先取）
@@ -389,7 +393,7 @@ const SD_HOLD_FRAMES = 6 * 60;       // 最小幅になってから、足場が�
 
 // スキルの数値（60fps 換算）
 const BOMB_FUSE = 120, BOMB_R = 9, BOMB_BLAST = 85;     // ボム: 導火線の長さ（2 秒）/ 大きさ / 爆風の半径
-const BOMB_KNOCK = 0.57, BOMB_LIFT = 5.5;               // ボムの吹っ飛び（横の強さ / 上向きの初速）。2026-10-16 に 0.475 から 1.2 倍
+const BOMB_KNOCK = 0.855, BOMB_LIFT = 5.5;              // ボムの吹っ飛び（横の強さ / 上向きの初速）。2026-10-16 に 0.475 → 0.57 → 0.855（1.5 倍）
 // ボムの投げ方（ためて離す）: 横の初速は BOMB_VX0 + BOMB_VX1 × ため量（0〜1）、上向きの初速 BOMB_VY（低い山なり。上の台の下から投げても台に乗らない）
 const BOMB_VX0 = 3.5, BOMB_VX1 = 6, BOMB_VY = 5.5, BOMB_CHARGE = 48, BOMB_MAX = 2;   // … / 最大までためる時間（0.8 秒）/ 画面に置ける数（クールタイムはない。ラストスパート中は LATE_BOMBS）
 const BOMB_HIT_FRAC = 0.35, BOMB_RECOIL = 2.5;          // 飛んでいる爆弾が人に当たったときの吹っ飛ばし（盾なら 1 段階削る）/ 盾に当たって跳ね返る横の速さの最低値
@@ -437,7 +441,7 @@ const WEB_PULL = 250, WEB_PULL_FRAMES = 8, WEB_ROOT = 60;  // 引き寄せ: 糸�
 const WEB_DIVE = 420, WEB_DIVE_V = 18, WEB_STOMP = 0.5, WEB_LAG = 9;   // 急降下: 糸が届く距離（斜め 45 度）/ 降りる速さ / 着地で足もとの敵を吹っ飛ばす強さ / 着地のあとの隙（0.15 秒）
 // 幽霊（脱落した人が、ラウンドが終わるまで足場の上を歩いて、爆弾を置いて邪魔をする。人のプレイヤーだけ。場外へ落ちても、メインの真ん中から幽霊のまま復活する）
 // 誰にも当たらず、誰からも当たられない。爆弾はその場に置かれ、1 秒後に爆発する
-const YUREI_SPEED = 4.5, YUREI_JUMP = jumpVel(jumpHeight(BASE_STAT)), YUREI_H = 32;   // 歩く速さ / ジャンプの初速（スピード 2 の人と同じ高さ。1 回だけ）/ 体の高さ（見た目）
+const YUREI_SPEED = MOVE_BASE * moveMul(3), YUREI_JUMP = jumpVel(jumpHeight(3)), YUREI_H = 32;   // 幽霊は、スピード 3 の人と同じ速さ（約 6.1px/フレーム）とジャンプの高さ（2026-10-16 に 4.5px・スピード 2 から）。   // 歩く速さ / ジャンプの初速（スピード 2 の人と同じ高さ。1 回だけ）/ 体の高さ（見た目）
 const YUREI_CD = 180, YUREI_FIRST = 60, YUREI_FUSE = 60;          // 爆弾のクールタイム（3 秒）/ 幽霊になってから最初の爆弾まで（1 秒）/ 置いてから爆発するまで（1 秒）
 const YUREI_R = 7, YUREI_BLAST = 75, YUREI_KNOCK = 0.45, YUREI_LIFT = 6;   // 爆弾の大きさ / 爆風の半径 / 吹っ飛ばし（盾は効かない）/ 上向きの初速
 // ラストスパート: ラウンドの残りが 20 秒以下（サドンデス中も含む）の間。スキルのクールタイムが半分になり、キャラごとの強化が入る（トレーニングにはない）
@@ -564,7 +568,7 @@ let netMsg = "";
 // wr: 何本先取か（ロビーでは次の試合の設定。ホストが決めて、スナップショットで参加者へ届く）
 // pj: 飛び道具（ボム・矢） / fl: 花 / cl: 分身（持ち主のスロットごとに 1 つ） / wd: 天狗の風の場（持ち主ごとに 1 つまで）
 // rm: スワッパーの ゾーン（持ち主ごとに 1 つまで） / cb: クロス使いのクロスボウ（持ち主ごとに 1 つまで。ラストスパート中は 2 つまで） / mn: ゴブGの手下
-const game = { ph: "lobby", tm: 0, win: -1, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cb: [], mn: [], cl: [null, null, null, null], p: [null, null, null, null] };
+const game = { ph: "lobby", tm: 0, win: -1, wt: 0, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cb: [], mn: [], cl: [null, null, null, null], p: [null, null, null, null] };
 const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cb = []; game.mn = []; game.cl = [null, null, null, null]; };
 // ラストスパート（残り 20 秒以下。サドンデス中も含む。トレーニングにはない）。参加者の画面でも、届いた game.rt で同じように判定できる
 const late = () => game.ph === "play" && !training && game.rt <= LATE_FRAMES;
@@ -617,6 +621,7 @@ function newPlayer() {
            yk: 0, ykx: 0, yky: 0, slw: 0,               // 糸で引き寄せられている残り / 行き先 / 引き寄せられたあと、糸が絡んで動けない残り（見た目用。動けないのは fz）
            yr: 0, yrx: 0, yry: 0, yrvy: 0, yrg: false, yrc: 0,   // 幽霊（脱落したあと）か / 幽霊の x / 足もとの y / 縦の速さ / 地面に立っているか（ホストだけ）/ 次の爆弾までの残り
            gk: 0, gq: 0, sm: 0, smT: 0,                        // ゴブG: 背中のゴブリンが次に槍を投げられるまで / 召喚の残りの数 / 次の召喚までの残り（ホストだけ）
+           tg: 0,                                       // チーム（0 = なし / 1〜4）
            mg: 0, mgr: 0, bm: 0, mc: 0, ml: 0, bd: BOOK_MAX, bdT: 0,   // mgr: いま ためが進んでいるか（0 = 止まっている。段階は mg に残る）   // 魔法使い: ためている長さ（0 = ためていない）/ 詠唱の残り / 詠唱中の魔法の段階 / 魔法書の耐久 / 壊れた本が戻るまでの残り
            mb: 0, mbo: -1, mbv: null,                   // 拘束魔法で動けない残り / かけた魔法使いのスロット / その間に魔法使いから受けた吹っ飛びの合計（ホストだけ）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
@@ -625,16 +630,17 @@ function newPlayer() {
 }
 
 // ---------- 設定（名前とキャラ）----------
+const sanitizeTeam = v => { const t = Math.round(Number(v)); return Number.isFinite(t) && t >= 0 && t < TEAM_NAMES.length ? t : 0; };
 function sanitizeProfile(d) {
   d = d || {};
   const n = Array.from(String(d.n || "").replace(/[\u0000-\u001f\u007f]/g, "").trim()).slice(0, 8).join("");
   let c = Math.round(Number(d.c));
   if (d.c == null || !Number.isFinite(c) || c < 0 || c >= CHARS.length) c = 0;
-  return { n, c };
+  return { n, c, tg: sanitizeTeam(d.tg) };   // tg: チーム（古い版の参加者は送らない → チームなし。メッセージの種類 t と重ならない名前にする）
 }
 function loadProfile() {
   try { const j = JSON.parse(localStorage.getItem("shieldfight-profile2") || "null"); if (j) return sanitizeProfile(j); } catch (e) {}
-  return { n: "", c: 0 };
+  return { n: "", c: 0, tg: 0 };
 }
 function saveProfile() { try { localStorage.setItem("shieldfight-profile2", JSON.stringify(draft)); } catch (e) {} }
 let draft = loadProfile();   // キャラ選択画面で選んでいる内容
@@ -657,8 +663,23 @@ function setRounds(v) {
 const canEdit = p => game.ph === "lobby" || !p.lk;
 function applyProfile(p, prof) {
   if (!canEdit(p)) return;
-  p.n = prof.n; p.ch = prof.c; p.rd = true;
+  p.n = prof.n; p.ch = prof.c; p.tg = prof.tg | 0; p.rd = true;
 }
+// チーム。own（スロット）から、その人のチームを返す（分身・飛び道具・置き物も持ち主の own で引ける）
+const tgOf = own => { const p = game.p[own]; return p ? p.tg | 0 : 0; };
+// 味方か（同じ持ち主、または同じチーム）。攻撃・罠・置き物の当たり判定と、CPU の狙いで使う
+const ally = (a, b) => a === b || (tgOf(a) > 0 && tgOf(a) === tgOf(b));
+// 陣営（チームなら "t" + チーム、チームなしなら "p" + スロット）。陣営が 1 つしか残っていなければ、ラウンドの決着
+const sideOf = i => tgOf(i) ? "t" + tgOf(i) : "p" + i;
+const sidesOf = list => new Set(list.map(sideOf)).size;
+// スロット i の人の色。チーム戦ならチームの色の濃淡（同じチームの中で、スロットの小さい順に 1 番目・2 番目…）、そうでなければ席の色
+function colOf(i) {
+  const t = tgOf(i);
+  if (!t) return COLORS[i] || "#ffffff";
+  let k = 0; for (let j = 0; j < i; j++) if (game.p[j] && game.p[j].c && tgOf(j) === t) k++;
+  return TEAM_SHADES[t][k % 4];
+}
+const teamWord = t => TEAM_NAMES[t] + "チーム";
 
 // ---------- ホスト側シミュレーション ----------
 // 効果音・演出のきっかけ。ホスト自身が鳴らし、同じ内容を次のスナップショットで参加者にも届ける
@@ -735,11 +756,12 @@ function startRound() {
     if (idx >= 0) { spawn(p, idx, fighters.length, true); p.al = true; p.lk = true; p.lv = chOf(p).lives || 0; }
     else { p.al = false; p.yr = 0; }      // 選んでいる最中の人は観戦（次のラウンドから参加）
   }
-  game.ph = "count"; game.tm = 180; game.win = -1;
+  game.ph = "count"; game.tm = 180; game.win = -1; game.wt = 0;
 }
 
 function hostStartMatch() {
   if (role !== "host" || game.ph !== "lobby" || readySlots().length < 2) return;
+  if (sidesOf(readySlots()) < 2) return;                   // 全員が同じチーム: 始められない（画面に理由を出す）
   readySlots().forEach(s => game.p[s].w = 0);
   game.wr = winRounds;                                     // 何本先取か（この試合の間は変わらない）
   trainKO = 0;                                             // トレーニングの撃墜数は、始めるたびに 0 から
@@ -749,7 +771,7 @@ function hostStartMatch() {
 function toLobby() {
   const slots = connectedSlots();
   slots.forEach((s, idx) => { const p = game.p[s]; p.w = 0; p.lk = false; p.lv = 0; spawn(p, idx, slots.length); p.al = true; });
-  game.ph = "lobby"; game.win = -1; game.nf = 0;
+  game.ph = "lobby"; game.win = -1; game.wt = 0; game.nf = 0;
   game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0;
   clearEntities();
 }
@@ -770,7 +792,7 @@ function ents() {
 function aimAtFoe(p) {                       // 居合斬り: 右を向いていても、左に敵がいれば左へ踏み込む
   let best = null, bd = 1e9;
   for (const e of ents()) {
-    if (e.own === p.own || untouchable(e)) continue;
+    if (ally(e.own, p.own) || untouchable(e)) continue;
     const d = Math.abs(ecx(e) - ecx(p)) + 1.5 * Math.abs(e.y + phOf(e) - (p.y + phOf(p)));
     if (d < bd) { bd = d; best = e; }
   }
@@ -783,7 +805,7 @@ function dashStop(p, vx) {
   let lim = Math.abs(vx);
   const py = p.y + (p.ground ? 0 : p.vy + 0.6);                          // 空中では、このフレームの落下ぶんも見込んで高さを比べる（斜めに入ってめりこまないように）
   for (const e of ents()) {
-    if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0) continue;
+    if (e === p || ally(e.own, p.own) || !e.al || untouchable(e) || e.hd > 0) continue;
     if (py + phOf(p) <= e.y || py >= e.y + phOf(e)) continue;            // 高さが重ならない
     if (Math.sign(ecx(e) - ecx(p)) !== p.f) continue;                    // 向かう先にいる敵だけ
     lim = Math.min(lim, Math.max(0, p.f > 0 ? hbL(e) - front : front - hbR(e)));
@@ -944,7 +966,7 @@ function rewindStep(p) {
 function rewindPush(p, x, y) {
   const w = pwOf(p), h = phOf(p);
   for (const e of ents()) {
-    if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0 || p.rwHit.includes(e)) continue;
+    if (e === p || ally(e.own, p.own) || !e.al || untouchable(e) || e.hd > 0 || p.rwHit.includes(e)) continue;
     if (hbR(e) < x || hbL(e) > x + w || e.y + phOf(e) < y || e.y > y + h) continue;
     p.rwHit.push(e);
     const dir = Math.sign(ecx(e) - CENTER_X) || (ecx(e) >= x + w / 2 ? 1 : -1);
@@ -962,7 +984,7 @@ function distToBody(x, y, e) {
 const zoneOf = p => game.rm.find(m => m.own === p.own) || null;            // 自分の ゾーン（なければ null）
 const inZone = (m, e) => distToBody(m.x, m.y, e) <= m.r;
 // ゾーンの中にいる敵（透過中・復活直後・巻き戻し中・つかまれている人は除く）
-const zoneFoes = (p, m) => ents().filter(e => e !== p && e.own !== p.own && e.al && !untouchable(e) && e.hd === 0 && inZone(m, e));
+const zoneFoes = (p, m) => ents().filter(e => e !== p && !ally(e.own, p.own) && e.al && !untouchable(e) && e.hd === 0 && inZone(m, e));
 function openZone(p, ks) {                     // 離した場所に、広げた大きさの円を残す（クールタイムは円が消えてから）
   const m = { own: p.own, x: ecx(p), y: ecy(p), r: zoneR(ks), t: ZONE_LIFE };
   game.rm = game.rm.filter(o => o.own !== p.own); game.rm.push(m);
@@ -1051,7 +1073,7 @@ function grabStep(p, inp) {                   // 前へダッシュしながら�
     const w = pwOf(p), hx0 = p.f > 0 ? p.x + w : p.x - GRAB_REACH, hx1 = hx0 + GRAB_REACH;
     let best = null, bd = 1e9;
     for (const e of ents()) {
-      if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0) continue;
+      if (e === p || ally(e.own, p.own) || !e.al || untouchable(e) || e.hd > 0) continue;
       if (hx1 < hbL(e) || hx0 > hbR(e) || p.y + phOf(p) < e.y || p.y > e.y + phOf(e)) continue;
       const d = Math.abs(ecx(e) - ecx(p));
       if (d < bd) { bd = d; best = e; }
@@ -1121,7 +1143,8 @@ function windMul(p) {
   const x = ecx(p), y = ecy(p);
   for (const w of game.wd) {
     if (x < w.x || x > w.x + w.w || y < w.y || y > w.y + w.h) continue;
-    if (w.own === p.own) { mv *= WIND_SELF_MV; jp *= WIND_SELF_JP; } else { mv *= WIND_FOE_MV; jp *= WIND_FOE_JP; }
+    if (w.own === p.own) { mv *= WIND_SELF_MV; jp *= WIND_SELF_JP; } else if (ally(w.own, p.own)) continue; else {   // 味方（チーム）は、遅くも速くもならない
+    mv *= WIND_FOE_MV; jp *= WIND_FOE_JP; }
   }
   return { mv, jp };
 }
@@ -1170,7 +1193,7 @@ function webSkill(p) {
     const x0 = p.f > 0 ? p.x + pwOf(p) : p.x - WEB_PULL, x1 = x0 + WEB_PULL;
     let best = null, bd = 1e9;
     for (const e of ents()) {
-      if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0 || e.yk > 0) continue;
+      if (e === p || ally(e.own, p.own) || !e.al || untouchable(e) || e.hd > 0 || e.yk > 0) continue;
       if (hbR(e) < x0 || hbL(e) > x1 || hy + 10 < e.y || hy - 10 > e.y + phOf(e)) continue;
       const d = Math.abs(ecx(e) - hx);
       if (d < bd) { bd = d; best = e; }
@@ -1221,7 +1244,7 @@ function webStep(p) {
 function webStomp(p) {                       // 盾は効かない（真上から降ってくるため）
   const x = ecx(p), feet = p.y + phOf(p), r = pwOf(p) / 2 + 24;
   for (const e of ents()) {
-    if (e === p || e.own === p.own || !e.al || untouchable(e) || e.hd > 0) continue;
+    if (e === p || ally(e.own, p.own) || !e.al || untouchable(e) || e.hd > 0) continue;
     if (hbR(e) < x - r || hbL(e) > x + r || e.y + phOf(e) < feet - 70 || e.y > feet + 4) continue;
     const dir = Math.sign(ecx(e) - x) || p.f;
     knock(p, e, WEB_STOMP, dir); impact("h", p, e, WEB_STOMP, dir);
@@ -1265,7 +1288,7 @@ function yureiBlast(b, list) {               // 爆風の中の人を、盾を�
   emit("yx", b.x, b.y, YUREI_BLAST);
   let any = false;
   for (const e of list) {
-    if (e.own === b.own || untouchable(e)) continue;
+    if (ally(e.own, b.own) || untouchable(e)) continue;
     const nx = Math.max(hbL(e), Math.min(b.x, hbR(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e))), dist = Math.hypot(b.x - nx, b.y - ny);
     if (dist > YUREI_BLAST) continue;
     const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
@@ -1314,11 +1337,11 @@ function killMinion(m, hit) {                // hit: 殴られて消えた（な
 function hitObjs(own, x0, y0, x1, y1, done, noMinion, cbPad) {
   let any = false;
   if (!noMinion) for (const m of game.mn.slice()) {
-    if (m.own === own || m.x + MN_W < x0 || m.x > x1 || m.y + MN_H < y0 || m.y > y1) continue;
+    if (ally(m.own, own) || m.x + MN_W < x0 || m.x > x1 || m.y + MN_H < y0 || m.y > y1) continue;
     killMinion(m, true); any = true;
   }
   for (const c of game.cb.slice()) {
-    if (c.own === own || (done && done.includes(c)) || c.x + CB_W < x0 || c.x > x1 || c.y + CB_H < y0 || c.y > y1 + (cbPad || 0)) continue;
+    if (ally(c.own, own) || (done && done.includes(c)) || c.x + CB_W < x0 || c.x > x1 || c.y + CB_H < y0 || c.y > y1 + (cbPad || 0)) continue;
     if (done) done.push(c);
     hurtCb(c); any = true;
   }
@@ -1326,8 +1349,8 @@ function hitObjs(own, x0, y0, x1, y1, done, noMinion, cbPad) {
 }
 function blastObjs(own, x, y, r) {           // 爆風（半径 r）: 長方形の最近点まで r 以内の手下は消え、クロスボウは 1 回削れる
   const near = (ox, oy, w, h) => Math.hypot(x - Math.max(ox, Math.min(x, ox + w)), y - Math.max(oy, Math.min(y, oy + h))) <= r;
-  for (const m of game.mn.slice()) if (m.own !== own && near(m.x, m.y, MN_W, MN_H)) killMinion(m, true);
-  for (const c of game.cb.slice()) if (c.own !== own && near(c.x, c.y, CB_W, CB_H)) hurtCb(c);
+  for (const m of game.mn.slice()) if (!ally(m.own, own) && near(m.x, m.y, MN_W, MN_H)) killMinion(m, true);
+  for (const c of game.cb.slice()) if (!ally(c.own, own) && near(c.x, c.y, CB_W, CB_H)) hurtCb(c);
 }
 // 自動で出る攻撃の命中処理（持ち主が戦っていなくても当てられる）。騎士が構えていたら、カウンターを成功させるだけで持ち主は飛ばさない（置き物・槍が消えるだけ）。
 // o: strike と同じ { dir, frac, recoil } / onCounter: カウンターを受けたときにすること（クロスボウを壊す・手下を消す）
@@ -1355,7 +1378,7 @@ function updateCbs(list) {
     if (!c.g) continue;                       // 足場に乗っているときだけ撃つ
     if (c.rl > 0) { c.rl--; continue; }
     const mx = c.f > 0 ? c.x + CB_W : c.x, by = c.y + CB_H - CB_BOLT, lo = Math.min(mx, mx + c.f * CB_RANGE), hi = Math.max(mx, mx + c.f * CB_RANGE);
-    const seen = list.some(e => e.own !== c.own && e.al && !untouchable(e) && hbR(e) > lo && hbL(e) < hi && by > e.y && by < e.y + phOf(e));
+    const seen = list.some(e => !ally(e.own, c.own) && e.al && !untouchable(e) && hbR(e) > lo && hbL(e) < hi && by > e.y && by < e.y + phOf(e));
     if (!seen) continue;                      // 射線（口から前方 CB_RANGE）に敵が入ったら撃つ。分身は狙い、手下は狙わない
     game.pj.push({ k: 1, x: mx, y: by, vx: c.f * ARROW_SPEED * (13 + 9 * CB_ARROW_C), vy: 0, own: c.own, pw: 0.35 + 0.85 * CB_ARROW_C, t: 0, xid: c.id });
     c.rl = CB_RELOAD;
@@ -1382,7 +1405,7 @@ function updateGoblins(list) {
       const sz = szOf(p), kx = p.f > 0 ? p.x - 7 * sz : p.x + pwOf(p) + 7 * sz, ky = p.y + (k === "gk" ? 14 : 34) * sz;   // そのゴブリンの手もと
       let best = null, bd = GOB_RANGE + 1;
       for (const e of list) {
-        if (e.own === p.own || !e.al || untouchable(e)) continue;
+        if (ally(e.own, p.own) || !e.al || untouchable(e)) continue;
         const d = distToBody(kx, ky, e);
         if (d <= GOB_RANGE && d < bd) { bd = d; best = e; }
       }
@@ -1410,7 +1433,7 @@ function updateMinions(list) {
         if (!m.done) {
           let t = null, bd = 1e9;
           for (const e of list) {
-            if (e.own === m.own || !e.al || untouchable(e)) continue;
+            if (ally(e.own, m.own) || !e.al || untouchable(e)) continue;
             if (hbR(e) < x0 || hbL(e) > x1 || e.y + phOf(e) < y0 || e.y > y1) continue;
             const d = Math.abs(ecx(e) - mcx);
             if (d < bd) { bd = d; t = e; }
@@ -1424,7 +1447,7 @@ function updateMinions(list) {
     } else if (m.g) {                         // 地上: いちばん近い敵（高さの違いは重く見る）へ向かう
       let t = null, bd = 1e9;
       for (const e of list) {
-        if (e.own === m.own || !e.al || untouchable(e)) continue;
+        if (ally(e.own, m.own) || !e.al || untouchable(e)) continue;
         const d = Math.abs(ecx(e) - mcx) + 1.5 * Math.abs(e.y + phOf(e) - (m.y + MN_H));
         if (d < bd) { bd = d; t = e; }
       }
@@ -1722,7 +1745,7 @@ function resolveHits(list) {
     const hx0 = p.f > 0 ? p.x + PLW * sz : p.x - reach, hx1 = hx0 + reach;
     const hy0 = p.y + 8 * sz, hy1 = p.y + (PLH - 8) * sz;
     for (const t of list) {
-      if (t === p || t.own === p.own || p.hit.includes(t) || !t.al || untouchable(t)) continue;
+      if (t === p || ally(t.own, p.own) || p.hit.includes(t) || !t.al || untouchable(t)) continue;
       if (hx1 < hbL(t) || hx0 > hbR(t) || hy1 < t.y || hy0 > t.y + phOf(t)) continue;
       p.hit.push(t);
       strike(p, t, { dir: p.f, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker });
@@ -1737,7 +1760,7 @@ function explode(b, list) {
   emit("x", b.x, b.y, BOMB_BLAST);
   let any = false;
   for (const e of list) {
-    if (e.own === b.own || untouchable(e)) continue;
+    if (ally(e.own, b.own) || untouchable(e)) continue;
     const nx = Math.max(hbL(e), Math.min(b.x, hbR(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e)));
     const dist = Math.hypot(b.x - nx, b.y - ny);
     if (dist > BOMB_BLAST) continue;
@@ -1770,7 +1793,7 @@ function updateProjectiles(list) {
       if (b.vy !== 0 || Math.abs(b.vx) > 0.8) {              // 飛んでいる・転がっている間は当たり判定がある（同じ相手には 1 回まで）。止まった爆弾は当たらない
         const hit = b.hit || (b.hit = []);
         for (const e of list) {
-          if (e.own === b.own || !e.al || untouchable(e) || hit.includes(e)) continue;
+          if (ally(e.own, b.own) || !e.al || untouchable(e) || hit.includes(e)) continue;
           const nx = Math.max(hbL(e), Math.min(b.x, hbR(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e)));
           if (Math.hypot(b.x - nx, b.y - ny) > BOMB_R) continue;
           hit.push(e);
@@ -1812,7 +1835,7 @@ function updateProjectiles(list) {
       }
       const done = b.hit;                                    // 同じ相手には、行き・帰りのそれぞれで 1 回まで
       for (const e of list) {
-        if (e.own === b.own || !e.al || untouchable(e) || done.includes(e)) continue;
+        if (ally(e.own, b.own) || !e.al || untouchable(e) || done.includes(e)) continue;
         if (hbL(e) > xb || hbR(e) < xa || e.y > yb || e.y + phOf(e) < ya) continue;
         done.push(e);
         const dir = Math.abs(b.vx) > 1 ? Math.sign(b.vx) : (Math.sign(ecx(e) - ecx(o)) || 1);   // 盾の進む向き（真上・真下へ戻るときは、投げた人から離れる向き）
@@ -1830,7 +1853,7 @@ function updateProjectiles(list) {
       b.x = ecx(o) + b.dir * 22 * sz; b.y = o.y + 26 * sz;
       const x0 = b.dir > 0 ? b.x : b.x - M.range, x1 = x0 + M.range, ya = b.y - BEAM_HALF, yb = b.y + BEAM_HALF;
       for (const e of list) {
-        if (e.own === b.own || !e.al || untouchable(e) || b.hit.includes(e)) continue;
+        if (ally(e.own, b.own) || !e.al || untouchable(e) || b.hit.includes(e)) continue;
         if (hbL(e) > x1 || hbR(e) < x0 || e.y > yb || e.y + phOf(e) < ya) continue;
         b.hit.push(e);
         magicHit(b, o, e, b.dir);
@@ -1843,7 +1866,7 @@ function updateProjectiles(list) {
       const xa = Math.min(ox, b.x) - 4, xb = Math.max(ox, b.x) + 4, ya = b.y - 7, yb = b.y + 7;
       const hits = [];
       for (const e of list) {
-        if (e.own === b.own || !e.al || untouchable(e) || b.hit.includes(e)) continue;
+        if (ally(e.own, b.own) || !e.al || untouchable(e) || b.hit.includes(e)) continue;
         if (hbL(e) < xb && hbR(e) > xa && yb > e.y && ya < e.y + phOf(e)) hits.push(e);
       }
       hits.sort((p1, p2) => dir * (ecx(p1) - ecx(p2)));                // 飛んでくる側に近い順
@@ -1870,7 +1893,7 @@ function updateProjectiles(list) {
       const xa = Math.min(ox, b.x) - 3, xb = Math.max(ox, b.x) + 3, ya = Math.min(oy, b.y) - 3, yb = Math.max(oy, b.y) + 3;
       let hit = null;
       for (const e of list) {
-        if (e.own === b.own || untouchable(e)) continue;
+        if (ally(e.own, b.own) || untouchable(e)) continue;
         if (hbL(e) < xb && hbR(e) > xa && yb > e.y && ya < e.y + phOf(e)) { hit = e; break; }
       }
       if (hit) {
@@ -1884,7 +1907,7 @@ function updateProjectiles(list) {
       const xa = Math.min(ox, b.x) - 4, xb = Math.max(ox, b.x) + 4;
       let hit = null;
       for (const e of list) {
-        if (e.own === b.own || untouchable(e)) continue;
+        if (ally(e.own, b.own) || untouchable(e)) continue;
         if (hbL(e) < xb && hbR(e) > xa && b.y > e.y && b.y < e.y + phOf(e)) { hit = e; break; }
       }
       if (hit) {
@@ -1910,7 +1933,7 @@ function updateFlowers(list) {
       f.vy = Math.min(14, f.vy + 0.6); f.y += f.vy;
       let hit = null;
       for (const e of list) {
-        if (e.own === f.own || !e.al || untouchable(e) || e.dz > 0) continue;   // 花で動けない人には、ほかの花は効かない（花の上を通り抜ける）
+        if (ally(e.own, f.own) || !e.al || untouchable(e) || e.dz > 0) continue;   // 花で動けない人には、ほかの花は効かない（花の上を通り抜ける）
         if (e.x < f.x + hw && e.x + pwOf(e) > f.x - hw && f.y >= e.y && oy - 16 * s <= e.y + phOf(e)) { hit = e; break; }
       }
       if (hit) {                                             // 地上ならその場で、空中なら動けないまま落ちる（土下座の姿）
@@ -1933,7 +1956,7 @@ function updateFlowers(list) {
     if (f.t < FLOWER_ARM) continue;                          // 咲くまでは無害
     const hw = f.big ? FLOWER_BIG_HALF : FLOWER_HALF, rt = f.big ? FLOWER_BIG_ROOT : FLOWER_ROOT;
     for (const e of list) {
-      if (e.own === f.own || untouchable(e) || !e.ground || e.dz > 0) continue;   // 花で動けない人が上にいても、花は咲いたまま残る（ずっと固定されないように）
+      if (ally(e.own, f.own) || untouchable(e) || !e.ground || e.dz > 0) continue;   // 花で動けない人が上にいても、花は咲いたまま残る（ずっと固定されないように）
       if (Math.abs(e.y + phOf(e) - f.y) < 3 && e.x < f.x + hw && e.x + pwOf(e) > f.x - hw) {      // 踏んだ人は土下座して動けなくなる
         e.fz = rt; e.dz = rt; e.rk = 0; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; releaseGrab(e); stopWeb(e);
         emit("fl", f.x, f.y, f.big ? 1 : 0);
@@ -1972,7 +1995,7 @@ function aiTarget(c, owner, B, ccx, feet) {            // 狙う敵: 近い（�
   const orc = owner ? ecx(owner) : ccx;
   let t = null, best = 1e9;
   const eat = (e, w) => {
-    if (!e || !e.c || !e.al || e.own === c.own || untouchable(e)) return;
+    if (!e || !e.c || !e.al || ally(e.own, c.own) || untouchable(e)) return;
     let sc = (Math.abs(ecx(e) - ccx) + 1.5 * Math.abs(e.y + phOf(e) - feet)) * w;
     if (owner && Math.abs(ecx(e) - orc) < 260) sc *= 0.7;
     if (sc < best) { best = sc; t = e; }
@@ -2087,7 +2110,7 @@ function aiZone(c, t, B) {
 function aiObjects(c, B, ccx, feet, R, gap) {
   const cw = pwOf(c), r = { goal: null, turn: 0, hit: false };
   for (const m of game.mn) {
-    if (m.own === c.own || m.y + MN_H < c.y + 8 * szOf(c) || m.y > feet) continue;
+    if (ally(m.own, c.own) || m.y + MN_H < c.y + 8 * szOf(c) || m.y > feet) continue;
     const dx = m.x + MN_W / 2 - ccx, s = Math.sign(dx) || c.f, eg = Math.abs(dx) - (cw + MN_W) / 2;
     if (s === c.f && eg <= R - 4) { r.hit = Math.random() >= B.miss; return r; }
     if (s !== c.f && eg <= 24) { r.turn = s > 0 ? KEY.r : KEY.l; return r; }
@@ -2095,7 +2118,7 @@ function aiObjects(c, B, ccx, feet, R, gap) {
   if (gap <= 140) return null;
   let best = null, bd = 160;
   for (const b of game.cb) {
-    if (b.own === c.own || Math.abs(b.y + CB_H - feet) >= 4) continue;
+    if (ally(b.own, c.own) || Math.abs(b.y + CB_H - feet) >= 4) continue;
     const d = Math.abs(b.x + CB_W / 2 - ccx);
     if (d < bd) { bd = d; best = b; }
   }
@@ -2109,7 +2132,7 @@ function aiObjects(c, B, ccx, feet, R, gap) {
 function aiDodge(c, inp, ccx, feet) {                  // 爆弾（ボマーのボム・幽霊の置いた爆弾）から離れる / 矢を跳んでよける / 敵の花を跳び越す
   const cy = c.y + phOf(c) / 2;
   for (const b of game.pj) {
-    if (b.own === c.own || b.k === 6) continue;                // ビームはよけようがない
+    if (ally(b.own, c.own) || b.k === 6) continue;                // ビームはよけようがない
     if (b.k === 3) {                                     // 幽霊の置いた爆弾: 爆発の前に、近くにあれば（横 YUREI_BLAST+20px 以内で、高さもおおむね重なる）そこから離れる
       if (b.t < YUREI_FUSE && Math.abs(ccx - b.x) < YUREI_BLAST + 20 && Math.abs(cy - b.y) < YUREI_BLAST + 30) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
     } else if (b.k === 0) {
@@ -2121,7 +2144,7 @@ function aiDodge(c, inp, ccx, feet) {                  // 爆弾（ボマーの�
   }
   for (const f of game.fl) {
     const df = f.x - ccx;
-    if (f.own !== c.own && f.t >= FLOWER_ARM && Math.abs(f.y - feet) < 3 && Math.abs(df) > 6 && Math.abs(df) < 55 + (f.big ? FLOWER_BIG_HALF : FLOWER_HALF) && (inp & (df > 0 ? KEY.r : KEY.l))) inp |= KEY.u;
+    if (!ally(f.own, c.own) && f.t >= FLOWER_ARM && Math.abs(f.y - feet) < 3 && Math.abs(df) > 6 && Math.abs(df) < 55 + (f.big ? FLOWER_BIG_HALF : FLOWER_HALF) && (inp & (df > 0 ? KEY.r : KEY.l))) inp |= KEY.u;
   }
   return inp;
 }
@@ -2336,10 +2359,13 @@ function hostTick() {
       }
     }
     const alive = slots.filter(i => game.p[i].al);
-    if (alive.length <= 1) {
-      game.win = alive.length === 1 ? alive[0] : -1;
-      if (game.win >= 0) game.p[game.win].w++;
-      game.ph = (game.win >= 0 && game.p[game.win].w >= game.wr) ? "match" : "round";
+    if (sidesOf(alive) <= 1) {                             // 残っている陣営（チーム、またはチームなしの 1 人）が 1 つ以下なら決着
+      game.win = alive.length ? alive[0] : -1;
+      game.wt = game.win >= 0 ? tgOf(game.win) : 0;          // 勝ったチーム（チームなしなら 0）
+      const winners = game.win < 0 ? [] : game.wt ? slots.filter(i => game.p[i].lk && game.p[i].tg === game.wt) : [game.win];   // チーム戦は、落ちていた仲間も含めて全員の勝ち数が増える
+      winners.forEach(i => game.p[i].w++);
+      game.ph = winners.some(i => game.p[i].w >= game.wr) ? "match" : "round";
+
       game.tm = game.ph === "match" ? 360 : 120;
       clearEntities();
     }
@@ -2383,9 +2409,9 @@ function serEnt(p) {                                         // 見た目に必�
 }
 function snapshot() {
   const inGame = game.ph !== "lobby";         // キャラは試合が始まるまで他のプレイヤーに送らない
-  const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr,
+  const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, wt: game.wt | 0, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr,
     p: game.p.map(p => p ? Object.assign(serEnt(p),
-      { w: p.w, c: p.c ? 1 : 0, n: p.n, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, am: p.am, amT: p.amT, lv: p.lv },
+      { w: p.w, c: p.c ? 1 : 0, n: p.n, tg: p.tg | 0, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, am: p.am, amT: p.amT, lv: p.lv },
       inGame ? { ch: p.ch } : null, inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
     pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 || b.k === 4 ? Math.round(b.pw * 10) : b.k === 5 ? b.lv * 10 : b.k === 6 ? b.dir * 10 : 0, b.own]),   // 魔法（k: 5）は、7 番目に段階 × 10
@@ -2433,13 +2459,14 @@ function hostLoop() {
 let solo = false;
 // トレーニング（CPU 戦の一種）: 相手は一切動かない練習用の人形。制限時間もサドンデスもなく、落ちたら誰でもすぐ復活する（ラウンドの区切りがない）。trainKO: 相手を落とした回数
 let training = false, trainKO = 0;
-const soloCfg = { n: 1, lv: 1, chars: [-1, -1, -1] };      // CPU の数 / 強さ（AI_LEVELS の番号）/ CPU ごとのキャラ（-1 = ランダム）
+const soloCfg = { n: 1, lv: 1, chars: [-1, -1, -1], teams: [0, 0, 0] };      // CPU の数 / 強さ（AI_LEVELS の番号）/ CPU ごとのキャラ（-1 = ランダム）/ CPU ごとのチーム
 function sanitizeSolo(d) {
   d = d || {};
   const n = Math.max(1, Math.min(MAX_PLAYERS - 1, Math.round(Number(d.n)) || 1));
   let lv = Math.round(Number(d.lv)); if (!Number.isFinite(lv) || lv < 0 || lv >= AI_LEVELS.length) lv = 1;
   const chars = [0, 1, 2].map(k => { const v = d.chars ? d.chars[k] : -1, c = Math.round(Number(v)); return v != null && Number.isFinite(c) && c >= 0 && c < CHARS.length ? c : -1; });
-  return { n, lv, chars };
+  const teams = [0, 1, 2].map(k => sanitizeTeam(d.teams ? d.teams[k] : 0));
+  return { n, lv, chars, teams };
 }
 function loadSolo() { try { const j = JSON.parse(localStorage.getItem("shieldfight-cpu") || "null"); if (j) Object.assign(soloCfg, sanitizeSolo(j)); } catch (e) {} }
 function saveSolo() { try { localStorage.setItem("shieldfight-cpu", JSON.stringify(soloCfg)); } catch (e) {} }
@@ -2450,6 +2477,7 @@ function applySoloCfg() {                  // ロビーで、CPU の席を設定
     const p = game.p[i] || (game.p[i] = newPlayer());
     p.own = i; p.c = true; p.rd = true; p.cpu = true; p.cpuLv = soloCfg.lv; p.n = "CPU" + i;
     p.ch = Math.max(0, soloCfg.chars[i - 1]);                // 「ランダム」は、始めるときに決める（それまではノーマルの見た目）
+    p.tg = soloCfg.teams[i - 1] | 0;
   }
   const slots = connectedSlots();
   slots.forEach((s, idx) => { spawn(game.p[s], idx, slots.length); game.p[s].al = true; });
@@ -2465,7 +2493,7 @@ function startSolo(keepTraining) {
   if (!keepTraining) training = false;
   solo = true; role = "host"; net = "ready"; myId = 0; roomCode = ""; game.wr = winRounds;
   document.body.classList.add("solo");
-  const me = game.p[0] = newPlayer(); me.own = 0; me.n = draft.n; me.ch = draft.c; me.al = true;
+  const me = game.p[0] = newPlayer(); me.own = 0; me.n = draft.n; me.ch = draft.c; me.tg = draft.tg | 0; me.al = true;
   applySoloCfg();
   hostLast = 0; hostTimer = setInterval(hostLoop, 1000 / 60);
   renderUI();
@@ -2571,7 +2599,7 @@ function readEnt(p, n) {                                     // スナップシ�
 function applySnapshot(s) {
   hostPause = false;                                                   // スナップショットが届くのは、ホストが動いているとき（一時停止の知らせの取りこぼし対策）
   const phChanged = game.ph !== s.ph;
-  game.ph = s.ph; game.tm = s.tm; game.win = s.win; game.nf = s.nf | 0; game.rt = s.rt | 0; game.sd = s.sd | 0; game.hsf = !!s.hs;
+  game.ph = s.ph; game.tm = s.tm; game.win = s.win; game.wt = s.wt | 0; game.nf = s.nf | 0; game.rt = s.rt | 0; game.sd = s.sd | 0; game.hsf = !!s.hs;
   const wrChanged = game.wr !== sanitizeRounds(s.wr);                 // 古い版のホストは wr を送らない（標準の 3 本先取として扱う）
   game.wr = sanitizeRounds(s.wr);
   if (s.ev && !document.hidden) for (const e of s.ev) fxEvent(e);   // 自分が裏にいる間は、効果音や演出をためない
@@ -2581,7 +2609,7 @@ function applySnapshot(s) {
     let p = game.p[i];
     if (!p) { p = game.p[i] = newPlayer(); p.x = n.x; p.y = n.y; }
     readEnt(p, n);
-    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.am = n.am === undefined ? arrowMax() : n.am | 0; p.amT = n.amT | 0; p.lv = n.lv | 0; p.own = i;
+    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.tg = n.tg | 0; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.am = n.am === undefined ? arrowMax() : n.am | 0; p.amT = n.amT | 0; p.lv = n.lv | 0; p.own = i;
     p.wk = n.wk || [0, 0, 0]; p.wkm = n.wkm || [0, 0, 0]; p.wm = n.wm | 0;
     const cn = s.cl[i];
     if (!cn) game.cl[i] = null;
@@ -2598,7 +2626,7 @@ function applySnapshot(s) {
   game.rm = (s.rm || []).map(a => ({ x: a[0], y: a[1], r: a[2], t: a[3], own: a[4] }));
   game.cb = (s.cb || []).map(a => ({ x: a[0], y: a[1], f: a[2], t: a[3], hp: a[4], own: a[5], rl: a[6], vy: a[7] }));   // 古い版のホストは送らない
   game.mn = (s.mn || []).map(a => ({ x: a[0], y: a[1], vx: a[2], vy: a[3], f: a[4], a: a[5], t: a[6], own: a[7] }));
-  const sig = game.p.map(p => p ? (p.c ? 1 : 0) + "," + (p.rd ? 1 : 0) + "," + p.n : "-").join("|");
+  const sig = game.p.map(p => p ? (p.c ? 1 : 0) + "," + (p.rd ? 1 : 0) + "," + p.n + "," + (p.tg | 0) : "-").join("|");
   if (phChanged || wrChanged || sig !== lastSig) renderUI();
   lastSig = sig;
   refreshHud();
@@ -2961,7 +2989,7 @@ function landStatsHtml() {
     const p = game.p[i], c = chOf(p), wins = Array.from({ length: game.wr }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
     const vals = [effA(p), effD(p), effS(p)], bases = [baseStat(p, "A"), baseStat(p, "D"), baseStat(p, "S")];   // もとの値（リバーシは今の形態）
     const bars = i === myId && LAND_MY_STATS ? `<div class="hs">${STATS.map((st, k) => barHtml(vals[k], st.color, bases[k])).join("")}</div>` : "";
-    return `<div class="hc${i === myId ? " me" : ""}" style="--c:${COLORS[i]}"><div><b>${esc(nameOf(i))}</b>` +
+    return `<div class="hc${i === myId ? " me" : ""}" style="--c:${colOf(i)}"><div><b>${esc(nameOf(i))}</b>` +
       `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn">${wins}</span></div></div>${bars}</div>`;
   };
   const half = Math.ceil(ids.length / 2);
@@ -2976,8 +3004,8 @@ function statsHtml() {
     if (!p || !p.c || !p.lk) continue;
     const c = chOf(p), wins = Array.from({ length: game.wr }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
     const vals = [effA(p), effD(p), effS(p)], bases = [baseStat(p, "A"), baseStat(p, "D"), baseStat(p, "S")];   // もとの値（リバーシは今の形態）
-    html +=`<div class="pc${i === myId ? " me" : ""}"><b style="color:${COLORS[i]}">${esc(nameOf(i))}</b>` +
-      `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn" style="color:${COLORS[i]}">${wins}</span></div>` +
+    html +=`<div class="pc${i === myId ? " me" : ""}"><b style="color:${colOf(i)}">${esc(nameOf(i))}</b>${teamLabel(p)}` +
+      `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn" style="color:${colOf(i)}">${wins}</span></div>` +
       STATS.map((st, k) => `<div class="pr"><span class="lb" style="color:${st.color}">${st.label}</span>${barHtml(vals[k], st.color, bases[k])}</div>`).join("") + `</div>`;
   }
   return `<div class="pcs">${html}</div>`;
@@ -3000,7 +3028,7 @@ function refreshHud() {
   const me = game.p[myId];
   const inBattle = !!(role && net === "ready" && me && game.ph !== "lobby");
   const sig = (inBattle ? 1 : 0) + "|" + (land ? 1 : 0) + "|" + (late() ? 1 : 0) + "|" + game.ph + "|" + game.wr + "|" + myId + "|" +
-    game.p.map(p => p ? [p.c ? 1 : 0, p.lk ? 1 : 0, p.ch, p.lv, p.w, p.n, p.bz > 0 ? 1 : 0, p.gt > 0 ? 1 : 0, p.fm ? 1 : 0, p.slw > 0 ? 1 : 0].join(",") : "-").join("|");
+    game.p.map(p => p ? [p.c ? 1 : 0, p.lk ? 1 : 0, p.ch, p.lv, p.w, p.n, p.tg | 0, p.bz > 0 ? 1 : 0, p.gt > 0 ? 1 : 0, p.fm ? 1 : 0, p.slw > 0 ? 1 : 0].join(",") : "-").join("|");
   if (sig === lastHud) return;
   lastHud = sig;
   document.body.classList.toggle("battle", inBattle);
@@ -3033,6 +3061,15 @@ function paintSelect() {
       ? `<b>スキル「${esc(c.skill.name)}」</b>（クールタイム ${esc(c.skill.cdText || c.skill.cd + "秒")}${c.skill.hold ? "・ためて発動" : ""}）<br>${esc(c.skill.text)}`
       : "スキルなし"}${c.auto ? `<br><b>自動の能力</b><br>${esc(c.auto)}` : ""}${traits}</div>`;
 }
+// チームを選ぶボタン（なし・赤・青・緑・黄）。id: 入れ物の id / cur: 今のチーム
+const teamSeg = (id, cur) => `<span class="seg team" id="${id}">${TEAM_NAMES.map((nm, t) => `<button type="button" data-v="${t}"${t === cur ? ' class="on"' : ""}${t ? ` style="color:${TEAM_COLORS[t]}"` : ""}>${nm}</button>`).join("")}</span>`;
+function bindTeamSeg(root, id, set) {
+  root.querySelectorAll("#" + id + " button").forEach(b => b.onclick = () => {
+    const v = Number(b.dataset.v); set(v);
+    root.querySelectorAll("#" + id + " button").forEach(x => x.classList.toggle("on", x === b));
+  });
+}
+const teamLabel = p => p && p.tg ? `<span style="color:${TEAM_COLORS[p.tg]}">［${TEAM_NAMES[p.tg]}］</span>` : "";
 function showSelect() {
   const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
   ui.innerHTML = `<div class="panel setup"><div class="cols"><div class="colL"><h1>キャラ選択</h1>
@@ -3040,7 +3077,10 @@ function showSelect() {
     <input id="pname" maxlength="8" placeholder="${esc("プレイヤー" + (myId + 1))}" value="${esc(draft.n)}">
     <div class="chips">${chips}</div></div><div class="colR">
     <div class="detail" id="detail"></div>
+    <div class="cpuset"><div class="row"><span>チーム</span>${teamSeg("segT", draft.tg | 0)}</div>
+    <div class="hint">同じチームどうしは攻撃が当たらない。「なし」は個人戦</div></div>
     <button id="bOk">決定</button></div></div></div>`;
+  bindTeamSeg(ui, "segT", v => { draft.tg = v; });
   const root = ui.querySelector(".setup");
   root.querySelectorAll(".chip").forEach(b => {
     const i = Number(b.dataset.i);
@@ -3083,10 +3123,12 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
     <div class="detail" id="detail"></div>
     <div class="cpuset">
       <div class="row"><span>${training ? "相手の数" : "CPU の数"}</span><span class="seg" id="segN">${[1, 2, 3].map(v => `<button data-v="${v}">${v}</button>`).join("")}</span></div>
+      <div class="row"><span>あなたのチーム</span>${teamSeg("segT", draft.tg | 0)}</div>
       <div class="row"${training ? ' style="display:none"' : ""}><span>強さ</span><span class="seg" id="segLv">${AI_LEVELS.map((l, v) => `<button data-v="${v}">${esc(l.name)}</button>`).join("")}</span></div>
       <div class="hint" id="lvHint"${training ? ' style="display:none"' : ""}></div>
       <div id="cpuRows"></div>
       <div class="row"${training ? ' style="display:none"' : ""}><span>何本先取</span>${roundsHtml("wr")}</div>
+      <div class="hint" id="teamHint" style="color:#fca5a5"></div>
     </div>
     <div class="btns"><button id="bGo">${training ? "練習開始" : "戦闘開始"}</button>
     <button id="bBack" class="sub">タイトルへ</button></div></div></div></div>`;
@@ -3104,14 +3146,26 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
     root.querySelectorAll("#segLv button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === soloCfg.lv));
     root.querySelector("#lvHint").textContent = AI_LEVELS[soloCfg.lv].desc;
     root.querySelector("#cpuRows").innerHTML = Array.from({ length: soloCfg.n }, (_, k) =>
-      `<div class="row"><span>${training ? "相手" : "CPU"}${k + 1} のキャラ</span><select data-k="${k}">${opts}</select></div>`).join("");
-    root.querySelectorAll("#cpuRows select").forEach(sel => {
+      `<div class="row"><span>${training ? "相手" : "CPU"}${k + 1}</span><select data-k="${k}">${opts}</select><select data-tk="${k}">${TEAM_NAMES.map((nm, t) => `<option value="${t}">チーム: ${nm}</option>`).join("")}</select></div>`).join("");
+    root.querySelectorAll("#cpuRows select[data-k]").forEach(sel => {
       const k = Number(sel.dataset.k);
       sel.value = String(soloCfg.chars[k]);
       sel.onchange = () => { soloCfg.chars[k] = Number(sel.value); saveSolo(); applySoloCfg(); };
     });
+    root.querySelectorAll("#cpuRows select[data-tk]").forEach(sel => {           // CPU ごとのチーム
+      const k = Number(sel.dataset.tk);
+      sel.value = String(soloCfg.teams[k] | 0);
+      sel.onchange = () => { soloCfg.teams[k] = sanitizeTeam(sel.value); saveSolo(); applySoloCfg(); paintTeamHint(); };
+    });
+    paintTeamHint();
+  };
+  const paintTeamHint = () => {                    // 全員が同じチームなら始められない
+    const h = root.querySelector("#teamHint"), same = sidesOf(connectedSlots()) < 2;
+    h.textContent = same ? "全員が同じチームです。チームを分けてください" : "";
+    root.querySelector("#bGo").disabled = same;
   };
   bindRounds(root, "wr", () => paintRounds(root, "wr"));
+  bindTeamSeg(root, "segT", v => { draft.tg = v; game.p[0].tg = v; paintTeamHint(); });
   root.querySelectorAll("#segN button").forEach(b => b.onclick = () => { soloCfg.n = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
   root.querySelectorAll("#segLv button").forEach(b => b.onclick = () => { soloCfg.lv = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
   root.querySelector("#bGo").onclick = () => {
@@ -3129,8 +3183,8 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
 
 function showLobby() {
   const list = game.p.map((p, i) => p && p.c
-    ? `<div class="pl" style="color:${COLORS[i]}"><b>${esc(nameOf(i))}</b>${i === myId ? "（あなた）" : ""}<span class="${p.rd ? "ok" : "wt"}">${p.rd ? "✔ 準備OK" : "選択中…"}</span></div>` : "").join("");
-  const n = connectedSlots().length, ready = readySlots().length;
+    ? `<div class="pl" style="color:${colOf(i)}"><b>${esc(nameOf(i))}</b>${teamLabel(p)}${i === myId ? "（あなた）" : ""}<span class="${p.rd ? "ok" : "wt"}">${p.rd ? "✔ 準備OK" : "選択中…"}</span></div>` : "").join("");
+  const n = connectedSlots().length, ready = readySlots().length, oneTeam = ready >= 2 && sidesOf(readySlots()) < 2;   // 準備OKの全員が同じチーム
   if (role === "host") {
     ui.innerHTML = `<div class="panel lobby"><h1>ロビー</h1><div class="cols"><div class="colL">
       <p>部屋番号</p>
@@ -3140,9 +3194,9 @@ function showLobby() {
       <button id="bCopy" class="sub">URLをコピー</button></div><div class="colR">
       <p>参加者 ${n}/4</p>${list}
       <div class="rounds"><span>何本先取</span>${roundsHtml("wr")}</div>
-      <button id="bStart" ${ready < 2 ? "disabled" : ""}>ゲーム開始</button>
-      <button id="bEdit" class="sub">キャラを変更</button>
-      <p>${ready < 2 ? "準備OKが2人以上になると開始できます<br>" : ""}ホストはこの画面を開いたままにしてください<br>（他のアプリに切り替えると全員の画面が止まります）</p></div></div></div>`;
+      <button id="bStart" ${ready < 2 || oneTeam ? "disabled" : ""}>ゲーム開始</button>
+      <button id="bEdit" class="sub">キャラ・チームを変更</button>
+      <p>${ready < 2 ? "準備OKが2人以上になると開始できます<br>" : oneTeam ? "全員が同じチームです。チームを分けると開始できます<br>" : ""}ホストはこの画面を開いたままにしてください<br>（他のアプリに切り替えると全員の画面が止まります）</p></div></div></div>`;
     bindRounds(ui, "wr", renderUI);
     document.getElementById("bCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(shareUrl()); };
     document.getElementById("bStart").onclick = () => { autoFs(); hostStartMatch(); };
@@ -3152,7 +3206,8 @@ function showLobby() {
     ui.innerHTML = `<div class="panel"><h1>ロビー</h1><p>参加者 ${n}/4</p>${list}
       <p>何本先取: <b style="color:#e5e7eb">${game.wr}</b>（ホストが決めます）</p>
       <p>ホストの開始を待っています…</p>
-      <button id="bEdit" class="sub">キャラを変更</button></div>`;
+      <button id="bEdit" class="sub">キャラ・チームを変更</button></div>`;
+
     document.getElementById("bEdit").onclick = () => { if (hostConn && hostConn.open) hostConn.send({ t: "unprof" }); };
   }
 }
@@ -3667,7 +3722,7 @@ function fxPhase(dt) {
   else if (prevRt > LATE_FRAMES && game.rt <= LATE_FRAMES && game.rt > LATE_FRAMES - 120 && !training) { fxLateT = 180; Sfx.lastSpurt(); shake(3); }
   if (game.ph !== fxPrev.ph) {
     if (game.ph === "play" && fxPrev.ph === "count") { Sfx.beep(true); fxGoT = 40; fxBannerT = 0; }
-    else if (game.ph === "round") { Sfx.roundEnd(game.win >= 0); fxBannerT = 0; }
+    else if (game.ph === "round") { Sfx.roundEnd(game.win >= 0); fxBannerT = 0; }   // チーム戦でも、決着の音は同じ
     else if (game.ph === "match") { Sfx.matchEnd(); fxBannerT = 0; }
     if (game.ph === "count") fxPrev.sec = -1;
     if (fxPrev.ph === "lobby" && game.ph !== "count") fxPrev.sd = game.sd;   // 途中参加のとき、過去の節目の音を鳴らさない
@@ -3711,7 +3766,7 @@ function drawPlayer(p, i, me, now) {
   // ロビーでは、ほかの人のキャラは見せない
   const chIdx = (game.ph === "lobby" && !clone && i !== myId && !solo) ? 0 : p.ch;
   const chd = CHARS[chIdx] || CHARS[0];
-  const col = clone ? CLONE_COLOR : COLORS[i];
+  const col = clone ? CLONE_COLOR : colOf(i);
   const up = role === "client" ? !!p.sg : shieldUp(p);            // 盾が効いている状態か（ホストが決めたものを使う）
   // 時計師: 巻き戻しが使えるとき、戻る先（2 秒前の位置）を点線の枠で薄く出す（全員に見える）
   if (chd.id === "clock" && p.al && game.ph === "play" && p.kc === 0 && !p.rw && !clone) {
@@ -3730,6 +3785,12 @@ function drawPlayer(p, i, me, now) {
   cx.globalAlpha = alpha;
   const sz = p.gt > 0 ? GIANT_SCALE : 1;                          // 巨大化中は 2 倍（左上の座標を基準に拡大。足もとの中心はホストが保っている）
   if (sz !== 1) { cx.translate(p.x, p.y); cx.scale(sz, sz); cx.translate(-p.x, -p.y); }
+  const team = tgOf(i);                                           // チーム戦: 体のまわりに、チームの色の光る縁（分身も持ち主のチーム）
+  if (team && p.al) {
+    cx.save(); cx.shadowColor = TEAM_COLORS[team]; cx.shadowBlur = 18; cx.strokeStyle = TEAM_COLORS[team]; cx.lineWidth = 3.5;
+    cx.globalAlpha = alpha * (0.75 + 0.25 * Math.sin(now / 160)); cx.strokeRect(p.x - 4, p.y - 4, PLW + 8, PLH + 8); cx.restore();
+  }
+
   // 狂化のオーラ
   if (p.bz > 0 && p.al) {
     const wob = Math.sin(now / 60) * 1.5;
@@ -3908,7 +3969,7 @@ function drawArrow(b) {
 }
 // 幽霊（脱落した人）: 足場の上に立つ半透明の幽霊（足もとが少し浮いて、ゆらゆら揺れる。跳ぶと縦に少し伸びる）。置ける爆弾を持っているときは、横に爆弾を出す
 function drawYurei(p, i, me, now) {
-  const x = p.yrx, feet = p.yry, hover = 3 + Math.sin(now / 260 + i) * 1.5, y = feet - hover - 14, col = COLORS[i], ready = p.yrc <= 0;
+  const x = p.yrx, feet = p.yry, hover = 3 + Math.sin(now / 260 + i) * 1.5, y = feet - hover - 14, col = colOf(i), ready = p.yrc <= 0;
   const st = 1 + Math.min(0.18, Math.abs(p.yrvy || 0) * 0.012);
   cx.save(); cx.globalAlpha = 0.62;
   cx.translate(x, feet); cx.scale(1 / st, st); cx.translate(-x, -feet);
@@ -3925,7 +3986,7 @@ function drawYurei(p, i, me, now) {
 }
 // 置かれた幽霊の爆弾: 爆風の範囲（点線の輪）の中で、置いた人の色の円が広がっていき（爆発の瞬間に輪いっぱい）、爆弾は爆発が近いほど速く点滅する
 function drawYureiBomb(b, now) {
-  const left = Math.max(0, 1 - b.t / YUREI_FUSE), col = COLORS[b.own] || "#ffffff";
+  const left = Math.max(0, 1 - b.t / YUREI_FUSE), col = colOf(b.own) || "#ffffff";
   cx.save();
   cx.globalAlpha = 0.16 + 0.1 * (1 - left); cx.fillStyle = col; cx.beginPath(); cx.arc(b.x, b.y, YUREI_BLAST * (1 - left), 0, 6.2832); cx.fill();
   cx.globalAlpha = 0.45; cx.strokeStyle = col; cx.lineWidth = 2; cx.setLineDash([6, 5]); cx.beginPath(); cx.arc(b.x, b.y, YUREI_BLAST, 0, 6.2832); cx.stroke(); cx.setLineDash([]);
@@ -3976,7 +4037,7 @@ function drawMagic(b, now) {
 function drawThrownShield(b) {                     // ブーメラン使いが投げた盾（回りながら飛ぶ。縁は持ち主の色）
   cx.save(); cx.translate(b.x, b.y); cx.rotate(b.t * 0.45);
   cx.fillStyle = "rgba(226,232,240,0.95)"; cx.fillRect(-4, -19, 8, 38);
-  cx.strokeStyle = COLORS[b.own] || "#ffffff"; cx.lineWidth = 2; cx.strokeRect(-4, -19, 8, 38);
+  cx.strokeStyle = colOf(b.own) || "#ffffff"; cx.lineWidth = 2; cx.strokeRect(-4, -19, 8, 38);
   cx.restore();
 }
 function drawSpear(b) {                            // ゴブGの槍（飛ぶ向きに回す。茶色の柄と灰色の穂先）
@@ -3987,7 +4048,7 @@ function drawSpear(b) {                            // ゴブGの槍（飛ぶ向�
 }
 // クロスボウ（置き物）: 茶色の台座と柱の上に、横向きのクロスボウ。台座に持ち主の色の帯、上に耐久の点。足場に乗っている間は、射線を持ち主の色の薄い点線で出す
 function drawCb(c, now) {
-  const f = c.f, x = c.x, y = c.y, col = COLORS[c.own] || "#ffffff", mx = f > 0 ? x + CB_W : x, on = c.rl >= 0;
+  const f = c.f, x = c.x, y = c.y, col = colOf(c.own) || "#ffffff", mx = f > 0 ? x + CB_W : x, on = c.rl >= 0;
   const blink = c.t >= CB_LIFE - CB_BLINK && Math.floor(now / 120) % 2;
   if (c.g !== undefined ? c.g : on) {              // 足場に乗っている間だけ（ホストは g、参加者は rl が -1 でないこと）
     cx.save(); cx.globalAlpha = 0.15; cx.strokeStyle = col; cx.lineWidth = 2; cx.setLineDash([8, 8]);
@@ -4016,7 +4077,7 @@ function drawCb(c, now) {
 }
 // ゴブGの手下: 緑の体に、持ち主の色の縁取り。前に小さな剣。斬る間は、黄色い弧が出る。残り 1 秒は点滅
 function drawMinion(m, now) {
-  const f = m.f, x = m.x, y = m.y, col = COLORS[m.own] || "#ffffff";
+  const f = m.f, x = m.x, y = m.y, col = colOf(m.own) || "#ffffff";
   cx.save();
   if (m.t >= MN_LIFE - 60 && Math.floor(now / 120) % 2) cx.globalAlpha = 0.4;
   cx.fillStyle = "#16a34a"; cx.fillRect(x, y, MN_W, MN_H);
@@ -4057,7 +4118,7 @@ function drawWind(w, now) {
   const fade = Math.max(0, Math.min(1, w.t / 10, (WIND_FRAMES - w.t) / 30));
   cx.save(); cx.globalAlpha = fade;
   cx.fillStyle = "rgba(186,230,253,0.10)"; cx.fillRect(w.x, w.y, w.w, w.h);
-  cx.strokeStyle = COLORS[w.own] || "#ffffff"; cx.globalAlpha = fade * 0.35; cx.lineWidth = 1.5; cx.setLineDash([6, 6]);
+  cx.strokeStyle = colOf(w.own) || "#ffffff"; cx.globalAlpha = fade * 0.35; cx.lineWidth = 1.5; cx.setLineDash([6, 6]);
   cx.strokeRect(w.x, w.y, w.w, w.h); cx.setLineDash([]);
   cx.beginPath(); cx.rect(w.x, w.y, w.w, w.h); cx.clip();
   cx.globalAlpha = fade * 0.6; cx.strokeStyle = "#e0f2fe"; cx.lineWidth = 2; cx.lineCap = "round";
@@ -4384,7 +4445,7 @@ function render() {
     h.push(p.x, p.y); if (h.length > 14) h.splice(0, 2);
     if (p.al && p.rw > 0 && rwGhosts.length < 80) rwGhosts.push({ x: p.x, y: p.y, f: p.f, ch: p.ch, t: 0 });
     if (p.al && p.s > 0) {
-      cx.save(); cx.fillStyle = p.isClone ? CLONE_COLOR : COLORS[i];
+      cx.save(); cx.fillStyle = p.isClone ? CLONE_COLOR : colOf(i);
       const tz = p.gt > 0 ? GIANT_SCALE : 1;
       for (let k = 0; k < h.length - 2; k += 2) { cx.globalAlpha = 0.05 + 0.2 * (k / h.length); cx.fillRect(h[k], h[k + 1], PLW * tz, PLH * tz); }
       cx.restore();
@@ -4403,8 +4464,9 @@ function render() {
   // メッセージ
   drawTimer(now);
   if (game.ph === "count") banner(String(Math.ceil(game.tm / 60)), "ラウンド開始！");
-  else if (game.ph === "round") banner(game.win >= 0 ? nameOf(game.win) + " の勝ち！" : "引き分け");
-  else if (game.ph === "match") banner(nameOf(game.win) + " 優勝！", "まもなくロビーに戻ります");
+  else if (game.ph === "round") banner(game.win >= 0 ? (game.wt ? teamWord(game.wt) : nameOf(game.win)) + " の勝ち！" : "引き分け");
+  else if (game.ph === "match") banner((game.wt ? teamWord(game.wt) : nameOf(game.win)) + " 優勝！", "まもなくロビーに戻ります");
+
   else if (game.ph === "play") {
     if (fxSdT > 0) banner("サドンデス！", "足場が縮みます");
     else if (fxGoT > 0) banner("GO!");
