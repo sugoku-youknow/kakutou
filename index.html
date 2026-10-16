@@ -54,6 +54,11 @@
   /* タイトルへ戻るボタン（家のマーク）: タイトル画面以外ではいつも左上に出す。2 回押すと戻る（1 回目で「もう一度押すとタイトルへ」と出る）。「やめる」はその右 */
   #home{display:none;position:absolute;top:calc(6px + env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));z-index:4;min-width:34px;height:34px;padding:0;margin:0;border-radius:17px;background:rgba(255,255,255,.14);line-height:0}
   #home svg{width:18px;height:18px}
+  /* 操作ボタンを自分で置いた配置（z-index 5）が重なっても、音・全画面・向き・タイトルへ・やめるのボタンが押せるよう、それより上に出す（配置の編集中は下に戻す） */
+  body.customlayout #mute, body.customlayout #fs, body.customlayout #rot, body.customlayout #quit{z-index:6}
+  body.customlayout #home{z-index:7}
+  body.editing #mute, body.editing #fs, body.editing #rot, body.editing #quit{z-index:3}
+
   #home.ask{padding:0 12px;background:rgba(239,68,68,.75);font-size:12px;line-height:1}
   body.inapp #home{display:block}
   /* 操作ボタンの配置の編集画面: 操作ボタンを出して、ドラッグで動かす。選んでいるボタンは黄色の枠 */
@@ -325,7 +330,7 @@ const MAIN_PLAT = { x: PX, y: PY, w: PW, main: true };
 const WIDE_SCALE = 1.2, CENTER_X = PX + PW / 2;
 const widen = (pl, k) => Object.assign({}, pl, { x: CENTER_X + (pl.x - CENTER_X) * k, w: pl.w * k });
 function layoutFor(n) {
-  const y = PY - UP_GAP, k = n >= 3 ? WIDE_SCALE : 1;
+  const y = PY - UP_GAP, k = WIDE_SCALE;                 // 2 人のときも、3〜4 人と同じ幅（2026-10-16 から）
   let list;
   if (n >= 4) list = [{ x: PX + 20, y, w: 200 }, { x: PX + PW - 220, y, w: 200 }, MAIN_PLAT];
   else if (n === 3) list = [{ x: PX + 130, y, w: 320 }, MAIN_PLAT];
@@ -384,9 +389,9 @@ const SD_HOLD_FRAMES = 6 * 60;       // 最小幅になってから、足場が�
 
 // スキルの数値（60fps 換算）
 const BOMB_FUSE = 120, BOMB_R = 9, BOMB_BLAST = 85;     // ボム: 導火線の長さ（2 秒）/ 大きさ / 爆風の半径
-const BOMB_KNOCK = 0.475, BOMB_LIFT = 5.5;              // ボムの吹っ飛び（横の強さ / 上向きの初速）。以前の半分
+const BOMB_KNOCK = 0.57, BOMB_LIFT = 5.5;               // ボムの吹っ飛び（横の強さ / 上向きの初速）。2026-10-16 に 0.475 から 1.2 倍
 // ボムの投げ方（ためて離す）: 横の初速は BOMB_VX0 + BOMB_VX1 × ため量（0〜1）、上向きの初速 BOMB_VY（低い山なり。上の台の下から投げても台に乗らない）
-const BOMB_VX0 = 3.5, BOMB_VX1 = 6, BOMB_VY = 5.5, BOMB_CHARGE = 48, BOMB_MAX = 2;   // … / 最大までためる時間（0.8 秒）/ 画面に置ける数（クールタイムはない）
+const BOMB_VX0 = 3.5, BOMB_VX1 = 6, BOMB_VY = 5.5, BOMB_CHARGE = 48, BOMB_MAX = 2;   // … / 最大までためる時間（0.8 秒）/ 画面に置ける数（クールタイムはない。ラストスパート中は LATE_BOMBS）
 const BOMB_HIT_FRAC = 0.35, BOMB_RECOIL = 2.5;          // 飛んでいる爆弾が人に当たったときの吹っ飛ばし（盾なら 1 段階削る）/ 盾に当たって跳ね返る横の速さの最低値
 const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 90;    // 花: 咲くまで / 残る時間 / 踏んだ人が動けない時間（1.5 秒）
 const FLOWER_HALF = 9, FLOWER_BIG_P = 0.2, FLOWER_BIG_ROOT = 180, FLOWER_BIG_SCALE = 1.6, FLOWER_BIG_HALF = 14;   // 花を踏む判定の幅（半分）/ 大きな花になる確率 / 大きな花で動けない時間（3 秒）/ 見た目の倍率 / 判定の幅（半分）
@@ -396,7 +401,8 @@ const ARROW_SPEED = 0.7;              // 矢の速さの倍率（13〜22px/フ�
 const ARROW_MAX = 5, ARROW_REGEN = 60;   // アーチャーの矢: 持てる本数（ラウンド開始時の本数。ラストスパート中の上限は LATE_ARROW_MAX）/ 1 本回復するまで（1 秒）。矢がないと撃てない
 const CLONE_STATS = { A: 2, D: 1, S: 2 };   // コペルニウムの分身の性能（本体とは別）
 const BZ_FRAMES = 360, BZ_BONUS = { A: 2, D: -2, S: 2 }; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値（防御は下がる）
-const CN_FRAMES = 24, CN_WHIFF = 18; // カウンター: 構えている時間 / 空振りしたときの隙
+const CN_FRAMES = 24, CN_WHIFF = 18, CN_MUL = 3.0; // カウンター: 構えている時間 / 空振りしたときの隙 / 返す吹っ飛ばしの倍率（2026-10-16 に 2.0 から 1.5 倍）
+const TP_CD0 = 1, TP_CD1 = 2.5;      // テレポーターのクールタイム（秒）= TP_CD0 + TP_CD1 × ため量（近くへ 1 秒〜いちばん遠くへ 3.5 秒）
 const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
 const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛ばし力の倍率
 const GIANT_FRAMES = 480, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
@@ -421,8 +427,8 @@ const WIND_FRAMES = 300, WIND_W = 440, WIND_H = 280;    // 天狗の風の場: �
 const WIND_FOE_MV = 0.45, WIND_FOE_JP = 0.55, WIND_SELF_MV = 1.6, WIND_SELF_JP = 1.4;   // 場の中の 移動速度・ジャンプの高さ の倍率（敵 / 天狗自身）
 // ブーメラン使いの盾投げ: 約 260px 先までだんだん遅くなりながら飛び（初速 13、1 フレームに 0.325 ずつ遅くなる）、止まったら投げた人のほうへ横一直線に戻る（高さだけ少しずつ合わせる）。
 // 体に当たれば受け止める。跳んでかわすと、後ろへ飛んでいって止まり、また戻ってくる（受け止めるまで何度でも）
-const BOOM_V0 = 13, BOOM_DECEL = 13 * 13 / (2 * 260), BOOM_BACK_MAX = 14, BOOM_BACK_ACC = 0.8;   // 行きの初速 / 減速 / 帰りの速さの上限 / 帰りの加速
-const BOOM_STEER = 2.5, BOOM_REGEN = 300, BOOM_FRAC = 1.2, BOOM_HALF = 14;   // 帰りに高さを合わせる速さの上限（跳べばかわせる）/ 盾がないまま 5 秒たつと新しい盾が出る / 吹っ飛ばし（以前の 1.5 倍）/ 当たり判定の半分の大きさ
+const BOOM_V0 = 13, BOOM_DECEL = 13 * 13 / (2 * 260), BOOM_BACK_MAX = BOOM_V0, BOOM_BACK_ACC = 0.8;   // 行きの初速 / 減速 / 帰りの速さの上限（行きの初速と同じ）/ 帰りの加速
+const BOOM_STEER = 1.5, BOOM_REGEN = 300, BOOM_FRAC = 0.96, BOOM_HALF = 14;   // 帰りに高さを合わせる速さの上限（跳べばかわせる）/ 盾がないまま 5 秒たつと新しい盾が出る / 吹っ飛ばし（以前の 1.5 倍）/ 当たり判定の半分の大きさ
 // 蜘蛛の糸: 居場所で効果が変わる。クールタイムは効果ごとに別（0 = 崖へ戻る / 1 = 引き寄せ / 2 = 急降下）
 const WEB_CD = [240, 300, 120], WEB_WHIFF = 60;            // クールタイム（4 秒 / 5 秒 / 2 秒）/ 届かなかったとき（1 秒）
 const WEB_LEDGE = 300, WEB_UP_FRAMES = 15;                 // 崖へ戻る: 糸が届く距離 / 崖の上まで引き上げる時間（0.25 秒）
@@ -436,27 +442,28 @@ const YUREI_R = 7, YUREI_BLAST = 75, YUREI_KNOCK = 0.45, YUREI_LIFT = 6;   // �
 // ラストスパート: ラウンドの残りが 20 秒以下（サドンデス中も含む）の間。スキルのクールタイムが半分になり、キャラごとの強化が入る（トレーニングにはない）
 const LATE_FRAMES = 20 * 60;
 const LATE_GHOST_CD = 6 * 60;        // ゴースト（透過）は半分の 4 秒だとほぼ無敵になるので、ラスト中は 6 秒
-const LATE_ARROW_MAX = 10, LATE_FLOWERS = 4, LATE_XBOWS = 2, LATE_NAO_BONUS = 2;   // アーチャーの矢の上限 / おくれたんの花の数 / クロス使いのクロスボウの数 / なおの攻撃・防御・スピード
+const LATE_ARROW_MAX = 10, LATE_FLOWERS = 4, LATE_XBOWS = 2, LATE_NAO_BONUS = 2, LATE_BOMBS = 4;   // … / ボマーの爆弾の数   // アーチャーの矢の上限 / おくれたんの花の数 / クロス使いのクロスボウの数 / なおの攻撃・防御・スピード
 // クロス使いのクロスボウ: 足場に置くと、射線（前方 450px）に敵が入るたびに矢を自動で撃つ。8 秒で壊れ、攻撃を 3 回受けても壊れる（クールタイムは置いた瞬間から 12 秒。ラストスパート中は 6 秒で、2 台まで同時に置ける）
 const CB_W = 30, CB_H = 26, CB_BOLT = 22, CB_RANGE = 450;     // クロスボウの大きさ（左上の座標で持つ）/ 矢の高さ（足もとから）/ 射線の長さ
 const CB_RELOAD = 30, CB_ARM = 12, CB_LIFE = 480, CB_BLINK = 60, CB_HP = 3;   // 次の矢まで（0.5 秒）/ 足場に乗ってから最初の矢まで / 稼働（8 秒）/ 消える前の点滅 / 壊れるまでに受けられる回数
 const CB_PAD = 14;                                            // 矢・槍がクロスボウに当たる範囲を、下へ広げる幅（アーチャーの矢はクロスボウの上を通るので）
 const CB_ARROW_C = 0.5;                                    // 矢のため量（速さ 0.7 × (13 + 9 × 0.5)、威力 0.35 + 0.85 × 0.5）
 // ゴブG: 背中のゴブリンが近くの敵へ小さな槍を自動で投げる。スキル「召喚」で手下を 3 体呼ぶ
-const GOB_RANGE = 140, GOB_THROW_CD = 90;                     // 槍を投げる距離 / 投げる間隔（1.5 秒）
+const GOB_RANGE = 140, GOB_THROW_CD = 120;                    // 槍を投げる距離 / 1 体のゴブリンが投げる間隔（2 秒。背中に 2 体いて、互い違いに投げる）
 const GOB_SPEAR_V = 8, GOB_SPEAR_LIFE = 26, GOB_SPEAR_FRAC = 0.3;   // 槍の速さ / 寿命 / 吹っ飛ばし
 const GOB_SUMMON_N = 3, GOB_SUMMON_EVERY = 90;                // 召喚: 呼ぶ数 / 間隔（1.5 秒）
 const MN_W = 14, MN_H = 20, MN_SPEED = 2.2, MN_LIFE = 360, MN_MAX = 3;   // 手下の大きさ / 歩く速さ / 寿命（6 秒）/ ゴブG 1 体あたりの上限
 const MN_REACH = 18, MN_TOTAL = 18, MN_ON = 6, MN_OFF = 10, MN_FRAC = 0.74, MN_FALL = 60;   // 剣の届く距離 / 斬りの全体 / 当たるフレーム / 吹っ飛ばし / メインの上面からこれだけ落ちたら消える
 // 魔法使い: スキルを 1 回押すとため始め、もう 1 回押すと 0.2 秒の詠唱のあと撃つ。ためた長さで魔法が変わる（MAGIC_STEP ごとに次の段階）。
 // 魔法書の耐久 BOOK_MAX を、撃つたびに cost だけ減らし、0 以下で壊れる（BOOK_REGEN たつと新しい本が出る。それまでスキルは使えない）
-const MAGIC_STEP = 60, MAGIC_CAST = 12, BOOK_MAX = 10, BOOK_REGEN = 360, MAGIC_BIND = 90;   // 1 段階の長さ（1 秒）/ 詠唱（0.2 秒）/ 耐久 / 壊れてから新しい本まで（6 秒）/ 拘束魔法で動けない時間（1.5 秒）
-// 段階ごと: 名前 / 速さ（px/フレーム）/ 射程 / 耐久の消費 / 吹っ飛ばし / breaker 盾を一撃で壊す（吹っ飛ばさない）/ bind 盾を無視して拘束 / pierce 人を貫通（盾も壊して強く飛ばす）/ 色
+const MAGIC_STEP = 60, MAGIC_CAST = 12, BOOK_MAX = 10, BOOK_REGEN = 360, MAGIC_BIND = 90, MAGIC_FULL = 1 + 3 * MAGIC_STEP;   // … / 究極魔法になるため（ここで自動で止まる）   // 1 段階の長さ（1 秒）/ 詠唱（0.2 秒）/ 耐久 / 壊れてから新しい本まで（6 秒）/ 拘束魔法で動けない時間（1.5 秒）
+// 段階ごと: 名前 / 速さ（px/フレーム）/ 射程 / 耐久の消費 / 吹っ飛ばし / breaker 盾を一撃で壊す（吹っ飛ばさない）/ bind 盾を無視して拘束 / pierce 人を貫通（盾も壊して強く飛ばす）
+//   col: 光の色（水色 → 黄色 → 赤紫 → 黄色と青の雷）/ col2: 雷のもう 1 色 / btn: スキルボタンの色 / r: 本の光の大きさ
 const MAGIC = [
-  { name: "弱魔法", v: 30, range: 290, cost: 1, frac: 0.5, col: "#7dd3fc" },
-  { name: "強魔法", v: 20, range: 580, cost: 2, frac: 1.0, breaker: true, col: "#818cf8" },
-  { name: "拘束魔法", v: 14, range: 580, cost: 3, bind: true, col: "#4ade80" },
-  { name: "究極魔法", v: 36, range: 1000, cost: 4, frac: 1.3, pierce: true, col: "#fbbf24" },
+  { name: "弱魔法", v: 30, range: 290, cost: 1, frac: 0.5, col: "#67e8f9", btn: "rgba(103,232,249,.6)", r: 5 },
+  { name: "強魔法", v: 20, range: 580, cost: 2, frac: 1.0, breaker: true, col: "#facc15", btn: "rgba(250,204,21,.65)", r: 8 },
+  { name: "拘束魔法", v: 14, range: 580, cost: 3, bind: true, col: "#d946ef", btn: "rgba(192,38,211,.7)", r: 12 },
+  { name: "究極魔法", v: 36, range: 1000, cost: 4, frac: 1.3, pierce: true, col: "#60a5fa", col2: "#fde047", btn: "linear-gradient(135deg,rgba(250,204,21,.85),rgba(59,130,246,.85))", r: 14 },
 ];
 const magicLv = mg => Math.min(MAGIC.length, 1 + Math.floor(Math.max(0, mg - 1) / MAGIC_STEP));   // ためた長さ → 段階（1〜4）
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
@@ -470,17 +477,17 @@ const outOfBounds = p => { const x = p.x + pwOf(p) / 2; return x < KO_L || x > K
 const CHARS = [
   { id: "normal", name: "ノーマル", A: 2, D: 2, S: 2, tag: "練習用。すべて普通で、スキルはない", skill: null },
   { id: "bomber", name: "ボマー", A: 2, D: 2, S: 4, tag: "爆弾で周りを吹っ飛ばす",
-    skill: { name: "ボム", cd: 0, cdText: "なし（爆弾は画面に2個まで）", hold: true, maxCharge: BOMB_CHARGE, text: "押している間ためて、離すと爆弾を低い山なりに投げる。長くためるほど遠くへ飛ぶ（ため中は飛ぶ道すじが見える）。飛んでいる爆弾が敵に当たると、盾なら盾を1段階削って跳ね返り、盾がなければ敵を少し吹っ飛ばす（爆発はしない）。2秒後に爆発して周りを軽く吹っ飛ばす。爆風に盾は効かない（自分は無傷）。爆弾は画面に2個まで置けて、1個爆発するとすぐ次を投げられる" } },
+    skill: { name: "ボム", cd: 0, cdText: "なし（爆弾は画面に2個まで）", hold: true, maxCharge: BOMB_CHARGE, text: "押している間ためて、離すと爆弾を低い山なりに投げる。長くためるほど遠くへ飛ぶ（ため中は飛ぶ道すじが見える）。飛んでいる爆弾が敵に当たると、盾なら盾を1段階削って跳ね返り、盾がなければ敵を少し吹っ飛ばす（爆発はしない）。2秒後に爆発して周りを軽く吹っ飛ばす。爆風に盾は効かない（自分は無傷）。爆弾は画面に2個まで（ラストスパート中は4個まで）置けて、1個爆発するとすぐ次を投げられる" } },
   { id: "samurai", name: "侍", A: 5, D: 1, S: 4, tag: "攻撃力が高く、盾を一撃で割れる",
-    skill: { name: "居合斬り", cd: 4, text: "少しためてから（約0.17秒）、いちばん近い敵の方向へ自動で踏み込んで斬る（約156px。敵の体に触れたら手前で止まる）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす" } },
+    skill: { name: "居合斬り", cd: 4, text: "少しためてから（約0.17秒）、いちばん近い敵の方向へ自動で踏み込んで斬る（約156px。敵の体に触れたら手前で止まる）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は吹っ飛ばす。ためや踏み込みの途中で攻撃されて止められたら、クールタイムなしですぐ使える" } },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 4, tag: "遠くから矢を放つ",
     skill: { name: "弓矢", cd: 0.1, hold: true, maxCharge: 36, openShield: true, text: "矢は最大5本まで持てて、1秒に1本ずつ回復する（矢がないと撃てない）。押している間ためて、離すと矢を放つ（0.6秒で最大）。長くためるほど速く強い。ためている間は盾が外れる" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 5, tag: "瞬間移動で間合いを支配する",
-    skill: { name: "テレポート", cd: 2, hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ" } },
+    skill: { name: "テレポート", cd: 2, cdText: "1秒〜3.5秒（遠くへ飛ぶほど長い）", hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶが、そのぶんクールタイムが長い" } },
   { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 3, tag: "盾なし。スキルで攻撃と速さが上がるが、防御がなくなる", noShield: true,
     skill: { name: "狂化", cd: 14, text: "6秒間、攻撃+2・スピード+2になるが、防御が−2（0）になる（4/2/3 → 6/0/5）。吹っ飛ばされやすくなる" } },
-  { id: "knight", name: "騎士", A: 3, D: 5, S: 2, tag: "とても硬い。攻撃を2倍にして返す",
-    skill: { name: "カウンター", cd: 4, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
+  { id: "knight", name: "騎士", A: 3, D: 5, S: 2, tag: "とても硬い。攻撃を3倍にして返す",
+    skill: { name: "カウンター", cd: 4, text: "構えている間（約0.4秒）に攻撃を受けると、無効にして相手を3倍の力で吹っ飛ばす。空振りすると隙ができる" } },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 4, tag: "透明になって攻撃をすり抜ける",
     skill: { name: "透過", cd: 8, text: "4秒間、半透明になって攻撃を一切受けなくなる。時間切れか、自分が攻撃すると解除される。透明中に出した攻撃は1.5倍の力で吹っ飛ばす" } },
   { id: "giant", name: "巨人", A: 1, D: 2, S: 2, tag: "ふだんは弱いが、巨大化して暴れる",
@@ -488,7 +495,7 @@ const CHARS = [
   { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 4, tag: "分身と一緒に戦う",
     skill: { name: "分身", cd: 12, text: "目の前にピンク色の分身を呼ぶ。7秒間、自分とは別に動き、敵を追いかけて攻撃してくれる味方になる。分身は盾を持たず、性能は攻撃2・防御1・スピード2" } },
   { id: "okure", name: "おくれたん", A: 2, D: 3, S: 3, tag: "花の罠で相手を足止めする",
-    skill: { name: "花", cd: 1, text: "目の前に小さな花を咲かせる。踏んだ相手は1.5秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）。ときどき（5回に1回くらい）大きな花が咲き、踏むと3秒間動けない。空中で使うと花を真下へ落とす（当たった相手は、地上ならそのまま、空中なら動けないまま落ちる。足場に落ちた花は罠になる）" } },
+    skill: { name: "花", cd: 1, text: "目の前に小さな花を咲かせる。踏んだ相手は1.5秒間、土下座して動けなくなり、吹っ飛ばされにくくなる（自分は平気）。ときどき（5回に1回くらい）大きな花が咲き、踏むと3秒間動けない。動けない間に殴られても、崖の外まで飛ばない限り、動けないまま（次の花へつなげられる）。空中で使うと、前のほう（地面に置くときと同じ距離）から花を落とす（当たった相手は、地上ならそのまま、空中なら動けないまま落ちる。足場に落ちた花は罠になる）" } },
   { id: "nao", name: "なお", A: 1, D: 3, S: 3, tag: "攻撃は弱いが打たれ強く、残機が1つ多い", skill: null, lives: 1 },
   // 13〜16 体目（通信ではキャラを番号で送るので、必ず末尾に足す）
   { id: "clock", name: "時計師", A: 2, D: 2, S: 3, tag: "時間を巻き戻して、ピンチから抜け出す",
@@ -502,9 +509,9 @@ const CHARS = [
     skill: { name: "羽うちわ", cd: 10, text: "前方の広い範囲に5秒間、風の吹く場を作る（使ったあとはすぐ動ける）。場の中では、敵は移動が0.45倍・ジャンプが0.55倍に下がり、自分は移動が1.6倍・ジャンプが1.4倍に上がる" } },
   // 17〜20 体目（必ず末尾に足す）。atk: 通常攻撃の種類（ATKS の番号）/ forms: 形態ごとの性能（A/D/S は最初の形態の値）
   { id: "boomer", name: "ブーメラン使い", A: 3, D: 2, S: 3, tag: "盾を投げて、行きと帰りで2回当てる",
-    skill: { name: "盾投げ", cd: 4, text: "自分の盾を前へ投げる。盾は約260px先まで飛んで、投げた人のほうへ戻ってくる。戻ってきた盾を跳んでかわすと、後ろへ飛んでいって、また戻ってくる（受け止めるまで何度でも飛ぶ）。行き・帰りのたびに敵に当たり、帰りは相手の背中に当たる（盾が効かない）。投げている間は自分の盾がないが、5秒たつと新しい盾が出る（それもまた投げられる）。盾が壊れている間は投げられない" } },
+    skill: { name: "盾投げ", cd: 4, text: "自分の盾を前へ投げる。盾は約260px先まで飛んで、投げた人のほうへ戻ってくる。戻ってきた盾（投げたときと同じ速さ）を跳んでかわすと、後ろへ飛んでいって、また戻ってくる（受け止めるまで何度でも飛ぶ）。行き・帰りのたびに敵に当たり、帰りは相手の背中に当たる（盾が効かない）。投げている間は自分の盾がないが、5秒たつと新しい盾が出る（それもまた投げられる）。盾が壊れている間は投げられない" } },
   { id: "lancer", name: "槍兵", A: 3, D: 2, S: 2, atk: 2, tag: "長い槍で、遠くから突く",
-    skill: { name: "突進突き", cd: 5, text: "少し構えてから、槍を構えて前へ突進する（約120px）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は強く吹っ飛ばす。空中でも使える。突進のあとは少し動けず、盾も外れる。通常攻撃は届く距離がふつうの約1.8倍だが、出が遅い" } },
+    skill: { name: "突進突き", cd: 5, text: "少し構えてから、槍を構えて前へ突進する（約120px）。盾で受けられても一撃で盾を壊す（吹っ飛ばしはしない）。盾のない相手は強く吹っ飛ばす。空中でも使える。突進のあとは少し動けず、盾も外れる。構えや突進の途中で攻撃されて止められたら、クールタイムなしですぐ使える。通常攻撃は届く距離がふつうの約1.8倍だが、出が遅い" } },
   { id: "reversi", name: "リバーシ", A: 5, D: 1, S: 4, forms: [{ A: 5, D: 1, S: 4 }, { A: 1, D: 5, S: 2 }], tag: "攻めと守りの2つの姿を入れ替える",
     skill: { name: "変身", cd: 3, text: "攻撃形態（攻撃5・防御1・スピード4）と守り形態（攻撃1・防御5・スピード2）を入れ替える。ラウンドの始めは攻撃形態。吹っ飛ばされている最中でも使える" } },
   { id: "spider", name: "蜘蛛", A: 2, D: 1, S: 4, tag: "糸で崖に戻り、敵を引き寄せ、空から襲う",
@@ -516,11 +523,12 @@ const CHARS = [
       text: "向いている方へクロスボウを置く（向きは固定）。空中で使うと真下へ落ちて足場に置かれる（崖の外なら落ちて消える）。450px先までの射線に敵が入ると、0.5秒ごとに矢を撃つ（盾で防げる）。攻撃を3回受けるか、8秒たつと壊れる" } },
   { id: "gobg", name: "ゴブG", A: 3, D: 3, S: 3, back: 14, tag: "背中のゴブリンと、呼び出した手下で戦う",
     skill: { name: "召喚", cd: 10, cdText: "10秒（使った瞬間から）", text: "押すと手下を呼ぶ。すぐに1体、そのあと1.5秒ごとに1体ずつ、合計3体。手下は近くの敵へ歩いて行き、1回斬ると消える。吹っ飛ばされても呼び続けるが、落ちて復活すると残りは取り消し" },
-    auto: "背中のゴブリンが、140px以内の敵へ小さな槍を1.5秒ごとに自動で投げる（盾で防げる）" },
+    auto: "背中の2体のゴブリンが、140px以内の敵へ小さな槍を自動で投げる（1体2秒ごと。互い違いに投げる。盾で防げる）" },
+
   // 23 体目（必ず末尾に足す）
   { id: "wizard", name: "魔法使い", A: 2, D: 2, S: 3, tag: "魔法をためて、4種類の魔法を撃ち分ける",
     skill: { name: "魔法", cd: 0, cdText: "なし（撃つときに0.2秒の詠唱。魔法書が壊れると6秒使えない）",
-      text: "1回押すとため始め、もう1回押すと0.2秒の詠唱のあと撃つ（ため中も移動・ジャンプ・攻撃ができる）。ためた長さで魔法が変わる。0秒〜: 弱魔法（とても速い。盾を1段階削る。射程はステージの半分）。1秒〜: 強魔法（盾を一撃で壊す）。2秒〜: 拘束魔法（盾を貫いて1.5秒動けなくする。その間に自分で殴った吹っ飛ばしは、たまって最後にまとめて飛ぶ）。3秒〜: 究極魔法（とても速く、盾を壊して強く吹っ飛ばし、何人でも貫通する）。魔法書の耐久は10で、弱1・強2・拘束3・究極4ずつ減る（残り1でも究極を撃てる）。0になると本が壊れ、6秒後に新しい本が出るまで使えない" } },
+      text: "1回押すとため始め、ためている間にもう1回押すと0.2秒の詠唱のあと撃つ。ためは地上で止まっているときだけ進み、移動・ジャンプ・攻撃をすると止まる（段階は残る）。止まっているときに押すと、その段階からため再開。究極魔法までたまると自動で止まり、押すと撃つ。ためた長さで魔法が変わり、本の光とスキルボタンの色で分かる。0秒〜: 弱魔法（水色の小さい光。とても速い。盾を1段階削る。射程はステージの半分）。1秒〜: 強魔法（黄色の光。盾を一撃で壊す）。2秒〜: 拘束魔法（赤紫の大きい光。盾を貫いて1.5秒動けなくする。その間に自分で殴った吹っ飛ばしは、たまって最後にまとめて飛ぶ）。3秒〜: 究極魔法（黄色と青の雷。とても速く、盾を壊して強く吹っ飛ばし、何人でも貫通する）。魔法書の耐久は10で、弱1・強2・拘束3・究極4ずつ減る（残り1でも究極を撃てる）。0になると本が壊れ、6秒後に新しい本が出るまで使えない" } },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
@@ -563,7 +571,9 @@ const cdMul = () => late() ? 0.5 : 1;                                           
 const skCd = p => { const sk = chOf(p).skill; return !sk ? 0 : late() && chOf(p).id === "ghost" ? LATE_GHOST_CD : Math.round(sk.cd * 60 * cdMul()); };
 const arrowMax = () => late() ? LATE_ARROW_MAX : ARROW_MAX;                             // アーチャーの矢の上限
 const flowerMax = () => late() ? LATE_FLOWERS : 2;                                      // おくれたんが置ける花の数
-const xbowMax = () => late() ? LATE_XBOWS : 1;                                          // クロス使いが同時に置けるクロスボウの数
+const bombMax = () => late() ? LATE_BOMBS : BOMB_MAX;                                    // ボマーが画面に置ける爆弾の数
+const xbowMax = () => late() ? LATE_XBOWS : 1;
+                                          // クロス使いが同時に置けるクロスボウの数
 let entSeq = 0;          // クロスボウの番号（ホストだけ。そのクロスボウが撃った矢を見分ける）
 // いま使える足場。サドンデス中は縮む（上の台は早く消え、メインは最小幅まで縮んだあとすべて崩れる）
 function platforms() {
@@ -604,8 +614,8 @@ function newPlayer() {
            wb: 0, wbm: 0, wbx: 0, wby: 0, wl: null, wlt: 0, wlT: null,   // 蜘蛛: 糸で動いている残り / 動き方（1 = 崖へ戻る / 2 = 急降下）/ 行き先 / 糸の先 [x, y] / 糸を見せる残り / 引き寄せている相手
            yk: 0, ykx: 0, yky: 0, slw: 0,               // 糸で引き寄せられている残り / 行き先 / 引き寄せられたあと、糸が絡んで動けない残り（見た目用。動けないのは fz）
            yr: 0, yrx: 0, yry: 0, yrvy: 0, yrg: false, yrc: 0,   // 幽霊（脱落したあと）か / 幽霊の x / 足もとの y / 縦の速さ / 地面に立っているか（ホストだけ）/ 次の爆弾までの残り
-           gk: 0, sm: 0, smT: 0,                        // ゴブG: 背中のゴブリンが次に槍を投げられるまで / 召喚の残りの数 / 次の召喚までの残り（ホストだけ）
-           mg: 0, mc: 0, ml: 0, bd: BOOK_MAX, bdT: 0,   // 魔法使い: ためている長さ（0 = ためていない）/ 詠唱の残り / 詠唱中の魔法の段階 / 魔法書の耐久 / 壊れた本が戻るまでの残り
+           gk: 0, gq: 0, sm: 0, smT: 0,                        // ゴブG: 背中のゴブリンが次に槍を投げられるまで / 召喚の残りの数 / 次の召喚までの残り（ホストだけ）
+           mg: 0, mgr: 0, mc: 0, ml: 0, bd: BOOK_MAX, bdT: 0,   // mgr: いま ためが進んでいるか（0 = 止まっている。段階は mg に残る）   // 魔法使い: ためている長さ（0 = ためていない）/ 詠唱の残り / 詠唱中の魔法の段階 / 魔法書の耐久 / 壊れた本が戻るまでの残り
            mb: 0, mbo: -1, mbv: null,                   // 拘束魔法で動けない残り / かけた魔法使いのスロット / その間に魔法使いから受けた吹っ飛びの合計（ホストだけ）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
@@ -686,7 +696,7 @@ function spawn(p, slot, n, battle) {
     const ups = layoutFor(n).slice(0, -1);                 // 上の台（メインを除く）
     const up = slot >= 2 ? ups[slot - 2] : null;
     if (up) { x = up.x + up.w / 2 - PLW / 2; y = up.y - PLH; }
-    else { const m = layoutFor(n).slice(-1)[0], k = n >= 3 ? WIDE_SCALE : 1; x = [m.x + 150 * k, m.x + m.w - 150 * k - PLW][slot]; }   // メインの左右
+    else { const m = layoutFor(n).slice(-1)[0], k = WIDE_SCALE; x = [m.x + 150 * k, m.x + m.w - 150 * k - PLW][slot]; }   // メインの左右
   } else {
     const xs = n <= 2 ? [PX + 150, PX + PW - 150 - PLW] : [PX + 70, PX + 200, PX + PW - 200 - PLW, PX + PW - 70 - PLW];
     x = xs[Math.min(slot, xs.length - 1)];
@@ -699,8 +709,8 @@ function spawn(p, slot, n, battle) {
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0;
   p.bt = 0; p.fm = 0; p.wk = [0, 0, 0]; p.wkm = [0, 0, 0]; stopWeb(p); p.slw = 0;   // リバーシはラウンドの始めは攻撃形態
   p.yr = 0; p.yrc = 0; p.yry = 0; p.yrvy = 0; p.yrg = false;
-  p.gk = 0; p.sm = 0; p.smT = 0;
-  p.mg = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
+  p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;
+  p.mg = 0; p.mgr = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -850,9 +860,12 @@ function fireHold(p) {                       // ためて離すスキル
     p.x = pl ? Math.max(pl.x, Math.min(pl.x + pl.w - PLW, dest)) : Math.max(KO_L, Math.min(KO_R - PLW, dest));
     p.vx = 0;
     emit("tp", x0, y0, ecx(p), ecy(p));
+    p.kc = p.km = Math.round((TP_CD0 + TP_CD1 * c) * 60 * cdMul());   // クールタイムは飛ぶ距離（ため量）しだい
+    return;
   }
   p.kc = skCd(p);
 }
+
 // ボマーの爆弾の投げ始め（位置と速度）。c: ため量（0〜1）
 const bombStart = (p, c) => ({ x: ecx(p) + p.f * 18, y: p.y + 14, vx: p.f * (BOMB_VX0 + BOMB_VX1 * c), vy: -BOMB_VY });
 // 爆弾が最初に足場に落ちるまでの道すじ（ため中に表示する）。updateProjectiles のボムと同じ計算。足場に落ちなければ、撃墜ラインの下まで
@@ -875,7 +888,7 @@ function plantFlower(p) {                    // 地上: 足場の上に置く（
   const big = Math.random() < FLOWER_BIG_P ? 1 : 0;                                 // ときどき大きな花（踏むと 3 秒動けない）
   if (!p.ground) {                           // 落ちる花: 当たった敵を、地上ならその場で、空中なら動けないまま落とす。足場に落ちたら、ふつうの花（罠）になる
     room();
-    game.fl.push({ x: ecx(p), y: p.y + phOf(p) + 2, own: p.own, t: 0, big, air: 1, vy: Math.max(2, p.vy) });
+    game.fl.push({ x: ecx(p) + p.f * 52, y: p.y + phOf(p) + 2, own: p.own, t: 0, big, air: 1, vy: Math.max(2, p.vy) });   // 地面に置くときと同じ、前 52px から落とす
     return true;
   }
   const pl = platforms().find(s => Math.abs(p.y + PLH - s.y) < 2 && p.x + PLW > s.x && p.x < s.x + s.w);
@@ -903,10 +916,10 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.sh = 1; p.sbk = 0; p.shi = 0; p.iv = RESPAWN_INV; p.dz = 0; p.gt = 0; p.gb = 0; p.dj = 0;
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own));                    // 投げていた盾（何枚あっても）は消えて、手元に戻る
-  p.mg = 0; p.mc = 0; p.mb = 0; p.mbv = null;                                                    // 魔法使い: ためと詠唱は取り消し（魔法書の耐久はそのまま）
+  p.mg = 0; p.mgr = 0; p.mc = 0; p.mb = 0; p.mbv = null;                                                    // 魔法使い: ためと詠唱は取り消し（魔法書の耐久はそのまま）
 
   for (const cb of cbsOf(p)) removeCb(cb);                                                       // クロス使い: 置いたクロスボウは（2 台あっても）全部消える
-  p.gk = 0; p.sm = 0; p.smT = 0;                                                                 // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
+  p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;                                                       // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
   game.pj = game.pj.filter(b => !(b.k === 4 && b.own === p.own));
   game.mn = game.mn.filter(m => m.own !== p.own);
   emit("rv", ecx(p), ecy(p));
@@ -1003,7 +1016,14 @@ function releaseGrab(p) {                     // つかみをやめる（つか�
   p.gr = 0; p.grH = 0;
 }
 // 敵の攻撃（殴られた・爆風・糸・つかみ・拘束魔法）で、つかみに行くダッシュが止められたら、クールタイムをなくす（すぐもう一度使える）。releaseGrab より先に呼ぶ
-function grabBroken(t) { if (t.gr > 0 && !t.grT) t.kc = 0; }
+// 侍の居合斬り・槍兵の突進突き（構えから突進の終わりまで）も同じ。攻撃をリセットする前に呼ぶ
+function grabBroken(t) {
+  if (t.gr > 0 && !t.grT) t.kc = 0;
+  if (t.a > 0 && (t.ak === 1 || (t.ak === 3 && t.a <= ATKS[3].dashTo))) t.kc = 0;
+}
+// おくれたんの花で動けない（土下座の）相手は、殴られても飛ばされるだけで、残りの時間は動けないまま（花→攻撃→落ちた先の花… とつなげられる）。
+// ただし、崖の外まで飛ぶ当たり（flyOut）なら、復帰できるように解く。fz0 / dz0: 当たる前の値
+function keepRoot(t, fz0, dz0) { if (dz0 > 0 && !flyOut(t)) { t.fz = fz0; t.dz = dz0; t.rk = 1; } }   // rk: 殴られても続いている（physics で、崖の外へ出たら解く）
 function grabStep(p, inp) {                   // 前へダッシュしながらつかむ（4〜14 フレーム目）→ 持ち上げる（20 フレーム）→ 投げる
   const dir = ((inp & KEY.r) ? 1 : 0) - ((inp & KEY.l) ? 1 : 0);
   if (dir) p.grD = dir;                       // 投げる向き: 最後に押した左右（押さなければ後ろ）
@@ -1239,7 +1259,10 @@ function yureiBlast(b, list) {               // 爆風の中の人を、盾を�
     e.vx = dir * KNOCK_BASE * defMul(effD(e)) * YUREI_KNOCK * dzMul(e) * (1 - 0.4 * dist / YUREI_BLAST);
     grabBroken(e); const bv = freeBind(e); if (bv) e.vx += bv.vx;
     e.vy = -YUREI_LIFT; e.s = Math.max(1, Math.round(Math.abs(e.vx) * STUN_SPEED));
+    const fz0 = e.fz, dz0 = e.dz;
     e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.mc = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0; stopWeb(e);
+    keepRoot(e, fz0, dz0);
+
 
     if (flyOut(e)) any = true;
   }
@@ -1337,20 +1360,27 @@ function updateGoblins(list) {
   for (const p of game.p) {
     if (!p || !p.c || !p.al || chOf(p).id !== "gobg" || (training && p.cpu)) continue;
     if (p.sm > 0 && p.hd === 0 && p.yk === 0 && --p.smT <= 0) { summonMinion(p); p.sm--; p.smT = GOB_SUMMON_EVERY; }
-    if (p.gk > 0) { p.gk--; continue; }
+    // 背中のゴブリンは 2 体（上: gk / 下: gq）。それぞれ 2 秒に 1 回投げ、1 体が投げたら、もう 1 体は少なくとも 1 秒あける（互い違いに投げる）
+    if (p.gk > 0) p.gk--;
+    if (p.gq > 0) p.gq--;
     if (p.hd > 0 || p.yk > 0) continue;       // つかまれている間・糸で引き寄せられている間は投げない（槍でつかみがほどけないように）
-    const sz = szOf(p), kx = p.f > 0 ? p.x - 7 * sz : p.x + pwOf(p) + 7 * sz, ky = p.y + 22 * sz;   // 背中のゴブリンの手もと
-    let best = null, bd = GOB_RANGE + 1;
-    for (const e of list) {
-      if (e.own === p.own || !e.al || untouchable(e)) continue;
-      const d = distToBody(kx, ky, e);
-      if (d <= GOB_RANGE && d < bd) { bd = d; best = e; }
+    for (const k of ["gk", "gq"]) {
+      if (p[k] > 0) continue;
+      const sz = szOf(p), kx = p.f > 0 ? p.x - 7 * sz : p.x + pwOf(p) + 7 * sz, ky = p.y + (k === "gk" ? 14 : 34) * sz;   // そのゴブリンの手もと
+      let best = null, bd = GOB_RANGE + 1;
+      for (const e of list) {
+        if (e.own === p.own || !e.al || untouchable(e)) continue;
+        const d = distToBody(kx, ky, e);
+        if (d <= GOB_RANGE && d < bd) { bd = d; best = e; }
+      }
+      if (!best) break;
+      const dx = ecx(best) - kx, dy = ecy(best) - ky, dd = Math.hypot(dx, dy) || 1, vx = dx / dd * GOB_SPEAR_V, vy = dy / dd * GOB_SPEAR_V;
+      game.pj.push({ k: 4, x: kx, y: ky, vx, vy, own: p.own, t: 0, pw: GOB_SPEAR_FRAC });
+      p[k] = GOB_THROW_CD;
+      const o = k === "gk" ? "gq" : "gk"; p[o] = Math.max(p[o], GOB_THROW_CD / 2);
+      emit("gs", kx, ky, Math.sign(vx) || p.f);
+      break;
     }
-    if (!best) continue;
-    const dx = ecx(best) - kx, dy = ecy(best) - ky, dd = Math.hypot(dx, dy) || 1, vx = dx / dd * GOB_SPEAR_V, vy = dy / dd * GOB_SPEAR_V;
-    game.pj.push({ k: 4, x: kx, y: ky, vx, vy, own: p.own, t: 0, pw: GOB_SPEAR_FRAC });
-    p.gk = GOB_THROW_CD;
-    emit("gs", kx, ky, Math.sign(vx) || p.f);
   }
 }
 // 手下: いちばん近い敵へ歩いて行き、届く距離で 1 回斬る。斬り終わると（当たっても外れても）消える。足場の下からは通り抜け、メインの端では止まる（上の台からは降りる）
@@ -1422,6 +1452,12 @@ function physics(p, inp, neutral) {
   if (p.gh > 0 && --p.gh === 0) emit("gx", ecx(p), ecy(p));
   if (p.fz > 0) p.fz--;
   if (p.dz > 0) p.dz--;
+  if (!p.dz) p.rk = 0;
+  else if (p.rk && !p.ground) {                  // 花で動けないまま殴られて、空中でメインの端より外へ出た: 崖から戻れるよう、すぐ動けるようにする
+    const m = mainPlat();
+    if (!m || ecx(p) < m.x || ecx(p) > m.x + m.w) { p.fz = 0; p.dz = 0; p.rk = 0; }
+  }
+
   if (p.a === 0) p.gb = 0;
   if (p.gt > 0 && --p.gt === 0) { p.x += PLW / 2; p.y += PLH; }     // 巨大化が終わる（足もとの中心を保つ）
   if (p.cn > 0 && --p.cn === 0 && !p.cnHit) p.fz = CN_WHIFF;       // 構えが空振りに終わると隙ができる
@@ -1433,7 +1469,7 @@ function physics(p, inp, neutral) {
   }
   if (p.bt > 0 && !game.pj.some(b => b.k === 2 && b.own === p.own)) p.bt = 0;   // 念のため: 投げた盾がなくなっていたら手元に戻す
   if (p.bt > 0 && ++p.bt > BOOM_REGEN) { p.bt = 0; emit("bn", ecx(p), ecy(p)); }  // ブーメラン使い: 盾がないまま 5 秒たつと、新しい盾が出る（投げた盾は飛び続ける）
-  if (p.mg > 0 && p.mg < 1e5) p.mg++;                                             // 魔法使い: ためている長さ（殴られても、つかまれても続く）
+  // 魔法使いのためは、下の kpress のあとで進める（止まっている間だけ）
   if (p.bdT > 0 && --p.bdT === 0) { p.bd = BOOK_MAX; emit("bkn", ecx(p), ecy(p)); }   // 壊れた魔法書の代わりに、新しい本が出る
   // 盾の回復
   if (p.sbk > 0) { if (--p.sbk === 0) { p.sh = 1; p.shi = 0; } }
@@ -1462,6 +1498,10 @@ function physics(p, inp, neutral) {
   if (jrise) p.bu = INPUT_BUF;
   p.kp = kin ? 1 : 0; p.ap = a ? 1 : 0; p.jp = u ? 1 : 0;
   const kpress = p.bk > 0, apress = a || p.ba > 0, upress = u || p.bu > 0;
+  if (chd.id === "wizard" && p.mgr) {            // 魔法使い: ためは、地上で止まっている（左右・ジャンプ・攻撃を押していない）間だけ進む。押すと止まる（段階は残る）。究極魔法までたまると自動で止まる
+    if (!p.ground || dir || upress || apress || p.s > 0 || p.fz > 0 || p.mc > 0 || p.a > 0 || p.hd > 0 || p.yk > 0 || p.mb > 0) p.mgr = 0;
+    else if (++p.mg >= MAGIC_FULL) { p.mg = MAGIC_FULL; p.mgr = 0; emit("mgu", ecx(p), ecy(p)); }
+  }
   if (p.bk > 0) p.bk--;
   if (p.ba > 0) p.ba--;
   if (p.bu > 0) p.bu--;
@@ -1558,15 +1598,16 @@ function skillInput(p, chd, kin, kpress, dir, zone) {
   }
   if (chd.id === "wizard") {                     // 魔法使い: 1 回目で ため始め、2 回目で詠唱（0.2 秒後に撃つ）。魔法書が壊れている間・詠唱中は何もしない
     if (!kpress || p.mc > 0 || p.bd <= 0 || p.cn > 0) return false;
-    if (!p.mg) { p.mg = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }
-    if (p.a > 0) return false;                   // 攻撃の途中では撃てない（ためは続く）
-    aim(); p.ml = magicLv(p.mg); p.mg = 0; p.mc = MAGIC_CAST; p.vx *= 0.3;
+    if (!p.mg) { p.mg = 1; p.mgr = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }
+    if (!p.mgr && p.mg < MAGIC_FULL) { p.mgr = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }   // 止まっていたためを、その段階から再開する
+    if (p.a > 0) return false;                   // 攻撃の途中では撃てない
+    aim(); p.ml = magicLv(p.mg); p.mg = 0; p.mgr = 0; p.mc = MAGIC_CAST; p.vx *= 0.3;   // ためている最中（または究極魔法までたまって止まっている）なら撃つ
     emit("mgc", ecx(p), ecy(p), p.f, p.ml);
     return true;
   }
   if (sk.hold) {
     if (p.ks > 0) { if (kin) p.ks = Math.min(p.ks + 1, sk.maxCharge); else { aim(); fireHold(p); } return false; }
-    if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0 && (chd.id !== "archer" || p.am > 0) && (chd.id !== "bomber" || bombsOf(p).length < BOMB_MAX)) { aim(); p.ks = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }   // ボマー: 爆弾が画面に 2 個ある間は ため始められない
+    if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0 && (chd.id !== "archer" || p.am > 0) && (chd.id !== "bomber" || bombsOf(p).length < bombMax())) { aim(); p.ks = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }   // ボマー: 爆弾が画面に 2 個ある間は ため始められない
     return false;
   }
 
@@ -1582,8 +1623,9 @@ function knock(att, t, frac, dir) {
   const mul = (att.gb > 0 ? GH_ATK_MUL : 1) * dzMul(t);          // 透過中の攻撃は強く、土下座中は飛びにくい
   t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul;
   t.vy = -9; t.s = Math.max(1, Math.round(Math.abs(t.vx) * STUN_SPEED));   // 攻撃力・防御力・ため量・透過・土下座などで速さが変わると、硬直もそのぶん変わる
-  t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0; t.dz = 0; t.mc = 0;   // 魔法使いの詠唱も取り消し（耐久は減らない）
   grabBroken(t);
+  const fz0 = t.fz, dz0 = t.dz;
+  t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0; t.dz = 0; t.mc = 0;   // 魔法使いの詠唱も取り消し（耐久は減らない）
   t.ground = false; t.hf = 12; releaseGrab(t); t.hd = 0; t.wa = 0; stopWeb(t);   // 吹っ飛ばされたら、回り込み攻撃・糸の動きも取り消し
   if (t.mb > 0) {                                                // 拘束魔法で動けない相手
     if (att.own === t.mbo) {                                     // かけた魔法使い（と分身）の攻撃: 吹っ飛びをためておき、拘束が解けた瞬間にまとめて飛ばす
@@ -1592,6 +1634,7 @@ function knock(att, t, frac, dir) {
       t.vx = t.vy = 0; t.s = 0;
     } else { const v = freeBind(t); if (v) { t.vx += v.vx; t.vy = Math.min(t.vy, v.vy); t.s = Math.max(t.s, v.s); } }   // ほかの人の攻撃: 拘束が解けて、たまっていたぶんも足して飛ぶ
   }
+  keepRoot(t, fz0, dz0);                                         // 花で動けない相手は、崖の外まで飛ばない限り動けないまま
 }
 // 拘束魔法を解く（ほかの人の攻撃・つかみ・糸など）。たまっていた吹っ飛び（なければ null）を返す
 function freeBind(t) { const v = t.mbv; t.mb = 0; t.mbv = null; return v; }
@@ -1630,7 +1673,7 @@ function impact(kind, att, t, frac, dir) {
 // 騎士のカウンター: 受けた攻撃を、相手自身の攻撃力の 200% で相手に返す
 function counterHit(kn, att) {
   const dir = Math.sign(ecx(att) - ecx(kn)) || -kn.f;
-  att.vx = dir * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(att)) * 2.0;
+  att.vx = dir * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(att)) * CN_MUL;
   grabBroken(att); freeBind(att);
   att.vy = -9; att.s = 48; att.a = 0; att.ak = 0; att.cd = 0; att.ks = 0; att.cn = 0; att.fz = 0; att.dz = 0; att.mc = 0; att.ground = false; att.hf = 14; releaseGrab(att); att.hd = 0; stopWeb(att);
   kn.cn = 0; kn.cnHit = true;
@@ -1686,7 +1729,9 @@ function explode(b, list) {
     const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
     e.vx = dir * KNOCK_BASE * atkMul(A) * defMul(effD(e)) * BOMB_KNOCK * dzMul(e) * (1 - 0.4 * dist / BOMB_BLAST);
     grabBroken(e); const bv = freeBind(e); if (bv) e.vx += bv.vx;
+    const fz0 = e.fz, dz0 = e.dz;
     e.vy = -BOMB_LIFT; e.s = Math.max(34, bv ? bv.s : 0); e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.mc = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0; stopWeb(e);
+    keepRoot(e, fz0, dz0);
     if (flyOut(e)) any = true;
   }
   blastObjs(b.own, b.x, b.y, BOMB_BLAST);     // 手下は消え、クロスボウは 1 回削れる
@@ -1842,7 +1887,7 @@ function updateFlowers(list) {
       }
       if (hit) {                                             // 地上ならその場で、空中なら動けないまま落ちる（土下座の姿）
         const e = hit;
-        e.fz = rt; e.dz = rt; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; e.mc = 0; if (e.vy < 0) e.vy = 0;
+        e.fz = rt; e.dz = rt; e.rk = 0; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; e.mc = 0; if (e.vy < 0) e.vy = 0;
         releaseGrab(e); stopWeb(e);
         emit("fl", f.x, Math.min(f.y, e.y + phOf(e)), f.big ? 1 : 0);
         game.fl.splice(i, 1); continue;
@@ -1862,7 +1907,7 @@ function updateFlowers(list) {
     for (const e of list) {
       if (e.own === f.own || untouchable(e) || !e.ground) continue;
       if (Math.abs(e.y + phOf(e) - f.y) < 3 && e.x < f.x + hw && e.x + pwOf(e) > f.x - hw) {      // 踏んだ人は土下座して動けなくなる
-        e.fz = rt; e.dz = rt; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; releaseGrab(e); stopWeb(e);
+        e.fz = rt; e.dz = rt; e.rk = 0; e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.vx = 0; releaseGrab(e); stopWeb(e);
         emit("fl", f.x, f.y, f.big ? 1 : 0);
         game.fl.splice(i, 1);
         break;
@@ -1913,7 +1958,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
   const { gap, sgn, sd, dyFeet, sameLevel, tr } = X, g = c.ground, face = c.f === sgn, tFaces = t.f === -sgn;
   switch (id) {
     case "bomber": {                                                                                                    // 敵の足もとに落ちるだけためて投げる（爆弾が 2 個ある間は投げない）
-      if (!g || !face || !sameLevel || gap < 40 || gap > 300 || bombsOf(c).length >= BOMB_MAX) return 0;
+      if (!g || !face || !sameLevel || gap < 40 || gap > 300 || bombsOf(c).length >= bombMax()) return 0;
       let best = 1, bd = 1e9;
       for (let k = 1; k <= BOMB_CHARGE; k += 2) {
         const bp = bombPath(c, k / BOMB_CHARGE), e = bp.pts[bp.pts.length - 1];
@@ -1929,19 +1974,22 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "giant": return gap < 260 ? KEY.k : 0;
     case "copern": return gap < 360 ? KEY.k : 0;
     case "okure":
-      if (!g) return t.y > c.y + phOf(c) - 10 && Math.abs(ecx(t) - ecx(c)) < 24 ? KEY.k : 0;                       // 空中: 敵の真上にいたら、花を落とす
+      if (!g) return t.y > c.y + phOf(c) - 10 && Math.abs(ecx(t) - (ecx(c) + c.f * 52)) < 24 ? KEY.k : 0;          // 空中: 花を落とす場所（前 52px）の真下に敵がいたら、落とす
+
       return g && face && sameLevel && t.ground && gap > 70 && gap < 240 ? KEY.k : 0;                                // 敵が来る道に花を置く
     case "wizard": {                                                                                                    // ためる → 狙った段階になって、敵が射線にいたら撃つ。動けない敵には強い魔法
       if (c.bd <= 0 || c.mc > 0) return 0;
       if (!c.mg) {
-        if (gap > 700) return 0;
+        if (!g || gap > 700) return 0;
         const pick = [1, 1, 2, 2, 3, 4][Math.floor(Math.random() * 6)];
         c.aiMg = Math.min(pick, c.bd >= 4 ? 4 : c.bd >= 2 ? 2 : 1); return KEY.k;
       }
       const lv = magicLv(c.mg), M = MAGIC[lv - 1], hy = c.y + 26 * szOf(c);
-      if (!face || hy < t.y || hy > t.y + phOf(t) || gap > M.range - 30) return 0;
-      const want = (t.mb > 0 || t.fz > 30) ? 4 : c.aiMg || 1;
-      return lv >= Math.min(want, MAGIC.length) || (t.mb > 0 && lv >= 2) ? KEY.k : 0;
+      const want = (t.mb > 0 || t.fz > 30) ? Math.min(lv, 2) : Math.min(c.aiMg || 1, MAGIC.length);   // 動けない敵には、強魔法以上ならすぐ撃つ
+      const ready = lv >= want, aimed = face && hy >= t.y && hy <= t.y + phOf(t) && gap <= M.range - 30;
+      if (ready && aimed) return KEY.k;                  // ためている最中・究極で止まっているなら撃つ。途中で止まっていれば再開（次に考えたときに撃つ）
+      return !ready && !c.mgr && g ? KEY.k : 0;          // 狙った段階に届かないまま止まっていたら、再開する
+
     }
 
     case "wrestler": return g && face && sameLevel && gap < GRAB_REACH + 90 && t.a === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵へ、ダッシュしてつかむ
@@ -2153,7 +2201,8 @@ function aiThink(c, owner, pls, B) {
   if (id === "swapper" && B.skill > 0) { const k = aiZone(c, t, B); if (k) inp = (inp & ~(KEY.a | KEY.k)) | k; }   // スワッパー: ゾーンの中では、回り込み攻撃と入れ替え
   if (B.dodge && c.ground && Math.random() < B.dodge) inp = aiDodge(c, inp, ccx, feet);
   // 行き詰まり防止: 同じ高さで 2 秒（120 フレーム）も何も押していなければ、とにかく敵へ向かう（待ち・不感帯などで動けなくなる場合の保険）
-  if (inp & (KEY.l | KEY.r | KEY.a | KEY.u | KEY.k)) c.aiIdle = 0; else c.aiIdle += B.think;
+  if (id === "wizard" && c.mgr && gap > 70 && !(inp & KEY.k)) inp &= ~(KEY.l | KEY.r | KEY.a | KEY.u);   // 魔法使い: ためている間は動かない（動くと止まる）。敵が近づいたら動く
+  if ((inp & (KEY.l | KEY.r | KEY.a | KEY.u | KEY.k)) || (id === "wizard" && c.mgr)) c.aiIdle = 0; else c.aiIdle += B.think;
   if (c.aiIdle >= 120 && c.ground) { c.aiIdle = 0; c.aiOnce = 0; c.aiSideT = 0; c.aiGoal = tcx; inp = sgn > 0 ? KEY.r : KEY.l; }
   return inp;
 }
@@ -2292,9 +2341,11 @@ function serEnt(p) {                                         // 見た目に必�
 
   if (p.wl) o.wl = [r1(p.wl[0]), r1(p.wl[1])];                // 蜘蛛の糸の先（糸を使っている間だけ）
   if (p.yr) { o.yr = 1; o.yrx = r1(p.yrx); o.yry = r1(p.yry); o.yrvy = r1(p.yrvy); o.yrc = p.yrc; }   // 幽霊（脱落したあと）の位置（足もとの y）・縦の速さと、次の爆弾までの残り
-  if (p.gk) o.gk = p.gk;                                      // ゴブG: 背中のゴブリンが、次に槍を投げられるまでの残り（腕の見た目用）
+  if (p.gk) o.gk = p.gk;
+  if (p.gq) o.gq = p.gq;                                      // ゴブG: 下のゴブリン                                      // ゴブG: 背中のゴブリンが、次に槍を投げられるまでの残り（腕の見た目用）
   if (p.bt) o.bt = p.bt;                                      // ブーメラン使い: 盾を投げてからのフレーム（新しい盾までの表示用）
-  if (p.mg) o.mg = p.mg;                                      // 魔法使い: ためている長さ（段階は全員に見える）
+  if (p.mg) o.mg = p.mg;                                      // 魔法使い: ためた長さ（段階は全員に見える）
+  if (p.mgr) o.mr = 1;                                        // 魔法使い: ためが進んでいる
   if (p.mc) { o.mc = p.mc; o.ml = p.ml; }                     // 魔法使い: 詠唱の残りと、撃つ魔法の段階
   if (p.bd !== BOOK_MAX) o.bd = p.bd;                         // 魔法使い: 魔法書の耐久（減っていなければ送らない。戦闘中しか減らないので、ロビーでキャラは漏れない）
   if (p.bdT) o.bdT = p.bdT;                                   // 魔法使い: 壊れた本が戻るまで
@@ -2484,8 +2535,8 @@ function readEnt(p, n) {                                     // スナップシ�
     p.yrt = n.yrx; p.yrty = n.yry;
     if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
   }
-  p.gk = n.gk | 0; p.bt = n.bt | 0;
-  p.mg = n.mg | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
+  p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
+  p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
 function applySnapshot(s) {
@@ -2814,11 +2865,11 @@ function deco(c, id, x, y, f, o) {
     c.beginPath(); c.moveTo(fgx, y + 22); c.lineTo(fgx + 2, y + 28); c.lineTo(fgx + 4, y + 22); c.fill();
     c.beginPath(); c.moveTo(fgx + 8, y + 22); c.lineTo(fgx + 10, y + 28); c.lineTo(fgx + 12, y + 22); c.fill();
     c.fillStyle = "#92400e"; c.fillRect(x + 4, y + 42, PLW - 8, 10); c.fillRect(x + 8, y + 52, 8, 5); c.fillRect(x + 24, y + 52, 8, 5);
-    const bx = f > 0 ? x - 14 : x + PLW, gk = o.gk || 0;
+    const bx = f > 0 ? x - 14 : x + PLW;
     c.strokeStyle = "#78350f"; c.lineWidth = 2; c.strokeRect(bx + 1, y + 1, 12, 42);
-    c.beginPath(); c.moveTo(f > 0 ? bx + 13 : bx + 1, y + 20); c.lineTo(f > 0 ? bx + 17 : bx - 3, y + 20); c.stroke();
-    {
-      const gy = y + 13, gx = bx + 1, thr = gk > GOB_THROW_CD - 10;
+    c.beginPath(); c.moveTo(f > 0 ? bx + 13 : bx + 1, y + 21); c.lineTo(f > 0 ? bx + 17 : bx - 3, y + 21); c.stroke();
+    for (const [gy, gk] of [[y + 3, o.gk || 0], [y + 23, o.gq || 0]]) {   // 上と下のゴブリン（投げた直後は腕と槍を前へ出す）
+      const gx = bx + 1, thr = gk > GOB_THROW_CD - 10;
       c.fillStyle = "#15803d"; c.fillRect(gx, gy, 12, 18);
       c.fillStyle = "#16a34a"; c.fillRect(gx + 1, gy + 1, 10, 7);
       c.beginPath(); c.moveTo(gx, gy + 3); c.lineTo(gx - 3, gy + 1); c.lineTo(gx, gy + 6); c.fill();
@@ -3134,7 +3185,7 @@ const skBtn = document.querySelector(".tb.skill"), skHint = document.getElementB
 let lastSk = "";
 function updateSkillUI() {
   const me = game.p[myId];
-  let state = "none", label = "なし", sec = "", ratio = 0;
+  let state = "none", label = "なし", sec = "", ratio = 0, bg = "", wizHint = "";   // bg: ボタンの色（魔法使いの段階）/ wizHint: 魔法使いの説明
   if (role && net === "ready" && me && game.ph !== "lobby" && me.yr && !me.al) {   // 幽霊: スキルボタンも爆弾（攻撃ボタンでも落とせる）
     label = "爆弾";
     if (me.yrc > 0) { state = "cool"; ratio = Math.min(1, me.yrc / YUREI_CD); sec = String(Math.ceil(me.yrc / 60)); } else state = "ready";
@@ -3150,9 +3201,13 @@ function updateSkillUI() {
       }
       else if (id === "wizard") {                                // 魔法使い: 魔法書の耐久（📖）と、ためている魔法の段階
         if (me.bd <= 0) { state = "cool"; label = "本なし"; ratio = Math.min(1, me.bdT / BOOK_REGEN); sec = String(Math.ceil(me.bdT / 60)); }
-        else if (me.mc > 0) { state = "charge"; label = "詠唱"; sec = "📖" + me.bd; }
-        else if (me.mg > 0) { state = "charge"; label = MAGIC[magicLv(me.mg) - 1].name; sec = "📖" + me.bd; }
-        else { state = "ready"; label = "ため始め"; sec = "📖" + me.bd; }
+        else if (me.mc > 0) { state = "charge"; label = "詠唱"; sec = "📖" + me.bd; bg = MAGIC[Math.max(1, me.ml) - 1].btn; }
+        else if (me.mg > 0) {                                     // ためている（mgr）/ 止まっている。ボタンの色は段階の色
+          const M = MAGIC[magicLv(me.mg) - 1], full = me.mg >= MAGIC_FULL;
+          state = me.mgr ? "charge" : "ready"; label = M.name; sec = "📖" + me.bd; bg = M.btn;
+          wizHint = me.mgr ? "もう一度押すと発射（動くと止まる）" : full ? "押すと発射" : "止まっている  押すとため再開";
+        }
+        else { state = "ready"; label = "ため始め"; sec = "📖" + me.bd; wizHint = "押すとため始める（地上で止まっている間だけたまる）"; }
       }
       else if (zone) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(zone.t / 60)); }   // スワッパーの ゾーンがある間（数字は円が消えるまでの秒数）
       else if (me.ks > 0) { state = "charge"; label = "ため中"; }
@@ -3160,22 +3215,23 @@ function updateSkillUI() {
       else if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (me.km || skCd(me))); sec = String(Math.ceil(me.kc / 60)); }
       else if (id === "boomer" && me.sbk > 0) { state = "cool"; label = "盾なし"; ratio = Math.min(1, me.sbk / SHIELD_BREAK_FRAMES); sec = String(Math.ceil(me.sbk / 60)); }   // 盾が壊れている間は投げられない
       else if (id === "boomer" && me.bt > 0) { state = "cool"; label = "盾なし"; ratio = Math.max(0, 1 - me.bt / BOOM_REGEN); sec = String(Math.max(1, Math.ceil((BOOM_REGEN - me.bt) / 60))); }   // 投げている間（受け止めるか、5 秒で新しい盾）
-      else if (id === "bomber" && bombsOf(me).length >= BOMB_MAX) {   // 爆弾が画面に 2 個: いちばん古い爆弾が爆発するまで
+      else if (id === "bomber" && bombsOf(me).length >= bombMax()) {   // 爆弾が画面に 2 個（ラストスパート中は 4 個）: いちばん古い爆弾が爆発するまで
         const t = Math.max(0, BOMB_FUSE - bombsOf(me)[0].t);
         state = "cool"; label = "爆弾2個"; ratio = Math.min(1, t / BOMB_FUSE); sec = String(Math.max(1, Math.ceil(t / 60)));
       }
       else state = "ready";
       if (chOf(me).id === "archer" && state !== "cool") sec = "×" + me.am;      // アーチャー: 残りの矢の本数
-      if (id === "bomber" && state === "ready") sec = "×" + (BOMB_MAX - bombsOf(me).length);   // ボマー: あと何個投げられるか
+      if (id === "bomber" && state === "ready") sec = "×" + (bombMax() - bombsOf(me).length);   // ボマー: あと何個投げられるか
     }
   }
-  const key = [state, label, sec, Math.round(ratio * 50)].join("|");
+  const key = [state, label, sec, Math.round(ratio * 50), bg, wizHint].join("|");
   if (key === lastSk) return;
   lastSk = key;
   skBtn.dataset.state = state; skBtn.style.setProperty("--p", ratio.toFixed(3));
+  if (bg) skBtn.style.background = bg; else skBtn.style.removeProperty("background");
   skBtn.querySelector("b").textContent = label; skBtn.querySelector("i").textContent = sec;
   const wiz = sec && sec.startsWith("📖");                       // 魔法使い（数字は魔法書の耐久）
-  skHint.textContent = state === "none" ? "スキルなし" : "[X] " + label + (wiz ? (state === "ready" ? "  押すとため始める" : label === "詠唱" ? "" : "  もう一度押すと発射") + "  耐久 " + sec.slice(2) : sec && sec[0] === "×" ? (label === "ボム" ? "  あと " + sec.slice(1) + " 個" : "  矢 " + sec) : state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : label === "矢なし" ? "  1本回復するまで待つ" : "  あと " + sec + " 秒");
+  skHint.textContent = state === "none" ? "スキルなし" : "[X] " + label + (wiz ? (wizHint ? "  " + wizHint : "") + "  耐久 " + sec.slice(2) : sec && sec[0] === "×" ? (label === "ボム" ? "  あと " + sec.slice(1) + " 個" : "  矢 " + sec) : state === "ready" ? (sec ? "  円が消えるまで " + sec + " 秒" : "  準備OK") : state === "charge" ? "  ためて離す" : label === "矢なし" ? "  1本回復するまで待つ" : "  あと " + sec + " 秒");
 
 }
 
@@ -3475,7 +3531,9 @@ function fxEvent(e) {
   else if (k === "bc") Sfx.shieldCatch();          // 投げた盾を受け止めた
   else if (k === "bp") Sfx.shieldPass();           // 戻ってきた盾をかわした（後ろへ飛んでいく）
   else if (k === "bn") { Sfx.shieldCatch(); rings.push({ x, y, t: 0, max: 12, c: "#e2e8f0", r0: 6, sp: 3 }); }   // 盾がないまま 5 秒たって、新しい盾が出た
-  else if (k === "mgc") { Sfx.magicCast(f); rings.push({ x, y, t: 0, max: 12, c: (MAGIC[f - 1] || MAGIC[0]).col, r0: 34, sp: -2.4 }); }   // 魔法の詠唱（縮んでいく輪）
+  else if (k === "mgu") { Sfx.bookNew(); shake(4); rings.push({ x, y, t: 0, max: 16, c: MAGIC[3].col2, r0: 10, sp: 4 }); rings.push({ x, y, t: 0, max: 12, c: MAGIC[3].col, r0: 6, sp: 3 }); }   // 究極魔法までたまった（ためが自動で止まる）
+  else if (k === "mgc") {
+ Sfx.magicCast(f); rings.push({ x, y, t: 0, max: 12, c: (MAGIC[f - 1] || MAGIC[0]).col, r0: 34, sp: -2.4 }); }   // 魔法の詠唱（縮んでいく輪）
   else if (k === "mg") {                           // 魔法を撃った（e[4] = 段階）
     const M = MAGIC[f - 1] || MAGIC[0];
     Sfx.magic(f); if (f >= 4) { shake(8); flashA = Math.max(flashA, 0.25); }
@@ -3651,7 +3709,8 @@ function drawPlayer(p, i, me, now) {
   const dg = p.dz > 0 && p.al;
   if (dg) { cx.save(); cx.translate(0, p.y + PLH); cx.scale(1, 0.55); cx.translate(0, -(p.y + PLH)); }
   const spear = p.a > 0 && p.ak >= 2;                             // 槍兵が槍を前へ出している
-  drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear, gk: p.gk, bd: p.bd });
+  drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear, gk: p.gk, gq: p.gq, bd: p.bd });
+
   if (dg) cx.restore();
   if (p.slw > 0 && p.fz > 0 && p.al) {                            // 蜘蛛の糸がからんで、動けない
 
@@ -3739,18 +3798,30 @@ function drawPlayer(p, i, me, now) {
     for (let k = 0; k < 2; k++) { cx.beginPath(); cx.ellipse(p.x + PLW / 2, p.y + 18 + k * 24, PLW * 0.75, 7, 0, a + k * 3, a + k * 3 + 4.6); cx.stroke(); }
     cx.fillStyle = "rgba(74,222,128,0.12)"; cx.fillRect(p.x - 4, p.y - 4, PLW + 8, PLH + 8);
   }
-  // 魔法使い: ためている魔法（本の上の光の玉。段階で色と大きさが変わり、段階の数だけ小さな点が回る）/ 詠唱中は大きく光る
+  // 魔法使い: 魔法書の光（段階で色と大きさが変わる: 水色の小さい光 → 黄色の少し大きい光 → 赤紫の大きい光 → 黄色と青の雷をまとう大きい光）。
+  // ためが進んでいる間は、次の段階までの円が回る。止まっている間は光が少し暗い。詠唱中は大きく光る
   if ((p.mg > 0 || p.mc > 0) && p.al && chd.id === "wizard") {
-    const lv = p.mc > 0 ? Math.max(1, p.ml) : magicLv(p.mg), M = MAGIC[lv - 1];
-    const ox = p.f > 0 ? p.x + PLW + 2 : p.x - 2, oy = p.y + 24, r = 4 + 2 * lv + (p.mc > 0 ? 4 : 0) + Math.sin(now / 90) * 1.2;
-    cx.fillStyle = M.col; cx.globalAlpha = alpha * 0.35; cx.beginPath(); cx.arc(ox, oy, r * 1.9, 0, 6.2832); cx.fill();
-    cx.globalAlpha = alpha; cx.beginPath(); cx.arc(ox, oy, r, 0, 6.2832); cx.fill();
+    const lv = p.mc > 0 ? Math.max(1, p.ml) : magicLv(p.mg), M = MAGIC[lv - 1], on = p.mgr || p.mc > 0;
+    const ox = p.f > 0 ? p.x + PLW + 2 : p.x - 2, oy = p.y + 38, r = M.r + (p.mc > 0 ? 4 : 0) + Math.sin(now / 90) * (on ? 1.2 : 0.4);
+    const k0 = on ? 1 : 0.7;
+    cx.fillStyle = M.col; cx.globalAlpha = alpha * 0.3 * k0; cx.beginPath(); cx.arc(ox, oy, r * 2.2, 0, 6.2832); cx.fill();
+    cx.globalAlpha = alpha * k0; cx.beginPath(); cx.arc(ox, oy, r, 0, 6.2832); cx.fill();
     cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(ox, oy, r * 0.4, 0, 6.2832); cx.fill();
-    cx.fillStyle = M.col;
-    for (let k = 0; k < lv; k++) { const a = now / 200 + k * 6.2832 / lv; cx.beginPath(); cx.arc(p.x + PLW / 2 + Math.cos(a) * 30, p.y + PLH / 2 + Math.sin(a) * 36, 3, 0, 6.2832); cx.fill(); }
-    if (lv < MAGIC.length && p.mc === 0) {                         // 次の段階までの円
+    if (M.col2) {                                                   // 究極魔法: 黄色と青の稲妻が、光のまわりにぱちぱち走る（毎回形が変わる）
+      cx.lineWidth = 2; cx.globalAlpha = alpha;
+      for (let k = 0; k < 4; k++) {
+        cx.strokeStyle = k % 2 ? M.col : M.col2;
+        let a = Math.random() * 6.2832, x = ox + Math.cos(a) * r * 0.6, y = oy + Math.sin(a) * r * 0.6;
+        cx.beginPath(); cx.moveTo(x, y);
+        for (let j = 0; j < 3; j++) { x += Math.cos(a) * 9 + (Math.random() - 0.5) * 10; y += Math.sin(a) * 9 + (Math.random() - 0.5) * 10; cx.lineTo(x, y); }
+        cx.stroke();
+      }
+      cx.strokeStyle = M.col2; cx.globalAlpha = alpha * 0.5; cx.strokeRect(p.x - 3, p.y - 3, PLW + 6, PLH + 6);
+    }
+    cx.globalAlpha = alpha;
+    if (p.mgr && lv < MAGIC.length) {                               // 次の段階までの円（次の段階の色）
       const k = ((p.mg - 1) % MAGIC_STEP) / MAGIC_STEP;
-      cx.strokeStyle = MAGIC[lv].col; cx.lineWidth = 2; cx.beginPath(); cx.arc(ox, oy, r + 5, -Math.PI / 2, -Math.PI / 2 + 6.2832 * k); cx.stroke();
+      cx.strokeStyle = MAGIC[lv].col; cx.lineWidth = 2.5; cx.beginPath(); cx.arc(ox, oy, r + 6, -Math.PI / 2, -Math.PI / 2 + 6.2832 * k); cx.stroke();
     }
   }
   // ためている間のリングと、テレポートの行き先（スワッパーは円そのものを、別に描く）
@@ -3841,6 +3912,15 @@ function drawMagic(b, now) {
   cx.globalAlpha = 1; cx.beginPath(); cx.arc(b.x, b.y, r, 0, 6.2832); cx.fill();
   cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(b.x, b.y, r * 0.45, 0, 6.2832); cx.fill();
   if (lv === 3) { cx.strokeStyle = M.col; cx.lineWidth = 2; cx.beginPath(); cx.ellipse(b.x, b.y, 6, 14, now / 80, 0, 6.2832); cx.stroke(); }
+  if (M.col2) {                                                     // 究極魔法: 光線のまわりに黄色と青の稲妻
+    cx.lineWidth = 2;
+    for (let k = 0; k < 2; k++) {
+      cx.strokeStyle = k ? M.col : M.col2; cx.beginPath();
+      let x = b.x, y = b.y; cx.moveTo(x, y);
+      for (let j = 0; j < 5; j++) { x -= d * 16; y = b.y + (Math.random() - 0.5) * 22; cx.lineTo(x, y); }
+      cx.stroke();
+    }
+  }
   cx.restore();
 }
 function drawThrownShield(b) {                     // ブーメラン使いが投げた盾（回りながら飛ぶ。縁は持ち主の色）
@@ -4051,7 +4131,7 @@ function classicView() {
   let top = portrait ? PY - 320 : VIEW_TOP;
   for (const p of game.p) if (p && p.c && p.al) top = Math.min(top, p.y - 30);    // いちばん高い人の頭（名前の分の余白つき）まで映す
   camTop += (top - camTop) * (top < camTop ? 0.2 : 0.08);
-  return { s: Math.min(cw / (VIEW_W * (game.nf >= 3 ? WIDE_SCALE : 1)), ch / (VIEW_BOTTOM - camTop)), x: CENTER_X, y: (camTop + VIEW_BOTTOM) / 2 };   // 3〜4 人のステージは広いので、そのぶん広く映す
+  return { s: Math.min(cw / (VIEW_W * WIDE_SCALE), ch / (VIEW_BOTTOM - camTop)), x: CENTER_X, y: (camTop + VIEW_BOTTOM) / 2 };   // ステージは人数によらず 1.2 倍の幅なので、そのぶん広く映す
 }
 function classicCam(fs, dt) {                        // 基本の映し方の外へ出た人がいたら、その人が映るまで広げる（出ていなければ基本のまま）
   const base = classicView(), hw = cw / base.s / 2, hh = ch / base.s / 2;
