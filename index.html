@@ -16,6 +16,9 @@
 <title>シールドファイト</title>
 <style>
   html,body{margin:0;height:100%;background:#111827;color:#e5e7eb;font-family:system-ui,"Yu Gothic",sans-serif;overflow:hidden}
+  /* iPhone の Safari は user-scalable=no を無視するので、ボタンやその間をすばやく 2 回たたくと拡大されてしまう。manipulation で、どこでもダブルタップの拡大をしない（スクロールはできる） */
+  html,body{touch-action:manipulation}
+  #cv{touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   :root{--b:min(21vw,92px);--g:8px;--sh:124px}   /* 操作ボタンの大きさ / ボタン同士のすき間 / 下のプレイヤー情報の高さ（縦持ちで固定） */
   /* 画面構成: 上=戦闘画面 / 中=操作ボタン（スマホのみ）/ 下=プレイヤー情報 */
   #wrap{position:relative;display:flex;flex-direction:column;width:100%;height:100vh;height:100dvh}
@@ -134,7 +137,7 @@
   #touch{display:none;flex:none;justify-content:space-between;align-items:flex-end;box-sizing:border-box;padding:0 16px calc(20px + env(safe-area-inset-bottom));pointer-events:none}
   #touch>div{pointer-events:auto}
   #dpad{display:flex;gap:10px}
-  .tb{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;width:var(--b);height:var(--b);background:rgba(255,255,255,.18);border-radius:18px;font-size:calc(var(--b)*.38);user-select:none;-webkit-user-select:none;touch-action:none}
+  .tb{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;width:var(--b);height:var(--b);background:rgba(255,255,255,.18);border-radius:18px;font-size:calc(var(--b)*.38);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
   .tb:active{background:rgba(255,255,255,.35)}
   #rbtns{position:relative;width:calc(var(--b)*2 + var(--g));height:calc(var(--b) + (var(--b) + var(--g))*.866)}
   #rbtns .tb{position:absolute;border-radius:50%}
@@ -559,6 +562,11 @@ let role = null;         // "host" | "client"
 let myId = -1;           // 自分のスロット番号
 let peer = null, conns = [];   // host: conns[slot]
 let hostConn = null, hostTimer = null;
+// 速い通り道（fast）: スナップショットと入力だけを、順番待ちをしない接続で送る。順番どおりの接続だと、1 つ届き直すのを待つ間、後ろの新しいスナップショットまで止まってカクつくため。
+// 順番が入れ替わって届くことがあるので、番号（q）を付けて古いものは捨てる。開けなかったときは、ふつうの接続（conns / hostConn）で送る
+let fastConns = [], fastConn = null;
+let snapQ = 0, lastSnapQ = 0, pauseQ = 0, inQ = 0;
+const inQs = [0, 0, 0, 0];                     // ホスト側: 参加者ごとに、最後に使った入力の番号
 let roomCode = "";
 let net = "idle";        // idle | connecting | ready | error
 let netMsg = "";
@@ -691,6 +699,10 @@ const teamWord = t => TEAM_NAMES[t] + "チーム";
 //   ["bp",x,y] 戻ってきた盾をかわした / ["bn",x,y] 新しい盾が出た / ["mgc",x,y,向き,段階] 詠唱 / ["mg",x,y,向き,段階] 魔法を撃った / ["mx",x,y,段階] 魔法が消えた
 //   ["mbn",x,y,向き] 拘束魔法が当たった / ["mbx",x,y] 拘束が解けた / ["bkx",x,y] 魔法書が壊れた / ["bkn",x,y] 新しい魔法書
 let evq = [];
+// 送った出来事は、続く 5 回のスナップショットにも入れ直す（速い通り道では古いスナップショットを捨てるので、その中の出来事も届くように）。
+// evTotal: これまでに送った出来事の数。各スナップショットの e1 に入れ、参加者はまだ鳴らしていない番号のものだけを鳴らす
+const evHist = [];
+let evTotal = 0, lastEv = 0;
 function emit(...e) {
   if (game.ph === "lobby") return;
   evq.push(e.map(v => typeof v === "number" ? Math.round(v * 10) / 10 : v));
@@ -2420,7 +2432,12 @@ function snapshot() {
     mn: game.mn.map(m => [r1(m.x), r1(m.y), r1(m.vx), r1(m.vy), m.f, m.a, m.t, m.own]),          // ゴブGの手下: 位置・速度・向き・斬りの経過・経過・持ち主
     wd: game.wd.map(w => [r1(w.x), r1(w.y), w.w, w.h, w.d, w.t, w.own]),
     rm: game.rm.map(m => [r1(m.x), r1(m.y), r1(m.r), m.t, m.own]) };
-  if (evq.length) s.ev = evq.splice(0);        // 前回の送信以降に起きた効果音・演出のきっかけ
+  const fresh = evq.splice(0);                // 前回の送信以降に起きた効果音・演出のきっかけ
+  evHist.push(fresh); if (evHist.length > 6) evHist.shift();   // 直近 6 回ぶん（約 0.1 秒）
+  evTotal += fresh.length;
+  const ev = [].concat(...evHist);
+  if (ev.length) s.ev = ev;
+  s.e1 = evTotal; s.q = ++snapQ;
   return s;
 }
 
@@ -2443,11 +2460,23 @@ function hostLoop() {
     hostAcc -= STEP_MS; n++;
     held[0] = myKeys;
     for (let i = 0; i < MAX_PLAYERS; i++) { inputs[i] = held[i] | latch[i]; latch[i] = 0; }
-    hostTick();
-    if (++tickCount % 2 === 0) {
-      if (conns.some(c => c && c.open)) { const snap = snapshot(); for (const c of conns) if (c && c.open) c.send(snap); }
-      else evq.length = 0;                   // 参加者がいない（CPU 戦など）ときは、出来事をためない
+    hostTick(); tickCount++;
+  }
+  // スナップショットは、計算を進めたら毎回送る（1 秒に最大 60 回。2026-10-17 までは計算 2 回に 1 回 = 30 回）。まとめて計算したときも 1 回だけ
+  if (n > 0) {
+    if (conns.some(c => c && c.open)) {
+      const snap = snapshot(), str = JSON.stringify(snap);   // 文字にするのは 1 回だけ（全員に同じものを送る）
+      for (let i = 0; i < MAX_PLAYERS; i++) {
+        const c = conns[i], f = fastConns[i];
+        if (!c || !c.open) continue;
+        if (f && f.open && str.length < 60000) {
+          // 送り切れずにたまっている（回線が詰まっている）参加者には、今回は送らない。次の新しいものが届けば足りるので、たまったぶんの遅れを増やさない
+          if ((f.dataChannel && f.dataChannel.bufferedAmount > 32000) || f.bufferSize > 0) continue;
+          f.send(str);
+        } else c.send(snap);
+      }
     }
+    else evq.length = 0;                   // 参加者がいない（CPU 戦など）ときは、出来事をためない
   }
   if (n >= 4) hostAcc = Math.min(hostAcc, STEP_MS);   // 大きく遅れたとき（端末が重い等）は、追いつこうとしない
   if (game.ph !== lastPh) { lastPh = game.ph; renderUI(); }
@@ -2510,9 +2539,10 @@ function goTitle() {
   sessionId++;
   clearInterval(hostTimer); hostTimer = null;
   const quiet = o => { try { if (o) { if (o.removeAllListeners) o.removeAllListeners(); if (o.close) o.close(); } } catch (e) {} };   // 切れたときの処理（エラー表示など）を先に外してから切る
-  conns.forEach(quiet); quiet(hostConn);
+  conns.forEach(quiet); quiet(hostConn); fastConns.forEach(quiet); quiet(fastConn);
   try { if (peer) { if (peer.removeAllListeners) peer.removeAllListeners(); peer.destroy(); } } catch (e) {}
-  peer = null; conns = []; hostConn = null; hostTries = 0;
+  peer = null; conns = []; hostConn = null; fastConns = []; fastConn = null; hostTries = 0;
+  lastSnapQ = 0; pauseQ = 0; lastEv = 0; evHist.length = 0;
   role = null; myId = -1; net = "idle"; netMsg = ""; roomCode = ""; solo = false; training = false;
   document.body.classList.remove("solo");
   game.p = [null, null, null, null]; game.ph = "lobby"; game.tm = 0; game.win = -1; game.nf = 0; game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0; game.hsf = false;
@@ -2537,6 +2567,20 @@ function startHost() {
     net = "error"; netMsg = "接続エラー: " + e.type; renderUI();
   });
   peer.on("connection", conn => {
+    if (conn.metadata && conn.metadata.f) {  // 参加者が、入ったあとに開く速い通り道（同じ相手のふつうの接続がある席に結びつける）
+      conn.on("open", () => {
+        const slot = conns.findIndex(c => c && c.open && c.peer === conn.peer);
+        if (slot < 0) { try { conn.close(); } catch (e) {} return; }
+        fastConns[slot] = conn;
+        conn.on("data", s => {
+          if (typeof s !== "string" || fastConns[slot] !== conn) return;
+          let d; try { d = JSON.parse(s); } catch (e) { return; }
+          if (d && d.t === "in") takeInput(slot, d);
+        });
+        conn.on("close", () => { if (fastConns[slot] === conn) fastConns[slot] = null; });
+      });
+      return;
+    }
     conn.on("open", () => {
       let slot = -1;
       for (let i = 1; i < MAX_PLAYERS; i++) if (!game.p[i] || !game.p[i].c) { slot = i; break; }
@@ -2545,19 +2589,30 @@ function startHost() {
       const p = newPlayer(); p.own = slot; game.p[slot] = p;
       spawn(p, slot, connectedSlots().length);
       p.al = game.ph === "lobby";            // 試合中の参加は、キャラを選んで次のラウンドから
-      inputs[slot] = held[slot] = latch[slot] = 0;
+      inputs[slot] = held[slot] = latch[slot] = inQs[slot] = 0;
+      if (fastConns[slot]) { try { fastConns[slot].close(); } catch (e) {} fastConns[slot] = null; }
       conn.send({ t: "hello", id: slot });
-      if (document.hidden) conn.send({ t: "pause", v: 1 });
+      if (document.hidden) conn.send({ t: "pause", v: 1, q: snapQ });
       renderUI();
       conn.on("data", d => {
         if (!d) return;
-        if (d.t === "in") { held[slot] = d.k & 63; latch[slot] |= held[slot]; }
+        if (d.t === "in") takeInput(slot, d);
         else if (d.t === "prof") { applyProfile(p, sanitizeProfile(d)); renderUI(); }
         else if (d.t === "unprof") { if (canEdit(p)) p.rd = false; renderUI(); }
       });
-      conn.on("close", () => { if (conns[slot] === conn) { game.p[slot].c = false; game.p[slot].al = false; conns[slot] = null; renderUI(); } });
+      conn.on("close", () => {
+        if (conns[slot] !== conn) return;
+        game.p[slot].c = false; game.p[slot].al = false; conns[slot] = null;
+        if (fastConns[slot]) { try { fastConns[slot].close(); } catch (e) {} fastConns[slot] = null; }
+        renderUI();
+      });
     });
   });
+}
+// 参加者の入力。番号（q）が前に使ったもの以下なら、遅れて届いた古い入力なので使わない（番号のない古い版の参加者は、届いた順に使う）
+function takeInput(slot, d) {
+  if (d.q !== undefined) { const q = Number(d.q); if (!(q > inQs[slot])) return; inQs[slot] = q; }
+  held[slot] = d.k & 63; latch[slot] |= held[slot];
 }
 
 function startClient(code) {
@@ -2568,15 +2623,29 @@ function startClient(code) {
     hostConn = peer.connect(PREFIX + code, { reliable: true });
     hostConn.on("data", d => {
       if (!d) return;
-      if (d.t === "hello") { myId = d.id; net = "ready"; renderUI(); }
+      if (d.t === "hello") { myId = d.id; net = "ready"; renderUI(); openFast(code, sid); }
       else if (d.t === "full") { net = "error"; netMsg = "この部屋は満員です（最大4人）"; renderUI(); }
       else if (d.t === "s") applySnapshot(d);
-      else if (d.t === "pause") { hostPause = !!d.v; }               // ホストが画面を離れた / 戻った
+      else if (d.t === "pause") { hostPause = !!d.v; if (d.v) pauseQ = d.q | 0; }   // ホストが画面を離れた / 戻った
     });
     hostConn.on("close", () => { net = "error"; netMsg = "ホストとの接続が切れました"; renderUI(); });
     setTimeout(() => { if (sid === sessionId && net === "connecting") { net = "error"; netMsg = "部屋が見つかりません（番号を確認してください）"; renderUI(); } }, 10000);
   });
   peer.on("error", e => { net = "error"; netMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（ホストが閉じたか、番号が違います）" : "接続エラー: " + e.type; renderUI(); });
+}
+// 参加者側: 速い通り道を開く（開けなくても、ふつうの接続のまま遊べる）
+function openFast(code, sid) {
+  if (fastConn || !peer) return;
+  try { fastConn = peer.connect(PREFIX + code, { reliable: false, serialization: "raw", metadata: { f: 1 } }); } catch (e) { fastConn = null; return; }
+  const fc = fastConn;
+  fc.on("open", () => { if (sid === sessionId) { sentKeys = -1; pushKeys(); } });
+  fc.on("data", s => {
+    if (sid !== sessionId || typeof s !== "string") return;
+    let d; try { d = JSON.parse(s); } catch (e) { return; }
+    if (d && d.t === "s") applySnapshot(d);
+  });
+  fc.on("error", () => {});
+  fc.on("close", () => { if (fastConn === fc) fastConn = null; });
 }
 
 function readEnt(p, n) {                                     // スナップショットの内容を、見た目用の状態に反映する
@@ -2597,12 +2666,17 @@ function readEnt(p, n) {                                     // スナップシ�
   if (n.ch !== undefined) p.ch = n.ch;
 }
 function applySnapshot(s) {
-  hostPause = false;                                                   // スナップショットが届くのは、ホストが動いているとき（一時停止の知らせの取りこぼし対策）
+  if (s.q !== undefined) { if (s.q <= lastSnapQ) return; lastSnapQ = s.q; }   // 遅れて届いた古いスナップショットは捨てる（中の出来事は、次の 5 回にも入っている）
+  if (s.q === undefined || s.q > pauseQ) hostPause = false;           // スナップショットが届くのは、ホストが動いているとき（一時停止の知らせの取りこぼし対策。止まる前に送られたものが、知らせより後に届いた場合は除く）
   const phChanged = game.ph !== s.ph;
   game.ph = s.ph; game.tm = s.tm; game.win = s.win; game.wt = s.wt | 0; game.nf = s.nf | 0; game.rt = s.rt | 0; game.sd = s.sd | 0; game.hsf = !!s.hs;
   const wrChanged = game.wr !== sanitizeRounds(s.wr);                 // 古い版のホストは wr を送らない（標準の 3 本先取として扱う）
   game.wr = sanitizeRounds(s.wr);
-  if (s.ev && !document.hidden) for (const e of s.ev) fxEvent(e);   // 自分が裏にいる間は、効果音や演出をためない
+  if (s.ev && !document.hidden) {                                      // 自分が裏にいる間は、効果音や演出をためない
+    const first = s.e1 === undefined ? -Infinity : s.e1 - s.ev.length;   // s.ev[0] の番号（古い版のホストは番号がないので、全部鳴らす）
+    s.ev.forEach((e, j) => { if (first + j >= lastEv) fxEvent(e); });
+  }
+  if (s.e1 !== undefined) lastEv = Math.max(lastEv, s.e1);
   for (let i = 0; i < MAX_PLAYERS; i++) {
     const n = s.p[i];
     if (!n) { game.p[i] = null; continue; }
@@ -2643,7 +2717,9 @@ function recalcKeys() {
 }
 function pushKeys() {
   if (role === "client" && hostConn && hostConn.open && sentKeys !== myKeys) {
-    hostConn.send({ t: "in", k: myKeys }); sentKeys = myKeys;
+    const m = { t: "in", k: myKeys, q: ++inQ };
+    if (fastConn && fastConn.open) fastConn.send(JSON.stringify(m)); else hostConn.send(m);
+    sentKeys = myKeys;
   }
 }
 addEventListener("keydown", e => {
@@ -2664,7 +2740,7 @@ function onVisibility() {
   down.clear(); myKeys = 0; held[0] = 0; latch[0] = 0; sentKeys = -1; pushKeys();
   hostLast = 0; hostAcc = 0;
   if (hid) Sfx.suspend(); else Sfx.resume();
-  if (role === "host") for (const c of conns) if (c && c.open) { try { c.send({ t: "pause", v: hid ? 1 : 0 }); } catch (e) {} }
+  if (role === "host") for (const c of conns) if (c && c.open) { try { c.send({ t: "pause", v: hid ? 1 : 0, q: snapQ }); } catch (e) {} }
 }
 document.addEventListener("visibilitychange", onVisibility);
 document.querySelectorAll(".tb").forEach(el => {
@@ -3461,6 +3537,15 @@ const paintMute = () => { muteBtn.textContent = Sfx.muted ? "🔇" : "🔊"; };
 muteBtn.onclick = () => { Sfx.init(); Sfx.setMuted(!Sfx.muted); paintMute(); Sfx.beep(false); muteBtn.blur(); };
 paintMute();
 ["pointerdown", "touchend", "click", "keydown"].forEach(ev => addEventListener(ev, () => Sfx.init(), { passive: true }));
+// iPhone の拡大を止める（CSS の touch-action が効かない古い iOS の分も）: 2 本指でつまむ拡大と、操作ボタン・ゲーム画面の上でのダブルタップ。
+// 操作ボタンは pointer のイベントで動くので、touchend を止めても押せる（メニューのボタンは click で動くので、ここでは止めない）
+["gesturestart", "gesturechange"].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+let lastTouchEnd = 0;
+document.addEventListener("touchend", e => {
+  const now = performance.now();
+  if (now - lastTouchEnd < 350 && e.target.closest && e.target.closest(".tb, #cv")) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
 
 // 全画面: スマホのブラウザはアドレスバーを消せないので、全画面の機能（Android・iPad の Chrome など）でゲームを画面いっぱいにする。
 // iPhone はこの機能がないので、「ホーム画面に追加」から開いてもらう（<head> の apple-mobile-web-app-capable で、アドレスバーなしで起動する）。
