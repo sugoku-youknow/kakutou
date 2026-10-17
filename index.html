@@ -494,8 +494,8 @@ const UP_FRAMES = 480, UP_BONUS = 1;
 // 臭い息は、吐いた場所に雲として 1.5 秒残る（天狗の風の場のように動かない）。雲に入った敵は、入った瞬間から 1.5 秒動けず、雲の中にいる間 0.25 秒ごとに 2% のダメージ（1 秒に 8%）
 const BREATH_W = 160, BREATH_H = 80, BREATH_LIFE = 90, BREATH_STUN = 90, BREATH_TICK = 15, BREATH_DOT = 2;   // 雲の幅（体の前から）/ 高さ / 残る時間 / 動けない時間 / ダメージの間隔 / 1 回のダメージ（%）
 const CIG_EVERY = 180, CIG_MAX = 3, CIG_LIFE = 900, CIG_HALF = 9, CIG_SLOW = 480, CIG_SLOW_BY = 1;   // 出る間隔（3 秒）/ 同時に出ている数 / 残る時間（15 秒）/ 拾う判定の幅（半分）/ （2026-10-17〜18 の、敵が拾ったときのスピード低下。今は使わない）
-// ヤニ猫の禁断症状（2026-10-18）: 最後にタバコを拾ってから CIG_WD（3 秒）たつと、全性能 −2 と、CIG_WD_TICK フレームごとに 1% のダメージ（1 秒に 5%）。拾うと治って、また 3 秒数え直す
-const CIG_WD = 180, CIG_WD_BY = 2, CIG_WD_TICK = 12;
+// ヤニ猫の禁断症状（2026-10-18）: 口のタバコは CIG_WD（5 秒）で吸い切る。持っている（ストックの）タバコがあれば、すぐ次に火をつける。なければ、全性能 −2 と、CIG_WD_TICK フレームごとに 1% のダメージ（1 秒に 5%）。拾うと治って、また 3 秒数え直す
+const CIG_WD = 300, CIG_WD_BY = 2, CIG_WD_TICK = 12, CIG_STOCK = 5;   // 2026-10-18 に 3 秒 → 5 秒。CIG_STOCK: 吸っている最中に拾ったタバコを持っておける本数（吸い切ったら次に火をつける）
 // 吸血鬼（2026-10-18）: 吸血は、体の前 VAMP_REACH の敵に噛みつく（盾・騎士のカウンターの構えは効かない）。与える % = VAMP_BASE + 相手の % × VAMP_PCT、同じだけ自分の % が減る。
 // 吹っ飛ばしは通常攻撃の VAMP_FRAC 倍。空振りしたときのクールタイムは VAMP_WHIFF。羽: 二段ジャンプが、スピード VAMP_AIR_S の地上ジャンプと同じ高さ
 const VAMP_REACH = 44, VAMP_BASE = 8, VAMP_PCT = 0.2, VAMP_FRAC = 0.5, VAMP_WHIFF = 120, VAMP_AIR_S = 4;
@@ -506,6 +506,7 @@ const hwC = hw => Math.min(1, hw / HW_MAX), hwR = c => 8 + 12 * c, hwV = c => 7 
 // 勝負師（2026-10-18）: ハンマーの出目（1〜5）。1: 当たっても何も起きず自分に HM_SELF % / 2: 通常攻撃 / 3: 通常攻撃＋自分の % を HM_HEAL 回復 / 4: 盾を壊し、HM_BIND 動けなくして HM_DMG4 % / 5: 盾を壊し、HM_FRAC5 倍で吹っ飛ばす
 const HM_SELF = 20, HM_HEAL = 8, HM_BIND = 60, HM_DMG4 = 10, HM_FRAC5 = 2;
 const withdrawn = p => !p.isClone && (p.cw | 0) > CIG_WD;
+const cigLeft = p => Math.max(0, 1 - (p.cw | 0) / CIG_WD);   // 口のタバコの残り（1 = 火をつけたばかり、0 = 吸い切った）
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
 // メインステージの端から 500px、足場の面から 300px の余裕を持たせる（以前は 340px / 260px で、飛ばされるとすぐ撃墜された）。左右はキャラの中心、下は頭の位置で判定する
 const KO_MARGIN = 500, KO_BOTTOM = 300;
@@ -574,7 +575,7 @@ const CHARS = [
     skill: { name: "ヤク", cd: 2, text: "前に注射器を落とす（2本まで）。触れた敵は3秒間、画面が揺れて見にくくなる。自分で拾うと8秒間、ランダムな性能1つが+1（重ねられる）" } },
   { id: "yani", name: "ヤニ猫", A: 4, D: 3, S: 4, tag: "臭い息で足止め。タバコで強くなる",
     skill: { name: "臭い息", cd: 6, text: "前方に臭い息の雲を1.5秒残す。入った敵は1.5秒動けず、中にいる間ダメージを受ける（盾は効かない）" },
-    auto: "ステージにタバコが出る（3秒ごと、3本まで）。3秒拾わないと禁断症状（全性能-2・1秒に5%のダメージ）。拾うと治る。敵も拾って消せる" },
+    auto: "ステージにタバコが出る（3秒ごと、3本まで）。口のタバコは5秒で吸い切り、なくなると禁断症状（全性能-2・1秒に5%のダメージ）。吸っている間に拾うと5本までストックでき、吸い切ると次に火がつく。敵も拾って消せる" },
   // 26〜28 体目（必ず末尾に足す）
   { id: "vamp", name: "吸血鬼", A: 3, D: 1, S: 4, tag: "盾ごと噛みついて、相手の%を吸い取る",
     skill: { name: "吸血", cd: 7, text: "前の敵に噛みつく（盾・カウンター無視）。8%＋相手の%の20%を与え、同じだけ自分の%が回復する" },
@@ -702,7 +703,7 @@ function newPlayer() {
            mb: 0, mbo: -1, mbv: null,                   // 拘束魔法で動けない残り / かけた魔法使いのスロット / その間に魔法使いから受けた吹っ飛びの合計（ホストだけ）
            dm: 0,                                       // 蓄積ダメージ（%）
            hw: 0, hwr: 0, hwh: [], hmN: 0,              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
-           ub: 0, nc: 0, dr: 0, st: 0, cw: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
+           ub: 0, nc: 0, dr: 0, st: 0, cw: 0, cs: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
            yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
@@ -817,7 +818,7 @@ function spawn(p, slot, n, battle) {
   p.yr = 0; p.yrc = 0; p.yry = 0; p.yrvy = 0; p.yrg = false;
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
-  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0;
+  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -1040,7 +1041,7 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwN = 0; p.rwE = null; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own));                    // 投げていた盾（何枚あっても）は消えて、手元に戻る
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.mb = 0; p.mbv = null;                                                    // 魔法使い: ためと詠唱は取り消し（魔法書の耐久はそのまま）
-  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.hw = 0; p.hwr = 0; p.hwh = [];   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
+  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = [];   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
 
   for (const cb of cbsOf(p)) removeCb(cb);                                                       // クロス使い: 置いたクロスボウは（2 台あっても）全部消える
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;                                                       // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
@@ -1661,6 +1662,7 @@ function physics(p, inp, neutral) {
   if (p.ub > 0) p.ub--;
   if (chd.id === "yani" && !p.isClone && !neutral && game.ph === "play") {   // ヤニ猫: タバコを拾わない時間を数え、3 秒を超えたら禁断症状（ダメージ）
     p.cw = Math.min(CIG_WD + 600, (p.cw | 0) + 1);
+    if (p.cw >= CIG_WD && (p.cs | 0) > 0) { p.cs--; p.cw = 0; emit("cgl", ecx(p) + p.f * 26, p.y + 28); }   // 吸い切った: 持っているタバコに火をつける
     if (p.cw > CIG_WD && (p.cw - CIG_WD) % CIG_WD_TICK === 0) addDmg(p, 1);
   }
   if (p.yb && p.yb.length) {                     // ヤク猫の注射器の強化: 1 つずつ時間が減り、切れたものから消える
@@ -2184,6 +2186,32 @@ function updateFlowers(list) {
   }
 }
 
+// ---- 体の当たり判定（2026-10-18）: やわらかく押し合う ----
+// 体が横に重なった 2 人（分身も）を、毎フレーム重なりの PUSH_K 倍（最大 PUSH_MAX px）ずつ左右へ離す。走り抜けようとすると、相手はわずかに押されるが、自分は通り抜けられる。
+// 上から乗っても止まらず（体の上には立てない）、横へずれて落ちる。吹っ飛ばされている人・透過中・復活直後・巻き戻し中・つかまれている人・糸で動いている人には働かない（吹っ飛びが人に当たって弱まらない）。
+// 地上の人は、立っている足場の端から外へは押し出さない
+const PUSH_K = 0.12, PUSH_MAX = 0.9, PUSH_W = 0.85;   // 押す強さ / 1 フレームに押す上限 / 体の幅のうち、重なりとみなす割合（少しの重なりは許す）
+function softPush() {
+  const list = ents().filter(e => e.s === 0 && e.gh === 0 && e.iv === 0 && e.rw === 0 && e.hd === 0 && e.yk === 0 && e.wb === 0 && !(e.gr > 0 && e.grT));
+  const pls = platforms();
+  const nudge = (e, dx) => {
+    if (e.ground) {                                    // 足場の端から外へは押さない
+      const cxp = ecx(e), pl = pls.find(q => Math.abs(e.y + phOf(e) - q.y) < 2 && cxp >= q.x && cxp <= q.x + q.w);
+      if (pl) { const lo = pl.x + 4 - cxp, hi = pl.x + pl.w - 4 - cxp; dx = Math.max(Math.min(0, lo), Math.min(Math.max(0, hi), dx)); }
+    }
+    e.x += dx;
+  };
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const a = list[i], b = list[j];
+    const dyo = Math.min(a.y + phOf(a), b.y + phOf(b)) - Math.max(a.y, b.y);
+    if (dyo < 6) continue;                              // 高さがほとんど重ならない
+    const dx = ecx(b) - ecx(a), ov = (pwOf(a) + pwOf(b)) / 2 * PUSH_W - Math.abs(dx);
+    if (ov <= 0) continue;
+    const sgn = dx !== 0 ? Math.sign(dx) : (a.own <= b.own ? 1 : -1), m = Math.min(PUSH_MAX, ov * PUSH_K);
+    nudge(a, -sgn * m); nudge(b, sgn * m);
+  }
+}
+
 // ---- ヤク猫の注射器・ヤニ猫の臭い息とタバコ ----
 // 地面の小さな置き物（注射器・タバコ。足もとの中心 x・足場の面 y、横 ±half・高さ 12px）に、体が重なっているか
 const touchesItem = (e, x, y, half) => e.x < x + half && e.x + pwOf(e) > x - half && e.y < y && e.y + phOf(e) > y - 12;
@@ -2267,7 +2295,12 @@ function updateCigs(list) {
     if (++c.t > CIG_LIFE || !itemOnPlatform(c.x, c.y)) { game.cg.splice(i, 1); continue; }
     for (const e of list) {
       if (e.isClone || !e.al || untouchable(e) || !touchesItem(e, c.x, c.y, CIG_HALF)) continue;
-      if (chOf(e).id === "yani") { e.cw = 0; game.cg.splice(i, 1); emit("cgu", c.x, c.y, 1); break; }         // ヤニ猫: 禁断症状が治り、また 3 秒数え直す
+      if (chOf(e).id === "yani") {                                                                             // ヤニ猫: 禁断症状なら、すぐ火をつけて治る。吸っている最中なら、ストックに足す（いっぱいなら拾わない）
+        if (withdrawn(e)) { e.cw = 0; emit("cgl", ecx(e) + e.f * 26, e.y + 28); }
+        else if ((e.cs | 0) < CIG_STOCK) e.cs = (e.cs | 0) + 1;
+        else continue;
+        game.cg.splice(i, 1); emit("cgu", c.x, c.y, 1); break;
+      }
       if (!yanis.some(y => !ally(y.own, e.own))) continue;                                                     // ヤニ猫の味方は拾わない（素通り）
       game.cg.splice(i, 1); emit("cgu", c.x, c.y, 0); break;                                                   // 敵: 拾って消せる（敵には何も起きない。2026-10-18 から）
     }
@@ -2522,10 +2555,10 @@ function aiThink(c, owner, pls, B) {
     return inp;
   }
   // 1.5) ヤニ猫: 同じ高さにタバコがあり、禁断症状が近い（拾ってから 1 秒以上たった）なら、取りに行く（敵がすぐそばにいるときは、禁断症状の直前まで戦う）
-  if (id === "yani" && !c.isClone && c.ground && game.cg.length && (c.cw | 0) > 60) {
+  if (id === "yani" && !c.isClone && c.ground && game.cg.length && (c.cs | 0) < 2 && ((c.cw | 0) > 60 || !c.cs)) {
     let best = null, bd = 1e9;
     for (const g of game.cg) { if (Math.abs(g.y - feet) > 4) continue; const d = Math.abs(g.x - ccx); if (d < bd) { bd = d; best = g; } }
-    if (best && bd < 450 && (!t || Math.abs(ecx(t) - ccx) > 80 || (c.cw | 0) > CIG_WD - 40)) { steer(best.x); return inp; }
+    if (best && bd < 450 && (!t || Math.abs(ecx(t) - ccx) > 80 || ((c.cw | 0) > CIG_WD - 40 && !c.cs))) { steer(best.x); return inp; }
   }
   // 2) 狙える敵がいない
   if (!t) {
@@ -2678,6 +2711,7 @@ function hostTick() {
     if (game.hs > 0) { game.hs--; return; }                // ヒットストップ中は全員の動きを止める
     for (const i of slots) { const p = game.p[i]; if (p.cpu) inputs[i] = p.al && !training ? aiInput(p, null, AI_LEVELS[p.cpuLv] || AI_LEVELS[1]) : 0; }   // CPU の頭脳（トレーニングの相手は何も押さない）
     for (const i of slots) physics(game.p[i], inputs[i], false);
+    softPush();
     for (const i of slots) tickClone(i);
     for (const i of slots) { const p = game.p[i]; if (p.yr && !p.al) yureiStep(p, inputs[i]); }   // 幽霊（足場の上を歩く）
     const list = ents();
@@ -2746,6 +2780,7 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.ub > 0) o.ub = p.ub;                                  // タバコの全性能 +1 の残り
   if (p.ybt > 0) { o.yb = p.ybs.slice(); o.ybt = p.ybt; }
   if (p.cw) o.cw = p.cw;
+  if (p.cs) o.cs = p.cs;                                      // ヤニ猫: 持っているタバコの本数
   if (p.hw) { o.hw = p.hw; if (p.hwr) o.hwr = 1; }             // 波動士のため量（ためが進んでいれば hwr）
   if (p.a > 0 && p.ak === 4) o.hn = p.hmN;                     // 勝負師: 振っているハンマーの出目                                      // ヤニ猫: 最後にタバコを拾ってからのフレーム（禁断症状の表示と性能用）      // ヤク猫の注射器: 性能ごとの上乗せ（攻撃・防御・スピード）と、いちばん長い残り
   if (p.nc > 0) o.nc = p.nc;                                  // 敵のタバコでスピード −1 の残り
@@ -3024,7 +3059,7 @@ function readEnt(p, n) {                                     // スナップシ�
     if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
   }
   p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
-  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0;
+  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0;
   p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
@@ -3475,12 +3510,37 @@ function deco(c, id, x, y, f, o) {
       c.fillStyle = "#94a3b8"; c.fillRect(f > 0 ? sx - 3 : sx + 14, y + 41, 3, 3);
       c.strokeStyle = "#cbd5e1"; c.beginPath(); c.moveTo(f > 0 ? sx + 14 : sx, y + 42.5); c.lineTo(f > 0 ? sx + 20 : sx - 6, y + 42.5); c.stroke();
     } else {
-      const tx = f > 0 ? x + 32 : x - 4;
-      c.fillStyle = "#f8fafc"; c.fillRect(tx, y + 27, 12, 3);
-      c.fillStyle = "#f97316"; c.fillRect(f > 0 ? tx + 10 : tx, y + 27, 2, 3);
-      const t = performance.now() / 400, sx = f > 0 ? tx + 12 : tx;
-      c.strokeStyle = "rgba(203,213,225,0.6)"; c.lineWidth = 1.5; c.beginPath(); c.moveTo(sx, y + 27);
-      c.quadraticCurveTo(sx + 5 * Math.sin(t), y + 20, sx + 2 * Math.sin(t + 1), y + 12); c.stroke();
+      // 口のタバコ: 吸うほど短くなる（o.left: 残り 0〜1。選択画面では 1）。茶色のフィルターは残り、白い紙が燃えて縮み、先が赤く光って灰が付く
+      const now = performance.now(), left = o.left === undefined ? 1 : o.left, wd = !!o.wd;
+      const fx = f > 0 ? x + 31 : x + 9, d = f > 0 ? 1 : -1;      // フィルターの口側の端
+      if (!wd) {
+        const len = 2 + 12 * left, tip = fx + d * (4 + len);
+        c.fillStyle = "#d97706"; c.fillRect(Math.min(fx, fx + d * 4), y + 27, 4, 3);
+        c.fillStyle = "#f8fafc"; c.fillRect(Math.min(fx + d * 4, tip), y + 27, len, 3);
+        c.fillStyle = "#9ca3af"; c.fillRect(Math.min(tip, tip + d * 2), y + 27, 2, 3);                  // 灰
+        c.fillStyle = Math.floor(now / 180) % 2 ? "#ef4444" : "#fb923c"; c.fillRect(Math.min(tip + d * 2, tip + d * 3.5), y + 27, 1.5, 3);   // 火
+        const sx = tip + d * 3, t = now / 400;
+        c.strokeStyle = "rgba(203,213,225,0.65)"; c.lineWidth = 1.5; c.beginPath(); c.moveTo(sx, y + 27);
+        c.quadraticCurveTo(sx + 5 * Math.sin(t), y + 19, sx + 2 * Math.sin(t + 1), y + 10); c.stroke();
+        c.beginPath(); c.moveTo(sx + 1, y + 14); c.quadraticCurveTo(sx + 6 * Math.sin(t + 2), y + 6, sx + 3 * Math.sin(t + 3), y - 2); c.stroke();
+      } else {                                                    // 禁断症状: タバコがなく、口を「へ」の字に食いしばる
+        c.strokeStyle = "#111827"; c.lineWidth = 1.6; c.beginPath(); c.moveTo(fx - d * 7, y + 30); c.lineTo(fx - d * 3, y + 27); c.lineTo(fx + d * 1, y + 30); c.stroke();
+      }
+      // 胸のタバコの箱: 持っている本数だけ、白いタバコが箱から出ている（4 本以上は数字も）
+      const n = o.cs | 0, bx = x + 13;
+      c.fillStyle = "#b91c1c"; c.fillRect(bx, y + 36, 14, 14); c.fillStyle = "#f8fafc"; c.fillRect(bx + 2, y + 41, 10, 3);
+      for (let k = 0; k < Math.min(n, 3); k++) { c.fillStyle = "#f8fafc"; c.fillRect(bx + 2 + k * 4, y + 31, 3, 6); c.fillStyle = "#d97706"; c.fillRect(bx + 2 + k * 4, y + 31, 3, 2); }
+      if (n >= 4) { c.fillStyle = "#fde047"; c.font = "bold 10px sans-serif"; c.textAlign = "center"; c.fillText("×" + n, bx + 7, y + 60); }
+      if (wd) {                                                   // イライラ: つり上がった眉と、頭の怒りマーク（赤い十字の血管）と、頭から湯気
+        const ex = f > 0 ? x + 24 : x + 8;
+        c.strokeStyle = "#111827"; c.lineWidth = 2; c.beginPath(); c.moveTo(ex - 1, y + 7 + (f > 0 ? 0 : 4)); c.lineTo(ex + 9, y + 7 + (f > 0 ? 4 : 0)); c.stroke();
+        const vx = f > 0 ? x + 6 : x + PLW - 6, vy = y + 9, pop = 1 + 0.15 * Math.sin(now / 90);
+        c.save(); c.translate(vx, vy - 2); c.scale(pop * 1.5, pop * 1.5); c.strokeStyle = "#dc2626"; c.lineWidth = 1.8; c.beginPath();
+        for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { c.moveTo(a * 1.5, b * 5); c.quadraticCurveTo(a * 1.5, b * 1.5, a * 5, b * 1.5); }
+        c.stroke(); c.restore();
+        c.fillStyle = "rgba(226,232,240,0.6)";
+        for (let k = 0; k < 2; k++) { const ph = (now / 600 + k * 0.5) % 1; c.beginPath(); c.arc(x + 10 + k * 20 + Math.sin(ph * 7) * 3, y - 14 - ph * 18, 3 + ph * 4, 0, 6.2832); c.fill(); }
+      }
     }
   }
 }
@@ -4231,6 +4291,8 @@ function fxEvent(e) {
     else Sfx.swing();
   } else if (k === "hm4") {                        // ハンマーの 4: 拘束
     Sfx.bindOn(); rings.push({ x, y, t: 0, max: 14, c: "#a855f7", r0: 24, sp: -1.4 });
+  } else if (k === "cgl") {                        // ヤニ猫: 新しいタバコに火をつけた
+    Sfx.pop(); burst(x, y, 6, { dir: -Math.PI / 2, spread: 1.6, v0: 0.5, v1: 2, l0: 10, l1: 18, s0: 2, s1: 3, g: -0.03, colors: ["#fb923c", "#fde047", "#e5e7eb"] });
   } else if (k === "zd") {                         // スワッパー: 円が消えて、自分にダメージ（e[3] = %）
     Sfx.pop(); burst(x, y + 10, 8, { v0: 1, v1: 3, l0: 12, l1: 22, s0: 2, s1: 4, g: 0.1, colors: ["#67e8f9", "#a78bfa", "#f87171"] });
   } else if (k === "syu" || k === "cgu") {         // 注射器・タバコを拾った（syu の 4 つ目: 上がった性能の番号 / cgu の 4 つ目: 1 = ヤニ猫が拾って強化 / 0 = 敵が拾ってスピード −1）
@@ -4376,7 +4438,10 @@ function drawPlayer(p, i, me, now) {
   const dg = p.dz > 0 && p.al;
   if (dg) { cx.save(); cx.translate(0, p.y + PLH); cx.scale(1, 0.55); cx.translate(0, -(p.y + PLH)); }
   const spear = p.a > 0 && p.ak >= 2;                             // 槍兵が槍を前へ出している
-  drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear, gk: p.gk, gq: p.gq, bd: p.bd });
+  const yaniPlay = chd.id === "yani" && !clone && game.ph !== "lobby", irr = yaniPlay && p.al && withdrawn(p);
+  if (irr) { cx.save(); cx.translate((Math.random() * 2 - 1) * 1.5, 0); }   // 禁断症状: 体が小刻みに震える
+  drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear, gk: p.gk, gq: p.gq, bd: p.bd, left: yaniPlay ? cigLeft(p) : undefined, wd: irr, cs: yaniPlay ? p.cs : 0 });
+  if (irr) cx.restore();
 
   if (dg) cx.restore();
   if (p.slw > 0 && p.fz > 0 && p.al) {                            // 蜘蛛の糸がからんで、動けない
