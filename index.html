@@ -410,7 +410,7 @@ const ARROW_SPEED = 0.7;              // 矢の速さの倍率（13〜22px/フ�
 const ARROW_MAX = 5, ARROW_REGEN = 60;   // アーチャーの矢: 持てる本数（ラウンド開始時の本数。ラストスパート中の上限は LATE_ARROW_MAX）/ 1 本回復するまで（1 秒）。矢がないと撃てない
 const CLONE_STATS = { A: 2, D: 1, S: 2 };   // コペルニウムの分身の性能（本体とは別）
 const BZ_FRAMES = 360, BZ_BONUS = { A: 2, D: -2, S: 2 }; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値（防御は下がる）
-const CN_FRAMES = 24, CN_WHIFF = 18, CN_MUL = 1.5; // カウンター: 構えている時間 / 空振りしたときの隙 / 返す吹っ飛ばしの倍率（相手自身の攻撃の 1.5 倍）
+const CN_FRAMES = 24, CN_WHIFF = 18, CN_MUL = 1.2; // カウンター: 構えている時間 / 空振りしたときの隙 / 返す吹っ飛ばしの倍率（相手自身の攻撃の 1.2 倍。2026-10-17 に 1.5 → 1.2）
 const TP_MIN = 90, TP_MAX = PW * WIDE_SCALE - PLW; // テレポートの距離: いちばん近く / いちばん遠く（ステージの端から端まで = 656px）
 const TP_CD0 = 1, TP_CD1 = 2.5;      // テレポーターのクールタイム（秒）= TP_CD0 + TP_CD1 × ため量（近くへ 1 秒〜いちばん遠くへ 3.5 秒）
 const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
@@ -453,9 +453,9 @@ const YUREI_R = 7, YUREI_BLAST = 75, YUREI_KNOCK = 0.45, YUREI_LIFT = 6;   // �
 const LATE_FRAMES = 20 * 60;
 const LATE_GHOST_CD = 6 * 60;        // ゴースト（透過）は半分の 4 秒だとほぼ無敵になるので、ラスト中は 6 秒
 const LATE_ARROW_MAX = 10, LATE_FLOWERS = 4, LATE_XBOWS = 2, LATE_NAO_BONUS = 2, LATE_BOMBS = 4;   // … / ボマーの爆弾の数   // アーチャーの矢の上限 / おくれたんの花の数 / クロス使いのクロスボウの数 / なおの攻撃・防御・スピード
-// クロス使いのクロスボウ: 足場に置くと、射線（前方 450px）に敵が入るたびに矢を自動で撃つ。8 秒で壊れ、攻撃を 3 回受けても壊れる（クールタイムは置いた瞬間から 12 秒。ラストスパート中は 6 秒で、2 台まで同時に置ける）
+// クロス使いのクロスボウ: 足場に置くと、射線（前方 450px）に敵が入るたびに矢を自動で撃つ。8 秒で壊れ、攻撃を 2 回受けても壊れる（クールタイムは置いた瞬間から 12 秒。ラストスパート中は 6 秒で、2 台まで同時に置ける）
 const CB_W = 30, CB_H = 26, CB_BOLT = 22, CB_RANGE = 450;     // クロスボウの大きさ（左上の座標で持つ）/ 矢の高さ（足もとから）/ 射線の長さ
-const CB_RELOAD = 30, CB_ARM = 12, CB_LIFE = 480, CB_BLINK = 60, CB_HP = 3;   // 次の矢まで（0.5 秒）/ 足場に乗ってから最初の矢まで / 稼働（8 秒）/ 消える前の点滅 / 壊れるまでに受けられる回数
+const CB_RELOAD = 30, CB_ARM = 12, CB_LIFE = 480, CB_BLINK = 60, CB_HP = 2;   // 次の矢まで（0.5 秒）/ 足場に乗ってから最初の矢まで / 稼働（8 秒）/ 消える前の点滅 / 壊れるまでに受けられる回数（2026-10-17 に 3 → 2）
 const CB_PAD = 14;                                            // 矢・槍がクロスボウに当たる範囲を、下へ広げる幅（アーチャーの矢はクロスボウの上を通るので）
 const CB_ARROW_C = 0.5;                                    // 矢のため量（速さ 0.7 × (13 + 9 × 0.5)、威力 0.35 + 0.85 × 0.5）
 // ゴブG: 背中のゴブリンが近くの敵へ小さな槍を自動で投げる。スキル「召喚」で手下を 3 体呼ぶ
@@ -473,7 +473,7 @@ const MAGIC = [
   { name: "弱魔法", v: 30, range: 290, cost: 1, frac: 0.5, col: "#22d3ee", btn: "rgba(103,232,249,.6)", r: 8 },
   { name: "強魔法", v: 20, range: 580, cost: 2, frac: 1.0, breaker: true, col: "#eab308", btn: "rgba(250,204,21,.65)", r: 12 },
   { name: "拘束魔法", v: 14, range: 580, cost: 3, bind: true, col: "#c026d3", btn: "rgba(192,38,211,.7)", r: 17 },
-  { name: "究極魔法", v: 36, range: 1000, cost: 4, frac: 1.3, pierce: true, beam: 30, col: "#3b82f6", col2: "#facc15", btn: "linear-gradient(135deg,rgba(250,204,21,.85),rgba(59,130,246,.85))", r: 21 },
+  { name: "究極魔法", v: 36, range: 1000, cost: 4, frac: 2.6, pierce: true, beam: 30, col: "#3b82f6", col2: "#facc15", btn: "linear-gradient(135deg,rgba(250,204,21,.85),rgba(59,130,246,.85))", r: 21 },   // 吹っ飛ばしは 2026-10-17 に 1.3 → 2.6（2 倍）
 ];
 const BEAM_HALF = 12;                 // 究極魔法のビームの太さ（半分。px）。ビームは beam フレーム（0.5 秒）残り、その間に入った敵にも 1 回ずつ当たる
 const magicLv = mg => Math.min(MAGIC.length, 1 + Math.floor(Math.max(0, mg - 1) / MAGIC_STEP));   // ためた長さ → 段階（1〜4）
@@ -497,8 +497,8 @@ const CHARS = [
     skill: { name: "テレポート", cd: 2, cdText: "1〜3.5秒（遠いほど長い）", hold: true, maxCharge: 60, text: "押している間ためて、離すと向いている方へ瞬間移動する。長くためるほど遠くへ飛ぶ（最大でステージの端から端まで）が、そのぶんクールタイムが長い" } },
   { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 3, tag: "盾なし。スキルで攻撃と速さが上がる", noShield: true,
     skill: { name: "狂化", cd: 14, text: "6秒間、攻撃とスピードが上がるが、防御が下がる" } },
-  { id: "knight", name: "騎士", A: 3, D: 5, S: 2, tag: "とても硬い。攻撃を跳ね返す",
-    skill: { name: "カウンター", cd: 4, text: "構えている間に攻撃を受けると、相手を1.5倍の力で吹っ飛ばす。空振りすると隙ができる" } },
+  { id: "knight", name: "騎士", A: 3, D: 4, S: 2, tag: "とても硬い。攻撃を跳ね返す",
+    skill: { name: "カウンター", cd: 4, text: "構えている間に攻撃を受けると、相手を1.2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 4, tag: "透明になって攻撃をすり抜ける",
     skill: { name: "透過", cd: 8, text: "4秒間、攻撃を受けなくなる。透明中に出した攻撃は強い" } },
   { id: "giant", name: "巨人", A: 1, D: 2, S: 2, tag: "ふだんは弱いが、巨大化して暴れる",
@@ -506,7 +506,7 @@ const CHARS = [
   { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 4, tag: "分身と一緒に戦う",
     skill: { name: "分身", cd: 12, text: "7秒間、自分で敵と戦ってくれる分身を呼ぶ" } },
   { id: "okure", name: "おくれたん", A: 2, D: 3, S: 3, tag: "花の罠で相手を足止めする",
-    skill: { name: "花", cd: 1, text: "前に花を咲かせる。踏んだ相手は2秒動けない（ときどき咲く大きな花は4秒）。空中で使うと花を落とす" } },
+    skill: { name: "花", cd: 1, text: "前に花を咲かせる。踏んだ相手は2秒動けない（ときどき咲く大きな花は4秒）。空中で使うと花を落とす。花は敵の攻撃で消える" } },
   { id: "nao", name: "なお", A: 1, D: 3, S: 3, tag: "攻撃は弱いが打たれ強く、残機が1つ多い", skill: null, lives: 1 },
   // 13〜16 体目（通信ではキャラを番号で送るので、必ず末尾に足す）
   { id: "clock", name: "時計師", A: 2, D: 2, S: 3, tag: "時間を巻き戻して、ピンチから抜け出す",
@@ -531,7 +531,7 @@ const CHARS = [
   // 21〜22 体目（必ず末尾に足す）。back: 当たり判定を背中側へ広げる幅 / auto: スキルとは別の、自動で働く能力の説明
   { id: "xbow", name: "クロス使い", A: 2, D: 2, S: 4, tag: "クロスボウを置いて、射線に入った敵を撃つ",
     skill: { name: "クロスボウ", cd: 12, cdText: "12秒",
-      text: "クロスボウを置く。前に入った敵を自動で撃つ。8秒たつか3回攻撃されると壊れる" } },
+      text: "クロスボウを置く。前に入った敵を自動で撃つ。8秒たつか2回攻撃されると壊れる" } },
   { id: "gobg", name: "ゴブG", A: 3, D: 3, S: 3, back: 14, tag: "背中のゴブリンと、呼び出した手下で戦う",
     skill: { name: "召喚", cd: 10, cdText: "10秒", text: "手下を3体呼ぶ。手下は敵に1回斬りかかって消える" },
     auto: "背中のゴブリン2体が、近くの敵へ槍を投げる" },
@@ -1143,7 +1143,7 @@ function magicHit(b, o, e, dir) {
     if (e.cn > 0 && o.al) { counterHit(e, o); return; }
     const guard = shieldUp(e) && e.f === -dir;
     if (guard) { breakShield(e); impact("k", o, e, 0, dir); }
-    knock(o, e, M.frac, dir); impact("h", o, e, M.frac, dir);
+    knock(o, e, M.frac, dir, M.frac); impact("h", o, e, M.frac, dir);   // 究極魔法は、ふつうの上限（1.3）を超えて飛ばす
     return;
   }
   strike(o, e, { dir, frac: M.frac, recoil: false, breaker: !!M.breaker });   // 弱魔法は盾を 1 段階削る / 強魔法は盾を一撃で壊す
@@ -1669,9 +1669,9 @@ function skillInput(p, chd, kin, kpress, dir, zone) {
 
 function breakShield(t) { t.sh = 0; t.sbk = SHIELD_BREAK_FRAMES; t.shi = 0; t.bf = 14; }
 // frac: 盾なしで当たったときの吹っ飛ばしに対する割合（0 なら横には飛ばず、少し浮いてよろけるだけ）
-function knock(att, t, frac, dir) {
+function knock(att, t, frac, dir, cap) {                         // cap: 強さの上限（ふだんは 1.3。究極魔法だけ上げる）
   if (att.wa) { frac *= ZONE_WARP_MUL; att.wa = 0; }               // スワッパーの回り込み攻撃
-  frac = Math.min(1.3, frac);
+  frac = Math.min(cap || 1.3, frac);
   const mul = (att.gb > 0 ? GH_ATK_MUL : 1) * dzMul(t);          // 透過中の攻撃は強く、土下座中は飛びにくい
   t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul;
   t.vy = -9; t.s = Math.max(1, Math.round(Math.abs(t.vx) * STUN_SPEED));   // 攻撃力・防御力・ため量・透過・土下座などで速さが変わると、硬直もそのぶん変わる
@@ -1765,6 +1765,16 @@ function resolveHits(list) {
       strike(p, t, { dir: p.f, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker });
     }
     hitObjs(p.own, hx0, hy0, hx1, hy1, p.hit);                      // 手下とクロスボウにも当たる（クロスボウは 1 回の攻撃で 1 回だけ削る）
+    cutFlowers(p.own, hx0, hy0, hx1, hy1);
+  }
+}
+// おくれたんの花は、敵の通常攻撃（近接）が当たると消える（2026-10-17）。咲く前・落ちている途中の花も消える。飛び道具・爆風では消えない
+function cutFlowers(own, x0, y0, x1, y1) {
+  for (let i = game.fl.length - 1; i >= 0; i--) {
+    const f = game.fl[i], s = f.big ? FLOWER_BIG_SCALE : 1, hw = (f.big ? FLOWER_BIG_HALF : FLOWER_HALF) + 4;
+    if (ally(f.own, own) || f.x + hw < x0 || f.x - hw > x1 || f.y < y0 || f.y - 16 * s > y1) continue;
+    game.fl.splice(i, 1);
+    emit("flx", f.x, f.y, f.big ? 1 : 0);
   }
 }
 
@@ -3783,6 +3793,9 @@ function fxEvent(e) {
     const big = e[3] === 1;                        // 大きな花: 演出を多めに
     Sfx.rooted(); shake(big ? 5 : 3);
     burst(x, y - 10, big ? 22 : 14, { dir: -Math.PI / 2, spread: 3.2, v0: 1.5, v1: 5, l0: 16, l1: 28, s0: 3, s1: 5, g: 0.1, colors: ["#f472b6", "#f9a8d4", "#16a34a"] });
+  } else if (k === "flx") {                        // 花が攻撃で散った
+    Sfx.pop();
+    burst(x, y - 8, e[3] === 1 ? 14 : 9, { dir: -Math.PI / 2, spread: 3.6, v0: 1, v1: 4, l0: 14, l1: 26, s0: 2, s1: 4, g: 0.12, colors: ["#f472b6", "#f9a8d4", "#16a34a"] });
   } else if (k === "cn") {                         // カウンター成功
     Sfx.counter(); shake(10); flashA = Math.max(flashA, 0.3);
     rings.push({ x, y, t: 0, max: 14, c: "#facc15", r0: 10, sp: 6 });
@@ -4180,7 +4193,7 @@ function drawCb(c, now) {
     if (c.hp < CB_HP - 1) { cx.moveTo(x + 20, y + 19); cx.lineTo(x + 17, y + 22); cx.lineTo(x + 20, y + CB_H); }
     cx.stroke();
   }
-  for (let k = 0; k < CB_HP; k++) { cx.fillStyle = k < c.hp ? col : "rgba(255,255,255,0.2)"; cx.beginPath(); cx.arc(x + CB_W / 2 + (k - 1) * 7, y - 9, 2.5, 0, 6.2832); cx.fill(); }
+  for (let k = 0; k < CB_HP; k++) { cx.fillStyle = k < c.hp ? col : "rgba(255,255,255,0.2)"; cx.beginPath(); cx.arc(x + CB_W / 2 + (k - (CB_HP - 1) / 2) * 7, y - 9, 2.5, 0, 6.2832); cx.fill(); }
   cx.restore();
 }
 // ゴブGの手下: 緑の体に、持ち主の色の縁取り。前に小さな剣。斬る間は、黄色い弧が出る。残り 1 秒は点滅
