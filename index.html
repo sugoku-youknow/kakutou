@@ -19,6 +19,8 @@
   /* iPhone の Safari は user-scalable=no を無視するので、ボタンやその間をすばやく 2 回たたくと拡大されてしまう。manipulation で、どこでもダブルタップの拡大をしない（スクロールはできる） */
   html,body{touch-action:manipulation}
   #cv{touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  /* 戦闘中は、どこを長押ししても文字の選択（青い選択とコピーのメニュー）を出さない。出ると指の動きが選択に取られ、ボタンを離したことが届かず押しっぱなしになるため */
+  body.battle, body.battle *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   :root{--b:min(21vw,92px);--g:8px;--sh:124px}   /* 操作ボタンの大きさ / ボタン同士のすき間 / 下のプレイヤー情報の高さ（縦持ちで固定） */
   /* 画面構成: 上=戦闘画面 / 中=操作ボタン（スマホのみ）/ 下=プレイヤー情報 */
   #wrap{position:relative;display:flex;flex-direction:column;width:100%;height:100vh;height:100dvh}
@@ -2709,9 +2711,11 @@ function applySnapshot(s) {
 // ---------- 入力 ----------
 const keyMap = { ArrowLeft: "l", KeyA: "l", ArrowRight: "r", KeyD: "r", ArrowUp: "u", KeyW: "u", ArrowDown: "d", KeyS: "d",
                  Space: "a", KeyZ: "a", KeyJ: "a", KeyX: "k", KeyK: "k", KeyL: "k" };
-const down = new Set();
+const down = new Set();                      // キーボードで押しているボタン
+const touchDown = new Map();                 // 画面のボタン: 指（pointerId）ごとに、押しているボタン
 function recalcKeys() {
   let k = 0; for (const c of down) k |= KEY[c];
+  for (const c of touchDown.values()) k |= KEY[c];
   myKeys = k; latch[0] |= k;                 // ホスト自身の短いタップも取りこぼさない
   pushKeys();
 }
@@ -2732,12 +2736,12 @@ addEventListener("keyup", e => {
   if (e.target.tagName !== "INPUT") e.preventDefault();      // ボタンにフォーカスが残っていても、Space で押されないようにする
   down.delete(k); recalcKeys();
 });
-addEventListener("blur", () => { down.clear(); recalcKeys(); });
+addEventListener("blur", () => { down.clear(); touchDown.clear(); recalcKeys(); });
 // タブ・アプリが裏になったとき（document.hidden）: 自分の押しているボタンをすべて離す（キャラが走り続けたり、押しっぱなしになったりしない）。音も止める。
 // ホストは、hostLoop が計算を一切進めなくなるので、参加者へ「一時停止」を知らせる。戻ったら解除を送る。キーの状態は 0 から。裏にいた間の時間は追いつかない（hostLast / hostAcc を戻す）
 function onVisibility() {
   const hid = document.hidden;
-  down.clear(); myKeys = 0; held[0] = 0; latch[0] = 0; sentKeys = -1; pushKeys();
+  down.clear(); touchDown.clear(); myKeys = 0; held[0] = 0; latch[0] = 0; sentKeys = -1; pushKeys();
   hostLast = 0; hostAcc = 0;
   if (hid) Sfx.suspend(); else Sfx.resume();
   if (role === "host") for (const c of conns) if (c && c.open) { try { c.send({ t: "pause", v: hid ? 1 : 0, q: snapQ }); } catch (e) {} }
@@ -2745,8 +2749,27 @@ function onVisibility() {
 document.addEventListener("visibilitychange", onVisibility);
 document.querySelectorAll(".tb").forEach(el => {
   const k = el.dataset.k;
-  el.addEventListener("pointerdown", e => { e.preventDefault(); if (editing) { startBtnDrag(e, k); return; } down.add(k); recalcKeys(); });
-  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, () => { if (editing) return; down.delete(k); recalcKeys(); }));
+  el.addEventListener("pointerdown", e => { e.preventDefault(); if (editing) { startBtnDrag(e, k); return; } touchDown.set(e.pointerId, k); recalcKeys(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, e => {
+    if (editing) return;
+    if (touchDown.get(e.pointerId) === k) { touchDown.delete(e.pointerId); recalcKeys(); }
+  }));
+});
+// 押しっぱなし対策（iPhone で、長押しの文字選択などに指の動きを取られると、ボタンに「離した」が届かないことがある）:
+// どこで指を離しても、その指のボタンを離す。画面に触れている指がなくなったら、画面のボタンはすべて離す
+["pointerup", "pointercancel"].forEach(ev => addEventListener(ev, e => {
+  if (touchDown.delete(e.pointerId)) recalcKeys();
+}, true));
+["touchend", "touchcancel"].forEach(ev => addEventListener(ev, e => {
+  if (e.touches.length === 0 && touchDown.size && !editing) { touchDown.clear(); recalcKeys(); }
+}, { capture: true, passive: true }));
+// 戦闘中は、文字の選択とコピーのメニューを出さない（CSS の user-select が効かなかったときの保険。入力欄は除く）
+const inBattleUi = e => document.body.classList.contains("battle") && !(e.target && e.target.closest && e.target.closest("input, textarea"));
+document.addEventListener("selectstart", e => { if (inBattleUi(e)) e.preventDefault(); });
+document.addEventListener("contextmenu", e => { if (inBattleUi(e)) e.preventDefault(); });
+document.addEventListener("selectionchange", () => {
+  if (!document.body.classList.contains("battle")) return;
+  const sel = getSelection(); if (sel && sel.rangeCount && !sel.isCollapsed) sel.removeAllRanges();
 });
 
 // ---------- 操作ボタンの配置（ゲームの中で、位置と大きさを自由に変えられる）----------
