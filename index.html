@@ -360,7 +360,7 @@ const dmgMul = t => 1 + (t.dm || 0) / 100;                   // 吹っ飛びの�
 function addDmg(t, v) { if (v > 0) t.dm = Math.min(DMG_MAX, (t.dm || 0) + Math.max(1, Math.round(v))); }
 const STUN_SPEED = 2.0;              // 吹っ飛ばされたときの硬直 = 飛ばされた横の速さ × STUN_SPEED（フレーム。スマブラと同じく、強く飛ばされるほど長い）。ノーマルの通常攻撃で 23 フレーム（約 0.38 秒）
 const INPUT_BUF = 8;                 // 先行入力: 押した瞬間を覚えておくフレーム数（硬直が解ける少し前に押しても出る）
-const JUMP_TURN = 8;                 // ジャンプした直後、空中でも向きを変えられるフレーム数（反転ジャンプ）
+const JUMP_TURN = 4;                 // ジャンプした直後、空中でも向きを変えられるフレーム数（反転ジャンプ）。2026-10-18 に 8 → 4（猶予が長すぎたので半分）
 // 攻撃の種類: 0=通常 / 1=侍の居合斬り（少しためてから、踏み込みながら斬る）/ 2=槍兵の通常攻撃（長いが出が遅い）/ 3=槍兵の突進突き
 // frac: 盾なしの相手への吹っ飛ばしの倍率 / breaker: 盾で受けられたら盾を一撃で壊す（吹っ飛ばさない）/ aim: 踏み込む直前に近い敵へ向き直る
 // lock: 攻撃の間ずっと動けない（踏み込みだけ進む）/ hover: 空中で踏み込むとき、落ちる速さを抑えて真横へ進む
@@ -419,18 +419,20 @@ const CN_FRAMES = 24, CN_WHIFF = 18, CN_MUL = 1.2; // カウンター: 構えて
 const TP_MIN = 90, TP_MAX = PW * WIDE_SCALE - PLW; // テレポートの距離: いちばん近く / いちばん遠く（ステージの端から端まで = 656px）
 const TP_CD0 = 1, TP_CD1 = 2.5;      // テレポーターのクールタイム（秒）= TP_CD0 + TP_CD1 × ため量（近くへ 1 秒〜いちばん遠くへ 3.5 秒）
 const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
-const GH_ATK_MUL = 1.5;              // 透過中に振った攻撃の吹っ飛ばし力の倍率
-const GIANT_FRAMES = 480, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（8 秒）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
+const GIANT_FRAMES = 360, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（6 秒。2026-10-18 に 8 秒から）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
 const RW_PUSH = 0.45;   // 巻き戻しの通り道にいた敵を、ステージの外側へ弾く強さ（盾・カウンター無視。ノーマルに当てて硬直約 10 フレーム）
 const RW_SPAN = 120, RW_SPEED = 4;   // 時計師の巻き戻し: さかのぼる長さ（2 秒）/ 早戻りの速さ（4 倍速。2 秒ぶんを 0.5 秒で戻る）
 // スワッパーの ゾーン: 押している間だけ円が広がり（上限なし）、離すとその場所に 5 秒残る。円の中では、攻撃ボタンで敵の背後へ回り込んで攻撃し、スキルボタンで入れ替える。
-// 円が消えるとクールタイム（2 秒＋半径 100px ごとに 1 秒）が始まり、その間は盾がなく、移動速度が 0.7 倍になる
+// 円が消えるとクールタイム（2 秒＋半径 100px ごとに 1 秒）が始まり、円の大きさに応じて自分にダメージが入る（2026-10-18 までは、クールタイム中は盾がなく移動速度が 0.7 倍だった）
 const ZONE_R0 = 40, ZONE_LIFE = 300, ZONE_SWAP_GAP = 6;                  // 押した瞬間の半径 / 円が残る時間（5 秒）/ 入れ替えの間隔（0.1 秒）
 // 円の広がり方: 押した直後は 1 フレームに 12px と速く、広がるほど遅くなり、やがて 1 フレームに 1.5px で広がり続ける（上限なし）
 //   半径 = 40 + 10.5 × 25 × (1 − e^(−ため/25)) + 1.5 × ため（0.25 秒で約 240px、0.5 秒で約 320px、1 秒で約 390px、2 秒で約 550px）
 const ZONE_FAST = 10.5, ZONE_TAU = 25, ZONE_SLOWV = 1.5;
-const ZONE_CD_BASE = 120, ZONE_CD_PER100 = 60, ZONE_SLOW = 0.7;          // クールタイム: 基本 2 秒 + 半径 100px ごとに 1 秒 / クールタイム中の移動速度の倍率
+const ZONE_CD_BASE = 120, ZONE_CD_PER100 = 60;                           // クールタイム: 基本 2 秒 + 半径 100px ごとに 1 秒
+// 円が消えたとき、スワッパー自身に入るダメージ（面積の二乗に比例 = 半径の 4 乗に比例。半径 300px で 15%）。2026-10-18 に、クールタイム中の「盾なし・動きが遅い」の代わりにした
+const ZONE_DMG = 15, ZONE_DMG_R = 300;
+const zoneDmg = r => ZONE_DMG * Math.pow(r / ZONE_DMG_R, 4);
 const zoneR = ks => ZONE_R0 + ZONE_FAST * ZONE_TAU * (1 - Math.exp(-ks / ZONE_TAU)) + ZONE_SLOWV * ks;
 const ZONE_WARP_MUL = 1.3;           // ゾーンの回り込み攻撃の吹っ飛ばしの倍率（攻撃の強さの上限 1.3 倍と同じ。背後から当てても、相手がすぐ立て直して戻らないように）
 const zoneCd = r => Math.round(ZONE_CD_BASE + ZONE_CD_PER100 * r / 100);
@@ -484,11 +486,12 @@ const BEAM_HALF = 12;                 // 究極魔法のビームの太さ（半
 const magicLv = mg => Math.min(MAGIC.length, 1 + Math.floor(Math.max(0, mg - 1) / MAGIC_STEP));   // ためた長さ → 段階（1〜4）
 // ヤク猫（2026-10-17）: 足もとに注射器を落とす（地面まで落ちる）。敵が触れると、その人の画面が揺れて見にくくなる。自分で拾い直すと全性能 +1（UP_FRAMES）。
 // 自分の注射器は、一度その上から離れてからでないと拾えない（落とした瞬間に拾ってしまわないように）
-const SY_MAX = 2, SY_ARM = 20, SY_LIFE = 600, SY_HALF = 8, SY_DRUG = 180;   // 置ける数 / 効くまで / 残る時間（10 秒）/ 触れる判定の幅（半分）/ 画面が揺れる時間（3 秒）
+const SY_MAX = 2, LATE_SYRINGES = 4, SY_ARM = 20, SY_LIFE = 600, SY_HALF = 8, SY_DRUG = 180;   // 置ける数（ラストスパート中は 4 本）/ 効くまで / 残る時間（10 秒）/ 触れる判定の幅（半分）/ 画面が揺れる時間（3 秒）
 // 自分の注射器・タバコを拾ったときの強化: 全性能 +1 が 8 秒（続けて拾うと時間が延びる。+1 より上には重ならない）
 const UP_FRAMES = 480, UP_BONUS = 1;
 // ヤニ猫（2026-10-17）: 臭い息（前方の敵を、盾を無視して動けなくする）。タバコは、ヤニ猫が戦っている間だけステージにときどき出る
-const BREATH_RANGE = 120, BREATH_STUN = 90;                             // 息の届く距離（体の前から）/ 動けない時間（1.5 秒）
+// 臭い息は、吐いた場所に雲として 1.5 秒残る（天狗の風の場のように動かない）。雲に入った敵は、入った瞬間から 1.5 秒動けず、雲の中にいる間 0.25 秒ごとに 2% のダメージ（1 秒に 8%）
+const BREATH_W = 160, BREATH_H = 80, BREATH_LIFE = 90, BREATH_STUN = 90, BREATH_TICK = 15, BREATH_DOT = 2;   // 雲の幅（体の前から）/ 高さ / 残る時間 / 動けない時間 / ダメージの間隔 / 1 回のダメージ（%）
 const CIG_EVERY = 180, CIG_MAX = 3, CIG_LIFE = 900, CIG_HALF = 9, CIG_SLOW = 480, CIG_SLOW_BY = 1;   // 出る間隔（3 秒）/ 同時に出ている数 / 残る時間（15 秒）/ 拾う判定の幅（半分）/ 敵が拾ったときのスピード低下の時間（8 秒）と量
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
 // メインステージの端から 500px、足場の面から 300px の余裕を持たせる（以前は 340px / 260px で、飛ばされるとすぐ撃墜された）。左右はキャラの中心、下は頭の位置で判定する
@@ -513,9 +516,9 @@ const CHARS = [
   { id: "knight", name: "騎士", A: 3, D: 4, S: 2, tag: "とても硬い。攻撃を跳ね返す",
     skill: { name: "カウンター", cd: 4, text: "構えている間に攻撃を受けると、相手を1.2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 4, tag: "透明になって攻撃をすり抜ける",
-    skill: { name: "透過", cd: 8, text: "4秒間、攻撃を受けなくなる。透明中に出した攻撃は強い" } },
+    skill: { name: "透過", cd: 8, text: "4秒間、攻撃を受けなくなる。透明のまま何度でも攻撃できる" } },
   { id: "giant", name: "巨人", A: 1, D: 2, S: 2, tag: "ふだんは弱いが、巨大化して暴れる",
-    skill: { name: "巨大化", cd: 15, text: "8秒間、全性能が上がり、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒は使えない" } },
+    skill: { name: "巨大化", cd: 18, text: "6秒間、全性能が上がり、大きさと攻撃の射程が2倍になる。ラウンド開始から10秒は使えない" } },
   { id: "copern", name: "コペルニウム", A: 3, D: 2, S: 4, tag: "分身と一緒に戦う",
     skill: { name: "分身", cd: 12, text: "7秒間、自分で敵と戦ってくれる分身を呼ぶ" } },
   { id: "okure", name: "おくれたん", A: 2, D: 3, S: 3, tag: "花の罠で相手を足止めする",
@@ -526,7 +529,7 @@ const CHARS = [
     skill: { name: "巻き戻し", cd: 10, text: "2秒前の位置へ巻き戻る。戻る間は無敵で、ぶつかった敵を弾く" } },
   { id: "swapper", name: "スワッパー", A: 2, D: 1, S: 4, tag: "ゾーンの中では、回り込みも入れ替えも自由自在",
     skill: { name: "ゾーン", cd: 2, cdText: "2秒＋円の大きさしだい（円が消えてから）", hold: true, maxCharge: 1e6,
-      text: "押している間、円が広がる。円の中では、攻撃ボタンで敵の背後へ回り込み、スキルボタンで全員の位置を入れ替える" } },
+      text: "押している間、円が広がる。円の中では、攻撃ボタンで敵の背後へ回り込み、スキルボタンで全員の位置を入れ替える。円が消えると、大きさに応じて自分がダメージを受ける" } },
   { id: "wrestler", name: "レスラー", A: 4, D: 3, S: 2, tag: "盾ごとつかんで投げ飛ばす",
     skill: { name: "ダッシュつかみ", cd: 5, text: "前へダッシュして敵をつかみ、押した方向へ投げる。盾もカウンターも効かない" } },
   { id: "tengu", name: "天狗", A: 2, D: 2, S: 4, tag: "風の場で、敵を鈍らせ自分は速くなる",
@@ -555,9 +558,9 @@ const CHARS = [
       text: "押すとため始め、ためている間にもう一度押すと撃つ。ためるほど強い魔法になる（弱→強→拘束→究極ビーム）。地上で動くとためは止まる。魔法書の耐久が0になると6秒使えない" } },
   // 24〜25 体目（必ず末尾に足す）
   { id: "yaku", name: "ヤク猫", A: 2, D: 2, S: 4, tag: "注射器の罠で、敵の画面を揺らす",
-    skill: { name: "ヤク", cd: 4, text: "足もとに注射器を落とす（2本まで）。触れた敵は3秒間、画面が揺れて見にくくなる。自分で拾い直すと8秒間、全性能+1" } },
+    skill: { name: "ヤク", cd: 2, text: "前に注射器を落とす（2本まで）。触れた敵は3秒間、画面が揺れて見にくくなる。自分で拾うと8秒間、ランダムな性能1つが+1（重ねられる）" } },
   { id: "yani", name: "ヤニ猫", A: 2, D: 3, S: 4, tag: "臭い息で足止め。タバコで強くなる",
-    skill: { name: "臭い息", cd: 6, text: "前方に臭い息を吐き、当たった敵を1.5秒動けなくする（盾は効かない）" },
+    skill: { name: "臭い息", cd: 6, text: "前方に臭い息の雲を1.5秒残す。入った敵は1.5秒動けず、中にいる間ダメージを受ける（盾は効かない）" },
     auto: "ステージにタバコが出る（3秒ごと、3本まで）。自分が拾うと8秒間全性能+1、敵が拾うと8秒間スピード-1" },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
@@ -566,7 +569,7 @@ const baseStat = (p, k) => { if (p.isClone) return CLONE_STATS[k]; const c = chO
 // 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる
 // ラストスパート中は、なおの攻撃・防御・スピードが +2（分身には付かない）
 const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, baseStat(p, k) + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0) + (!p.isClone && chOf(p).id === "nao" && late() ? LATE_NAO_BONUS : 0)
-  + (p.ub > 0 ? UP_BONUS : 0) - (k === "S" && p.nc > 0 ? CIG_SLOW_BY : 0)));   // ub: 注射器・タバコの強化 / nc: 敵のタバコを拾ってスピードが下がっている
+  + (p.ub > 0 ? UP_BONUS : 0) - (k === "S" && p.nc > 0 ? CIG_SLOW_BY : 0) + (p.ybs ? p.ybs[k === "A" ? 0 : k === "D" ? 1 : 2] : 0)));   // ybs: ヤク猫の注射器で上がっている数（攻撃・防御・スピード）   // ub: 注射器・タバコの強化 / nc: 敵のタバコを拾ってスピードが下がっている
 const effA = p => statOf(p, "A");
 const effD = p => statOf(p, "D");
 const effS = p => statOf(p, "S");
@@ -588,6 +591,27 @@ let hostConn = null, hostTimer = null;
 // 順番が入れ替わって届くことがあるので、番号（q）を付けて古いものは捨てる。開けなかったときは、ふつうの接続（conns / hostConn）で送る
 let fastConns = [], fastConn = null;
 let snapQ = 0, lastSnapQ = 0, pauseQ = 0, inQ = 0;
+// 落としてよい通り道（2026-10-18）: ふつうの接続と同じ RTCPeerConnection の上に、届き直しを一切しない（maxRetransmits: 0）データチャンネルを両側で同じ番号で作る（negotiated）。
+// 速い通り道（PeerJS の reliable: false）は「順番は待たないが、なくなったものは送り直す」ので、回線が不安定だと送り直しの間にまとめて届いてカクつく。こちらは、なくなったスナップショットは捨てて次を使う
+let uchs = [], uch = null;                     // ホスト側: 参加者ごと / 参加者側: ホストへの 1 本
+const UCH_ID = 7;
+function openUch(conn, onMsg) {
+  try {
+    const pc = conn && conn.peerConnection;
+    if (!pc || !pc.createDataChannel) return null;
+    const ch = pc.createDataChannel("sf-u", { negotiated: true, id: UCH_ID, ordered: false, maxRetransmits: 0 });
+    ch.onmessage = e => { if (typeof e.data === "string") onMsg(e.data); };
+    return ch;
+  } catch (e) { return null; }
+}
+const uchOpen = ch => !!ch && ch.readyState === "open";
+// 参加者側の見せ方（補間）: 届いたスナップショットを、ホストの計算の番号（tk）ごとにためておき、少し前（interpD フレーム前）の時点の位置を、前後のスナップショットから割り出して描く。
+// 届く間隔がばらついても（まとめて届いても）、止まって・飛んで見えない。遅らせる長さは、届き方のばらつきに合わせて 2〜15 フレームで自動で変わる
+let netOffs = [], renderTk = -1, interpD = 3, curTk;
+// 通信の往復時間（参加者側。ふつうの接続で 2 秒ごとに測る）
+let pingMs = 0, pingT = 0;
+// 短いタップの取りこぼし対策（落としてよい通り道で送るので）: 押した瞬間から 80ms の間は、離していても「押した」として送る
+const pressT = {}; let prevKeys = 0;
 const inQs = [0, 0, 0, 0];                     // ホスト側: 参加者ごとに、最後に使った入力の番号
 let roomCode = "";
 let net = "idle";        // idle | connecting | ready | error
@@ -598,8 +622,8 @@ let netMsg = "";
 // wr: 何本先取か（ロビーでは次の試合の設定。ホストが決めて、スナップショットで参加者へ届く）
 // pj: 飛び道具（ボム・矢） / fl: 花 / cl: 分身（持ち主のスロットごとに 1 つ） / wd: 天狗の風の場（持ち主ごとに 1 つまで）
 // rm: スワッパーの ゾーン（持ち主ごとに 1 つまで） / cb: クロス使いのクロスボウ（持ち主ごとに 1 つまで。ラストスパート中は 2 つまで） / mn: ゴブGの手下
-const game = { ph: "lobby", tm: 0, win: -1, wt: 0, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cb: [], mn: [], sy: [], cg: [], cgT: 0, cl: [null, null, null, null], p: [null, null, null, null] };
-const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cb = []; game.mn = []; game.sy = []; game.cg = []; game.cgT = 0; game.cl = [null, null, null, null]; };   // sy: ヤク猫の注射器 / cg: タバコ / cgT: 次のタバコまで
+const game = { ph: "lobby", tm: 0, win: -1, wt: 0, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cb: [], mn: [], sy: [], cg: [], cgT: 0, bc: [], cl: [null, null, null, null], p: [null, null, null, null] };
+const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cb = []; game.mn = []; game.sy = []; game.cg = []; game.cgT = 0; game.bc = []; game.cl = [null, null, null, null]; };   // bc: ヤニ猫の臭い息の雲   // sy: ヤク猫の注射器 / cg: タバコ / cgT: 次のタバコまで
 // ラストスパート（残り 20 秒以下。サドンデス中も含む。トレーニングにはない）。参加者の画面でも、届いた game.rt で同じように判定できる
 const late = () => game.ph === "play" && !training && game.rt <= LATE_FRAMES;
 const cdMul = () => late() ? 0.5 : 1;                                                   // スキルのクールタイムの倍率
@@ -655,7 +679,8 @@ function newPlayer() {
            mg: 0, mgr: 0, bm: 0, mc: 0, ml: 0, bd: BOOK_MAX, bdT: 0,   // mgr: いま ためが進んでいるか（0 = 止まっている。段階は mg に残る）   // 魔法使い: ためている長さ（0 = ためていない）/ 詠唱の残り / 詠唱中の魔法の段階 / 魔法書の耐久 / 壊れた本が戻るまでの残り
            mb: 0, mbo: -1, mbv: null,                   // 拘束魔法で動けない残り / かけた魔法使いのスロット / その間に魔法使いから受けた吹っ飛びの合計（ホストだけ）
            dm: 0,                                       // 蓄積ダメージ（%）
-           ub: 0, nc: 0, dr: 0, st: 0,                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
+           ub: 0, nc: 0, dr: 0, st: 0,
+           yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
            life: 0, isClone: false };
@@ -742,7 +767,6 @@ function shieldUp(p) {
   if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0 || p.gr > 0 || p.hd > 0 || p.mb > 0) return false;   // mb: 魔法で拘束されている
   if (p.bt > 0 || p.wb > 0 || p.yk > 0) return false;             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
-  if (c.id === "swapper" && p.kc > 0) return false;                  // スワッパー: ゾーンが消えたあとのクールタイム中は盾がない
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
   return true;
 }
@@ -770,7 +794,7 @@ function spawn(p, slot, n, battle) {
   p.yr = 0; p.yrc = 0; p.yry = 0; p.yrvy = 0; p.yrg = false;
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
-  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0;
+  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0;
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -983,7 +1007,7 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own));                    // 投げていた盾（何枚あっても）は消えて、手元に戻る
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.mb = 0; p.mbv = null;                                                    // 魔法使い: ためと詠唱は取り消し（魔法書の耐久はそのまま）
-  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0;                                                                   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
+  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0;                        // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
 
   for (const cb of cbsOf(p)) removeCb(cb);                                                       // クロス使い: 置いたクロスボウは（2 台あっても）全部消える
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;                                                       // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
@@ -1039,7 +1063,10 @@ function updateZones() {
     if (--m.t > 0) continue;
     game.rm.splice(i, 1);
     const p = game.p[m.own];
-    if (p) { p.kc = p.km = Math.round(zoneCd(m.r) * cdMul()); }       // 円が消えたら、大きさに応じたクールタイム（その間は盾なし・動きが遅い。ラストスパート中は半分）
+    if (p) {                                                       // 円が消えたら、大きさに応じたクールタイム（ラストスパート中は半分）と、自分へのダメージ（面積の二乗に比例）
+      p.kc = p.km = Math.round(zoneCd(m.r) * cdMul());
+      if (p.al) { const d = Math.round(zoneDmg(m.r)); if (d > 0) { p.dm = Math.min(DMG_MAX, (p.dm || 0) + d); emit("zd", ecx(p), p.y, d); } }
+    }
     emit("rx", m.x, m.y, m.r);
   }
 }
@@ -1539,6 +1566,12 @@ function physics(p, inp, neutral) {
   if (p.cn > 0 && --p.cn === 0 && !p.cnHit) p.fz = CN_WHIFF;       // 構えが空振りに終わると隙ができる
   if (p.slw > 0) p.slw--;
   if (p.ub > 0) p.ub--;
+  if (p.yb && p.yb.length) {                     // ヤク猫の注射器の強化: 1 つずつ時間が減り、切れたものから消える
+    const ybs = [0, 0, 0]; let ybt = 0;
+    p.yb = p.yb.filter(b => --b[1] > 0);
+    for (const b of p.yb) { ybs[b[0]]++; ybt = Math.max(ybt, b[1]); }
+    p.ybs = ybs; p.ybt = ybt;
+  }
   if (p.nc > 0) p.nc--;
   if (p.dr > 0) p.dr--;
   if (p.st > 0) p.st--;
@@ -1614,7 +1647,6 @@ function physics(p, inp, neutral) {
     if (lock) spm = 0;
     if (p.ks > 0) spm = Math.min(spm, 0.45);     // ためている間は動きが鈍る
     if (p.cn > 0) spm = 0;                       // カウンターの構え中は動かない
-    if (chd.id === "swapper" && p.kc > 0 && !neutral) spm *= ZONE_SLOW;   // スワッパー: ゾーンのクールタイム中は動きが遅い
     const sp = spm * MOVE_BASE * moveMul(S) * wm.mv;
     // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
     // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
@@ -1632,9 +1664,9 @@ function physics(p, inp, neutral) {
     }
     if (apress && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {
       p.ba = 0;
+      if (!p.ground && dir) p.f = dir;                          // 空中では、移動ボタンを押しながら攻撃すると、その方向へ振り向いて攻撃する（2026-10-18）
       if (zone && inZone(zone, p)) zoneWarp(p, zone);           // 円の中なら、敵の背後へ回り込んでから攻撃する
       p.a = 1; p.ak = chd.atk || 0; p.hit = [];                 // 通常攻撃（槍兵は長い槍）
-      if (p.gh > 0) { p.gh = 0; p.gb = 1; emit("gx", ecx(p), ecy(p)); }       // 自分から攻撃すると透過が解ける（この攻撃は 1.5 倍）
       emit("s", ecx(p), ecy(p));
     }
   }
@@ -1705,7 +1737,7 @@ function breakShield(t) { t.sh = 0; t.sbk = SHIELD_BREAK_FRAMES; t.shi = 0; t.bf
 function knock(att, t, frac, dir, cap) {                         // cap: 強さの上限（ふだんは 1.3。究極魔法だけ上げる）
   if (att.wa) { frac *= ZONE_WARP_MUL; att.wa = 0; }               // スワッパーの回り込み攻撃
   frac = Math.min(cap || 1.3, frac);
-  const mul = (att.gb > 0 ? GH_ATK_MUL : 1) * dzMul(t);          // 透過中の攻撃は強く、土下座中は飛びにくい
+  const mul = dzMul(t);                                          // 土下座中は飛びにくい（2026-10-18 まであった「透過中の攻撃は 1.5 倍」はなくした）
   t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul * dmgMul(t);
   addDmg(t, DMG_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul);
   t.vy = -9; t.s = Math.max(1, Math.round(Math.abs(t.vx) * STUN_SPEED));   // 攻撃力・防御力・ため量・透過・土下座などで速さが変わると、硬直もそのぶん変わる
@@ -2031,22 +2063,43 @@ function updateFlowers(list) {
 // 地面の小さな置き物（注射器・タバコ。足もとの中心 x・足場の面 y、横 ±half・高さ 12px）に、体が重なっているか
 const touchesItem = (e, x, y, half) => e.x < x + half && e.x + pwOf(e) > x - half && e.y < y && e.y + phOf(e) > y - 12;
 const itemOnPlatform = (x, y) => platforms().some(pl => Math.abs(pl.y - y) < 1 && x > pl.x + 2 && x < pl.x + pl.w - 2);
-function dropSyringe(p) {                    // 足もとに落とす（空中なら、真下へ落ちていく）。置けるのは 2 本まで（古いものから消える）
+const syMax = () => late() ? LATE_SYRINGES : SY_MAX;
+function dropSyringe(p) {                    // おくれたんの花と同じく、体の前 52px に落とす（地上で足場があればその上、足場の外や空中なら真下へ落ちていく）。置けるのは 2 本まで（ラストスパート中は 4 本。古いものから消える）
   const mine = game.sy.filter(s => s.own === p.own);
-  while (mine.length >= SY_MAX) game.sy.splice(game.sy.indexOf(mine.shift()), 1);
-  game.sy.push({ x: ecx(p), y: p.y + phOf(p), own: p.own, t: 0, air: p.ground ? 0 : 1, vy: p.ground ? 0 : Math.max(2, p.vy), away: false });
+  while (mine.length >= syMax()) game.sy.splice(game.sy.indexOf(mine.shift()), 1);
+  const x = ecx(p) + p.f * 52;
+  const pl = p.ground ? platforms().find(q => Math.abs(p.y + phOf(p) - q.y) < 2 && x > q.x + 4 && x < q.x + q.w - 4) : null;
+  if (pl) game.sy.push({ x, y: pl.y, own: p.own, t: 0, air: 0, vy: 0, away: false });
+  else game.sy.push({ x, y: p.y + phOf(p), own: p.own, t: 0, air: 1, vy: Math.max(2, p.vy), away: false });
 }
-function badBreath(p) {                      // 臭い息: 体の前 BREATH_RANGE までの、高さが重なる敵を動けなくする（盾・カウンターの構えは効かない）
-  const sz = szOf(p), front = p.f > 0 ? p.x + pwOf(p) : p.x, x0 = p.f > 0 ? front : front - BREATH_RANGE * sz, x1 = x0 + BREATH_RANGE * sz;
-  const y0 = p.y + 4 * sz, y1 = p.y + phOf(p) - 4 * sz;
-  for (const e of ents()) {
-    if (ally(e.own, p.own) || !e.al || untouchable(e)) continue;
-    if (hbR(e) < x0 || hbL(e) > x1 || e.y > y1 || e.y + phOf(e) < y0) continue;
-    e.fz = Math.max(e.fz, BREATH_STUN); e.st = BREATH_STUN;
-    e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.mc = 0; e.vx *= 0.3;
-    releaseGrab(e); stopWeb(e);
-  }
+function badBreath(p) {                      // 臭い息: 体の前に雲を置く（体の高さの中心に合わせる）。持ち主ごとに 1 つまで（新しく吐くと古い雲は消える）
+  const sz = szOf(p), front = p.f > 0 ? p.x + pwOf(p) : p.x, w = BREATH_W * sz, h = BREATH_H * sz;
+  game.bc = game.bc.filter(c => c.own !== p.own);
+  const c = { own: p.own, x: p.f > 0 ? front : front - w, y: ecy(p) - h / 2, w, h, d: p.f, t: 0, hit: [] };
+  game.bc.push(c);
+  breathTouch(c, ents());
   emit("br", front, p.y + 22 * sz, p.f);
+}
+function breathTouch(c, list) {              // 雲に重なっている敵: 初めて入った人は 1.5 秒動けなくする（盾・カウンターの構えは効かない）。0.25 秒ごとにダメージ
+  const tick = c.t > 0 && c.t % BREATH_TICK === 0;
+  for (const e of list) {
+    if (ally(e.own, c.own) || !e.al || untouchable(e)) continue;
+    if (hbR(e) < c.x || hbL(e) > c.x + c.w || e.y > c.y + c.h || e.y + phOf(e) < c.y) continue;
+    if (!c.hit.includes(e)) {
+      c.hit.push(e);
+      e.fz = Math.max(e.fz, BREATH_STUN); e.st = BREATH_STUN;
+      e.a = 0; e.ak = 0; e.ks = 0; e.cn = 0; e.mc = 0; e.vx *= 0.3;
+      releaseGrab(e); stopWeb(e);
+    }
+    if (tick) addDmg(e, BREATH_DOT);
+  }
+}
+function updateBreaths(list) {
+  for (let i = game.bc.length - 1; i >= 0; i--) {
+    const c = game.bc[i];
+    if (++c.t > BREATH_LIFE) { game.bc.splice(i, 1); continue; }
+    breathTouch(c, list);
+  }
 }
 function updateSyringes(list) {
   const pls = platforms();
@@ -2066,7 +2119,9 @@ function updateSyringes(list) {
       if (e.isClone || !e.al || untouchable(e) || !touchesItem(e, s.x, s.y, SY_HALF)) continue;
       if (e.own === s.own) {
         if (!s.away) continue;
-        e.ub = UP_FRAMES; game.sy.splice(i, 1); emit("syu", s.x, s.y); break;   // 自分で拾い直した: 全性能 +1
+        const k = Math.floor(Math.random() * 3);                                  // 自分で拾った: ランダムな性能 1 つが 8 秒 +1（何本でも重なる。それぞれ 8 秒で切れる）
+        e.yb.push([k, UP_FRAMES]); e.ybs[k]++; e.ybt = UP_FRAMES;
+        game.sy.splice(i, 1); emit("syu", s.x, s.y, k); break;
       }
       if (ally(e.own, s.own)) continue;
       e.dr = SY_DRUG; game.sy.splice(i, 1); emit("syh", s.x, s.y); break;      // 敵が触れた: その人の画面が揺れる
@@ -2176,7 +2231,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
       return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
     case "gobg": return g && sameLevel && t.ground && gap < 300 ? KEY.k : 0;
     case "yaku": return g && sameLevel && t.ground && gap > 40 && gap < 220 ? KEY.k : 0;                                        // 敵が来る道の足もとに注射器を落とす
-    case "yani": { const hy = c.y + 22 * szOf(c); return face && hy + 20 >= t.y && hy - 20 <= t.y + phOf(t) && gap <= BREATH_RANGE - 15 && t.s === 0 ? KEY.k : 0; }   // 息が届く距離の敵へ                                                         // 地上の敵が近いとき、手下を呼ぶ
+    case "yani": { const hy = c.y + 22 * szOf(c); return face && hy + 20 >= t.y && hy - 20 <= t.y + phOf(t) && gap <= BREATH_W - 30 && t.s === 0 ? KEY.k : 0; }   // 息の雲が届く距離の敵へ                                                         // 地上の敵が近いとき、手下を呼ぶ
     case "lancer": return g && face && sameLevel && shieldUp(t) && tFaces && gap >= 80 && gap <= 200 ? KEY.k : 0;              // 盾で待つ敵へ、突進して盾を割る
     case "xbow": {                                                                                                          // 同じ高さの敵が射線に入るところへ、クロスボウを置く（置ける数（ふだん 1 台、ラストスパート中は 2 台）に達している間は置かない）
       if (!g || cbsOf(c).length >= xbowMax()) return 0;
@@ -2478,7 +2533,7 @@ function hostTick() {
     for (const i of slots) { const p = game.p[i]; if (p.yr && !p.al) yureiStep(p, inputs[i]); }   // 幽霊（足場の上を歩く）
     const list = ents();
     updateFlowers(list);
-    updateSyringes(list); updateCigs(list);
+    updateSyringes(list); updateCigs(list); updateBreaths(list);
     updateProjectiles(list);
     updateCbs(list); updateGoblins(list); updateMinions(list);
     updateWinds();
@@ -2539,7 +2594,8 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.bdT) o.bdT = p.bdT;                                   // 魔法使い: 壊れた本が戻るまで
   if (p.mb) o.mb = p.mb;                                      // 拘束魔法で動けない残り
   if (p.dm) o.dm = p.dm;                                      // 蓄積ダメージ（%）
-  if (p.ub > 0) o.ub = p.ub;                                  // 注射器・タバコの全性能 +1 の残り
+  if (p.ub > 0) o.ub = p.ub;                                  // タバコの全性能 +1 の残り
+  if (p.ybt > 0) { o.yb = p.ybs.slice(); o.ybt = p.ybt; }      // ヤク猫の注射器: 性能ごとの上乗せ（攻撃・防御・スピード）と、いちばん長い残り
   if (p.nc > 0) o.nc = p.nc;                                  // 敵のタバコでスピード −1 の残り
   if (p.dr > 0) o.dr = p.dr;                                  // 注射器で画面が揺れる残り（揺れるのは本人の画面だけ）
   if (p.st > 0) o.st = p.st;                                  // 臭い息で動けない残り（見た目用）
@@ -2559,13 +2615,14 @@ function snapshot() {
     wd: game.wd.map(w => [r1(w.x), r1(w.y), w.w, w.h, w.d, w.t, w.own]),
     rm: game.rm.map(m => [r1(m.x), r1(m.y), r1(m.r), m.t, m.own]),
     sy: game.sy.map(s => s.air ? [r1(s.x), r1(s.y), s.t, s.own, 1, r1(s.vy)] : [r1(s.x), r1(s.y), s.t, s.own]),   // ヤク猫の注射器（落ちている途中は、5 番目が 1、6 番目が縦の速さ）
-    cg: game.cg.map(c => [r1(c.x), r1(c.y), c.t]) };                                                                // タバコ
+    cg: game.cg.map(c => [r1(c.x), r1(c.y), c.t]),
+    bc: game.bc.map(c => [r1(c.x), r1(c.y), r1(c.w), r1(c.h), c.d, c.t]) };                                         // ヤニ猫の臭い息の雲                                                                // タバコ
   const fresh = evq.splice(0);                // 前回の送信以降に起きた効果音・演出のきっかけ
   evHist.push(fresh); if (evHist.length > 6) evHist.shift();   // 直近 6 回ぶん（約 0.1 秒）
   evTotal += fresh.length;
   const ev = [].concat(...evHist);
   if (ev.length) s.ev = ev;
-  s.e1 = evTotal; s.q = ++snapQ;
+  s.e1 = evTotal; s.q = ++snapQ; s.tk = tickCount;   // tk: ホストの計算の番号（参加者が、届いたスナップショットを時間の順に並べて補間するため）
   return s;
 }
 
@@ -2595,9 +2652,10 @@ function hostLoop() {
     if (conns.some(c => c && c.open)) {
       const snap = snapshot(), str = JSON.stringify(snap);   // 文字にするのは 1 回だけ（全員に同じものを送る）
       for (let i = 0; i < MAX_PLAYERS; i++) {
-        const c = conns[i], f = fastConns[i];
+        const c = conns[i], f = fastConns[i], u = uchs[i];
         if (!c || !c.open) continue;
-        if (f && f.open && str.length < 60000) {
+        if (uchOpen(u) && str.length < 16000) { if (u.bufferedAmount < 32000) { try { u.send(str); } catch (e) {} } }   // 落としてよい通り道（詰まっている間は、その回を送らない）
+        else if (f && f.open && str.length < 60000) {
           // 送り切れずにたまっている（回線が詰まっている）参加者には、今回は送らない。次の新しいものが届けば足りるので、たまったぶんの遅れを増やさない
           if ((f.dataChannel && f.dataChannel.bufferedAmount > 32000) || f.bufferSize > 0) continue;
           f.send(str);
@@ -2665,6 +2723,9 @@ let hostTries = 0;
 let sessionId = 0;
 function goTitle() {
   sessionId++;
+  for (const u of uchs) { try { if (u) u.close(); } catch (e) {} }
+  try { if (uch) uch.close(); } catch (e) {}
+  uchs = []; uch = null; netOffs = []; renderTk = -1; interpD = 3; pingMs = 0; pingT = 0;
   clearInterval(hostTimer); hostTimer = null;
   const quiet = o => { try { if (o) { if (o.removeAllListeners) o.removeAllListeners(); if (o.close) o.close(); } } catch (e) {} };   // 切れたときの処理（エラー表示など）を先に外してから切る
   conns.forEach(quiet); quiet(hostConn); fastConns.forEach(quiet); quiet(fastConn);
@@ -2719,6 +2780,12 @@ function startHost() {
       p.al = game.ph === "lobby";            // 試合中の参加は、キャラを選んで次のラウンドから
       inputs[slot] = held[slot] = latch[slot] = inQs[slot] = 0;
       if (fastConns[slot]) { try { fastConns[slot].close(); } catch (e) {} fastConns[slot] = null; }
+      if (uchs[slot]) { try { uchs[slot].close(); } catch (e) {} }
+      uchs[slot] = openUch(conn, str => {                        // 落としてよい通り道で届く入力
+        if (conns[slot] !== conn) return;
+        let d; try { d = JSON.parse(str); } catch (e) { return; }
+        if (d && d.t === "in") takeInput(slot, d);
+      });
       conn.send({ t: "hello", id: slot });
       if (document.hidden) conn.send({ t: "pause", v: 1, q: snapQ });
       renderUI();
@@ -2727,11 +2794,13 @@ function startHost() {
         if (d.t === "in") takeInput(slot, d);
         else if (d.t === "prof") { applyProfile(p, sanitizeProfile(d)); renderUI(); }
         else if (d.t === "unprof") { if (canEdit(p)) p.rd = false; renderUI(); }
+        else if (d.t === "pg") conn.send({ t: "po", c: d.c });   // 往復時間の測定: そのまま返す
       });
       conn.on("close", () => {
         if (conns[slot] !== conn) return;
         game.p[slot].c = false; game.p[slot].al = false; conns[slot] = null;
         if (fastConns[slot]) { try { fastConns[slot].close(); } catch (e) {} fastConns[slot] = null; }
+        if (uchs[slot]) { try { uchs[slot].close(); } catch (e) {} uchs[slot] = null; }
         renderUI();
       });
     });
@@ -2740,7 +2809,7 @@ function startHost() {
 // 参加者の入力。番号（q）が前に使ったもの以下なら、遅れて届いた古い入力なので使わない（番号のない古い版の参加者は、届いた順に使う）
 function takeInput(slot, d) {
   if (d.q !== undefined) { const q = Number(d.q); if (!(q > inQs[slot])) return; inQs[slot] = q; }
-  held[slot] = d.k & 63; latch[slot] |= held[slot];
+  held[slot] = d.k & 63; latch[slot] |= held[slot] | (d.l & 63);   // l: 直前に押したボタン（短いタップ）
 }
 
 function startClient(code) {
@@ -2751,7 +2820,15 @@ function startClient(code) {
     hostConn = peer.connect(PREFIX + code, { reliable: true });
     hostConn.on("data", d => {
       if (!d) return;
-      if (d.t === "hello") { myId = d.id; net = "ready"; renderUI(); openFast(code, sid); }
+      if (d.t === "hello") {
+        myId = d.id; net = "ready"; renderUI(); openFast(code, sid);
+        uch = openUch(hostConn, str => {                       // 落としてよい通り道で届くスナップショット
+          if (sid !== sessionId) return;
+          let o; try { o = JSON.parse(str); } catch (e) { return; }
+          if (o && o.t === "s") applySnapshot(o);
+        });
+      }
+      else if (d.t === "po") { const r = performance.now() - d.c; if (r >= 0 && r < 10000) pingMs = pingMs ? pingMs * 0.7 + r * 0.3 : r; }
       else if (d.t === "full") { net = "error"; netMsg = "この部屋は満員です（最大4人）"; renderUI(); }
       else if (d.t === "s") applySnapshot(d);
       else if (d.t === "pause") { hostPause = !!d.v; if (d.v) pauseQ = d.q | 0; }   // ホストが画面を離れた / 戻った
@@ -2778,7 +2855,12 @@ function openFast(code, sid) {
 
 function readEnt(p, n) {                                     // スナップショットの内容を、見た目用の状態に反映する
   const jump = Math.abs(p.x - n.x) > 120 || Math.abs(p.y - n.y) > 120;
-  p.tx = n.x; p.ty = n.y; if (jump) { p.x = n.x; p.y = n.y; }
+  p.tx = n.x; p.ty = n.y; if (jump && curTk === undefined) { p.x = n.x; p.y = n.y; }
+  if (curTk !== undefined) {                                 // 補間用に、ホストの計算の番号と位置をためる（新しいものだけ。2 秒ぶんまで）
+    const b = p.ib || (p.ib = []);
+    if (!b.length || curTk > b[b.length - 1][0]) b.push([curTk, n.x, n.y]);
+    while (b.length > 2 && curTk - b[0][0] > 120) b.shift();
+  }
   p.f = n.f; p.a = n.a; p.ak = n.ak | 0; p.s = n.s; p.al = !!n.al; p.bf = n.bf; p.hf = n.hf;
   p.sh = n.sh; p.sbk = n.sk; p.sg = n.sg;
   p.gh = n.gh | 0; p.bz = n.bz | 0; p.cn = n.cn | 0; p.fz = n.fz | 0; p.iv = n.iv | 0; p.ks = n.ks | 0; p.gt = n.gt | 0; p.dz = n.dz | 0;
@@ -2790,12 +2872,17 @@ function readEnt(p, n) {                                     // スナップシ�
     if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
   }
   p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
-  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0;
+  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0;
   p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
 function applySnapshot(s) {
+  if (s.tk !== undefined) {                                            // 届いた時刻とホストの計算の番号の差（ずれ）を、直近 2 秒ぶんためる（ばらつきの大きさで、補間の遅らせ方を決める。捨てる古いものも数える）
+    netOffs.push(performance.now() - s.tk * STEP_MS);
+    if (netOffs.length > 120) netOffs.shift();
+  }
   if (s.q !== undefined) { if (s.q <= lastSnapQ) return; lastSnapQ = s.q; }   // 遅れて届いた古いスナップショットは捨てる（中の出来事は、次の 5 回にも入っている）
+  curTk = s.tk;
   if (s.q === undefined || s.q > pauseQ) hostPause = false;           // スナップショットが届くのは、ホストが動いているとき（一時停止の知らせの取りこぼし対策。止まる前に送られたものが、知らせより後に届いた場合は除く）
   const phChanged = game.ph !== s.ph;
   game.ph = s.ph; game.tm = s.tm; game.win = s.win; game.wt = s.wt | 0; game.nf = s.nf | 0; game.rt = s.rt | 0; game.sd = s.sd | 0; game.hsf = !!s.hs;
@@ -2830,7 +2917,13 @@ function applySnapshot(s) {
   game.cb = (s.cb || []).map(a => ({ x: a[0], y: a[1], f: a[2], t: a[3], hp: a[4], own: a[5], rl: a[6], vy: a[7] }));   // 古い版のホストは送らない
   game.sy = (s.sy || []).map(a => ({ x: a[0], y: a[1], t: a[2], own: a[3], air: a[4] | 0, vy: a[5] || 0 }));   // 古い版のホストは送らない
   game.cg = (s.cg || []).map(a => ({ x: a[0], y: a[1], t: a[2] }));
+  game.bc = (s.bc || []).map(a => ({ x: a[0], y: a[1], w: a[2], h: a[3], d: a[4], t: a[5] }));
   game.mn = (s.mn || []).map(a => ({ x: a[0], y: a[1], vx: a[2], vy: a[3], f: a[4], a: a[5], t: a[6], own: a[7] }));
+  if (curTk !== undefined && renderTk >= 0) {                          // 補間で人を少し前の時点で描くので、飛び道具と手下もそのぶん戻して、人とずれないようにする
+    const back = Math.max(0, curTk - renderTk);
+    for (const b of game.pj) { b.x -= b.vx * back; b.y -= b.vy * back; }
+    for (const m of game.mn) m.x -= m.vx * back;
+  }
   const sig = game.p.map(p => p ? (p.c ? 1 : 0) + "," + (p.rd ? 1 : 0) + "," + p.n + "," + (p.tg | 0) : "-").join("|");
   if (phChanged || wrChanged || sig !== lastSig) renderUI();
   lastSig = sig;
@@ -2845,11 +2938,21 @@ const touchDown = new Map();                 // 画面のボタン: 指（pointe
 function recalcKeys() {
   let k = 0; for (const c of down) k |= KEY[c];
   for (const c of touchDown.values()) k |= KEY[c];
+  const now = performance.now();
+  for (let b = 1; b < 64; b <<= 1) if ((k & b) && !(prevKeys & b)) pressT[b] = now;   // 押した瞬間の時刻
+  prevKeys = k;
   myKeys = k; latch[0] |= k;                 // ホスト自身の短いタップも取りこぼさない
   pushKeys();
 }
-function pushKeys() {
-  if (role === "client" && hostConn && hostConn.open && sentKeys !== myKeys) {
+const tapBits = () => { const now = performance.now(); let l = 0; for (const b in pressT) if (now - pressT[b] < 80) l |= +b; return l; };
+// force: 変わっていなくても送る（落としてよい通り道では、毎フレーム今の状態を送り直して、なくなった分を補う）
+function pushKeys(force) {
+  if (role !== "client" || !hostConn || !hostConn.open) return;
+  if (uchOpen(uch)) {
+    if (!force && sentKeys === myKeys) return;
+    try { uch.send(JSON.stringify({ t: "in", k: myKeys, l: tapBits(), q: ++inQ })); sentKeys = myKeys; return; } catch (e) {}
+  }
+  if (sentKeys !== myKeys) {
     const m = { t: "in", k: myKeys, q: ++inQ };
     if (fastConn && fastConn.open) fastConn.send(JSON.stringify(m)); else hostConn.send(m);
     sentKeys = myKeys;
@@ -3233,8 +3336,8 @@ const barHtml = (v, c, base) => {
   return `<span class="g" style="--c:${c}">${[1, 2, 3, 4, 5, 6].map(n => `<i class="${n <= v ? (n > b ? "on up" : "on") : (n <= b ? "dn" : "")}"></i>`).join("")}</span>`;
 };
 // 横画面モード: 画面の上に、全員の名前・キャラ名・勝ち数だけを小さなカードで出す（自分が左上。左右に半分ずつ、まん中は残り時間のために空ける）。
-// 性能の棒は自分のカードにだけ付ける（敵の性能は出さない）。LAND_MY_STATS を false にすると自分の分も出さない
-const LAND_MY_STATS = true;
+// 性能の棒は全員のカードに付ける（2026-10-18 までは自分のカードだけだった）。LAND_STATS を false にすると誰の分も出さない
+const LAND_STATS = true;
 function landStatsHtml() {
   const ids = [];
   for (let i = 0; i < MAX_PLAYERS; i++) { const p = game.p[i]; if (p && p.c && p.lk) ids.push(i); }
@@ -3242,7 +3345,7 @@ function landStatsHtml() {
   const card = i => {
     const p = game.p[i], c = chOf(p), wins = Array.from({ length: game.wr }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
     const vals = [effA(p), effD(p), effS(p)], bases = [baseStat(p, "A"), baseStat(p, "D"), baseStat(p, "S")];   // もとの値（リバーシは今の形態）
-    const bars = i === myId && LAND_MY_STATS ? `<div class="hs">${STATS.map((st, k) => barHtml(vals[k], st.color, bases[k])).join("")}</div>` : "";
+    const bars = LAND_STATS ? `<div class="hs">${STATS.map((st, k) => barHtml(vals[k], st.color, bases[k])).join("")}</div>` : "";
     return `<div class="hc${i === myId ? " me" : ""}" style="--c:${colOf(i)}"><div><b>${esc(nameOf(i))}</b>` +
       `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn">${wins}</span></div></div>${bars}</div>`;
   };
@@ -3282,7 +3385,7 @@ function refreshHud() {
   const me = game.p[myId];
   const inBattle = !!(role && net === "ready" && me && game.ph !== "lobby");
   const sig = (inBattle ? 1 : 0) + "|" + (land ? 1 : 0) + "|" + (late() ? 1 : 0) + "|" + game.ph + "|" + game.wr + "|" + myId + "|" +
-    game.p.map(p => p ? [p.c ? 1 : 0, p.lk ? 1 : 0, p.ch, p.lv, p.w, p.n, p.tg | 0, p.bz > 0 ? 1 : 0, p.gt > 0 ? 1 : 0, p.fm ? 1 : 0, p.slw > 0 ? 1 : 0, p.ub > 0 ? 1 : 0, p.nc > 0 ? 1 : 0].join(",") : "-").join("|");
+    game.p.map(p => p ? [p.c ? 1 : 0, p.lk ? 1 : 0, p.ch, p.lv, p.w, p.n, p.tg | 0, p.bz > 0 ? 1 : 0, p.gt > 0 ? 1 : 0, p.fm ? 1 : 0, p.slw > 0 ? 1 : 0, p.ub > 0 ? 1 : 0, p.nc > 0 ? 1 : 0, (p.ybs || []).join("/")].join(",") : "-").join("|");
   if (sig === lastHud) return;
   lastHud = sig;
   document.body.classList.toggle("battle", inBattle);
@@ -3939,8 +4042,10 @@ function fxEvent(e) {
     const big = e[3] === 1;                        // 大きな花: 演出を多めに
     Sfx.rooted(); shake(big ? 5 : 3);
     burst(x, y - 10, big ? 22 : 14, { dir: -Math.PI / 2, spread: 3.2, v0: 1.5, v1: 5, l0: 16, l1: 28, s0: 3, s1: 5, g: 0.1, colors: ["#f472b6", "#f9a8d4", "#16a34a"] });
-  } else if (k === "syu" || k === "cgu") {         // 注射器・タバコを拾った（cgu の 4 つ目: 1 = ヤニ猫が拾って強化 / 0 = 敵が拾ってスピード −1）
-    if (k === "syu" || e[3] === 1) { Sfx.bookNew(); rings.push({ x, y: y - 20, t: 0, max: 14, c: "#fde047", r0: 6, sp: 4 }); burst(x, y - 10, 10, { dir: -Math.PI / 2, spread: 2.4, v0: 1, v1: 4, l0: 14, l1: 26, s0: 2, s1: 4, g: -0.04, colors: ["#fde047", "#ffffff"] }); }
+  } else if (k === "zd") {                         // スワッパー: 円が消えて、自分にダメージ（e[3] = %）
+    Sfx.pop(); burst(x, y + 10, 8, { v0: 1, v1: 3, l0: 12, l1: 22, s0: 2, s1: 4, g: 0.1, colors: ["#67e8f9", "#a78bfa", "#f87171"] });
+  } else if (k === "syu" || k === "cgu") {         // 注射器・タバコを拾った（syu の 4 つ目: 上がった性能の番号 / cgu の 4 つ目: 1 = ヤニ猫が拾って強化 / 0 = 敵が拾ってスピード −1）
+    if (k === "syu" || e[3] === 1) { Sfx.bookNew(); rings.push({ x, y: y - 20, t: 0, max: 14, c: k === "syu" ? (STATS[e[3]] || STATS[0]).color : "#fde047", r0: 6, sp: 4 }); burst(x, y - 10, 10, { dir: -Math.PI / 2, spread: 2.4, v0: 1, v1: 4, l0: 14, l1: 26, s0: 2, s1: 4, g: -0.04, colors: ["#fde047", "#ffffff"] }); }
     else { Sfx.pop(); burst(x, y - 10, 10, { dir: -Math.PI / 2, spread: 2, v0: 0.5, v1: 2, l0: 20, l1: 36, s0: 4, s1: 8, g: -0.03, round: true, colors: ["#94a3b8", "#cbd5e1"] }); }
   } else if (k === "syh") {                        // 敵が注射器に触れた
     Sfx.rooted(); burst(x, y - 8, 12, { v0: 1, v1: 4, l0: 14, l1: 26, s0: 2, s1: 5, g: 0.05, colors: ["#ec4899", "#a855f7", "#e2e8f0"] });
@@ -4072,7 +4177,8 @@ function drawPlayer(p, i, me, now) {
     cx.fillStyle = "rgba(239,68,68,0.28)"; cx.fillRect(p.x - 5 + wob, p.y - 5, PLW + 10, PLH + 10);
     cx.fillStyle = "rgba(249,115,22,0.18)"; cx.fillRect(p.x - 9, p.y - 10, PLW + 18, PLH + 16);
   }
-  if (p.ub > 0 && p.al && (p.ub > 90 || Math.floor(now / 110) % 2)) {   // 注射器・タバコの全性能 +1: 体のまわりに金色の光（終わる前の 1.5 秒は点滅）
+  const upT = Math.max(p.ub | 0, p.ybt | 0);
+  if (upT > 0 && p.al && (upT > 90 || Math.floor(now / 110) % 2)) {   // 注射器・タバコの強化: 体のまわりに金色の光（終わる前の 1.5 秒は点滅）
     cx.save(); cx.shadowColor = "#fde047"; cx.shadowBlur = 14; cx.strokeStyle = "rgba(253,224,71,0.85)"; cx.lineWidth = 2.5;
     cx.strokeRect(p.x - 3, p.y - 3, PLW + 6, PLH + 6); cx.restore();
     cx.fillStyle = "#fde047"; for (let k = 0; k < 3; k++) { const a = now / 300 + k * 2.1; cx.fillRect(p.x + PLW / 2 + Math.cos(a) * 26 - 1.5, p.y + PLH / 2 + Math.sin(a) * 34 - 1.5, 3, 3); }
@@ -4431,6 +4537,19 @@ function drawCig(c, now) {
   cx.strokeStyle = "rgba(203,213,225,0.55)"; cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(x + 4, y - 5);
   cx.quadraticCurveTo(x + 4 + 6 * Math.sin(t), y - 13, x + 4 + 3 * Math.sin(t + 1.5), y - 22); cx.stroke();
 }
+// ヤニ猫の臭い息の雲: 黄緑のもやの玉がゆらゆら動く（出るときと消えるときはふわっと）
+function drawBreath(c, now) {
+  const fade = Math.max(0, Math.min(1, c.t / 6, (BREATH_LIFE - c.t) / 20));
+  cx.save(); cx.globalAlpha = fade;
+  cx.fillStyle = "rgba(132,204,22,0.18)"; cx.beginPath(); cx.ellipse(c.x + c.w / 2, c.y + c.h / 2, c.w / 2, c.h / 2, 0, 0, 6.2832); cx.fill();
+  for (let k = 0; k < 9; k++) {
+    const u = ((k * 0.37 + c.t * 0.004 * c.d) % 1 + 1) % 1, v = (k * 0.61) % 1;
+    const px = c.x + c.w * (0.1 + 0.8 * u), py = c.y + c.h * (0.2 + 0.6 * v) + Math.sin(now / 300 + k) * 5;
+    cx.fillStyle = k % 3 ? "rgba(163,230,53,0.35)" : "rgba(101,163,13,0.4)";
+    cx.beginPath(); cx.arc(px, py, 10 + (k % 4) * 3, 0, 6.2832); cx.fill();
+  }
+  cx.restore();
+}
 // 天狗の風の場: うっすら色のついた範囲に、風下へ流れる線（出るときと消えるときはふわっと）
 function drawWind(w, now) {
   const fade = Math.max(0, Math.min(1, w.t / 10, (WIND_FRAMES - w.t) / 30));
@@ -4699,8 +4818,33 @@ function setDrugView(on) {
   if (on === drugView) return;
   drugView = on; cv.style.filter = on ? "blur(1.6px) saturate(1.8) hue-rotate(35deg)" : "";
 }
+// 参加者側: 補間（届いたスナップショットの、少し前の時点の位置を描く）。tk を送らない古い版のホストなら false（今までどおり寄せる）
+function netInterp(dt, now) {
+  if (netOffs.length < 2) return false;
+  const base = Math.min(...netOffs), jit = netOffs.map(o => o - base).sort((a, b) => a - b);
+  const p90 = jit[Math.floor(jit.length * 0.9)];
+  const want = Math.max(2, Math.min(15, p90 / STEP_MS + 1.5));                 // ばらつきの 9 割をのみ込める遅らせ方
+  interpD += (want - interpD) * (want > interpD ? 0.2 : 0.01);                   // 増やすときは早く、減らすときはゆっくり
+  const target = (now - base) / STEP_MS - interpD;                              // いま描くホストの計算の番号
+  if (renderTk < 0 || Math.abs(target - renderTk) > 20) renderTk = target;
+  else renderTk += dt + (target - renderTk) * 0.05;
+  const place = p => {
+    const b = p && p.ib; if (!b || !b.length) return;
+    let i = b.length - 1;
+    if (renderTk >= b[i][0]) { p.x = b[i][1]; p.y = b[i][2]; return; }          // 新しいものがまだ届いていない: いちばん新しい位置で待つ
+    while (i > 0 && b[i - 1][0] > renderTk) i--;
+    if (i === 0) { p.x = b[0][1]; p.y = b[0][2]; return; }
+    const a = b[i - 1], c = b[i];
+    if (Math.abs(c[1] - a[1]) > 120 || Math.abs(c[2] - a[2]) > 120) { p.x = a[1]; p.y = a[2]; return; }   // 瞬間移動・復活: 間を埋めない
+    const k = (renderTk - a[0]) / (c[0] - a[0]);
+    p.x = a[1] + (c[1] - a[1]) * k; p.y = a[2] + (c[2] - a[2]) * k;
+  };
+  game.p.forEach(place); game.cl.forEach(place);
+  return true;
+}
+let interpOn = false;
 const smoothClient = p => {
-  if (p && p.tx !== undefined) { p.x += (p.tx - p.x) * 0.6; p.y += (p.ty - p.y) * 0.6; }
+  if (p && p.tx !== undefined && !interpOn) { p.x += (p.tx - p.x) * 0.6; p.y += (p.ty - p.y) * 0.6; }
   if (p && p.yr && p.yrt !== undefined) { p.yrx += (p.yrt - p.yrx) * 0.6; p.yry += (p.yrty - p.yry) * 0.6; }   // 幽霊の位置も同じように
 };   // 参加者側: 届いた位置へ寄せて滑らかに見せる
 let lastT = performance.now();
@@ -4715,11 +4859,17 @@ function render() {
     for (const b of game.pj) { b.x += b.vx * dt; b.y += b.vy * dt; b.t += dt; if (b.k === 0) b.vy += 0.5 * dt; }
     for (const m of game.mn) { m.x += m.vx * dt; m.t += dt; }          // 手下は横へ、クロスボウは経過（点滅）だけ先へ進める（y はホストの値のまま）
     for (const c of game.cb) c.t += dt;
+    for (const c of game.bc) c.t += dt;
     for (const f of game.fl) if (f.air) { f.y += f.vy * dt; f.vy = Math.min(14, f.vy + 0.6 * dt); }   // 落ちている花
     for (const s of game.sy) if (s.air) { s.y += s.vy * dt; s.vy = Math.min(14, s.vy + 0.6 * dt); }   // 落ちている注射器
 
   }
-  if (role === "client") { game.p.forEach(smoothClient); game.cl.forEach(smoothClient); }
+  if (role === "client") {
+    interpOn = netInterp(dt, now);
+    game.p.forEach(smoothClient); game.cl.forEach(smoothClient);
+    if (uchOpen(uch)) pushKeys(true);                                   // 落としてよい通り道では、毎フレーム今のボタンの状態を送る
+    if (hostConn && hostConn.open && now - pingT > 2000) { pingT = now; try { hostConn.send({ t: "pg", c: now }); } catch (e) {} }
+  }
   const g = cx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
   cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
   updateCamera(dt);
@@ -4767,6 +4917,7 @@ function render() {
   for (const f of game.fl) drawFlower(f, now);
   for (const sy of game.sy) drawSyringe(sy, now);
   for (const cg of game.cg) drawCig(cg, now);
+  for (const bc of game.bc) drawBreath(bc, now);
   for (const m of game.rm) drawPlacedZone(m, now);
   for (const c of game.cb) drawCb(c, now);
   for (const p of game.p) if (p && p.c && p.al && p.ks > 0 && chOf(p).id === "swapper") drawZone(p);
@@ -4797,6 +4948,13 @@ function render() {
   else flashA = 0;
   // メッセージ
   drawTimer(now);
+  if (role === "client" && pingMs > 0 && net === "ready") {             // 参加者だけ: 通信の往復時間（緑 < 80ms / 黄 < 150ms / 赤）と、補間の遅らせ方
+    const ms = Math.round(pingMs), y = land ? 56 : Math.max(16, Math.min(34, cw / 13)) + 24;
+    cx.save(); cx.font = "11px sans-serif"; cx.textAlign = "center";
+    cx.fillStyle = ms < 80 ? "rgba(134,239,172,0.8)" : ms < 150 ? "rgba(253,224,71,0.8)" : "rgba(248,113,113,0.85)";
+    cx.fillText("通信 " + ms + "ms" + (interpOn ? " ・補間 " + Math.round(interpD * STEP_MS) + "ms" : ""), cw / 2, y);
+    cx.restore();
+  }
   if (game.ph === "count") banner(String(Math.ceil(game.tm / 60)), "ラウンド開始！");
   else if (game.ph === "round") banner(game.win >= 0 ? (game.wt ? teamWord(game.wt) : nameOf(game.win)) + " の勝ち！" : "引き分け");
   else if (game.ph === "match") banner((game.wt ? teamWord(game.wt) : nameOf(game.win)) + " 優勝！", "まもなくロビーに戻ります");
