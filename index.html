@@ -1300,7 +1300,7 @@ function endBite(p) {
   p.vbT = 0; p.vbTgt = null; p.vbAmt = 0;
 }
 // ---- 波動士: 波動弾 ----
-const hwPos = p => { const sz = szOf(p), c = hwC(p.hw), r = hwRad(c, p) * sz; return { x: ecx(p), y: p.y - 54 * sz - r, r, c }; };   // 頭の上の名前と % の表示より上   // ためている玉の位置（体の後ろ）と大きさ
+const hwPos = p => { const sz = szOf(p), c = hwC(p.hw), r = hwRad(c, p) * sz; return { x: ecx(p), y: p.y, r, c }; };   // 頭のてっぺんが玉の中心（2026-10-18 に、名前と % の表示より上から下げた）   // ためている玉の位置（体の後ろ）と大きさ
 function fireHadou(p) {
   const o = hwPos(p), sz = szOf(p);
   o.x = ecx(p) + p.f * (pwOf(p) / 2 + o.r * 0.5); o.y = p.y + 26 * sz;            // 頭の上でためた玉を、体の高さで前へ撃ち出す（頭の上のままだと敵の上を通ってしまうため）
