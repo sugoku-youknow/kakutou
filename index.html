@@ -507,7 +507,8 @@ const VAMP_BITE = 30, VAMP_TICK = 6, VAMP_WING = 24;
 // ため量 c（0〜1、HW_MAX で 1）で、玉の半径・速さ・吹っ飛ばしが増える。ためている玉にも当たり判定がある（同じ相手には 1 回のためで 1 回）。撃ったあと HW_CD のクールタイム
 const HW_MAX = 180, HW_MIN = 8, HW_CD = 90, HW_RANGE = 650, HADOU_PER = 20, HW_HIT_GAP = 10;   // … / ためている玉が、同じ相手にもう一度当たれるまでのフレーム（2026-10-18 から当たり続ける）   // 最大までの長さ（3 秒）/ 撃てる最低限 / 撃ったあと（1.5 秒）/ 射程 / 波動の力: 自分の % がこれだけ増えるごとに全性能 +1（なめらかに）
 // 2026-10-18 から、玉は自分の後ろで作る。ためている間（スキルでためている状態）だけ玉があり、ためが止まると消える。自分の % が多いほど大きく速い（100% で大きさ 1.7 倍・速さ 1.5 倍まで）
-const hwSize = p => 1 + 0.7 * Math.min(1, ((p && p.dm) || 0) / 100), hwSpeed = p => 1 + 0.5 * Math.min(1, ((p && p.dm) || 0) / 100);
+// 2026-10-18（第14弾）: 玉の半径 = 8 + 12 × ため量 + 12 × min(1, 自分の % / 100)。0% なら 小（8）→ 中（20）、100% 以上なら 中（20）→ 大（32）。当たり判定も同じ大きさ。玉は頭の上でためる
+const hwK = p => Math.min(1, ((p && p.dm) || 0) / 100), hwRad = (c, p) => 8 + 12 * c + 12 * hwK(p), hwSpeed = p => 1 + 0.5 * hwK(p);
 const hwC = hw => Math.min(1, hw / HW_MAX), hwR = c => 8 + 12 * c, hwV = c => 7 + 11 * c, hwFrac = c => 0.4 + 0.9 * c, hwHoldFrac = c => 0.15 + 0.2 * c;   // ためている玉の 1 回の吹っ飛ばし（連続で当たるので弱め）
 // 勝負師（2026-10-18）: ハンマーの出目（1〜5）。1: 当たっても何も起きず自分に HM_SELF % / 2: 通常攻撃 / 3: 通常攻撃＋自分の % を HM_HEAL 回復 / 4: 盾を壊し、HM_BIND 動けなくして HM_DMG4 % / 5: 盾を壊し、HM_FRAC5 倍で吹っ飛ばす
 const HM_SELF = 20, HM_HEAL = 8, HM_BIND = 60, HM_DMG4 = 10, HM_FRAC5 = 2, HM_SHOW = 60;   // HM_SHOW: 出目の吹き出しを頭の上に出しておく長さ（1 秒）
@@ -587,7 +588,7 @@ const CHARS = [
     skill: { name: "吸血", cd: 7, text: "前の敵に0.5秒噛みつく（盾・カウンター無視。吹っ飛ばさない）。8%＋相手の%の20%を吸い取り、同じだけ自分の%が回復する" },
     auto: "吸血鬼の羽: 二段ジャンプで羽を広げ、スピード6の地上ジャンプと同じ高さまで跳ぶ。落ちるのがゆっくり（0.6倍）" },
   { id: "hadou", name: "波動士", A: 2, D: 2, S: 2, tag: "波動をためて撃つ。追い込まれるほど強くなる",
-    skill: { name: "波動弾", cd: 0, cdText: "撃ったあと1.5秒", text: "押すと体の後ろで波動をため始め、もう一度押すと撃つ。ためるほど、また自分の%が多いほど大きく速い（最大3秒）。ためている波動は触れた敵に当たり続ける。動くなどでためが止まっても、ため量は残り、押すと再開" },
+    skill: { name: "波動弾", cd: 0, cdText: "撃ったあと1.5秒", text: "押すと頭の上で波動をため始め、もう一度押すと撃つ。ためるほど、また自分の%が多いほど大きく速い（最大3秒）。ためている波動は触れた敵に当たり続ける。動くなどでためが止まっても、ため量は残り、押すと再開" },
     auto: "波動の力: 自分の%が20%増えるごとに、全性能が+1（なめらかに上がる）" },
   { id: "gambler", name: "勝負師", A: 2, D: 1, S: 3, tag: "出目しだいのハンマーで勝負する",
     skill: { name: "ハンマー", cd: 4, text: "1〜5がランダムに出るハンマーで殴る。1:自分に20% 2:通常攻撃 3:攻撃＋自分の%を8回復 4:盾を壊し1秒拘束＋10% 5:盾を壊し2倍で吹っ飛ばす" } },
@@ -1290,10 +1291,11 @@ function endBite(p) {
   p.vbT = 0; p.vbTgt = null; p.vbAmt = 0;
 }
 // ---- 波動士: 波動弾 ----
-const hwPos = p => { const sz = szOf(p), c = hwC(p.hw), r = hwR(c) * hwSize(p) * sz; return { x: ecx(p) - p.f * (16 * sz + r), y: p.y + 26 * sz, r, c }; };   // ためている玉の位置（体の後ろ）と大きさ
+const hwPos = p => { const sz = szOf(p), c = hwC(p.hw), r = hwRad(c, p) * sz; return { x: ecx(p), y: p.y - 54 * sz - r, r, c }; };   // 頭の上の名前と % の表示より上   // ためている玉の位置（体の後ろ）と大きさ
 function fireHadou(p) {
-  const o = hwPos(p);
-  game.pj.push({ k: 7, x: o.x, y: o.y, vx: p.f * hwV(o.c) * hwSpeed(p), vy: 0, own: p.own, t: 0, d: 0, pw: o.c, hit: [] });   // 後ろから前へ、自分の体を通り抜けて飛ぶ
+  const o = hwPos(p), sz = szOf(p);
+  o.x = ecx(p) + p.f * (pwOf(p) / 2 + o.r * 0.5); o.y = p.y + 26 * sz;            // 頭の上でためた玉を、体の高さで前へ撃ち出す（頭の上のままだと敵の上を通ってしまうため）
+  game.pj.push({ k: 7, x: o.x, y: o.y, vx: p.f * hwV(o.c) * hwSpeed(p), vy: 0, own: p.own, t: 0, d: 0, pw: o.c, hit: [] });
   p.hw = 0; p.hwr = 0; p.hwh = []; p.kc = p.km = Math.round(HW_CD * cdMul());
   emit("hwf", o.x, o.y, p.f, Math.round(o.c * 10) / 10);
 }
@@ -1753,7 +1755,7 @@ function physics(p, inp, neutral) {
   }
   if (chd.id === "hadou" && p.hwr) {            // 波動士: ためが止まる条件は魔法使いと同じ。止まると玉は消える（2026-10-18 から）。最大までたまったら、そのまま持っている
     if ((p.ground && dir) || jrise || p.bu > 0 || apress || p.s > 0 || p.fz > 0 || p.a > 0 || p.hd > 0 || p.yk > 0 || p.mb > 0) { const o = hwPos(p); emit("hwx", o.x, o.y, 0.2); p.hwr = 0; p.hwh = []; }   // 止まる: 玉は見えなくなるが、ため量は残る（2026-10-18 から。押すと再開）
-    else if (p.hw < HW_MAX && (p.hw += late() ? 2 : 1) >= HW_MAX) { p.hw = HW_MAX; emit("hwu", ecx(p) - p.f * 30, p.y + 26); }
+    else if (p.hw < HW_MAX && (p.hw += late() ? 2 : 1) >= HW_MAX) { p.hw = HW_MAX; const o = hwPos(p); emit("hwu", o.x, o.y, o.r); }
   }
   if (p.bk > 0) p.bk--;
   if (p.ba > 0) p.ba--;
@@ -2109,7 +2111,7 @@ function updateProjectiles(list) {
       }
       hitObjs(b.own, x0, ya, x1, yb, b.hitO, false, CB_PAD);
     } else if (b.k === 7) {                                  // 波動弾: 真横へ飛び、最初に当たった人（盾なら盾）で消える。射程を過ぎたら消える
-      const o = game.p[b.own], dir = Math.sign(b.vx) || 1, r = hwR(b.pw) * hwSize(o);
+      const o = game.p[b.own], dir = Math.sign(b.vx) || 1, r = hwRad(b.pw, o);
       b.x += b.vx; b.d += Math.abs(b.vx);
       let gone = false, best = null, bd = 1e9;
       for (const e of list) {
@@ -2436,8 +2438,8 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "hadou": {                                                                                                     // 魔法使いと同じく、狙った長さまでためて、敵が射線にいたら撃つ
       if (!c.hw) { if (!g || gap > HW_RANGE) return 0; c.aiHw = [20, 40, 60, 90, 180][Math.floor(Math.random() * 5)]; return KEY.k; }
       if (!c.hwr) return g ? KEY.k : 0;                                                                                 // 止まっていたためを再開する
-      const o = hwPos(c), ready = c.hw >= (c.aiHw || HW_MIN) || c.hw >= HW_MAX;
-      const aimed = face && o.y + o.r >= t.y && o.y - o.r <= t.y + phOf(t) && gap <= HW_RANGE - 40;
+      const o = hwPos(c), ready = c.hw >= (c.aiHw || HW_MIN) || c.hw >= HW_MAX, fy = c.y + 26 * szOf(c);   // 撃つ玉は体の高さを飛ぶ
+      const aimed = face && fy + o.r >= t.y && fy - o.r <= t.y + phOf(t) && gap <= HW_RANGE - 40;
       return ready && aimed && c.hw >= HW_MIN ? KEY.k : 0;
     }
     case "yaku": return g && sameLevel && t.ground && gap > 40 && gap < 220 ? KEY.k : 0;                                        // 敵が来る道の足もとに注射器を落とす
@@ -4331,8 +4333,10 @@ function fxEvent(e) {
     rings.push({ x, y, t: 0, max: 12, c: "#38bdf8", r0: 8, sp: 3 + 3 * f });
   } else if (k === "hwx") {                        // 波動弾が当たった・消えた
     burst(x, y, 8 + Math.round(10 * d), { v0: 1, v1: 4, l0: 12, l1: 22, s0: 2, s1: 5, colors: ["#38bdf8", "#e0f2fe", "#ffffff"] });
-  } else if (k === "hwu") {                        // 波動が最大までたまった
-    Sfx.bookNew(); rings.push({ x, y, t: 0, max: 16, c: "#38bdf8", r0: 12, sp: 5 });
+  } else if (k === "hwu") {                        // 波動が最大までたまった（d: 玉の半径）: 画面が少し光り、玉から光の輪と粒が広がる
+    Sfx.bookNew(); flashA = Math.max(flashA, 0.18); shake(3);
+    rings.push({ x, y, t: 0, max: 16, c: "#e0f2fe", r0: d, sp: 6 }); rings.push({ x, y, t: 0, max: 20, c: "#38bdf8", r0: d * 0.8, sp: 4 });
+    burst(x, y, 22, { v0: 2, v1: 7, l0: 14, l1: 26, s0: 2, s1: 5, g: 0, colors: ["#38bdf8", "#e0f2fe", "#ffffff"] });
   } else if (k === "hm") {                         // ハンマーの出目（d: 1〜5）
     if (d === 1) { Sfx.pop(); burst(x, y, 6, { v0: 0.5, v1: 2, l0: 10, l1: 18, s0: 2, s1: 4, colors: ["#6b7280", "#9ca3af"] }); }
     else if (d === 5) { Sfx.bookNew(); rings.push({ x, y, t: 0, max: 14, c: "#facc15", r0: 6, sp: 4 }); }
@@ -4520,11 +4524,22 @@ function drawPlayer(p, i, me, now) {
     cx.fillStyle = "#f8fafc"; cx.beginPath(); cx.moveTo(mx, my - 4); cx.lineTo(mx + p.f * 7, my); cx.lineTo(mx, my + 4); cx.fill();
     cx.fillStyle = "rgba(220,38,38,0.85)"; for (let j = 0; j < 3; j++) { const ph = ((now / 260) + j / 3) % 1; cx.beginPath(); cx.arc(mx + p.f * (16 - 16 * ph), my + Math.sin(ph * 6 + j) * 3, 2.2, 0, 6.2832); cx.fill(); }
   }
-  if (chd.id === "hadou" && !clone && p.al && p.hw > 0 && p.hwr) {         // 波動士: ためている波動の玉（ためが進んでいる間は脈打つ）
-    const o = hwPos(p), pulse = p.hwr ? 1 + 0.12 * Math.sin(now / 60) : 1;
-    cx.save(); cx.shadowColor = "#38bdf8"; cx.shadowBlur = 10 + 14 * o.c;
-    cx.fillStyle = "rgba(56,189,248,0.55)"; cx.beginPath(); cx.arc(o.x, o.y, o.r * pulse, 0, 6.2832); cx.fill();
-    cx.fillStyle = "rgba(224,242,254,0.9)"; cx.beginPath(); cx.arc(o.x, o.y, o.r * 0.45 * pulse, 0, 6.2832); cx.fill();
+  if (chd.id === "hadou" && !clone && p.al && p.hw > 0 && p.hwr) {         // 波動士: 頭の上でためている波動の玉（脈打つ）。両手から玉へ細い光の筋
+    const o = hwPos(p), full = p.hw >= HW_MAX, pulse = 1 + (full ? 0.08 : 0.12) * Math.sin(now / (full ? 45 : 60));
+    cx.save(); cx.strokeStyle = "rgba(125,211,252,0.6)"; cx.lineWidth = 1.5; cx.beginPath();
+    cx.moveTo(p.x + 2, p.y + 2); cx.lineTo(o.x - o.r * 0.5, o.y + o.r * 0.7); cx.moveTo(p.x + PLW - 2, p.y + 2); cx.lineTo(o.x + o.r * 0.5, o.y + o.r * 0.7); cx.stroke();
+    cx.shadowColor = "#38bdf8"; cx.shadowBlur = 10 + 14 * o.c + (full ? 14 : 0);
+    if (full) {                                                   // 最大までたまった: 玉のまわりに外へ揺らめく光の層と、こぼれ落ちる・はじける粒（あふれ出ている）
+      for (let k = 0; k < 3; k++) { const rr = o.r * (1.25 + 0.18 * k + 0.08 * Math.sin(now / 90 + k * 2)); cx.fillStyle = "rgba(56,189,248," + (0.18 - 0.05 * k) + ")"; cx.beginPath(); cx.arc(o.x, o.y, rr, 0, 6.2832); cx.fill(); }
+      for (let k = 0; k < 10; k++) {
+        const ph = ((now / 700) + k / 10) % 1, a = k * 2.399 + Math.floor(now / 700 + k / 10) * 1.3;
+        const px = o.x + Math.cos(a) * o.r * (0.9 + 0.9 * ph), py = o.y + Math.sin(a) * o.r * (0.9 + 0.5 * ph) + ph * ph * 30;   // 外へ出て、下へこぼれる
+        cx.fillStyle = k % 2 ? "rgba(224,242,254," + (1 - ph).toFixed(2) + ")" : "rgba(56,189,248," + (1 - ph).toFixed(2) + ")";
+        cx.beginPath(); cx.arc(px, py, 2 + 2 * (1 - ph), 0, 6.2832); cx.fill();
+      }
+    }
+    cx.fillStyle = full ? "rgba(56,189,248,0.7)" : "rgba(56,189,248,0.55)"; cx.beginPath(); cx.arc(o.x, o.y, o.r * pulse, 0, 6.2832); cx.fill();
+    cx.fillStyle = "rgba(224,242,254,0.9)"; cx.beginPath(); cx.arc(o.x, o.y, o.r * (full ? 0.55 : 0.45) * pulse, 0, 6.2832); cx.fill();
     cx.restore();
   }
   if (p.a > 0 && p.ak === 4 && p.al) {                            // 勝負師: ハンマーを背中の上へ振りかぶり、前へ振り下ろす（当たる間は前に倒れたまま、振り終わりで戻す）。頭の色は出目（1 は灰色、5 は金色）
@@ -4892,7 +4907,7 @@ function drawCig(c, now) {
 }
 // 波動弾: 青く光る玉と、後ろに流れる尾（ため量で大きくなる）
 function drawHadou(b, now) {
-  const r = hwR(b.pw || 0) * hwSize(game.p[b.own]), d = Math.sign(b.vx) || 1;
+  const r = hwRad(b.pw || 0, game.p[b.own]), d = Math.sign(b.vx) || 1;
   cx.save(); cx.shadowColor = "#38bdf8"; cx.shadowBlur = 12 + 12 * (b.pw || 0);
   cx.fillStyle = "rgba(56,189,248,0.3)"; cx.beginPath(); cx.ellipse(b.x - d * r * 1.2, b.y, r * 1.6, r * 0.7, 0, 0, 6.2832); cx.fill();
   cx.fillStyle = "rgba(56,189,248,0.75)"; cx.beginPath(); cx.arc(b.x, b.y, r, 0, 6.2832); cx.fill();
