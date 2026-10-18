@@ -511,6 +511,9 @@ const HW_MAX = 180, HW_MIN = 8, HW_CD = 90, HW_RANGE = 650, HADOU_PER = 20, HW_H
 const hwK = p => Math.min(1, ((p && p.dm) || 0) / 100), hwRad = (c, p) => 8 + 12 * c + 12 * hwK(p), hwSpeed = p => 1 + 0.5 * hwK(p);
 const hwC = hw => Math.min(1, hw / HW_MAX), hwR = c => 8 + 12 * c, hwV = c => 7 + 11 * c, hwFrac = c => 0.4 + 0.9 * c, hwHoldFrac = c => 0.15 + 0.2 * c;   // ためている玉の 1 回の吹っ飛ばし（連続で当たるので弱め）
 // 勝負師（2026-10-18）: ハンマーの出目（1〜5）。1: 当たっても何も起きず自分に HM_SELF % / 2: 通常攻撃 / 3: 通常攻撃＋自分の % を HM_HEAL 回復 / 4: 盾を壊し、HM_BIND 動けなくして HM_DMG4 % / 5: 盾を壊し、HM_FRAC5 倍で吹っ飛ばす
+// CF（2026-10-18）: ムーンサルトは、体の前 CF_REACH の敵を真上へ蹴り上げる（盾・騎士のカウンターの構えは効かない）。約 CF_LIFT px 浮き、CF_STUN フレーム動けない。CF_DMG % がたまる。
+// 自分は CF_FLIP フレームかけて宙返りする（少し浮く）。パッシブ: 空中で通常攻撃の根元（体に近い CF_ROOT px）が当たるとクリティカル（威力と吹っ飛ばしが CF_CRIT 倍、ヒットストップはふつうの CF_HS 倍）
+const CF_REACH = 44, CF_LIFT = 268, CF_STUN = 60, CF_DMG = 8, CF_FLIP = 18, CF_ROOT = 14, CF_CRIT = 2, CF_HS = 1.2;
 const HM_SELF = 20, HM_HEAL = 8, HM_BIND = 60, HM_DMG4 = 10, HM_FRAC5 = 2, HM_SHOW = 60;   // HM_SHOW: 出目の吹き出しを頭の上に出しておく長さ（1 秒）
 const withdrawn = p => !p.isClone && (p.cw | 0) > CIG_WD;
 const cigLeft = p => Math.max(0, 1 - (p.cw | 0) / CIG_WD);   // 口のタバコの残り（1 = 火をつけたばかり、0 = 吸い切った）
@@ -592,6 +595,10 @@ const CHARS = [
     auto: "波動の力: 自分の%が20%増えるごとに、全性能が+1（なめらかに上がる）" },
   { id: "gambler", name: "勝負師", A: 2, D: 1, S: 3, tag: "出目しだいのハンマーで勝負する",
     skill: { name: "ハンマー", cd: 4, text: "1〜5がランダムに出るハンマーで殴る。1:自分に20% 2:通常攻撃 3:攻撃＋自分の%を8回復 4:盾を壊し1秒拘束＋10% 5:盾を壊し2倍で吹っ飛ばす" } },
+  // 29 体目（必ず末尾に足す）
+  { id: "cf", name: "CF", A: 3, D: 2, S: 4, tag: "蹴り上げて、空中攻撃の根元でクリティカル",
+    skill: { name: "ムーンサルト", cd: 4, text: "宙返りして前の敵を真上に蹴り上げる（盾・カウンター無視）。相手は約250px浮いて1秒動けない" },
+    auto: "空中で通常攻撃の根元（体に近い14px）が当たるとクリティカル: 2倍の威力と吹っ飛ばし、光ってヒットストップ" },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
@@ -710,7 +717,7 @@ function newPlayer() {
            mb: 0, mbo: -1, mbv: null,                   // 拘束魔法で動けない残り / かけた魔法使いのスロット / その間に魔法使いから受けた吹っ飛びの合計（ホストだけ）
            dm: 0,                                       // 蓄積ダメージ（%）
            hw: 0, hwr: 0, hwh: [], hmN: 0, hmT: 0,     // … / 勝負師: 出目の吹き出しを出す残り
-           vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0,        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
+           vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
            ub: 0, nc: 0, dr: 0, st: 0, cw: 0, cs: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
            yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
@@ -798,7 +805,7 @@ function shieldUp(p) {
   const c = chOf(p);
   if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0 || p.gr > 0 || p.hd > 0 || p.mb > 0) return false;   // mb: 魔法で拘束されている
-  if (p.bt > 0 || p.wb > 0 || p.yk > 0) return false;             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
+  if (p.bt > 0 || p.wb > 0 || p.yk > 0 || p.msT > 0) return false;   // … / CF のムーンサルト（宙返り）の間             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
   return true;
 }
@@ -956,6 +963,8 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     placeCb(p);
   } else if (id === "vamp") {                  // 吸血: 空振りならクールタイムは短い
     if (!vampBite(p)) { p.kc = Math.round(VAMP_WHIFF * cdMul()); emit("sk", ecx(p), ecy(p), p.ch); return true; }
+  } else if (id === "cf") {                    // ムーンサルト: 当たっても外れても、クールタイムは同じ
+    cfMoonsault(p);
   } else if (id === "gambler") {               // ハンマー: 出目を決めて振る（1 は自分にダメージ、3 は自分の % を回復）
     const n = 1 + Math.floor(Math.random() * 5);
     p.hmN = n; p.hmT = HM_SHOW; p.a = 1; p.ak = 4; p.hit = [];
@@ -1316,6 +1325,26 @@ function updateHadouOrbs(list) {
     }
   }
 }
+// ---- CF: ムーンサルト ----
+// 体の前（少し体に食い込むところから CF_REACH 先まで）・体の高さに重なる、いちばん近い敵を真上へ蹴り上げる。盾も騎士の構えも効かない。自分は宙返りして少し浮く
+function cfMoonsault(p) {
+  const sz = szOf(p), front = p.f > 0 ? p.x + pwOf(p) : p.x;
+  const x0 = p.f > 0 ? front - 8 : front - CF_REACH * sz, x1 = x0 + CF_REACH * sz + 8, y0 = p.y - 10 * sz, y1 = p.y + phOf(p);
+  let t = null, bd = 1e9;
+  for (const e of ents()) {
+    if (ally(e.own, p.own) || !e.al || untouchable(e)) continue;
+    if (hbR(e) < x0 || hbL(e) > x1 || e.y > y1 || e.y + phOf(e) < y0) continue;
+    const d = Math.abs(ecx(e) - ecx(p)); if (d < bd) { bd = d; t = e; }
+  }
+  p.msT = CF_FLIP; p.a = 0; p.vx *= 0.3; p.vy = Math.min(p.vy, -6); p.ground = false;
+  if (!t) { emit("ms", front + p.f * 16, p.y + 20 * sz, p.f, 0); return; }
+  grabBroken(t); releaseGrab(t); stopWeb(t); freeBind(t);
+  t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.mc = 0; t.fz = 0; t.dz = 0; t.hd = 0;
+  t.vx = 0; t.vy = -jumpVel(CF_LIFT); t.s = CF_STUN; t.ground = false; t.hf = 12;
+  addDmg(t, CF_DMG);
+  emit("ms", ecx(t), t.y + phOf(t), p.f, 1);
+}
+
 // ---- 勝負師: ハンマー ----
 // 出目ごとの当たり方（1 は何も起きない。2・3 は通常攻撃と同じで盾に止められる。4・5 は盾を壊す。騎士の構えには返される）
 function hammerHit(p, t) {
@@ -1695,6 +1724,7 @@ function physics(p, inp, neutral) {
   if (p.slw > 0) p.slw--;
   if (p.ub > 0) p.ub--;
   if (p.wgT > 0) p.wgT--;
+  if (p.msT > 0) p.msT--;
   if (p.hmT > 0) p.hmT--;
   if (chd.id === "yani" && !p.isClone && !neutral && game.ph === "play") {   // ヤニ猫: タバコを拾わない時間を数え、3 秒を超えたら禁断症状（ダメージ）
     p.cw = Math.min(CIG_WD + 600, (p.cw | 0) + 1);
@@ -1963,7 +1993,7 @@ function strike(att, t, o) {
   if (untouchable(t)) return;
   if (t.cn > 0 && att.al) { counterHit(t, att); return; }
   const open = !shieldUp(t) || t.f !== -o.dir;               // 盾がない・外れている・背後から → 盾は効かない
-  if (open) { knock(att, t, o.frac, o.dir); impact("h", att, t, o.frac, o.dir); return; }
+  if (open) { knock(att, t, o.frac, o.dir, o.cap); impact("h", att, t, o.frac, o.dir); return; }
   if (o.breaker) {                                           // 居合斬り: 盾を壊すだけで、吹っ飛ばしはしない
     breakShield(t); impact("k", att, t, 0, o.dir); return;
   }
@@ -1988,6 +2018,12 @@ function resolveHits(list) {
       if (hx1 < hbL(t) || hx0 > hbR(t) || hy1 < t.y || hy0 > t.y + phOf(t)) continue;
       p.hit.push(t);
       if (ak.hammer) hammerHit(p, t);
+      else if (!p.isClone && !p.ground && chOf(p).id === "cf" && !(hx0 + (p.f > 0 ? CF_ROOT * sz : reach) < hbL(t) || hx0 + (p.f > 0 ? 0 : reach - CF_ROOT * sz) > hbR(t))) {
+        // CF の空中攻撃の根元（体に近い CF_ROOT px）が当たった: クリティカル（2 倍の威力と吹っ飛ばし。盾で受けられたらふつうの盾の削り）
+        const s0 = t.s;
+        strike(p, t, { dir: p.f, frac: CF_CRIT, cap: CF_CRIT, recoil: true });
+        if (t.s > 0 && t.s !== s0) { game.hs = Math.max(game.hs, Math.round(CF_HS * (8 + 3 * CF_CRIT))); emit("crit", ecx(t), ecy(t), p.f); }
+      }
       else strike(p, t, { dir: p.f, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker });
     }
     if (!(ak.hammer && (p.hmN | 0) <= 1)) hitObjs(p.own, hx0, hy0, hx1, hy1, p.hit);   // 手下とクロスボウにも当たる（クロスボウは 1 回の攻撃で 1 回だけ削る。ハンマーの 1 は何にも当たらない）
@@ -2433,6 +2469,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "boomer":                                                                                                      // 盾をこちらへ向けた敵の向こうまで投げて、帰りで背中に当てる。盾を見て止まっている敵にも
       return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
     case "gobg": return g && sameLevel && t.ground && gap < 300 ? KEY.k : 0;
+    case "cf": return g && face && gap < CF_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 && t.ground ? KEY.k : 0;              // 地上の敵を蹴り上げる（盾を構えていても）
     case "vamp": return face && gap < VAMP_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 ? KEY.k : 0;                    // 噛みつける距離（盾を構えた相手にも）
     case "gambler": return face && sameLevel && gap < ATKS[4].reach - 8 ? KEY.k : 0;                                         // ハンマーが届く距離
     case "hadou": {                                                                                                     // 魔法使いと同じく、狙った長さまでためて、敵が射線にいたら撃つ
@@ -2614,6 +2651,15 @@ function aiThink(c, owner, pls, B) {
   const tcx = ecx(t), th = phOf(t), tw = pwOf(t), dyFeet = t.y + th - feet;
   const sgn = Math.sign(tcx - ccx) || c.f, tpl = platformUnder(t), pl = platformUnder(c);
   const sd = (cwid + tw) / 2, gap = Math.abs(tcx - ccx) - sd;                          // gap: 体のふちどうしの距離
+  // 2.5) CF: 蹴り上げた（吹っ飛び中で空中の）敵の真下へ行って跳び、体が重なるくらいの近さで空中攻撃（根元のクリティカル）を当てる
+  if (id === "cf" && !t.ground && t.s > 0 && Math.abs(tcx - ccx) < 160 && t.y < c.y + 20) {
+    steer(tcx - sgn * (cwid / 2 + 6));
+    const dy = (t.y + th / 2) - (c.y + phOf(c) / 2);
+    if (c.ground && dy < -60) inp |= KEY.u;
+    else if (!c.ground && !c.dj && !c.jp && c.vy > -2 && dy < -40) inp |= KEY.u;
+    if (!c.ground && Math.abs(dy) < 34 && gap < CF_ROOT && c.a === 0 && c.cd === 0) { inp |= KEY.a; if (c.f !== sgn) inp |= sgn > 0 ? KEY.r : KEY.l; }
+    return inp;
+  }
   // 3) 敵が上の台に立っている: 真下まで行って跳び、届かなければ二段ジャンプで登る
   if (dyFeet < -45 && tpl) {
     const gx = Math.max(tpl.x + 14, Math.min(tpl.x + tpl.w - 14, tcx));
@@ -2829,7 +2875,8 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.cs) o.cs = p.cs;                                      // ヤニ猫: 持っているタバコの本数
   if (p.hw) { o.hw = p.hw; if (p.hwr) o.hwr = 1; }             // 波動士のため量（ためが進んでいれば hwr）
   if (p.hmT > 0 || (p.a > 0 && p.ak === 4)) o.hn = p.hmN;
-  if (p.wgT > 0) o.wg = p.wgT;                                  // 吸血鬼: 羽を広げている残り
+  if (p.wgT > 0) o.wg = p.wgT;
+  if (p.msT > 0) o.ms = p.msT;                                  // CF: 宙返りの残り                                  // 吸血鬼: 羽を広げている残り
   if (p.vbT > 0) o.vb = p.vbT;                                  // 吸血鬼: 噛みついている残り      // 勝負師: 出目（吹き出しを出している間と、振っている間）                                      // ヤニ猫: 最後にタバコを拾ってからのフレーム（禁断症状の表示と性能用）      // ヤク猫の注射器: 性能ごとの上乗せ（攻撃・防御・スピード）と、いちばん長い残り
   if (p.nc > 0) o.nc = p.nc;                                  // 敵のタバコでスピード −1 の残り
   if (p.dr > 0) o.dr = p.dr;                                  // 注射器で画面が揺れる残り（揺れるのは本人の画面だけ）
@@ -3107,7 +3154,7 @@ function readEnt(p, n) {                                     // スナップシ�
     if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
   }
   p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
-  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.vbT = n.vb | 0;
+  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; p.vbT = n.vb | 0;
   p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
@@ -3534,6 +3581,13 @@ function deco(c, id, x, y, f, o) {
     c.beginPath(); c.moveTo(tx, y + 4); c.lineTo(tx + d * 12, y + 2); c.lineTo(tx + d * 10, y + 7); c.fill();
     c.fillStyle = "#ef4444"; c.fillRect(x + 17, y + 3, 6, 5);
     c.strokeStyle = "#38bdf8"; c.lineWidth = 2; c.beginPath(); c.arc(x + 20, y + 42, 7, 0.2, 5.8); c.stroke(); c.beginPath(); c.arc(x + 20, y + 42, 3, 0, 6.2832); c.stroke();
+  } else if (id === "cf") {                    // 紺のヘルメット（黄色い鳥の印と、赤いバイザー）、後ろになびく赤いスカーフ、黄色い肩当て
+    c.fillStyle = "#1e3a8a"; c.fillRect(x - 1, y - 3, PLW + 2, 12);
+    c.fillStyle = "#facc15"; c.beginPath(); c.moveTo(x + 20, y + 7); c.lineTo(x + 12, y - 1); c.lineTo(x + 16, y - 1); c.lineTo(x + 20, y + 3); c.lineTo(x + 24, y - 1); c.lineTo(x + 28, y - 1); c.fill();
+    c.fillStyle = "#dc2626"; c.fillRect(f > 0 ? x + 20 : x + 4, y + 9, 16, 5);
+    const sx = f > 0 ? x : x + PLW, d = f > 0 ? -1 : 1, t = performance.now() / 160;
+    c.fillStyle = "#dc2626"; c.beginPath(); c.moveTo(sx, y + 20); c.lineTo(sx + d * 18, y + 18 + Math.sin(t) * 3); c.lineTo(sx + d * 14, y + 26 + Math.sin(t + 1) * 3); c.lineTo(sx, y + 27); c.fill();
+    c.fillStyle = "#facc15"; c.fillRect(x - 2, y + 18, 7, 6); c.fillRect(x + PLW - 5, y + 18, 7, 6);
   } else if (id === "gambler") {               // 緑のサンバイザー、赤い蝶ネクタイ、腰にサイコロ
     c.fillStyle = "#15803d"; c.fillRect(x - 2, y - 1, PLW + 4, 5); c.fillRect(f > 0 ? x + 18 : x - 8, y + 3, 30, 4);
     c.fillStyle = "#dc2626"; c.beginPath(); c.moveTo(x + 20, y + 32); c.lineTo(x + 13, y + 28); c.lineTo(x + 13, y + 36); c.fill(); c.beginPath(); c.moveTo(x + 20, y + 32); c.lineTo(x + 27, y + 28); c.lineTo(x + 27, y + 36); c.fill();
@@ -4324,6 +4378,13 @@ function fxEvent(e) {
     Sfx.grab(); shake(4);
     burst(x, y, 14, { dir: d > 0 ? 0 : Math.PI, spread: 2.4, v0: 1, v1: 5, l0: 14, l1: 26, s0: 2, s1: 5, g: 0.15, colors: ["#dc2626", "#7f1d1d", "#fca5a5"] });
     rings.push({ x, y, t: 0, max: 12, c: "#dc2626", r0: 6, sp: 3 });
+  } else if (k === "ms") {                         // ムーンサルト（f: 1 = 当たった）
+    if (f) { Sfx.counter(); shake(6); rings.push({ x, y, t: 0, max: 14, c: "#facc15", r0: 8, sp: 4 }); burst(x, y, 16, { dir: -Math.PI / 2, spread: 0.9, v0: 3, v1: 9, l0: 14, l1: 26, s0: 3, s1: 6, g: 0.1, colors: ["#facc15", "#fde68a", "#ffffff"] }); }
+    else { Sfx.swing(); burst(x, y, 5, { dir: -Math.PI / 2, spread: 1.2, v0: 1, v1: 3, l0: 10, l1: 16, s0: 2, s1: 3, colors: ["#fde68a", "#e5e7eb"] }); }
+  } else if (k === "crit") {                       // CF のクリティカル: 画面が光り、白と金の大きな輪と、はじける粒
+    Sfx.shieldBreak(); shake(12); flashA = Math.max(flashA, 0.4);
+    rings.push({ x, y, t: 0, max: 18, c: "#ffffff", r0: 10, sp: 7 }); rings.push({ x, y, t: 0, max: 22, c: "#facc15", r0: 6, sp: 5 });
+    burst(x, y, 26, { dir: d > 0 ? 0 : Math.PI, spread: 2.2, v0: 4, v1: 12, l0: 14, l1: 28, s0: 3, s1: 7, g: 0.05, colors: ["#facc15", "#ffffff", "#f97316"] });
   } else if (k === "vbd") {                        // 噛みついている間に % が移った
     burst(x, y, 3, { v0: 0.5, v1: 2, l0: 10, l1: 18, s0: 2, s1: 3, g: 0.1, colors: ["#dc2626", "#7f1d1d"] });
   } else if (k === "vbx") {                        // 吸血の空振り
@@ -4490,6 +4551,8 @@ function drawPlayer(p, i, me, now) {
   const dg = p.dz > 0 && p.al;
   if (dg) { cx.save(); cx.translate(0, p.y + PLH); cx.scale(1, 0.55); cx.translate(0, -(p.y + PLH)); }
   const spear = p.a > 0 && (p.ak === 2 || p.ak === 3);           // 槍兵が槍を前へ出している（勝負師のハンマー（4）では出さない）
+  const flip = chd.id === "cf" && !clone && p.al && p.msT > 0;   // CF: ムーンサルトの宙返り（体の中心で後ろへ 1 回転）
+  if (flip) { const k = 1 - p.msT / CF_FLIP, cxp = p.x + PLW / 2, cyp = p.y + PLH / 2; cx.save(); cx.translate(cxp, cyp); cx.rotate(-p.f * k * Math.PI * 2); cx.translate(-cxp, -cyp); }
   const yaniPlay = chd.id === "yani" && !clone && game.ph !== "lobby", irr = yaniPlay && p.al && withdrawn(p);
   if (irr) { cx.save(); cx.translate((Math.random() * 2 - 1) * 1.5, 0); }   // 禁断症状: 体が小刻みに震える
   if (chd.id === "vamp" && !clone && p.al && p.wgT > 0) {          // 吸血鬼の羽: 二段ジャンプで、体の後ろに大きなこうもりの羽を広げてはばたく
@@ -4504,6 +4567,10 @@ function drawPlayer(p, i, me, now) {
   }
   drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear, gk: p.gk, gq: p.gq, bd: p.bd, left: yaniPlay ? cigLeft(p) : undefined, wd: irr, cs: yaniPlay ? p.cs : 0 });
   if (irr) cx.restore();
+  if (flip) {                                                     // 蹴り上げる足の軌跡（宙返りの前半）
+    cx.restore();
+    if (p.msT > CF_FLIP / 2) { cx.save(); cx.strokeStyle = "rgba(250,204,21,0.8)"; cx.lineWidth = 4; cx.beginPath(); const ccx = p.x + PLW / 2, ccy = p.y + PLH / 2; cx.arc(ccx, ccy, 40, p.f > 0 ? 0.6 : Math.PI - 0.6, p.f > 0 ? -1.6 : Math.PI + 1.6, p.f > 0); cx.stroke(); cx.restore(); }
+  }
 
   if (dg) cx.restore();
   if (p.slw > 0 && p.fz > 0 && p.al) {                            // 蜘蛛の糸がからんで、動けない
