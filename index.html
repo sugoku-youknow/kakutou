@@ -520,6 +520,13 @@ const CF_REACH = 44, CF_LIFT = 268, CF_STUN = 60, CF_DMG = 8, CF_FLIP = 18, CF_R
 const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
 // サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
 // 進み終わる（足場の端に着く）とインクを撒き散らして爆発（半径 SR_BLAST、盾は効かない）。途中で吹っ飛ばされる・動けなくなると、爆発せずに終わる。乗っている間は盾なし
+// キャンピングシェルター（2026-10-24）: 攻撃ボタンで前に大きな傘（高さ UMB_H = 体の 1.5 倍）を開く。押している間は開いたまま、UMB_LAUNCH フレームで傘が前へ飛んでいく（離すと閉じる）。
+// 開いた傘は前からの攻撃を受け止め（盾の代わり。UMB_HP 回で壊れる。盾を一撃で壊す攻撃では 1 回で壊れる）、触れた敵には UMB_TICK フレームごとに弱く当たる（UMB_FRAC 倍。盾を削る）。
+// 飛ばした傘は UMB_RANGE px 進み、当たった敵に 1 回ずつ UMB_SHOT 倍で当たる。飛ばした・壊れたあとは UMB_REGEN フレームで新しい傘が生える（それまでの攻撃ボタンはふつうの通常攻撃）
+const UMB_H = 90, UMB_W = 16, UMB_LAUNCH = 75, UMB_HP = 5, UMB_REGEN = 300, UMB_FRAC = 0.35, UMB_TICK = 30, UMB_SLOW = 0.7;
+const UMB_V = 7, UMB_RANGE = 320, UMB_SHOT = 0.7;
+// ウルトラショット: 大きなインクの塊（半径 US_R）を真横へ撃つ。最初に当たった敵（手下・クロスボウ）か、射程 US_RANGE の終わりで爆発（半径 US_BLAST、盾は効かない）
+const US_V = 9, US_R = 22, US_RANGE = 700, US_BLAST = 90, US_KNOCK = 1.1, US_LIFT = 7;
 const SR_F = 40, SR_V = 9, SR_REACH = 30, SR_HIT = 0.6, SR_BLAST = 100, SR_KNOCK = 1.0, SR_LIFT = 6.5;
 const HM_SELF = 20, HM_HEAL = 8, HM_BIND = 60, HM_DMG4 = 10, HM_FRAC5 = 2, HM_SHOW = 60;   // HM_SHOW: 出目の吹き出しを頭の上に出しておく長さ（1 秒）
 const withdrawn = p => !p.isClone && (p.cw | 0) > CIG_WD;
@@ -610,6 +617,10 @@ const CHARS = [
   { id: "splat", name: "スパッタリー", A: 2, D: 2, S: 3, atk: 5, tag: "ステップで動き回り、短い射程を2倍の速さで撃つ",
     skill: { name: "サメライド", cd: 8, text: "サメに乗って前へ進み、ぶつかった敵を攻撃する。進み終わるとインクを撒き散らして爆発する（爆発は盾が効かない）" },
     auto: "地上で左右＋ジャンプで、その方向へ素早くステップ（続けて2回まで。2回目のあと少し使えない）。通常攻撃は射程が短いが、2倍の速さで撃てる" },
+  // 31 体目（必ず末尾に足す）
+  { id: "camp", name: "キャンピングシェルター", A: 2, D: 3, S: 1, tag: "大きな傘で守りながら押し込み、傘を飛ばす",
+    skill: { name: "ウルトラショット", cd: 10, text: "大きなインクの塊を撃つ。敵に当たるか遠くまで飛ぶと爆発する（盾は効かない）" },
+    auto: "攻撃ボタンで前に大きな傘を開く（押している間ずっと）。傘は前からの攻撃を防ぎ、触れた敵の盾を削る。1.25秒開くと傘が前へ飛んでいき、5秒で新しい傘が生える" },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
@@ -728,6 +739,7 @@ function newPlayer() {
            mb: 0, mbo: -1, mbv: null,                   // 拘束魔法で動けない残り / かけた魔法使いのスロット / その間に魔法使いから受けた吹っ飛びの合計（ホストだけ）
            dm: 0,                                       // 蓄積ダメージ（%）
            hw: 0, hwr: 0, hwh: [], hmN: 0, hmT: 0,     // … / 勝負師: 出目の吹き出しを出す残り
+           um: 0, umR: 0, umHp: UMB_HP, umh: [], aiUm: 0,   // キャンピングシェルター: 傘を開いている長さ（0 = 閉じている）/ 新しい傘が生えるまで / 傘の耐久 / 触れて当てた敵と次に当たれるまで（ホストだけ）/ CPU が攻撃ボタンを押し続ける残り
            sp: 0, spD: 1, spN: 0, spW: 0, spC: 0, spU: 0, srT: 0, srHit: [], srCar: [], aiStp: 0,   // スパッタリー: ステップの残り / 向き / 続けて出した回数 / 2 回目を出せる残り / 使えない残り / ジャンプボタンを離すまで地上ジャンプしない / サメライドの残り / 当てた相手・押している相手（ホストだけ）/ CPU のステップの指示
            vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
            ub: 0, nc: 0, dr: 0, st: 0, cw: 0, cs: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
@@ -817,7 +829,7 @@ function shieldUp(p) {
   const c = chOf(p);
   if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0 || p.gr > 0 || p.hd > 0 || p.mb > 0) return false;   // mb: 魔法で拘束されている
-  if (p.bt > 0 || p.wb > 0 || p.yk > 0 || p.msT > 0 || p.sp > 0 || p.srT > 0) return false;   // … / スパッタリーのステップ・サメライドの間   // … / CF のムーンサルト（宙返り）の間             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
+  if (p.bt > 0 || p.wb > 0 || p.yk > 0 || p.msT > 0 || p.sp > 0 || p.srT > 0 || p.um > 0) return false;   // 傘を開いている間は、盾の代わりに傘で受ける   // … / スパッタリーのステップ・サメライドの間   // … / CF のムーンサルト（宙返り）の間             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
   return true;
 }
@@ -847,6 +859,7 @@ function spawn(p, slot, n, battle) {
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
   p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0; p.hmT = 0; p.vbT = 0; p.vbTgt = null; p.wgT = 0;
   p.sp = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
+  p.um = 0; p.umR = 0; p.umHp = UMB_HP; p.umh = []; p.aiUm = 0;   // キャンピングシェルター
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -978,6 +991,10 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     if (!vampBite(p)) { p.kc = Math.round(VAMP_WHIFF * cdMul()); emit("sk", ecx(p), ecy(p), p.ch); return true; }
   } else if (id === "cf") {                    // ムーンサルト: 当たっても外れても、クールタイムは同じ
     cfMoonsault(p);
+  } else if (id === "camp") {                  // ウルトラショット: 傘は閉じる。少し後ろへ下がる
+    p.um = 0; p.vx -= p.f * 3;
+    game.pj.push({ k: 9, x: ecx(p) + p.f * 30, y: p.y + 26, vx: p.f * US_V, vy: 0, own: p.own, t: 0, d: 0 });
+    emit("us", ecx(p) + p.f * 30, p.y + 26, p.f, p.own);
   } else if (id === "splat") {                 // サメライド: 前へ進む（ステップ中でも使える）
     p.srT = SR_F; p.srHit = []; p.srCar = []; p.sp = 0; p.a = 0; p.s = 0; p.vy = Math.min(p.vy, 0);
     emit("sr", ecx(p), p.y + phOf(p), p.f, p.own);
@@ -1076,7 +1093,7 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwN = 0; p.rwE = null; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own));                    // 投げていた盾（何枚あっても）は消えて、手元に戻る
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.mb = 0; p.mbv = null;                                                    // 魔法使い: ためと詠唱は取り消し（魔法書の耐久はそのまま）
-  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmT = 0; p.wgT = 0; p.sp = 0; p.spN = 0; p.spC = 0; p.srT = 0;   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
+  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmT = 0; p.wgT = 0; p.sp = 0; p.spN = 0; p.spC = 0; p.srT = 0; p.um = 0; p.umR = 0; p.umHp = UMB_HP;   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
 
   for (const cb of cbsOf(p)) removeCb(cb);                                                       // クロス使い: 置いたクロスボウは（2 台あっても）全部消える
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;                                                       // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
@@ -1361,6 +1378,38 @@ function cfMoonsault(p) {
   t.vx = 0; t.vy = -jumpVel(CF_LIFT); t.s = CF_STUN; t.ground = false; t.hf = 12;
   addDmg(t, CF_DMG);
   emit("ms", ecx(t), t.y + phOf(t), p.f, 1);
+}
+
+// ---- キャンピングシェルター: 傘 ----
+const umBox = p => { const front = p.f > 0 ? p.x + pwOf(p) : p.x, sz = szOf(p); return { x0: p.f > 0 ? front : front - UMB_W * sz, x1: p.f > 0 ? front + UMB_W * sz : front, y0: p.y + phOf(p) - UMB_H * sz, y1: p.y + phOf(p) }; };
+// 開いている間（毎フレーム）: 押している長さを数え、触れた敵に UMB_TICK ごとに弱く当てる。UMB_LAUNCH で傘を飛ばす
+function umbrellaStep(p) {
+  p.um++;
+  const b = umBox(p);
+  p.umh = p.umh.filter(h => --h[1] > 0);
+  for (const e of ents()) {
+    if (e === p || ally(e.own, p.own) || !e.al || untouchable(e) || p.umh.some(h => h[0] === e)) continue;
+    if (hbR(e) < b.x0 - 4 || hbL(e) > b.x1 + 4 || e.y > b.y1 || e.y + phOf(e) < b.y0) continue;
+    p.umh.push([e, UMB_TICK]);
+    strike(p, e, { dir: p.f, frac: UMB_FRAC, recoil: false });
+    if (p.s > 0) { p.um = 0; return; }                         // 騎士のカウンターで返された
+  }
+  hitObjs(p.own, b.x0, b.y0, b.x1, b.y1, null, true);
+  if (p.um >= UMB_LAUNCH) {                                    // 傘を飛ばす（新しい傘が生えるまで、攻撃ボタンはふつうの通常攻撃）
+    game.pj.push({ k: 8, x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, vx: p.f * UMB_V, vy: 0, own: p.own, t: 0, d: 0, hit: [] });
+    p.um = 0; p.umR = UMB_REGEN; p.umh = []; p.cd = ATK_COOLDOWN;
+    emit("uml", (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, p.f);
+  }
+}
+// 前から来た攻撃を傘で受ける（strike から）。受けたら true
+function umbrellaBlock(att, t, o) {
+  if (!(t.um > 0) || t.f !== -o.dir) return false;
+  t.umHp -= o.breaker ? UMB_HP : 1; t.bf = 10; t.vx += o.dir * 2;
+  const b = umBox(t), x = (b.x0 + b.x1) / 2, y = ecy(t);
+  if (t.umHp <= 0) { t.um = 0; t.umR = UMB_REGEN; t.umHp = UMB_HP; t.umh = []; emit("umx", x, y, o.dir); }   // 傘が壊れた
+  else emit("b", x, y, o.dir, 0);
+  if (o.recoil) { att.vx = -o.dir * 5; att.bf = 10; }
+  return true;
 }
 
 // ---- スパッタリー: サメライド ----
@@ -1777,7 +1826,8 @@ function physics(p, inp, neutral) {
   if (p.hmT > 0) p.hmT--;
   if (p.spC > 0 && --p.spC === 0) p.spN = 0;          // スパッタリー: 2 回ステップしたあとの待ちが終わった
   if (p.spW > 0 && --p.spW === 0 && !p.spC) p.spN = 0; // 1 回目のあと、2 回目を出さないまま時間がたった
-  if ((p.sp > 0 || p.srT > 0) && (p.s > 0 || p.fz > 0 || p.hd > 0 || p.yk > 0 || p.mb > 0 || p.wb > 0)) { p.sp = 0; p.srT = 0; }   // 吹っ飛ばされた・動けなくなった: ステップもサメライドも（爆発せずに）終わる
+  if ((p.sp > 0 || p.srT > 0 || p.um > 0) && (p.s > 0 || p.fz > 0 || p.hd > 0 || p.yk > 0 || p.mb > 0 || p.wb > 0)) { p.sp = 0; p.srT = 0; p.um = 0; }   // … / 傘も閉じる
+  if (p.umR > 0 && --p.umR === 0) { p.umHp = UMB_HP; emit("umn", ecx(p), p.y + 10); }   // キャンピングシェルター: 新しい傘が生えた   // 吹っ飛ばされた・動けなくなった: ステップもサメライドも（爆発せずに）終わる
   if (chd.id === "yani" && !p.isClone && !neutral && game.ph === "play") {   // ヤニ猫: タバコを拾わない時間を数え、3 秒を超えたら禁断症状（ダメージ）
     p.cw = Math.min(CIG_WD + 600, (p.cw | 0) + 1);
     if (p.cw >= CIG_WD && (p.cs | 0) > 0) { p.cs--; p.cw = 0; emit("cgl", ecx(p) + p.f * 26, p.y + 28); }   // 吸い切った: 持っているタバコに火をつける
@@ -1878,12 +1928,13 @@ function physics(p, inp, neutral) {
     if (p.a > 0 && ak0.dash && p.a < ak0.dashFrom) spm = 0;     // 居合斬りのため中は動けない
     if (lock) spm = 0;
     if (p.ks > 0) spm = Math.min(spm, 0.45);     // ためている間は動きが鈍る
+    if (p.um > 0) spm = Math.min(spm, UMB_SLOW); // 傘を開いている間も少し遅い
     if (p.cn > 0) spm = 0;                       // カウンターの構え中は動かない
     const sp = spm * MOVE_BASE * moveMul(S) * wm.mv;
     // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
     // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
     const turnOk = p.ground || p.jg > 0;
-    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0) p.f = dir;
+    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0 && !p.um) p.f = dir;   // 傘を開いている間も向きは変わらない
     const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
     if (p.jh > 0) {                                // 小ジャンプ: 押したフレームを 1 として、SHORT_HOP_F フレーム目までに離したら、上がる勢いを弱める
@@ -1908,7 +1959,14 @@ function physics(p, inp, neutral) {
       if (dir && p.a === 0 && p.ks === 0) p.f = dir;
       if (!p.isClone) emit("dj", ecx(p), p.y + phOf(p));
     }
-    if (apress && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {
+    const camp = chd.id === "camp" && !p.isClone && !neutral;
+    if (camp && p.um > 0) {                      // キャンピングシェルター: 押している間は傘を開いたまま。離すと閉じる
+      if (a) umbrellaStep(p); else { p.um = 0; p.umh = []; p.cd = ATK_COOLDOWN; }
+    } else if (apress && camp && p.umR === 0 && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {
+      p.ba = 0; p.um = 1; p.umh = [];
+      if (!p.ground && dir) p.f = dir;
+      emit("umo", ecx(p) + p.f * 28, ecy(p), p.f);
+    } else if (apress && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {
       p.ba = 0;
       if (!p.ground && dir) p.f = dir;                          // 空中では、移動ボタンを押しながら攻撃すると、その方向へ振り向いて攻撃する（2026-10-18）
       if (zone && inZone(zone, p)) zoneWarp(p, zone);           // 円の中なら、敵の背後へ回り込んでから攻撃する
@@ -2058,6 +2116,7 @@ function counterHit(kn, att) {
 function strike(att, t, o) {
   if (untouchable(t)) return;
   if (t.cn > 0 && att.al) { counterHit(t, att); return; }
+  if (umbrellaBlock(att, t, o)) return;                      // キャンピングシェルターの傘（前からの攻撃）
   const open = !shieldUp(t) || t.f !== -o.dir;               // 盾がない・外れている・背後から → 盾は効かない
   if (open) { knock(att, t, o.frac, o.dir, o.cap); impact("h", att, t, o.frac, o.dir); return; }
   if (o.breaker) {                                           // 居合斬り: 盾を壊すだけで、吹っ飛ばしはしない
@@ -2163,6 +2222,29 @@ function updateProjectiles(list) {
       const boom = b.t >= BOMB_FUSE;                         // 敵に当たっても爆発しない。導火線が尽きたときだけ爆発
       if (boom) { explode(b, list); game.pj.splice(i, 1); continue; }
       if (b.y > KO_B + 80 || b.x < KO_L - 60 || b.x > KO_R + 60) game.pj.splice(i, 1);
+    } else if (b.k === 8) {                                  // キャンピングシェルターの飛ばした傘: 真横へ進み、当たった敵に 1 回ずつ当たる（盾で受けられる）。射程を過ぎたら消える
+      const o = game.p[b.own], dir = Math.sign(b.vx) || 1;
+      b.x += b.vx; b.d += Math.abs(b.vx);
+      const xa = b.x - UMB_W / 2, xb = b.x + UMB_W / 2, ya = b.y - UMB_H / 2, yb = b.y + UMB_H / 2;
+      for (const e of list) {
+        if (ally(e.own, b.own) || !e.al || untouchable(e) || b.hit.includes(e)) continue;
+        if (hbL(e) > xb || hbR(e) < xa || e.y > yb || e.y + phOf(e) < ya) continue;
+        b.hit.push(e);
+        if (o) strike(o, e, { dir, frac: UMB_SHOT, recoil: false });
+      }
+      hitObjs(b.own, xa, ya, xb, yb, b.hit);
+      if (b.d >= UMB_RANGE || b.x < KO_L - 60 || b.x > KO_R + 60) { game.pj.splice(i, 1); emit("umx", b.x, b.y, dir); }
+    } else if (b.k === 9) {                                  // ウルトラショット: 真横へ飛び、最初に当たった敵・手下・クロスボウか、射程の終わりで爆発
+      b.x += b.vx; b.d += Math.abs(b.vx);
+      let boom = b.d >= US_RANGE;
+      for (const e of list) {
+        if (ally(e.own, b.own) || !e.al || untouchable(e)) continue;
+        const nx = Math.max(hbL(e), Math.min(b.x, hbR(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e)));
+        if (Math.hypot(b.x - nx, b.y - ny) <= US_R) { boom = true; break; }
+      }
+      if (!boom && hitObjs(b.own, b.x - US_R, b.y - US_R, b.x + US_R, b.y + US_R, null, false, CB_PAD)) boom = true;
+      if (boom) { game.pj.splice(i, 1); emit("srx", b.x, b.y, US_BLAST, b.own); explode(b, list, US_BLAST, US_KNOCK, US_LIFT); continue; }
+      if (b.x < KO_L - 60 || b.x > KO_R + 60) game.pj.splice(i, 1);
     } else if (b.k === 3) {                                  // 幽霊の爆弾: 置かれた場所から動かず（重力なし）、YUREI_FUSE フレーム後に爆発する（足場が崩れても、その場で爆発）
       if (b.t >= YUREI_FUSE) { yureiBlast(b, list); game.pj.splice(i, 1); continue; }
     } else if (b.k === 2) {                                  // ブーメラン使いの盾: 行き（だんだん遅く）→ 投げた人のほうへ横一直線に戻る（高さは少しずつ合わせる）→ かわされたら、後ろへ飛んで止まり、また戻る
@@ -2536,6 +2618,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "boomer":                                                                                                      // 盾をこちらへ向けた敵の向こうまで投げて、帰りで背中に当てる。盾を見て止まっている敵にも
       return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
     case "gobg": return g && sameLevel && t.ground && gap < 300 ? KEY.k : 0;
+    case "camp": return face && Math.abs(dyFeet) < 40 && gap > 60 && gap < 600 && c.um === 0 ? KEY.k : 0;                     // 前の敵へウルトラショット
     case "splat": return g && face && sameLevel && gap > 30 && gap < 260 ? KEY.k : 0;                                         // 前の敵へサメで突っ込む（爆発は盾が効かない）
     case "cf": return g && face && gap < CF_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 && t.ground ? KEY.k : 0;              // 地上の敵を蹴り上げる（盾を構えていても）
     case "vamp": return face && gap < VAMP_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 ? KEY.k : 0;                    // 噛みつける距離（盾を構えた相手にも）
@@ -2831,7 +2914,20 @@ function aiInput(c, owner, B) {                                // 毎フレー�
     }
   }
   if (chOf(c).id === "splat" && !c.isClone) aiStep(c, B);
+  if (chOf(c).id === "camp" && !c.isClone) inp = aiUmbrella(c, B, inp);
   return inp;
+}
+// キャンピングシェルターの CPU: 前の敵が振りかぶったら傘を開いて受け、ときどき傘を開いたまま押し込んで飛ばす（aiUm: 押し続ける残り）
+function aiUmbrella(c, B, inp) {
+  if (c.aiUm > 0) { c.aiUm--; return inp | KEY.a; }
+  const t = c.aiTgt;
+  if (!t || !t.al || c.umR > 0 || c.um > 0 || c.a > 0 || c.s > 0 || c.fz > 0) return inp;
+  const dx = ecx(t) - ecx(c), sg = Math.sign(dx) || c.f, gap = Math.abs(dx) - (pwOf(t) + pwOf(c)) / 2;
+  if (c.f !== sg || Math.abs(t.y + phOf(t) - c.y - phOf(c)) > 40) return inp;
+  const tAk = ATKS[t.ak] || ATKS[0];
+  if (t.a > 0 && t.a < tAk.on && gap < tAk.reach * szOf(t) + 30 && Math.random() < B.dodge) c.aiUm = 24;   // 受ける
+  else if (gap < 220 && Math.random() < B.skill * 0.04) c.aiUm = UMB_LAUNCH + 2;                          // 押し込んで飛ばす
+  return c.aiUm > 0 ? inp | KEY.a : inp;
 }
 // スパッタリーの CPU: 敵の振りかぶりを見たら反対へステップでよけ、ときどきステップで一気に間合いを詰める（足場から落ちる向きには出さない）
 function aiStep(c, B) {
@@ -2958,6 +3054,9 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.hw) { o.hw = p.hw; if (p.hwr) o.hwr = 1; }             // 波動士のため量（ためが進んでいれば hwr）
   if (p.hmT > 0 || (p.a > 0 && p.ak === 4)) o.hn = p.hmN;
   if (p.wgT > 0) o.wg = p.wgT;
+  if (p.um > 0) o.um = p.um;                                    // キャンピングシェルター: 傘を開いている長さ
+  if (p.umR > 0) o.umR = p.umR;                                 // 新しい傘が生えるまで
+  if (p.umHp !== UMB_HP) o.umHp = p.umHp;                       // 傘の耐久（減っていなければ送らない）
   if (p.sp > 0) o.sp = p.sp;                                    // スパッタリー: ステップの残り（見た目用）
   if (p.srT > 0) o.sr = p.srT;                                  // スパッタリー: サメライドの残り（サメを描く）
   if (p.msT > 0) o.ms = p.msT;                                  // CF: 宙返りの残り                                  // 吸血鬼: 羽を広げている残り
@@ -3238,7 +3337,7 @@ function readEnt(p, n) {                                     // スナップシ�
     if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
   }
   p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
-  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; p.vbT = n.vb | 0; p.sp = n.sp | 0; p.srT = n.sr | 0;
+  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; p.vbT = n.vb | 0; p.sp = n.sp | 0; p.srT = n.sr | 0; p.um = n.um | 0; p.umR = n.umR | 0; p.umHp = n.umHp === undefined ? UMB_HP : n.umHp | 0;
   p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
@@ -3672,6 +3771,12 @@ function deco(c, id, x, y, f, o) {
     const sx = f > 0 ? x : x + PLW, d = f > 0 ? -1 : 1, t = performance.now() / 160;
     c.fillStyle = "#dc2626"; c.beginPath(); c.moveTo(sx, y + 20); c.lineTo(sx + d * 18, y + 18 + Math.sin(t) * 3); c.lineTo(sx + d * 14, y + 26 + Math.sin(t + 1) * 3); c.lineTo(sx, y + 27); c.fill();
     c.fillStyle = "#facc15"; c.fillRect(x - 2, y + 18, 7, 6); c.fillRect(x + PLW - 5, y + 18, 7, 6);
+  } else if (id === "camp") {                  // キャンピングシェルター: 緑のバケットハット（つば付き）、背中に大きなリュック（寝袋つき）
+    const bx = f > 0 ? x - 10 : x + PLW - 2;
+    c.fillStyle = "#78350f"; c.fillRect(bx, y + 22, 12, 30); c.fillStyle = "#a16207"; c.fillRect(bx + 2, y + 26, 8, 6);
+    c.fillStyle = "#2563eb"; c.fillRect(bx - 1, y + 50, 14, 7);
+    c.fillStyle = "#4d7c0f"; c.fillRect(x + 3, y - 6, PLW - 6, 9); c.fillRect(x - 4, y + 2, PLW + 8, 4);
+    c.fillStyle = "#d6d3d1"; c.fillRect(x + 3, y, PLW - 6, 2);
   } else if (id === "splat") {                 // スパッタリー: 蛍光オレンジのゲソ（後ろへ垂れる）、黒い目もと、両手に小さな銃（2 丁）
     c.fillStyle = "#111827"; c.fillRect(x + 2, y + 10, PLW - 4, 11);
     c.fillStyle = "#f8fafc"; c.fillRect(x + (f > 0 ? 24 : 8), y + 12, 8, 7); c.fillStyle = "#111827"; c.fillRect(x + (f > 0 ? 28 : 8), y + 13, 4, 5);   // 目は、黒い目もとの上に白目と黒目
@@ -4479,6 +4584,17 @@ function fxEvent(e) {
   } else if (k === "ms") {                         // ムーンサルト（f: 1 = 当たった）
     if (f) { Sfx.counter(); shake(6); rings.push({ x, y, t: 0, max: 14, c: "#facc15", r0: 8, sp: 4 }); burst(x, y, 16, { dir: -Math.PI / 2, spread: 0.9, v0: 3, v1: 9, l0: 14, l1: 26, s0: 3, s1: 6, g: 0.1, colors: ["#facc15", "#fde68a", "#ffffff"] }); }
     else { Sfx.swing(); burst(x, y, 5, { dir: -Math.PI / 2, spread: 1.2, v0: 1, v1: 3, l0: 10, l1: 16, s0: 2, s1: 3, colors: ["#fde68a", "#e5e7eb"] }); }
+  } else if (k === "umo") {                       // 傘を開いた
+    Sfx.guardUp(); burst(x, y, 6, { dir: d > 0 ? 0 : Math.PI, spread: 1.6, v0: 1, v1: 3, l0: 10, l1: 16, s0: 2, s1: 4, colors: ["#4d7c0f", "#e7e5e4"] });
+  } else if (k === "uml") {                       // 傘を飛ばした
+    Sfx.shieldThrow(); rings.push({ x, y, t: 0, max: 12, c: "#e7e5e4", r0: 10, sp: 4 });
+  } else if (k === "umx") {                       // 傘が壊れた・飛ばした傘が消えた
+    Sfx.woodBreak(); burst(x, y, 14, { v0: 1, v1: 5, l0: 14, l1: 26, s0: 3, s1: 7, g: 0.2, flat: true, colors: ["#4d7c0f", "#e7e5e4", "#57534e"] });
+  } else if (k === "umn") {                       // 新しい傘が生えた
+    Sfx.pop(); burst(x, y, 6, { dir: -Math.PI / 2, spread: 1.4, v0: 0.5, v1: 2, l0: 10, l1: 18, s0: 2, s1: 4, colors: ["#84cc16", "#e7e5e4"] });
+  } else if (k === "us") {                        // ウルトラショットを撃った
+    Sfx.throwBomb(); shake(4); const c = colOf(f);
+    burst(x, y, 12, { dir: d > 0 ? 0 : Math.PI, spread: 1.2, v0: 2, v1: 6, l0: 12, l1: 22, s0: 3, s1: 7, g: 0.15, round: true, colors: [c, "#f8fafc"] });
   } else if (k === "stp") {                       // スパッタリーのステップ（d: 向き / f: 持ち主のスロット）。足もとからインクのしぶき
     Sfx.jump(); const c = colOf(f);
     burst(x - d * 10, y - 4, 7, { dir: d > 0 ? Math.PI + 0.4 : -0.4, spread: 1.2, v0: 1.5, v1: 4, l0: 10, l1: 18, s0: 3, s1: 6, g: 0.15, round: true, colors: [c, "#f8fafc"] });
@@ -4617,6 +4733,22 @@ function fitCanvas() {
   const bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
   if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
   cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+// キャンピングシェルターの傘: 前を向いた大きな傘（緑と生成りのしま模様）。k: 開き具合（0〜1）/ hot: 飛んでいく直前（白く光る）
+function drawUmbrella(x, y, f, k, hot, hp) {
+  const ry = UMB_H / 2 * (0.3 + 0.7 * k), rx = 6 + 10 * k;
+  cx.save(); cx.translate(x, y); cx.scale(f, 1);
+  if (hot) { cx.shadowColor = "#ffffff"; cx.shadowBlur = 14; }
+  for (let j = 0; j < 6; j++) {                    // しま模様（上から 6 枚）
+    const a0 = -Math.PI / 2 + Math.PI * j / 6, a1 = a0 + Math.PI / 6;
+    cx.fillStyle = j % 2 ? "#e7e5e4" : (hp !== undefined && hp <= 2 ? "#a16207" : "#4d7c0f");
+    cx.beginPath(); cx.moveTo(0, 0); cx.ellipse(0, 0, rx, ry, 0, a0, a1); cx.closePath(); cx.fill();
+  }
+  cx.shadowBlur = 0; cx.strokeStyle = "#1c1917"; cx.lineWidth = 1.5;
+  cx.beginPath(); cx.ellipse(0, 0, rx, ry, 0, -Math.PI / 2, Math.PI / 2); cx.stroke();
+  cx.beginPath(); cx.moveTo(0, -ry); cx.lineTo(0, ry); cx.stroke();
+  cx.fillStyle = "#1c1917"; cx.fillRect(rx - 1, -2, 4, 4);   // 先の石突き
+  cx.restore();
 }
 // スパッタリーのサメライド: 足もとに、口を開けたサメ（背びれ・尾びれ）。後ろにインクのしぶき（持ち主の色）
 function drawShark(p, col, now) {
@@ -4826,6 +4958,18 @@ function drawPlayer(p, i, me, now) {
     } else {
       cx.fillStyle = "rgba(253,230,138,0.5)";       // 予備動作・戻り（盾なし＝隙）
       cx.fillRect(p.f > 0 ? p.x + PLW : p.x - 14, p.y + 22, 14, 14);
+    }
+  }
+  if (chd.id === "camp" && !clone && p.al) {                      // キャンピングシェルター: 開いた傘（前）/ 閉じた傘（背中。生えている途中は短い）
+    if (p.um > 0) {
+      const front = p.f > 0 ? p.x + PLW : p.x, cyU = p.y + PLH - UMB_H / 2;
+      cx.strokeStyle = "#57534e"; cx.lineWidth = 3; cx.beginPath(); cx.moveTo(p.x + PLW / 2 + p.f * 8, p.y + 34); cx.lineTo(front + p.f * 2, cyU); cx.stroke();   // 柄
+      const hot = p.um > UMB_LAUNCH - 18 && Math.floor(now / 60) % 2 === 0;
+      drawUmbrella(front + p.f * 2, cyU, p.f, Math.min(1, p.um / 6), hot, p.umHp);
+    } else {
+      const g = p.umR > 0 ? 1 - p.umR / UMB_REGEN : 1, bx = p.f > 0 ? p.x + 4 : p.x + PLW - 4;
+      cx.save(); cx.globalAlpha *= p.umR > 0 ? 0.5 : 1; cx.strokeStyle = "#4d7c0f"; cx.lineWidth = 6;
+      cx.beginPath(); cx.moveTo(bx, p.y + 46); cx.lineTo(bx - p.f * 6, p.y + 46 - 40 * g); cx.stroke(); cx.restore();
     }
   }
   // 盾が戻るまでのゲージ
@@ -5117,6 +5261,15 @@ function drawCig(c, now) {
   cx.quadraticCurveTo(x + 4 + 6 * Math.sin(t), y - 13, x + 4 + 3 * Math.sin(t + 1.5), y - 22); cx.stroke();
 }
 // 波動弾: 青く光る玉と、後ろに流れる尾（ため量で大きくなる）
+// ウルトラショットのインクの塊: 持ち主の色の大きな玉と、後ろにたれるしずく
+function drawUltra(b, now) {
+  const c = colOf(b.own), d = Math.sign(b.vx) || 1, w = Math.sin(now / 40) * 2;
+  cx.save(); cx.fillStyle = c;
+  for (let j = 1; j <= 3; j++) { cx.globalAlpha = 0.6 - j * 0.15; cx.beginPath(); cx.arc(b.x - d * (US_R + j * 9), b.y + j * 2, US_R * (0.55 - j * 0.1), 0, 6.2832); cx.fill(); }
+  cx.globalAlpha = 1; cx.beginPath(); cx.ellipse(b.x, b.y, US_R + w, US_R - w, 0, 0, 6.2832); cx.fill();
+  cx.fillStyle = "rgba(255,255,255,0.55)"; cx.beginPath(); cx.arc(b.x + d * 6, b.y - 8, 6, 0, 6.2832); cx.fill();
+  cx.restore();
+}
 function drawHadou(b, now) {
   const r = hwRad(b.pw || 0, game.p[b.own]), d = Math.sign(b.vx) || 1;
   cx.save(); cx.shadowColor = "#38bdf8"; cx.shadowBlur = 12 + 12 * (b.pw || 0);
@@ -5533,7 +5686,7 @@ function render() {
   for (let i = 0; i < MAX_PLAYERS; i++) { const c = game.cl[i]; if (c) drawWithTrail(c, i, false); }
   for (let i = 0; i < MAX_PLAYERS; i++) { const p = game.p[i]; if (p && p.c) drawWithTrail(p, i, i === myId); }
   for (const m of game.mn) drawMinion(m, now);
-  for (const b of game.pj) { if (b.k === 0) drawBomb(b, now); else if (b.k === 2) drawThrownShield(b); else if (b.k === 3) drawYureiBomb(b, now); else if (b.k === 4) drawSpear(b); else if (b.k === 5) drawMagic(b, now); else if (b.k === 6) drawBeam(b, now); else if (b.k === 7) drawHadou(b, now)
+  for (const b of game.pj) { if (b.k === 0) drawBomb(b, now); else if (b.k === 2) drawThrownShield(b); else if (b.k === 3) drawYureiBomb(b, now); else if (b.k === 4) drawSpear(b); else if (b.k === 5) drawMagic(b, now); else if (b.k === 6) drawBeam(b, now); else if (b.k === 7) drawHadou(b, now); else if (b.k === 8) drawUmbrella(b.x, b.y, Math.sign(b.vx) || 1, 1, false); else if (b.k === 9) drawUltra(b, now)
 ; else drawArrow(b); }
   drawFx();
   cx.restore();
