@@ -522,9 +522,9 @@ const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
 // 進み終わる（足場の端に着く）とインクを撒き散らして爆発（半径 SR_BLAST、盾は効かない）。途中で吹っ飛ばされる・動けなくなると、爆発せずに終わる。乗っている間は盾なし
 // キャンピングシェルター（2026-10-24）: 攻撃ボタンで前に大きな傘（高さ UMB_H = 体の 1.5 倍）を開く。押している間は開いたまま、UMB_LAUNCH フレームで傘が前へ飛んでいく（離すと閉じる）。
 // 開いた傘は前からの攻撃を受け止め（盾の代わり。UMB_HP 回で壊れる。盾を一撃で壊す攻撃では 1 回で壊れる）、触れた敵には UMB_TICK フレームごとに弱く当たる（UMB_FRAC 倍。盾を削る）。
-// 飛ばした傘は UMB_RANGE px 進み、当たった敵に 1 回ずつ UMB_SHOT 倍で当たる。飛ばした・壊れたあとは UMB_REGEN フレームで新しい傘が生える（それまでの攻撃ボタンはふつうの通常攻撃）
+// 飛ばした傘は足場の上を UMB_LIFE フレーム（4 秒）進み続け、足場の端（崖）に着いたらそこで止まる（空中で飛ばすと足場まで落ちる）。当たった敵に 1 回ずつ UMB_SHOT 倍で当たる（2026-10-24 から。それまでは 320px で消えた）。飛ばした・壊れたあとは UMB_REGEN フレームで新しい傘が生える（それまでの攻撃ボタンはふつうの通常攻撃）
 const UMB_H = 90, UMB_W = 16, UMB_LAUNCH = 75, UMB_HP = 5, UMB_REGEN = 300, UMB_FRAC = 0.35, UMB_TICK = 30, UMB_SLOW = 0.7;
-const UMB_V = 7, UMB_RANGE = 320, UMB_SHOT = 0.7;
+const UMB_V = 7 / 3, UMB_LIFE = 240, UMB_SHOT = 0.7;   // 2026-10-24 に速さを 7 → 1/3 に
 // ウルトラショット: 大きなインクの塊（半径 US_R）を真横へ撃つ。最初に当たった敵（手下・クロスボウ）か、射程 US_RANGE の終わりで爆発（半径 US_BLAST、盾は効かない）
 const US_V = 9, US_R = 22, US_RANGE = 700, US_BLAST = 90, US_KNOCK = 1.1, US_LIFT = 7;
 const SR_F = 40, SR_V = 9, SR_REACH = 30, SR_HIT = 0.6, SR_BLAST = 100, SR_KNOCK = 1.0, SR_LIFT = 6.5;
@@ -1396,7 +1396,7 @@ function umbrellaStep(p) {
   }
   hitObjs(p.own, b.x0, b.y0, b.x1, b.y1, null, true);
   if (p.um >= UMB_LAUNCH) {                                    // 傘を飛ばす（新しい傘が生えるまで、攻撃ボタンはふつうの通常攻撃）
-    game.pj.push({ k: 8, x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, vx: p.f * UMB_V, vy: 0, own: p.own, t: 0, d: 0, hit: [] });
+    game.pj.push({ k: 8, x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, vx: p.f * UMB_V, vy: 0, own: p.own, t: 0, pw: p.f, hit: [] });   // pw: 進む向き（崖で止まっても向きを覚えておく）
     p.um = 0; p.umR = UMB_REGEN; p.umh = []; p.cd = ATK_COOLDOWN;
     emit("uml", (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, p.f);
   }
@@ -1934,7 +1934,7 @@ function physics(p, inp, neutral) {
     // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
     // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
     const turnOk = p.ground || p.jg > 0;
-    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0 && !p.um) p.f = dir;   // 傘を開いている間も向きは変わらない
+    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0) p.f = dir;   // 傘を開いている間も向きを変えられる（傘も一緒に回る）
     const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
     if (p.jh > 0) {                                // 小ジャンプ: 押したフレームを 1 として、SHORT_HOP_F フレーム目までに離したら、上がる勢いを弱める
@@ -2222,10 +2222,20 @@ function updateProjectiles(list) {
       const boom = b.t >= BOMB_FUSE;                         // 敵に当たっても爆発しない。導火線が尽きたときだけ爆発
       if (boom) { explode(b, list); game.pj.splice(i, 1); continue; }
       if (b.y > KO_B + 80 || b.x < KO_L - 60 || b.x > KO_R + 60) game.pj.splice(i, 1);
-    } else if (b.k === 8) {                                  // キャンピングシェルターの飛ばした傘: 真横へ進み、当たった敵に 1 回ずつ当たる（盾で受けられる）。射程を過ぎたら消える
-      const o = game.p[b.own], dir = Math.sign(b.vx) || 1;
-      b.x += b.vx; b.d += Math.abs(b.vx);
-      const xa = b.x - UMB_W / 2, xb = b.x + UMB_W / 2, ya = b.y - UMB_H / 2, yb = b.y + UMB_H / 2;
+    } else if (b.k === 8) {                                  // キャンピングシェルターの飛ばした傘: 足場の上をゆっくり進み、崖に着いたら止まる。4 秒たったら消える。触れた敵に 1 回ずつ当たる（盾で受けられる）
+      const o = game.p[b.own], dir = b.pw, h = UMB_H / 2;
+      let pl = pls.find(q => Math.abs(b.y + h - q.y) < 1 && b.x >= q.x - UMB_W && b.x <= q.x + q.w + UMB_W) || null;   // いま乗っている足場（サドンデスで縮んでも乗ったまま。消えたら落ちる）
+      if (!pl) {                                             // 足場に乗るまでは落ちる
+        const oy = b.y;
+        b.vy = Math.min(12, b.vy + 0.6); b.y += b.vy;
+        for (const q of pls) if (oy + h <= q.y + 0.01 && b.y + h >= q.y && b.x > q.x && b.x < q.x + q.w) { b.y = q.y - h; b.vy = 0; pl = q; break; }
+      }
+      if (pl) {                                              // 足場の上: 進む。端（崖）では止まる（傘の厚みのぶん内側）
+        const lo = pl.x + UMB_W / 2, hi = pl.x + pl.w - UMB_W / 2, lim = dir > 0 ? hi : lo;
+        b.x = Math.max(lo, Math.min(hi, b.x + dir * UMB_V));
+        b.vx = b.x === lim ? 0 : dir * UMB_V;
+      } else b.x += b.vx;
+      const xa = b.x - UMB_W / 2, xb = b.x + UMB_W / 2, ya = b.y - h, yb = b.y + h;
       for (const e of list) {
         if (ally(e.own, b.own) || !e.al || untouchable(e) || b.hit.includes(e)) continue;
         if (hbL(e) > xb || hbR(e) < xa || e.y > yb || e.y + phOf(e) < ya) continue;
@@ -2233,7 +2243,7 @@ function updateProjectiles(list) {
         if (o) strike(o, e, { dir, frac: UMB_SHOT, recoil: false });
       }
       hitObjs(b.own, xa, ya, xb, yb, b.hit);
-      if (b.d >= UMB_RANGE || b.x < KO_L - 60 || b.x > KO_R + 60) { game.pj.splice(i, 1); emit("umx", b.x, b.y, dir); }
+      if (b.t >= UMB_LIFE || b.y > KO_B + 80) { game.pj.splice(i, 1); emit("umx", b.x, b.y, dir); }
     } else if (b.k === 9) {                                  // ウルトラショット: 真横へ飛び、最初に当たった敵・手下・クロスボウか、射程の終わりで爆発
       b.x += b.vx; b.d += Math.abs(b.vx);
       let boom = b.d >= US_RANGE;
@@ -3073,7 +3083,7 @@ function snapshot() {
       { w: p.w, c: p.c ? 1 : 0, n: p.n, tg: p.tg | 0, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, am: p.am, amT: p.amT, lv: p.lv },
       inGame ? { ch: p.ch } : null, inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
-    pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 || b.k === 4 || b.k === 7 ? Math.round(b.pw * 10) : b.k === 5 ? b.lv * 10 : b.k === 6 ? b.dir * 10 : 0, b.own]),   // 魔法（k: 5）は、7 番目に段階 × 10
+    pj: game.pj.map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 || b.k === 4 || b.k === 7 ? Math.round(b.pw * 10) : b.k === 5 ? b.lv * 10 : b.k === 6 ? b.dir * 10 : b.k === 8 ? b.pw * 10 : 0, b.own]),   // 魔法（k: 5）は、7 番目に段階 × 10
     fl: game.fl.map(f => f.air ? [r1(f.x), r1(f.y), f.t, f.big ? 1 : 0, 1, r1(f.vy)] : [r1(f.x), r1(f.y), f.t, f.big ? 1 : 0]),   // 落ちている花は、5 番目が 1、6 番目が縦の速さ
     cb: game.cb.map(c => [r1(c.x), r1(c.y), c.f, c.t, c.hp, c.own, c.g ? c.rl : -1, r1(c.vy)]),   // クロスボウ: 位置・向き・経過・耐久・持ち主・次の矢まで（-1 は落下中）・縦の速さ
     mn: game.mn.map(m => [r1(m.x), r1(m.y), r1(m.vx), r1(m.vy), m.f, m.a, m.t, m.own]),          // ゴブGの手下: 位置・速度・向き・斬りの経過・経過・持ち主
@@ -5686,7 +5696,7 @@ function render() {
   for (let i = 0; i < MAX_PLAYERS; i++) { const c = game.cl[i]; if (c) drawWithTrail(c, i, false); }
   for (let i = 0; i < MAX_PLAYERS; i++) { const p = game.p[i]; if (p && p.c) drawWithTrail(p, i, i === myId); }
   for (const m of game.mn) drawMinion(m, now);
-  for (const b of game.pj) { if (b.k === 0) drawBomb(b, now); else if (b.k === 2) drawThrownShield(b); else if (b.k === 3) drawYureiBomb(b, now); else if (b.k === 4) drawSpear(b); else if (b.k === 5) drawMagic(b, now); else if (b.k === 6) drawBeam(b, now); else if (b.k === 7) drawHadou(b, now); else if (b.k === 8) drawUmbrella(b.x, b.y, Math.sign(b.vx) || 1, 1, false); else if (b.k === 9) drawUltra(b, now)
+  for (const b of game.pj) { if (b.k === 0) drawBomb(b, now); else if (b.k === 2) drawThrownShield(b); else if (b.k === 3) drawYureiBomb(b, now); else if (b.k === 4) drawSpear(b); else if (b.k === 5) drawMagic(b, now); else if (b.k === 6) drawBeam(b, now); else if (b.k === 7) drawHadou(b, now); else if (b.k === 8) drawUmbrella(b.x, b.y, Math.sign(b.pw) || 1, 1, b.t > UMB_LIFE - 40 && Math.floor(now / 80) % 2 === 0); else if (b.k === 9) drawUltra(b, now)
 ; else drawArrow(b); }
   drawFx();
   cx.restore();
