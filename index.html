@@ -371,6 +371,7 @@ const ATKS = [
   { total: 30, on: 10, off: 16, reach: 82 },                                                                             // ふつうの約 1.8 倍の長さ
   { total: 34, on: 9, off: 18, reach: 82, dash: 12, dashFrom: 9, dashTo: 18, frac: 1.2, breaker: true, lock: true, hover: true },   // 8 フレーム構えて、10 フレーム突進（約 120px）。終わって 16 フレームは動けない
   { total: 26, on: 6, off: 12, reach: 72, hammer: true },                                                                // 勝負師のハンマー（4 番）。振りかぶって前へ振り下ろす。当たったときの効果は出目しだい（hammerHit）。2026-10-18 に 9 → 6 フレーム目から・54 → 72px
+  { total: 13, on: 4, off: 7, reach: 30, cd: 5, ink: true },                                                            // スパッタリーの通常攻撃（5 番）。ふつうの半分の時間（攻撃後の待ちも半分）で撃てるが、届く距離は短い（46 → 30px）
 ];
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
 
@@ -514,6 +515,12 @@ const hwC = hw => Math.min(1, hw / HW_MAX), hwR = c => 8 + 12 * c, hwV = c => 7 
 // CF（2026-10-18）: ムーンサルトは、体の前 CF_REACH の敵を真上へ蹴り上げる（盾・騎士のカウンターの構えは効かない）。約 CF_LIFT px 浮き、CF_STUN フレーム動けない。CF_DMG % がたまる。
 // 自分は CF_FLIP フレームかけて宙返りする（少し浮く）。パッシブ: 空中で通常攻撃の根元（体に近い CF_ROOT px）が当たるとクリティカル（威力と吹っ飛ばしが CF_CRIT 倍、ヒットストップはふつうの CF_HS 倍）
 const CF_REACH = 44, CF_LIFT = 268, CF_STUN = 60, CF_DMG = 8, CF_FLIP = 18, CF_ROOT = 14, CF_CRIT = 2, CF_HS = 1.2;
+// スパッタリー（2026-10-24）: 地上で左右を押しながらジャンプボタンを押すと、その方向へステップ（STEP_F フレームで STEP_V × STEP_F px。その間は盾なし）。
+// 続けて 2 回まで。1 回目のあと STEP_CHAIN フレーム 2 回目を出さなければ数え直し、2 回目のあとは STEP_CD フレームの間ステップできない（ジャンプになる）。人は左右＋ジャンプ、CPU は頭脳が決める（aiStp）
+const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
+// サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
+// 進み終わる（足場の端に着く）とインクを撒き散らして爆発（半径 SR_BLAST、盾は効かない）。途中で吹っ飛ばされる・動けなくなると、爆発せずに終わる。乗っている間は盾なし
+const SR_F = 40, SR_V = 9, SR_REACH = 30, SR_HIT = 0.6, SR_BLAST = 100, SR_KNOCK = 1.0, SR_LIFT = 6.5;
 const HM_SELF = 20, HM_HEAL = 8, HM_BIND = 60, HM_DMG4 = 10, HM_FRAC5 = 2, HM_SHOW = 60;   // HM_SHOW: 出目の吹き出しを頭の上に出しておく長さ（1 秒）
 const withdrawn = p => !p.isClone && (p.cw | 0) > CIG_WD;
 const cigLeft = p => Math.max(0, 1 - (p.cw | 0) / CIG_WD);   // 口のタバコの残り（1 = 火をつけたばかり、0 = 吸い切った）
@@ -599,6 +606,10 @@ const CHARS = [
   { id: "cf", name: "CF", A: 3, D: 2, S: 4, tag: "蹴り上げて、空中攻撃の根元でクリティカル",
     skill: { name: "ムーンサルト", cd: 4, text: "宙返りして前の敵を真上に蹴り上げる（盾・カウンター無視）。相手は約250px浮いて1秒動けない" },
     auto: "空中で通常攻撃の根元（体に近い14px）が当たるとクリティカル: 2倍の威力と吹っ飛ばし、光ってヒットストップ" },
+  // 30 体目（必ず末尾に足す）
+  { id: "splat", name: "スパッタリー", A: 2, D: 2, S: 3, atk: 5, tag: "ステップで動き回り、短い射程を2倍の速さで撃つ",
+    skill: { name: "サメライド", cd: 8, text: "サメに乗って前へ進み、ぶつかった敵を攻撃する。進み終わるとインクを撒き散らして爆発する（爆発は盾が効かない）" },
+    auto: "地上で左右＋ジャンプで、その方向へ素早くステップ（続けて2回まで。2回目のあと少し使えない）。通常攻撃は射程が短いが、2倍の速さで撃てる" },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
@@ -717,6 +728,7 @@ function newPlayer() {
            mb: 0, mbo: -1, mbv: null,                   // 拘束魔法で動けない残り / かけた魔法使いのスロット / その間に魔法使いから受けた吹っ飛びの合計（ホストだけ）
            dm: 0,                                       // 蓄積ダメージ（%）
            hw: 0, hwr: 0, hwh: [], hmN: 0, hmT: 0,     // … / 勝負師: 出目の吹き出しを出す残り
+           sp: 0, spD: 1, spN: 0, spW: 0, spC: 0, spU: 0, srT: 0, srHit: [], srCar: [], aiStp: 0,   // スパッタリー: ステップの残り / 向き / 続けて出した回数 / 2 回目を出せる残り / 使えない残り / ジャンプボタンを離すまで地上ジャンプしない / サメライドの残り / 当てた相手・押している相手（ホストだけ）/ CPU のステップの指示
            vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
            ub: 0, nc: 0, dr: 0, st: 0, cw: 0, cs: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
            yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
@@ -805,7 +817,7 @@ function shieldUp(p) {
   const c = chOf(p);
   if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0 || p.gr > 0 || p.hd > 0 || p.mb > 0) return false;   // mb: 魔法で拘束されている
-  if (p.bt > 0 || p.wb > 0 || p.yk > 0 || p.msT > 0) return false;   // … / CF のムーンサルト（宙返り）の間             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
+  if (p.bt > 0 || p.wb > 0 || p.yk > 0 || p.msT > 0 || p.sp > 0 || p.srT > 0) return false;   // … / スパッタリーのステップ・サメライドの間   // … / CF のムーンサルト（宙返り）の間             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
   return true;
 }
@@ -834,6 +846,7 @@ function spawn(p, slot, n, battle) {
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
   p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0; p.hmT = 0; p.vbT = 0; p.vbTgt = null; p.wgT = 0;
+  p.sp = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
@@ -965,6 +978,11 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     if (!vampBite(p)) { p.kc = Math.round(VAMP_WHIFF * cdMul()); emit("sk", ecx(p), ecy(p), p.ch); return true; }
   } else if (id === "cf") {                    // ムーンサルト: 当たっても外れても、クールタイムは同じ
     cfMoonsault(p);
+  } else if (id === "splat") {                 // サメライド: 前へ進む（ステップ中でも使える）
+    p.srT = SR_F; p.srHit = []; p.srCar = []; p.sp = 0; p.a = 0; p.s = 0; p.vy = Math.min(p.vy, 0);
+    emit("sr", ecx(p), p.y + phOf(p), p.f, p.own);
+    p.kc = skCd(p);
+    return true;
   } else if (id === "gambler") {               // ハンマー: 出目を決めて振る（1 は自分にダメージ、3 は自分の % を回復）
     const n = 1 + Math.floor(Math.random() * 5);
     p.hmN = n; p.hmT = HM_SHOW; p.a = 1; p.ak = 4; p.hit = [];
@@ -1058,7 +1076,7 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwN = 0; p.rwE = null; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own));                    // 投げていた盾（何枚あっても）は消えて、手元に戻る
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.mb = 0; p.mbv = null;                                                    // 魔法使い: ためと詠唱は取り消し（魔法書の耐久はそのまま）
-  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmT = 0; p.wgT = 0;   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
+  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmT = 0; p.wgT = 0; p.sp = 0; p.spN = 0; p.spC = 0; p.srT = 0;   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
 
   for (const cb of cbsOf(p)) removeCb(cb);                                                       // クロス使い: 置いたクロスボウは（2 台あっても）全部消える
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;                                                       // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
@@ -1343,6 +1361,37 @@ function cfMoonsault(p) {
   t.vx = 0; t.vy = -jumpVel(CF_LIFT); t.s = CF_STUN; t.ground = false; t.hf = 12;
   addDmg(t, CF_DMG);
   emit("ms", ecx(t), t.y + phOf(t), p.f, 1);
+}
+
+// ---- スパッタリー: サメライド ----
+// 乗っている間（毎フレーム）: 前へ進み、体の前にぶつかった敵に 1 回ずつ当てる。地上では足場の端で止まって、そこで爆発する
+function sharkStep(p) {
+  const sz = szOf(p), pl = platformUnder(p);
+  p.vx = p.f * SR_V;
+  if (!p.ground) p.vy = Math.min(p.vy, 1);                     // 空中では真横へ進む（少しずつ下がる）
+  let end = --p.srT <= 0;
+  if (pl && (p.f > 0 ? p.x + pwOf(p) + p.vx > pl.x + pl.w : p.x + p.vx < pl.x)) { p.vx = p.f > 0 ? pl.x + pl.w - pwOf(p) - p.x : pl.x - p.x; end = true; }
+  const front = p.f > 0 ? p.x + pwOf(p) : p.x;
+  const x0 = p.f > 0 ? p.x : front - SR_REACH * sz, x1 = p.f > 0 ? front + SR_REACH * sz : p.x + pwOf(p), y0 = p.y + 10 * sz, y1 = p.y + phOf(p) + 6 * sz;
+  for (const e of ents()) {
+    if (e === p || ally(e.own, p.own) || !e.al || untouchable(e) || p.srHit.includes(e)) continue;
+    if (hbR(e) < x0 || hbL(e) > x1 || e.y > y1 || e.y + phOf(e) < y0) continue;
+    p.srHit.push(e);
+    const s0 = e.s;
+    strike(p, e, { dir: p.f, frac: SR_HIT, recoil: false });
+    if (p.s > 0) { p.srT = 0; return; }                         // 騎士のカウンターで返された
+    if (e.s > 0 && e.s !== s0) p.srCar.push(e);                 // 盾なしで当たった: 最後の爆発までサメが押していく
+  }
+  for (const e of p.srCar) if (e.al && e.s > 0 && !untouchable(e)) { e.vx = p.f * SR_V; e.s = Math.max(e.s, 3); }
+  hitObjs(p.own, x0, y0, x1, y1, p.srHit);
+  if (end) sharkBlast(p, p.x + p.vx);
+}
+// 進み終わり: サメの鼻先でインクを撒き散らして爆発（盾は効かない。自分は飛ばない）
+function sharkBlast(p, px) {
+  const x = px + pwOf(p) / 2 + p.f * 26 * szOf(p), y = p.y + phOf(p) - 14;
+  p.srT = 0; p.vx = 0;
+  emit("srx", x, y, SR_BLAST, p.own);
+  explode({ x, y, own: p.own }, ents(), SR_BLAST, SR_KNOCK, SR_LIFT);
 }
 
 // ---- 勝負師: ハンマー ----
@@ -1726,6 +1775,9 @@ function physics(p, inp, neutral) {
   if (p.wgT > 0) p.wgT--;
   if (p.msT > 0) p.msT--;
   if (p.hmT > 0) p.hmT--;
+  if (p.spC > 0 && --p.spC === 0) p.spN = 0;          // スパッタリー: 2 回ステップしたあとの待ちが終わった
+  if (p.spW > 0 && --p.spW === 0 && !p.spC) p.spN = 0; // 1 回目のあと、2 回目を出さないまま時間がたった
+  if ((p.sp > 0 || p.srT > 0) && (p.s > 0 || p.fz > 0 || p.hd > 0 || p.yk > 0 || p.mb > 0 || p.wb > 0)) { p.sp = 0; p.srT = 0; }   // 吹っ飛ばされた・動けなくなった: ステップもサメライドも（爆発せずに）終わる
   if (chd.id === "yani" && !p.isClone && !neutral && game.ph === "play") {   // ヤニ猫: タバコを拾わない時間を数え、3 秒を超えたら禁断症状（ダメージ）
     p.cw = Math.min(CIG_WD + 600, (p.cw | 0) + 1);
     if (p.cw >= CIG_WD && (p.cs | 0) > 0) { p.cs--; p.cw = 0; emit("cgl", ecx(p) + p.f * 26, p.y + 28); }   // 吸い切った: 持っているタバコに火をつける
@@ -1776,6 +1828,7 @@ function physics(p, inp, neutral) {
   if (a && !p.ap) p.ba = INPUT_BUF;
   if (jrise) p.bu = INPUT_BUF;
   p.kp = kin ? 1 : 0; p.ap = a ? 1 : 0; p.jp = u ? 1 : 0;
+  if (!u) p.spU = 0;
   const kpress = p.bk > 0, apress = a || p.ba > 0, upress = u || p.bu > 0;
   // 魔法使い: ためは、ジャンプ・攻撃を押す、地上で左右を押す（空中で左右を押したまま着地したときも）、吹っ飛ぶ・動けない・詠唱などで止まる（段階は残る）。
   // 空中では左右に動きながらためられる。ラストスパート中は 2 倍の速さでたまる。究極魔法までたまると自動で止まる
@@ -1811,6 +1864,12 @@ function physics(p, inp, neutral) {
     grabStep(p, inp);
   } else if (p.vbT > 0) {                        // 吸血鬼: 噛みついている間は動けない
     biteStep(p);
+  } else if (p.srT > 0) {                        // スパッタリー: サメライド中は前へ進むだけ
+    sharkStep(p);
+  } else if (p.sp > 0) {                         // スパッタリー: ステップ中（向きは変わらず、攻撃・ジャンプはできない。スキルは使える）
+    canSkill = true;
+    p.vx = p.spD * STEP_V;
+    if (--p.sp === 0) p.vx = p.spD * MOVE_BASE * moveMul(S);   // 止まるときは、ふつうに走る速さまで落とす
   } else {
     canSkill = true;
     let spm = 1;                                 // 2026-10-18 から、通常攻撃の間も移動は遅くならない（それまでは 0.44 倍）
@@ -1831,7 +1890,14 @@ function physics(p, inp, neutral) {
       if (!u) { const rem = jumpHeight(S) * wm.jp * SHORT_HOP_H - (p.jy0 - p.y), v = rem > 0 ? -jumpVel(rem) : 0; if (p.vy < v) p.vy = v; p.jh = 0; }   // 跳び始めから数えて、ふつうの SHORT_HOP_H 倍の高さで止まる
       else if (++p.jh > SHORT_HOP_F) p.jh = 0;
     }
-    if (upress && p.ground && p.cn === 0 && !lock) {
+    // スパッタリー: 地上で左右＋ジャンプボタン（CPU は頭脳の指示）でステップ。使えないとき（2 回目のあとの待ち）はふつうのジャンプになる
+    const stepDir = chd.id === "splat" && !p.isClone && !neutral ? (p.cpu ? p.aiStp : (jrise || p.bu > 0) ? dir : 0) : 0;
+    if (p.cpu) p.aiStp = 0;
+    if (stepDir && p.ground && p.spC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && !lock) {
+      p.sp = STEP_F; p.spD = stepDir; p.f = stepDir; p.bu = 0; p.jh = 0; p.spU = u ? 1 : 0;
+      if (++p.spN >= 2) { p.spC = STEP_F + STEP_CD; p.spW = 0; } else p.spW = STEP_F + STEP_CHAIN;
+      emit("stp", ecx(p), p.y + phOf(p), stepDir, p.own);
+    } else if (upress && p.ground && p.cn === 0 && !lock && !p.spU) {
       p.vy = -jumpVel(jumpHeight(S) * wm.jp); p.ground = false; p.bu = 0; p.jg = JUMP_TURN; p.jh = (p.cpu || p.isClone || neutral) ? 0 : 1; p.jy0 = p.y;   // jh: 小ジャンプを見るため、押し続けているフレームを数える
       if (!p.isClone) emit("j", ecx(p), p.y + PLH);
     } else if ((jrise || p.bu > 0) && !p.ground && !p.dj && p.cn === 0 && !lock) {     // 二段ジャンプ: 空中で 1 回だけ（押した瞬間に左右を押していれば、その方向を向く）。先行入力でも出る
@@ -1860,7 +1926,7 @@ function physics(p, inp, neutral) {
       if (ak.stop) p.vx = dashStop(p, p.vx);
       if (ak.hover && !p.ground) p.vy = Math.min(p.vy, 1);
     } else if (ak.stop && p.a > ak.dashTo && p.vx * p.f > 0) p.vx = dashStop(p, p.vx);   // 踏み込みのあとの惰性でも、敵の体にめりこまない（向きが逆・0 のときはそのまま）
-    if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ATK_COOLDOWN; p.wa = 0; }
+    if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ak.cd !== undefined ? ak.cd : ATK_COOLDOWN; p.wa = 0; }   // スパッタリーは攻撃後の待ちも半分
   }
   if (p.cd > 0) p.cd--;
   const gk = ((chd.id === "wizard" && (p.mgr || p.mc > 0 || p.bm > 0)) || (chd.id === "hadou" && p.hwr)) && !p.ground ? 0.6
@@ -2041,25 +2107,26 @@ function cutFlowers(own, x0, y0, x1, y1) {
 }
 
 // ボムの爆発: 爆風の中の相手を、盾を無視して軽く吹っ飛ばす（持ち主と分身は無傷）
-function explode(b, list) {
+// 爆風（盾は効かない）。R: 半径 / K: 吹っ飛ばし / L: 上向きの初速（省くとボマーの爆弾の値。スパッタリーのサメライドの爆発は別の値で、演出も別に出す）
+function explode(b, list, R, K, L) {
   const owner = game.p[b.own], A = owner ? effA(owner) : BASE_STAT;
-  emit("x", b.x, b.y, BOMB_BLAST);
+  if (R === undefined) { R = BOMB_BLAST; K = BOMB_KNOCK; L = BOMB_LIFT; emit("x", b.x, b.y, BOMB_BLAST); }
   let any = false;
   for (const e of list) {
     if (ally(e.own, b.own) || untouchable(e)) continue;
     const nx = Math.max(hbL(e), Math.min(b.x, hbR(e))), ny = Math.max(e.y, Math.min(b.y, e.y + phOf(e)));
     const dist = Math.hypot(b.x - nx, b.y - ny);
-    if (dist > BOMB_BLAST) continue;
+    if (dist > R) continue;
     const dir = Math.sign(ecx(e) - b.x) || (e.f > 0 ? -1 : 1);
-    const bk = atkMul(A) * defMul(effD(e)) * BOMB_KNOCK * dzMul(e) * (1 - 0.4 * dist / BOMB_BLAST);
+    const bk = atkMul(A) * defMul(effD(e)) * K * dzMul(e) * (1 - 0.4 * dist / R);
     e.vx = dir * KNOCK_BASE * bk * dmgMul(e); addDmg(e, DMG_BASE * bk);
     grabBroken(e); const bv = freeBind(e); if (bv) e.vx += bv.vx;
     const fz0 = e.fz, dz0 = e.dz;
-    e.vy = -BOMB_LIFT; e.s = Math.max(34, bv ? bv.s : 0); e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.mc = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0; stopWeb(e);
+    e.vy = -L; e.s = Math.max(34, bv ? bv.s : 0); e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.cn = 0; e.fz = 0; e.dz = 0; e.mc = 0; e.ground = false; e.hf = 12; releaseGrab(e); e.hd = 0; stopWeb(e);
     keepRoot(e, fz0, dz0);
     if (flyOut(e)) any = true;
   }
-  blastObjs(b.own, b.x, b.y, BOMB_BLAST);     // 手下は消え、クロスボウは 1 回削れる
+  blastObjs(b.own, b.x, b.y, R);              // 手下は消え、クロスボウは 1 回削れる
   if (any) game.hs = Math.max(game.hs, 8);   // 崖の外まで飛ばしたときだけ止める
 }
 
@@ -2469,6 +2536,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "boomer":                                                                                                      // 盾をこちらへ向けた敵の向こうまで投げて、帰りで背中に当てる。盾を見て止まっている敵にも
       return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
     case "gobg": return g && sameLevel && t.ground && gap < 300 ? KEY.k : 0;
+    case "splat": return g && face && sameLevel && gap > 30 && gap < 260 ? KEY.k : 0;                                         // 前の敵へサメで突っ込む（爆発は盾が効かない）
     case "cf": return g && face && gap < CF_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 && t.ground ? KEY.k : 0;              // 地上の敵を蹴り上げる（盾を構えていても）
     case "vamp": return face && gap < VAMP_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 ? KEY.k : 0;                    // 噛みつける距離（盾を構えた相手にも）
     case "gambler": return face && sameLevel && gap < ATKS[4].reach - 8 ? KEY.k : 0;                                         // ハンマーが届く距離
@@ -2762,7 +2830,21 @@ function aiInput(c, owner, B) {                                // 毎フレー�
       if ((inp & KEY.r) && pl.x + pl.w - x < AI_EDGE) inp &= ~KEY.r;
     }
   }
+  if (chOf(c).id === "splat" && !c.isClone) aiStep(c, B);
   return inp;
+}
+// スパッタリーの CPU: 敵の振りかぶりを見たら反対へステップでよけ、ときどきステップで一気に間合いを詰める（足場から落ちる向きには出さない）
+function aiStep(c, B) {
+  const t = c.aiTgt;
+  if (!t || !t.al || !c.ground || c.spC > 0 || c.sp > 0 || c.srT > 0 || c.a > 0 || c.s > 0 || c.fz > 0) return;
+  const dx = ecx(t) - ecx(c), sg = Math.sign(dx) || c.f, gap = Math.abs(dx) - (pwOf(t) + pwOf(c)) / 2;
+  if (Math.abs(t.y + phOf(t) - c.y - phOf(c)) > 30) return;
+  const pl = platformUnder(c), room = d => pl && (d > 0 ? pl.x + pl.w - ecx(c) : ecx(c) - pl.x) > STEP_V * STEP_F + 30;
+  const tAk = ATKS[t.ak] || ATKS[0];
+  let want = 0;
+  if (t.a > 0 && t.a < tAk.on && gap < tAk.reach * szOf(t) + 20 && Math.random() < B.dodge) want = -sg;
+  else if (gap > 110 && gap < 260 && Math.random() < B.skill * 0.05) want = sg;
+  if (want && room(want)) c.aiStp = want;
 }
 const cloneInput = (c, owner) => aiInput(c, owner, AI_CLONE);
 function tickClone(i) {                                      // 分身は自分で考えて動く（スキルは使えない）
@@ -2876,6 +2958,8 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.hw) { o.hw = p.hw; if (p.hwr) o.hwr = 1; }             // 波動士のため量（ためが進んでいれば hwr）
   if (p.hmT > 0 || (p.a > 0 && p.ak === 4)) o.hn = p.hmN;
   if (p.wgT > 0) o.wg = p.wgT;
+  if (p.sp > 0) o.sp = p.sp;                                    // スパッタリー: ステップの残り（見た目用）
+  if (p.srT > 0) o.sr = p.srT;                                  // スパッタリー: サメライドの残り（サメを描く）
   if (p.msT > 0) o.ms = p.msT;                                  // CF: 宙返りの残り                                  // 吸血鬼: 羽を広げている残り
   if (p.vbT > 0) o.vb = p.vbT;                                  // 吸血鬼: 噛みついている残り      // 勝負師: 出目（吹き出しを出している間と、振っている間）                                      // ヤニ猫: 最後にタバコを拾ってからのフレーム（禁断症状の表示と性能用）      // ヤク猫の注射器: 性能ごとの上乗せ（攻撃・防御・スピード）と、いちばん長い残り
   if (p.nc > 0) o.nc = p.nc;                                  // 敵のタバコでスピード −1 の残り
@@ -3154,7 +3238,7 @@ function readEnt(p, n) {                                     // スナップシ�
     if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
   }
   p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
-  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; p.vbT = n.vb | 0;
+  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; p.vbT = n.vb | 0; p.sp = n.sp | 0; p.srT = n.sr | 0;
   p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
@@ -3588,6 +3672,19 @@ function deco(c, id, x, y, f, o) {
     const sx = f > 0 ? x : x + PLW, d = f > 0 ? -1 : 1, t = performance.now() / 160;
     c.fillStyle = "#dc2626"; c.beginPath(); c.moveTo(sx, y + 20); c.lineTo(sx + d * 18, y + 18 + Math.sin(t) * 3); c.lineTo(sx + d * 14, y + 26 + Math.sin(t + 1) * 3); c.lineTo(sx, y + 27); c.fill();
     c.fillStyle = "#facc15"; c.fillRect(x - 2, y + 18, 7, 6); c.fillRect(x + PLW - 5, y + 18, 7, 6);
+  } else if (id === "splat") {                 // スパッタリー: 蛍光オレンジのゲソ（後ろへ垂れる）、黒い目もと、両手に小さな銃（2 丁）
+    c.fillStyle = "#111827"; c.fillRect(x + 2, y + 10, PLW - 4, 11);
+    c.fillStyle = "#f8fafc"; c.fillRect(x + (f > 0 ? 24 : 8), y + 12, 8, 7); c.fillStyle = "#111827"; c.fillRect(x + (f > 0 ? 28 : 8), y + 13, 4, 5);   // 目は、黒い目もとの上に白目と黒目
+    c.fillStyle = "#f97316"; c.fillRect(x - 1, y - 4, PLW + 2, 10);
+    const bx = f > 0 ? x - 1 : x + PLW + 1, d = f > 0 ? -1 : 1, t = performance.now() / 220;
+    for (let k = 0; k < 2; k++) {                // 後ろに垂れるゲソ（先が明るい）
+      const ty = y + 2 + k * 7, sw = Math.sin(t + k) * 2;
+      c.fillStyle = "#f97316"; c.beginPath(); c.moveTo(bx, ty); c.lineTo(bx + d * 12, ty + 14 + sw); c.lineTo(bx + d * 4, ty + 16 + sw); c.lineTo(bx, ty + 7); c.fill();
+      c.fillStyle = "#fdba74"; c.beginPath(); c.arc(bx + d * 8, ty + 15 + sw, 2.5, 0, 6.2832); c.fill();
+    }
+    const gx = f > 0 ? x + PLW - 4 : x - 10;
+    c.fillStyle = "#334155"; c.fillRect(gx, y + 30, 14, 5); c.fillRect(gx, y + 40, 14, 5);
+    c.fillStyle = "#f97316"; c.fillRect(f > 0 ? gx + 10 : gx, y + 30, 4, 5); c.fillRect(f > 0 ? gx + 10 : gx, y + 40, 4, 5);
   } else if (id === "gambler") {               // 緑のサンバイザー、赤い蝶ネクタイ、腰にサイコロ
     c.fillStyle = "#15803d"; c.fillRect(x - 2, y - 1, PLW + 4, 5); c.fillRect(f > 0 ? x + 18 : x - 8, y + 3, 30, 4);
     c.fillStyle = "#dc2626"; c.beginPath(); c.moveTo(x + 20, y + 32); c.lineTo(x + 13, y + 28); c.lineTo(x + 13, y + 36); c.fill(); c.beginPath(); c.moveTo(x + 20, y + 32); c.lineTo(x + 27, y + 28); c.lineTo(x + 27, y + 36); c.fill();
@@ -4223,7 +4320,7 @@ addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = 
 addEventListener("appinstalled", () => { installEvt = null; if (uiKey === "title") { uiKey = ""; renderUI(); } });
 
 // 画面の演出: 火花・盾のかけら・衝撃波の輪・画面の揺れ・フラッシュ（座標はワールド）
-const parts = [], rings = [];
+const parts = [], rings = [], inks = [];          // inks: スパッタリーの爆発で、足場に残るインクの跡（見た目だけ。4 秒で消える）
 let shakeAmp = 0, flashA = 0;
 const shake = a => { shakeAmp = Math.max(shakeAmp, a); };
 function burst(x, y, n, o) {                       // o.dir を省くと全方向。flat は平たいかけら、round は丸い煙
@@ -4243,6 +4340,7 @@ function updateFx(dt) {
     q.x += q.vx * dt; q.y += q.vy * dt; q.vy += q.g * dt; q.vx *= Math.pow(0.97, dt); q.rot += q.vr * dt;
   }
   for (let i = rings.length - 1; i >= 0; i--) { rings[i].t += dt; if (rings[i].t >= rings[i].max) rings.splice(i, 1); }
+  for (let i = inks.length - 1; i >= 0; i--) { inks[i].t += dt; if (inks[i].t >= 240) inks.splice(i, 1); }
 }
 function drawFx() {
   for (const q of parts) {
@@ -4381,6 +4479,21 @@ function fxEvent(e) {
   } else if (k === "ms") {                         // ムーンサルト（f: 1 = 当たった）
     if (f) { Sfx.counter(); shake(6); rings.push({ x, y, t: 0, max: 14, c: "#facc15", r0: 8, sp: 4 }); burst(x, y, 16, { dir: -Math.PI / 2, spread: 0.9, v0: 3, v1: 9, l0: 14, l1: 26, s0: 3, s1: 6, g: 0.1, colors: ["#facc15", "#fde68a", "#ffffff"] }); }
     else { Sfx.swing(); burst(x, y, 5, { dir: -Math.PI / 2, spread: 1.2, v0: 1, v1: 3, l0: 10, l1: 16, s0: 2, s1: 3, colors: ["#fde68a", "#e5e7eb"] }); }
+  } else if (k === "stp") {                       // スパッタリーのステップ（d: 向き / f: 持ち主のスロット）。足もとからインクのしぶき
+    Sfx.jump(); const c = colOf(f);
+    burst(x - d * 10, y - 4, 7, { dir: d > 0 ? Math.PI + 0.4 : -0.4, spread: 1.2, v0: 1.5, v1: 4, l0: 10, l1: 18, s0: 3, s1: 6, g: 0.15, round: true, colors: [c, "#f8fafc"] });
+  } else if (k === "sr") {                        // サメライドに乗った
+    Sfx.gust(); shake(3); const c = colOf(f);
+    burst(x, y, 12, { dir: -Math.PI / 2, spread: 2.6, v0: 1.5, v1: 5, l0: 14, l1: 24, s0: 3, s1: 7, g: 0.2, round: true, colors: [c, "#94a3b8", "#f8fafc"] });
+  } else if (k === "srx") {                       // サメライドの爆発: 持ち主の色のインクを撒き散らし、足場にインクの跡を残す（d: 半径 / f: 持ち主のスロット）
+    Sfx.explode(); shake(11); flashA = Math.max(flashA, 0.25); const c = colOf(f);
+    burst(x, y, 40, { v0: 3, v1: 12, l0: 18, l1: 34, s0: 4, s1: 10, g: 0.25, round: true, colors: [c, c, "#f8fafc"] });
+    rings.push({ x, y, t: 0, max: 14, c, r0: 10, sp: d / 14 });
+    for (let j = 0; j < 7 && inks.length < 60; j++) {
+      const ix = x + (Math.random() * 2 - 1) * d;
+      const pl = platforms().filter(s => ix > s.x && ix < s.x + s.w && s.y >= y - 40 && s.y <= y + d).sort((a, b) => a.y - b.y)[0];
+      if (pl) inks.push({ x: ix, y: pl.y + 2, r: 12 + Math.random() * 16, c, t: 0 });
+    }
   } else if (k === "crit") {                       // CF のクリティカル: 画面が光り、白と金の大きな輪と、はじける粒
     Sfx.shieldBreak(); shake(12); flashA = Math.max(flashA, 0.4);
     rings.push({ x, y, t: 0, max: 18, c: "#ffffff", r0: 10, sp: 7 }); rings.push({ x, y, t: 0, max: 22, c: "#facc15", r0: 6, sp: 5 });
@@ -4505,6 +4618,26 @@ function fitCanvas() {
   if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
   cx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
+// スパッタリーのサメライド: 足もとに、口を開けたサメ（背びれ・尾びれ）。後ろにインクのしぶき（持ち主の色）
+function drawShark(p, col, now) {
+  const f = p.f, cxs = p.x + PLW / 2 + f * 10, by = p.y + PLH - 8, wob = Math.sin(now / 50) * 1.5;
+  cx.save();
+  for (let k = 0; k < 5; k++) {                   // しぶき
+    const ph = ((now / 260) + k / 5) % 1;
+    cx.fillStyle = col; cx.beginPath(); cx.arc(cxs - f * (34 + ph * 30), by + 4 - Math.sin(ph * 3.1) * 14 + k % 2 * 4, 5 * (1 - ph) + 2, 0, 6.2832); cx.fill();
+  }
+  cx.translate(cxs, by + wob); cx.scale(f * 1.35, 1.35);
+  cx.fillStyle = "#64748b";                        // 尾びれ
+  cx.beginPath(); cx.moveTo(-30, 0); cx.lineTo(-46, -12); cx.lineTo(-42, 0); cx.lineTo(-46, 12); cx.closePath(); cx.fill();
+  cx.beginPath(); cx.moveTo(-6, -10); cx.lineTo(-16, -30); cx.lineTo(6, -11); cx.closePath(); cx.fill();   // 背びれ（体の後ろから出る）
+  cx.beginPath(); cx.ellipse(0, 0, 36, 12, 0, 0, 6.2832); cx.fill();
+  cx.fillStyle = "#e2e8f0"; cx.beginPath(); cx.ellipse(4, 5, 28, 6, 0, 0, Math.PI); cx.fill();   // おなか
+  cx.fillStyle = "#7f1d1d"; cx.beginPath(); cx.moveTo(36, -2); cx.lineTo(22, 2); cx.lineTo(36, 8); cx.closePath(); cx.fill();   // 開けた口
+  cx.fillStyle = "#f8fafc"; for (let k = 0; k < 3; k++) { cx.beginPath(); cx.moveTo(24 + k * 4, 1); cx.lineTo(26 + k * 4, 4); cx.lineTo(28 + k * 4, 1); cx.fill(); }
+  cx.fillStyle = "#111827"; cx.beginPath(); cx.arc(22, -4, 2, 0, 6.2832); cx.fill();
+  cx.fillStyle = col; cx.fillRect(-20, -9, 6, 3); cx.fillRect(-10, -11, 6, 3);   // 体についたインク
+  cx.restore();
+}
 function drawPlayer(p, i, me, now) {
   const clone = p.isClone;
   // ロビーでは、ほかの人のキャラは見せない
@@ -4565,8 +4698,11 @@ function drawPlayer(p, i, me, now) {
     }
     cx.restore();
   }
+  const ride = chd.id === "splat" && !clone && p.al && p.srT > 0;   // スパッタリー: 乗っているサメ（体の下）。乗っている人は少し上に描く（見た目だけ）
+  if (ride) { drawShark(p, col, now); cx.save(); cx.translate(0, -16); }
   drawChar(cx, chIdx, p.x, p.y, p.f, col, p.hf > 0 && p.hf % 4 < 2, { fm: p.fm, atk: spear, gk: p.gk, gq: p.gq, bd: p.bd, left: yaniPlay ? cigLeft(p) : undefined, wd: irr, cs: yaniPlay ? p.cs : 0 });
   if (irr) cx.restore();
+  if (ride) cx.restore();
   if (flip) {                                                     // 蹴り上げる足の軌跡（宙返りの前半）
     cx.restore();
     if (p.msT > CF_FLIP / 2) { cx.save(); cx.strokeStyle = "rgba(250,204,21,0.8)"; cx.lineWidth = 4; cx.beginPath(); const ccx = p.x + PLW / 2, ccy = p.y + PLH / 2; cx.arc(ccx, ccy, 40, p.f > 0 ? 0.6 : Math.PI - 0.6, p.f > 0 ? -1.6 : Math.PI + 1.6, p.f > 0); cx.stroke(); cx.restore(); }
@@ -4669,6 +4805,14 @@ function drawPlayer(p, i, me, now) {
       const k = p.a / ak.dashFrom;
       cx.strokeStyle = "rgba(251,146,60," + (0.4 + 0.5 * k).toFixed(2) + ")"; cx.lineWidth = 3;
       cx.strokeRect(p.x - 8 + 6 * k, p.y - 8 + 6 * k, PLW + 16 - 12 * k, PLH + 16 - 12 * k);
+    }
+  } else if (p.a > 0 && (ATKS[p.ak] || ATKS[0]).ink) {           // スパッタリー: 2 丁の銃から、短いインクの粒を飛ばす（持ち主の色）
+    const ak = ATKS[p.ak], front = p.f > 0 ? p.x + PLW : p.x;
+    if (p.a >= ak.on && p.a <= ak.off) {
+      const k = (p.a - ak.on + 1) / (ak.off - ak.on + 1);
+      cx.fillStyle = col;
+      for (let j = 0; j < 4; j++) { const dd = (j * 8 + k * 10) % ak.reach; cx.beginPath(); cx.arc(front + p.f * (4 + dd), p.y + (j % 2 ? 42 : 32) + (j - 1.5) * 1.5, 4 - dd / ak.reach * 1.5, 0, 6.2832); cx.fill(); }
+      cx.fillStyle = "rgba(255,255,255,0.45)"; cx.beginPath(); cx.arc(front + p.f * 3, p.y + 32 + (p.a % 2) * 10, 4, 0, 6.2832); cx.fill();   // 銃口の光
     }
   } else if (p.a > 0) {
     const ak = ATKS[p.ak] || ATKS[0];
@@ -5358,6 +5502,11 @@ function render() {
     if (v.y1 > KO_B) { cx.moveTo(Math.max(v.x0, KO_L), KO_B); cx.lineTo(Math.min(v.x1, KO_R), KO_B); }
     cx.stroke(); cx.restore();
   }
+  for (const k of inks) {                          // スパッタリーのインクの跡（足場の上面に平たく。終わりの 1 秒で薄くなる）
+    cx.globalAlpha = Math.min(0.85, (240 - k.t) / 60); cx.fillStyle = k.c;
+    cx.beginPath(); cx.ellipse(k.x, k.y, k.r, k.r * 0.32, 0, 0, 6.2832); cx.fill();
+  }
+  cx.globalAlpha = 1;
   for (const w of game.wd) drawWind(w, now);
   for (const f of game.fl) drawFlower(f, now);
   for (const sy of game.sy) drawSyringe(sy, now);
@@ -5373,7 +5522,7 @@ function render() {
     const h = p.hist || (p.hist = []);
     h.push(p.x, p.y); if (h.length > 14) h.splice(0, 2);
     if (p.al && p.rw > 0 && rwGhosts.length < 80) rwGhosts.push({ x: p.x, y: p.y, f: p.f, ch: p.ch, t: 0 });
-    if (p.al && p.s > 0) {
+    if (p.al && (p.s > 0 || p.sp > 0)) {                                 // 吹っ飛び中と、スパッタリーのステップ中
       cx.save(); cx.fillStyle = p.isClone ? CLONE_COLOR : colOf(i);
       const tz = p.gt > 0 ? GIANT_SCALE : 1;
       for (let k = 0; k < h.length - 2; k += 2) { cx.globalAlpha = 0.05 + 0.2 * (k / h.length); cx.fillRect(h[k], h[k + 1], PLW * tz, PLH * tz); }
