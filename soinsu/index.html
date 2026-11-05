@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1320">
+<title>素因数バトル</title>
+<!-- ミニゲーム集「you know games」の中にも入っている（kakutou/soinsu/）。そのときだけアプリの設定・アイコン・一覧へ戻るボタンを使う -->
+<script>
+window.IN_HUB = !/soinsu-battle/.test(location.pathname);
+if (window.IN_HUB) {
+  document.write('<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="you know games">'
+    + '<link rel="manifest" href="../manifest.json"><link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png"><link rel="apple-touch-icon" href="../apple-touch-icon.png">');
+}
+</script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1320;color:#eef2ff;font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+input{font:inherit}
+#c{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.hidden{display:none!important}
+
+/* ---- HUD ---- */
+#hud{position:fixed;inset:0;pointer-events:none}
+.lay{position:absolute;left:0;top:0;transform-origin:center center;width:max-content;white-space:nowrap}
+#me{background:rgba(10,15,30,.72);border-radius:12px;padding:6px 12px;min-width:130px}
+#me .lab{font-size:11px;opacity:.7}
+#me .num{font-size:30px;font-weight:800;letter-spacing:1px;line-height:1.1}
+.bar{height:6px;background:#2a3142;border-radius:3px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:#5ad16a;transition:width .3s}
+#me .sub{font-size:11px;opacity:.8;margin-top:3px}
+#quit{pointer-events:auto;background:rgba(10,15,30,.72);border:1px solid #556;border-radius:8px;padding:4px 12px;font-size:13px}
+#alive{font-size:12px;background:rgba(10,15,30,.72);border-radius:8px;padding:3px 8px;white-space:nowrap}
+#feed{width:min(300px,40vw);display:flex;flex-direction:column;align-items:flex-start;white-space:normal}
+#feed div{background:rgba(10,15,30,.7);font-size:12px;padding:3px 8px;border-radius:8px;margin-top:3px;text-align:left;transition:opacity .6s}
+#cross{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(255,255,255,.6)}
+#banner{position:absolute;left:50%;top:22%;transform:translateX(-50%);background:rgba(10,15,30,.75);padding:6px 16px;border-radius:12px;font-weight:700;font-size:15px;white-space:nowrap}
+#toast{position:absolute;left:50%;top:34%;transform:translateX(-50%);background:rgba(0,0,0,.8);padding:8px 16px;border-radius:12px;font-size:14px;transition:opacity .3s;opacity:0;white-space:nowrap}
+#flash{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(255,0,0,0) 40%,rgba(255,0,0,.55));opacity:0;transition:opacity .5s}
+#fx{position:absolute;inset:0;overflow:hidden}
+#fx div{position:absolute;transform:translate(-50%,-50%);font-weight:900;font-size:22px;text-shadow:0 2px 4px #000;white-space:nowrap}
+#stick{width:120px;height:120px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08)}
+#knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
+#hud.editing .lay{pointer-events:auto;outline:2px dashed rgba(255,212,0,.7);outline-offset:3px;cursor:move}
+#hud.editing .lay.sel{outline:3px solid #ffd400}
+#hud.editing .lay *{pointer-events:none}
+#rotate{position:fixed;inset:0;z-index:50;background:#0d1320;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:18px;font-weight:700;text-align:center;padding:20px}
+#rotate .ico{font-size:56px;animation:rot 2s infinite}
+@keyframes rot{0%,30%{transform:rotate(0)}60%,100%{transform:rotate(90deg)}}
+#screen.toolbar{inset:auto;left:50%;top:8px;transform:translateX(-50%);background:none;padding:0;overflow:visible}
+#screen.toolbar.bottom{top:auto;bottom:8px}
+#screen.toolbar .card{width:auto;padding:6px 8px;background:rgba(22,30,51,.92);display:flex;align-items:center;gap:6px;white-space:nowrap}
+#screen.toolbar .card .btn{width:auto;margin:0;padding:7px 10px;font-size:13px}
+#screen.toolbar .card .lbl{font-size:12px;font-weight:700;padding:0 4px}
+
+/* ---- 入力パッド ---- */
+#pad{width:280px;background:rgba(10,15,30,.85);border:2px solid #ffd400;border-radius:14px;padding:6px;pointer-events:auto}
+#padhead{display:flex;align-items:baseline;gap:6px;font-size:12px;padding:0 4px}
+#padhead b{font-size:20px;color:#ffd400}
+#ptrange{margin-left:auto;font-size:11px}
+#pdisp{background:#000;border-radius:8px;margin:4px 0;padding:4px 8px;font-size:22px;font-weight:700;min-height:36px;letter-spacing:1px;word-break:break-all}
+#pdisp:empty::before{content:"例: 2×3";opacity:.3;font-weight:400}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.keys button{height:36px;border:none;border-radius:8px;background:#2a3348;font-size:20px;font-weight:700;touch-action:manipulation}
+.keys button:active{background:#46536f}
+.keys .op{background:#3a2f55}
+.keys .send{grid-column:span 3;background:#c23b3b}
+.keys .send.cool{background:#5a3a3a;opacity:.6}
+.keys .close{background:#333;font-size:14px}
+
+/* ---- 画面 ---- */
+#screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,10,20,.82);overflow:auto;padding:16px}
+#screen.clear{background:rgba(6,10,20,.55)}
+.card{width:min(420px,100%);background:#161e33;border-radius:18px;padding:18px 18px 16px;box-shadow:0 10px 30px rgba(0,0,0,.4);margin:auto}
+h1{margin:0 0 4px;font-size:28px;text-align:center;letter-spacing:2px}
+h1 small{display:block;font-size:12px;letter-spacing:0;opacity:.6;font-weight:400}
+h2{margin:0 0 10px;font-size:20px;text-align:center}
+.rules{font-size:13px;line-height:1.6;background:#0f1628;border-radius:12px;padding:8px 12px;margin:10px 0}
+.rules b{color:#ffd400}
+label{font-size:12px;opacity:.7}
+.row{display:flex;gap:8px;margin-top:8px}
+.in{width:100%;background:#0b1120;border:1px solid #334;border-radius:10px;padding:10px;color:#fff;font-size:16px}
+.btn{display:block;width:100%;border:none;border-radius:12px;padding:12px;font-size:16px;font-weight:700;background:#2f6fe0;margin-top:8px}
+.btn.sub{background:#2a3348}
+.btn.red{background:#c23b3b}
+.btn:disabled{opacity:.4}
+.err{color:#ff8080;font-size:13px;margin-top:8px;text-align:center}
+.code{font-size:42px;font-weight:800;text-align:center;letter-spacing:8px;color:#ffd400}
+.plist{list-style:none;padding:0;margin:8px 0}
+.plist li{background:#0f1628;border-radius:10px;padding:8px 12px;margin-top:5px;display:flex;justify-content:space-between}
+.note{font-size:12px;opacity:.65;text-align:center;margin-top:6px}
+.seg{display:flex;gap:6px;margin-top:6px}
+.seg button{flex:1;border:1px solid #445;background:#0f1628;border-radius:10px;padding:8px}
+.seg button.on{background:#2f6fe0;border-color:#2f6fe0}
+table.res{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}
+table.res td{padding:6px 4px;border-bottom:1px solid #263050}
+table.res td:last-child{text-align:right}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" class="hidden">
+  <div id="fx"></div>
+  <div id="flash"></div>
+  <div id="cross"></div>
+  <div id="me" class="lay" data-lay="me"><div class="lab">自分の数字</div><div class="num" id="mynum">-</div><div class="bar"><i id="mybar"></i></div><div class="sub" id="mysub"></div></div>
+  <button id="quit" class="lay" data-lay="quit">退出</button>
+  <div id="alive" class="lay" data-lay="alive"></div>
+  <div id="feed" class="lay" data-lay="feed"></div>
+  <div id="banner" class="hidden"></div>
+  <div id="toast"></div>
+  <div id="stick" class="lay" data-lay="stick"><div id="knob"></div></div>
+  <div id="pad" class="lay hidden" data-lay="pad">
+    <div id="padhead"><span id="ptname"></span><span id="ptrange"></span></div>
+    <div id="pdisp"></div>
+    <div class="keys">
+      <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button data-k="bs" class="op">⌫</button>
+      <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button data-k="x" class="op">×</button>
+      <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button data-k="0">0</button>
+      <button data-k="close" class="close">閉じる</button><button data-k="send" class="send" id="sendbtn">打ち込む</button>
+    </div>
+  </div>
+</div>
+<div id="screen"></div>
+<div id="rotate" class="hidden"><div class="ico">📱</div>スマホを横向きにしてください</div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+<script type="module">
+import * as THREE from "three";
+
+// ================= 設定 =================
+const PREFIX = "soinsu-battle-v1-";
+const MAX_PLAYERS = 8;
+const ARENA = 30;        // 半径（フィールドは 60×60）
+const RANGE = 14;        // 打ち込める距離
+const SPEED = 6;
+const RADIUS = 0.5;
+const EYE = 1.6;
+const COOLDOWN = 1.0;    // 打ち込み後に待つ秒数
+const COLORS = [0xff5a5a, 0x4aa3ff, 0x5ad16a, 0xffc23a, 0xc77dff, 0xff8fc8, 0x3ad6d0, 0xff8a3a];
+const OBST = [
+  { x: 0, z: 0, w: 4, d: 4, h: 3 },
+  { x: -12, z: -8, w: 6, d: 2, h: 2.2 }, { x: 12, z: 8, w: 6, d: 2, h: 2.2 },
+  { x: -10, z: 12, w: 2, d: 6, h: 2.5 }, { x: 10, z: -12, w: 2, d: 6, h: 2.5 },
+  { x: -20, z: -20, w: 3, d: 3, h: 3 }, { x: 20, z: 20, w: 3, d: 3, h: 3 },
+  { x: 20, z: -20, w: 3, d: 3, h: 3 }, { x: -20, z: 20, w: 3, d: 3, h: 3 },
+  { x: 0, z: -20, w: 8, d: 1.5, h: 1.6 }, { x: 0, z: 20, w: 8, d: 1.5, h: 1.6 },
+  { x: -22, z: 0, w: 1.5, d: 8, h: 1.6 }, { x: 22, z: 0, w: 1.5, d: 8, h: 1.6 },
+];
+
+// ================= 数学 =================
+const isPrime = n => { if (!Number.isInteger(n) || n < 2) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; };
+const prod = f => f.reduce((a, b) => a * b, 1);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function genFactors() {
+  for (;;) {
+    const f = [pick([11, 13, 17, 19, 23, 29, 31, 37])];
+    const n = 3 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < n; i++) f.push(pick([2, 2, 2, 3, 3, 3, 5, 5, 7, 7]));
+    if (Math.random() < 0.4) f.push(pick([11, 13, 17]));
+    const p = prod(f);
+    if (p >= 100 && p <= 20000) return f.sort((a, b) => a - b);
+  }
+}
+function collide(p) {
+  const lim = ARENA - RADIUS;
+  p.x = clamp(p.x, -lim, lim); p.z = clamp(p.z, -lim, lim);
+  for (const o of OBST) {
+    const hx = o.w / 2, hz = o.d / 2;
+    const cx = clamp(p.x, o.x - hx, o.x + hx), cz = clamp(p.z, o.z - hz, o.z + hz);
+    const dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
+    if (d2 >= RADIUS * RADIUS) continue;
+    if (d2 > 1e-8) { const d = Math.sqrt(d2); p.x = cx + dx / d * RADIUS; p.z = cz + dz / d * RADIUS; }
+    else {
+      const gaps = [o.x + hx - p.x, p.x - (o.x - hx), o.z + hz - p.z, p.z - (o.z - hz)];
+      const i = gaps.indexOf(Math.min(...gaps));
+      if (i === 0) p.x = o.x + hx + RADIUS; else if (i === 1) p.x = o.x - hx - RADIUS;
+      else if (i === 2) p.z = o.z + hz + RADIUS; else p.z = o.z - hz - RADIUS;
+    }
+  }
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+
+// ================= 状態 =================
+let mode = "none";        // local / host / client
+let screen = "menu";      // menu / connecting / lobby / game
+let peer = null, hostConn = null, hostSeen = 0;
+const host = { code: "", conns: new Map(), nextId: 1, playing: false, bots: 0 };
+let myId = 0, errMsg = "";
+let lobbyPs = [];
+let G = null;             // ホストだけが持つ正式な状態
+const view = new Map();   // 画面に出す全員の状態
+const me = { x: 0, z: 0, yaw: 0, pitch: 0 };
+let selId = null, inp = "", lastAtk = -99, overInfo = null, practiceBots = 3;
+const feed = [];
+
+// ================= 通信 =================
+function broadcast(m) {
+  for (const c of host.conns.values()) { try { c.send(m); } catch (e) {} }
+  onMsg(m);
+}
+function sendTo(id, m) {
+  if (id === myId) { onMsg(m); return; }
+  const c = host.conns.get(id); if (c) { try { c.send(m); } catch (e) {} }
+}
+function sendHost(m) {
+  if (mode === "client") { try { hostConn?.send(m); } catch (e) {} }
+  else hostHandle(myId, m);
+}
+
+// ---------- ホスト側 ----------
+function hostLobby() {
+  lobbyPs = [{ id: 0, name: myName() }];
+  for (const [id, c] of host.conns) lobbyPs.push({ id, name: c.pname });
+  for (let i = 0; i < host.bots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABCDEFGH"[i], bot: true });
+  broadcast({ t: "lobby", ps: lobbyPs, code: host.code });
+}
+function hostStart() {
+  const list = lobbyPs.slice();
+  const n = list.length, base = Math.random() * Math.PI * 2;
+  const order = list.map((_, i) => i).sort(() => Math.random() - 0.5);
+  G = { players: new Map(), over: false, lastSt: 0 };
+  list.forEach((p, i) => {
+    const a = base + order[i] / n * Math.PI * 2;
+    const q = { id: p.id, name: p.name, bot: !!p.bot, color: COLORS[i % COLORS.length], x: Math.cos(a) * 17, z: Math.sin(a) * 17, yaw: 0, f: genFactors(), alive: true, kills: 0, cd: 0 };
+    collide(q); q.yaw = Math.atan2(q.x, q.z); q.max = q.f.length;
+    G.players.set(q.id, q);
+  });
+  host.playing = true;
+  for (const c of host.conns.values()) c.seen = performance.now();
+  broadcast({ t: "start", ps: [...G.players.values()].map(p => ({ id: p.id, name: p.name, bot: p.bot, color: p.color, x: p.x, z: p.z, yaw: p.yaw, f: p.f, max: p.max })) });
+}
+function hostHandle(id, m) {
+  if (!G || !m) return;
+  const p = G.players.get(id); if (!p) return;
+  if (m.t === "pos") {
+    if (![m.x, m.z, m.yaw].every(Number.isFinite)) return;
+    p.x = clamp(m.x, -ARENA, ARENA); p.z = clamp(m.z, -ARENA, ARENA); p.yaw = m.yaw;
+  } else if (m.t === "atk") doAttack(id, m.to, m.p);
+}
+function doAttack(aid, tid, primes) {
+  const a = G.players.get(aid), t = G.players.get(tid);
+  if (!a || !t || G.over || !a.alive || !t.alive || aid === tid) return;
+  if (!Array.isArray(primes) || !primes.length || primes.length > 20 || !primes.every(isPrime)) return;
+  const now = performance.now() / 1000;
+  if (now < a.cd) return;
+  if (dist(a, t) > RANGE + 1.5) { sendTo(aid, { t: "msg", s: "遠すぎます" }); return; }
+  a.cd = now + COOLDOWN * 0.8;
+  const before = prod(t.f), abefore = prod(a.f);
+  const rest = t.f.slice(); let ok = true;
+  for (const q of primes) { const i = rest.indexOf(q); if (i < 0) { ok = false; break; } rest.splice(i, 1); }
+  let dead = false;
+  if (ok) { t.f = rest; if (!rest.length) { t.alive = false; dead = true; a.kills++; } }
+  else if (a.f.length > 1) a.f.splice(a.f.lastIndexOf(Math.max(...a.f)), 1);
+  broadcast({ t: "ev", a: aid, to: tid, p: primes, ok, fa: a.f, ft: t.f, dead, b: before, ab: abefore });
+  checkOver();
+}
+function checkOver() {
+  if (!G || G.over) return;
+  const alive = [...G.players.values()].filter(p => p.alive);
+  if (alive.length > 1) return;
+  G.over = true;
+  const g = G;
+  setTimeout(() => {
+    if (G !== g) return;
+    const ps = [...g.players.values()].map(p => ({ id: p.id, name: p.name, kills: p.kills, alive: p.alive, n: prod(p.f) }))
+      .sort((x, y) => (y.alive - x.alive) || (y.kills - x.kills));
+    broadcast({ t: "over", win: alive[0]?.id ?? null, ps });
+  }, 1500);
+}
+function hostDrop(id) {
+  host.conns.delete(id);
+  if (G && G.players.has(id)) { const p = G.players.get(id); p.alive = false; broadcast({ t: "gone", id }); checkOver(); }
+  else if (!host.playing) hostLobby();
+}
+
+// ---------- CPU ----------
+function botUpdate(p, dt, now) {
+  if (!p.alive) return;
+  const b = p.bs || (p.bs = { tgt: null, next: now + 2 + Math.random() * 2, re: 0, dir: Math.random() < 0.5 ? 1 : -1, wander: Math.random() * 6.28, stuck: 0, lx: p.x, lz: p.z, unstick: 0 });
+  if (now > b.re) {
+    const others = [...G.players.values()].filter(o => o.alive && o.id !== p.id).sort((x, y) => dist(p, x) - dist(p, y));
+    b.tgt = others.length ? (Math.random() < 0.7 ? others[0] : pick(others)).id : null;
+    b.re = now + 4 + Math.random() * 4; b.dir = Math.random() < 0.5 ? 1 : -1;
+  }
+  const t = G.players.get(b.tgt);
+  let mx = 0, mz = 0;
+  if (now < b.unstick) { mx = Math.cos(b.wander); mz = Math.sin(b.wander); }
+  else if (t && t.alive) {
+    const dx = t.x - p.x, dz = t.z - p.z, d = Math.hypot(dx, dz) || 1;
+    if (d > RANGE * 0.6) { mx = dx / d; mz = dz / d; }
+    else { mx = -dz / d * b.dir * 0.6; mz = dx / d * b.dir * 0.6; }
+    p.yaw = Math.atan2(-dx, -dz);
+    if (d < RANGE && now > b.next) {
+      b.next = now + 2.5 + Math.random() * 3;
+      let primes;
+      if (Math.random() < 0.7) {
+        const k = Math.min(t.f.length, Math.random() < 0.6 ? 1 : 2);
+        const pool = t.f.slice(); primes = [];
+        for (let i = 0; i < k; i++) primes.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+      } else {
+        const wrong = [2, 3, 5, 7, 11, 13, 17, 19].filter(q => !t.f.includes(q));
+        primes = [wrong.length ? pick(wrong) : 41];
+      }
+      doAttack(p.id, t.id, primes);
+    }
+  } else { mx = Math.cos(b.wander); mz = Math.sin(b.wander); if (Math.random() < dt * 0.5) b.wander = Math.random() * 6.28; }
+  p.x += mx * SPEED * 0.7 * dt; p.z += mz * SPEED * 0.7 * dt;
+  collide(p);
+  if (now - b.stuck > 1) {
+    if ((mx || mz) && Math.hypot(p.x - b.lx, p.z - b.lz) < 0.8) { b.wander = Math.random() * 6.28; b.unstick = now + 1.2; }
+    b.stuck = now; b.lx = p.x; b.lz = p.z;
+  }
+}
+
+// ---------- 受信（全員） ----------
+function onMsg(m) {
+  if (!m || typeof m !== "object") return;
+  switch (m.t) {
+    case "welcome": myId = m.you; return;
+    case "reject": errMsg = m.why; cleanupNet(); screen = "menu"; break;
+    case "lobby": lobbyPs = m.ps; host.code = m.code; screen = "lobby"; overInfo = null; clearGame(); break;
+    case "start": startView(m.ps); break;
+    case "st":
+      for (const [id, x, z, yaw] of m.p) { const v = view.get(id); if (v && id !== myId) { v.tx = x; v.tz = z; v.tyaw = yaw; } }
+      return;
+    case "ev": applyEv(m); return;
+    case "gone": { const v = view.get(m.id); if (v) { v.alive = false; addFeed(`${v.name} が抜けました`); } if (selId === m.id) closePad(); return; }
+    case "msg": toast(m.s); return;
+    case "over": overInfo = m; closePad(); break;
+  }
+  renderUI();
+}
+function applyEv(m) {
+  const a = view.get(m.a), t = view.get(m.to); if (!a || !t) return;
+  a.f = m.fa; t.f = m.ft;
+  const ps = m.p.join("×");
+  if (m.ok) {
+    if (m.dead) { t.alive = false; t.deadAt = performance.now(); addFeed(`💥 ${a.name} が ${t.name} を撃破！（${ps}）`); }
+    else addFeed(`${a.name} → ${t.name}：${ps} 命中`);
+    if (t.id !== myId) floatText(t, m.dead ? "撃破！" : "−" + ps, m.dead ? "#ffd400" : "#ff6060");
+    if (t.id === myId) { flash(); vibrate(m.dead ? 300 : 80); if (m.dead) toast(`${a.name} にやられた…`); }
+    if (a.id === myId) toast(m.dead ? "撃破！" : "命中！");
+  } else {
+    addFeed(`${a.name} の ${ps} は外れ`);
+    if (a.id !== myId) floatText(a, "失敗", "#ff9a3a");
+    else { flash(); vibrate(150); toast(`失敗！ 自分の数字 ${m.ab} → ${prod(m.fa)}`); }
+  }
+  if (selId === m.to && m.dead) closePad();
+}
+
+// ---------- 接続 ----------
+function cleanupNet() { try { peer?.destroy(); } catch (e) {} peer = null; hostConn = null; host.conns.clear(); host.playing = false; G = null; }
+const randCode = () => String(Math.floor(1000 + Math.random() * 9000));
+let hostTries = 0;
+function startHost() {
+  mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; host.bots = 0; host.nextId = 1; renderUI();
+  const code = randCode();
+  peer = new Peer(PREFIX + code);
+  peer.on("open", () => { host.code = code; hostTries = 0; hostLobby(); });
+  peer.on("error", e => {
+    if (e.type === "unavailable-id" && ++hostTries < 20) { peer.destroy(); startHost(); return; }
+    if (screen === "game" || screen === "lobby") { toast("通信エラー: " + e.type); return; }
+    errMsg = "接続エラー: " + e.type; screen = "menu"; cleanupNet(); renderUI();
+  });
+  peer.on("connection", conn => {
+    conn.on("data", m => {
+      conn.seen = performance.now();
+      if (m && m.t === "hello") {
+        if (host.playing) { conn.send({ t: "reject", why: "もう始まっています。終わるまで待ってください" }); setTimeout(() => conn.close(), 500); return; }
+        if (lobbyPs.length >= MAX_PLAYERS) { conn.send({ t: "reject", why: `満員です（${MAX_PLAYERS}人まで）` }); setTimeout(() => conn.close(), 500); return; }
+        const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12);
+        host.conns.set(id, conn); conn.send({ t: "welcome", you: id }); hostLobby(); return;
+      }
+      if (conn.pid) hostHandle(conn.pid, m);
+    });
+    conn.on("close", () => { if (conn.pid && host.conns.get(conn.pid) === conn) hostDrop(conn.pid); });
+  });
+}
+function joinRoom(code) {
+  code = String(code).replace(/\D/g, "");
+  if (code.length !== 4) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
+  mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; renderUI();
+  peer = new Peer();
+  peer.on("open", () => {
+    hostConn = peer.connect(PREFIX + code, { reliable: true });
+    hostConn.on("open", () => hostConn.send({ t: "hello", name: myName() }));
+    hostConn.on("data", m => { hostSeen = performance.now(); onMsg(m); });
+    hostConn.on("close", () => { if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; clearGame(); cleanupNet(); renderUI(); } });
+  });
+  peer.on("error", e => {
+    errMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（番号ちがい、またはホストが閉じました）" : "接続エラー: " + e.type;
+    screen = "menu"; clearGame(); cleanupNet(); renderUI();
+  });
+}
+function startPractice() {
+  mode = "local"; myId = 0; host.bots = practiceBots; host.code = "";
+  lobbyPs = [{ id: 0, name: myName() }];
+  for (let i = 0; i < practiceBots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABCDEFGH"[i], bot: true });
+  hostStart();
+}
+function leave() { clearGame(); cleanupNet(); mode = "none"; screen = "menu"; overInfo = null; renderUI(); }
+
+// ================= 3D =================
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8fb8e8);
+scene.fog = new THREE.Fog(0x8fb8e8, 30, 90);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
+camera.rotation.order = "YXZ";
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(20, 40, 10); scene.add(sun);
+{
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2, ARENA * 2), new THREE.MeshLambertMaterial({ color: 0x6f9a5a }));
+  ground.rotation.x = -Math.PI / 2; scene.add(ground);
+  const grid = new THREE.GridHelper(ARENA * 2, 30, 0x557744, 0x557744); grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.4; scene.add(grid);
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0x8a8f9c });
+  for (const [x, z, w, d] of [[0, -ARENA, ARENA * 2, 0.6], [0, ARENA, ARENA * 2, 0.6], [-ARENA, 0, 0.6, ARENA * 2], [ARENA, 0, 0.6, ARENA * 2]]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), wallMat); m.position.set(x, 0.6, z); scene.add(m);
+  }
+  const boxCols = [0xd9a066, 0xb07a4a, 0x9aa3b5, 0xc9b27c];
+  OBST.forEach((o, i) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(o.w, o.h, o.d), new THREE.MeshLambertMaterial({ color: boxCols[i % boxCols.length] }));
+    m.position.set(o.x, o.h / 2, o.z); scene.add(m);
+  });
+}
+const rangeRing = new THREE.Mesh(new THREE.RingGeometry(RANGE - 0.12, RANGE, 96), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+rangeRing.rotation.x = -Math.PI / 2; rangeRing.position.y = 0.03; scene.add(rangeRing);
+const selRing = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 40), new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.DoubleSide, depthWrite: false }));
+selRing.rotation.x = -Math.PI / 2; selRing.position.y = 0.04; selRing.visible = false; scene.add(selRing);
+
+const avatars = new Map();
+const bodyGeo = new THREE.CapsuleGeometry(0.4, 0.8, 4, 12), headGeo = new THREE.SphereGeometry(0.3, 16, 12), eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.05);
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+function makeAvatar(v) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color: v.color });
+  const body = new THREE.Mesh(bodyGeo, mat); body.position.y = 0.8; g.add(body);
+  const head = new THREE.Mesh(headGeo, new THREE.MeshLambertMaterial({ color: 0xffe0bd })); head.position.y = 1.85; g.add(head);
+  for (const s of [-0.11, 0.11]) { const e = new THREE.Mesh(eyeGeo, eyeMat); e.position.set(s, 1.9, -0.28); g.add(e); }
+  const cv = document.createElement("canvas"); cv.width = 256; cv.height = 160;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+  label.position.y = 2.75; g.add(label);
+  scene.add(g);
+  return { g, label, cv, ctx: cv.getContext("2d"), tex, key: "" };
+}
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+const hex = c => "#" + c.toString(16).padStart(6, "0");
+function drawLabel(av, v, inRange, sel) {
+  const key = [v.f.join(","), inRange, sel].join("|");
+  if (av.key === key) return; av.key = key;
+  const c = av.ctx; c.clearRect(0, 0, 256, 160);
+  rrect(c, 6, 6, 244, 148, 22); c.fillStyle = "rgba(10,15,30,0.78)"; c.fill();
+  c.lineWidth = sel ? 10 : 5; c.strokeStyle = sel ? "#ffd400" : hex(v.color); c.stroke();
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillStyle = "#ddd"; c.font = "bold 24px sans-serif"; c.fillText(v.name, 128, 34);
+  const s = String(prod(v.f));
+  c.fillStyle = inRange ? "#ffffff" : "#9aa0ad";
+  c.font = `900 ${Math.min(70, Math.floor(330 / (s.length + 0.6)))}px sans-serif`; c.fillText(s, 128, 86);
+  const r = v.f.length / v.max;
+  c.fillStyle = "#2a3142"; rrect(c, 30, 122, 196, 14, 7); c.fill();
+  c.fillStyle = r > 0.5 ? "#5ad16a" : r > 0.25 ? "#ffc23a" : "#ff5a5a"; rrect(c, 30, 122, Math.max(14, 196 * r), 14, 7); c.fill();
+  av.tex.needsUpdate = true;
+  av.label.material.opacity = inRange ? 1 : 0.6;
+}
+function clearGame() {
+  for (const av of avatars.values()) scene.remove(av.g);
+  avatars.clear(); view.clear(); closePad(); feed.length = 0;
+  document.getElementById("fx").innerHTML = ""; fxList.length = 0;
+}
+function startView(ps) {
+  clearGame(); overInfo = null;
+  for (const p of ps) {
+    const v = { ...p, tx: p.x, tz: p.z, tyaw: p.yaw, alive: true };
+    view.set(p.id, v);
+    if (p.id !== myId) avatars.set(p.id, makeAvatar(v));
+  }
+  const mine = view.get(myId);
+  if (mine) { me.x = mine.x; me.z = mine.z; me.yaw = mine.yaw; me.pitch = 0; }
+  lastAtk = -99; screen = "game"; lastMine = ""; hostSeen = performance.now();
+  toast("相手の頭の数字を素因数分解して打ち込もう！");
+}
+
+// ================= 入力 =================
+const joy = { x: 0, y: 0 };
+const keys = new Set();
+const touches = new Map();
+const stickEl = document.getElementById("stick"), knobEl = document.getElementById("knob");
+canvas.addEventListener("pointerdown", e => {
+  if (screen !== "game") return;
+  e.preventDefault();
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  const hasStick = [...touches.values()].some(t => t.kind === "stick");
+  const r = stickEl.getBoundingClientRect(), scx = r.left + r.width / 2, scy = r.top + r.height / 2, sr = r.width / 2;
+  const kind = !hasStick && Math.hypot(e.clientX - scx, e.clientY - scy) < sr * 1.6 ? "stick" : "look";
+  touches.set(e.pointerId, { kind, sx: scx, sy: scy, sr, lx: e.clientX, ly: e.clientY, t0: performance.now(), moved: 0 });
+  if (kind === "stick") moveStick(touches.get(e.pointerId), e);
+});
+canvas.addEventListener("pointermove", e => {
+  const t = touches.get(e.pointerId); if (!t) return;
+  if (t.kind === "stick") moveStick(t, e);
+  else {
+    const dx = e.clientX - t.lx, dy = e.clientY - t.ly;
+    me.yaw -= dx * 0.006; me.pitch = clamp(me.pitch - dy * 0.006, -1.2, 1.2);
+    t.moved += Math.abs(dx) + Math.abs(dy); t.lx = e.clientX; t.ly = e.clientY;
+  }
+});
+function moveStick(t, e) {
+  const R = t.sr; let dx = e.clientX - t.sx, dy = e.clientY - t.sy; const l = Math.hypot(dx, dy);
+  if (l > R) { dx *= R / l; dy *= R / l; }
+  joy.x = dx / R; joy.y = dy / R;
+  const s = LAY.stick.s; knobEl.style.transform = `translate(${dx / s}px,${dy / s}px)`;
+}
+function endTouch(e) {
+  const t = touches.get(e.pointerId); if (!t) return;
+  touches.delete(e.pointerId);
+  if (t.kind === "stick") { joy.x = joy.y = 0; knobEl.style.transform = ""; }
+  else if (t.moved < 12 && performance.now() - t.t0 < 400) tapSelect(e.clientX, e.clientY);
+}
+canvas.addEventListener("pointerup", endTouch);
+canvas.addEventListener("pointercancel", endTouch);
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+const tmpV = new THREE.Vector3();
+function tapSelect(x, y) {
+  let best = null, bd = 70;
+  for (const v of view.values()) {
+    if (v.id === myId || !v.alive) continue;
+    for (const h of [1.0, 1.85, 2.75]) {
+      tmpV.set(v.x, h, v.z).project(camera);
+      if (tmpV.z > 1) continue;
+      const d = Math.hypot((tmpV.x + 1) / 2 * innerWidth - x, (1 - tmpV.y) / 2 * innerHeight - y);
+      if (d < bd) { bd = d; best = v; }
+    }
+  }
+  if (best) selectTarget(best.id);
+}
+function selectTarget(id) {
+  const myV = view.get(myId);
+  if (myV && !myV.alive) { toast("観戦中は打ち込めません"); return; }
+  if (selId !== id) inp = "";
+  selId = id; document.getElementById("pad").classList.remove("hidden"); applyLayout(); padKey = ""; updPad(true);
+  const v = view.get(id); if (v && distTo(v) > RANGE) toast("遠すぎます。近づいてください");
+}
+function closePad() { selId = null; inp = ""; document.getElementById("pad").classList.add("hidden"); }
+const distTo = v => Math.hypot(v.x - me.x, v.z - me.z);
+
+document.querySelector("#pad .keys").addEventListener("pointerdown", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  e.preventDefault(); padPress(b.dataset.k);
+});
+function padPress(k) {
+  if (k === "close") { closePad(); return; }
+  if (k === "send") { submit(); return; }
+  if (k === "bs") inp = inp.slice(0, -1);
+  else if (k === "x") { if (inp && !inp.endsWith("×")) inp += "×"; }
+  else if (/^\d$/.test(k)) { if (inp.length < 40 && !(k === "0" && (inp === "" || inp.endsWith("×")))) inp += k; }
+  updPad(true);
+}
+function submit() {
+  const t = view.get(selId); if (!t || !t.alive) { closePad(); return; }
+  const toks = inp.split("×").filter(s => s !== "");
+  if (!toks.length) { toast("素因数を入力してください"); return; }
+  const ps = toks.map(Number);
+  const bad = ps.find(n => !isPrime(n));
+  if (bad !== undefined) { toast(`${bad} は素数ではありません`); return; }
+  if (distTo(t) > RANGE) { toast("遠すぎます。近づいてください"); return; }
+  const now = performance.now() / 1000;
+  if (now < lastAtk + COOLDOWN) return;
+  lastAtk = now;
+  sendHost({ t: "atk", to: selId, p: ps });
+  inp = ""; updPad(true);
+}
+let padKey = "";
+function updPad(force) {
+  if (selId == null) return;
+  const t = view.get(selId); if (!t) return;
+  const inR = distTo(t) <= RANGE;
+  const cool = performance.now() / 1000 < lastAtk + COOLDOWN;
+  const key = [inp, inR, cool, t.name].join("|");
+  if (!force && key === padKey) return; padKey = key;
+  document.getElementById("ptname").textContent = "→ " + t.name;
+  const r = document.getElementById("ptrange");
+  r.textContent = inR ? "射程内" : "遠すぎ"; r.style.color = inR ? "#5ad16a" : "#ff8080";
+  document.getElementById("pdisp").textContent = inp;
+  document.getElementById("sendbtn").classList.toggle("cool", cool || !inR);
+}
+addEventListener("keydown", e => {
+  if (screen !== "game" || e.target.tagName === "INPUT") return;
+  const k = e.key;
+  if (selId != null) {
+    if (/^\d$/.test(k)) { padPress(k); return; }
+    if (k === "x" || k === "*" || k === " ") { padPress("x"); e.preventDefault(); return; }
+    if (k === "Backspace") { padPress("bs"); return; }
+    if (k === "Enter") { submit(); return; }
+    if (k === "Escape") { closePad(); return; }
+  }
+  keys.add(k.toLowerCase());
+});
+addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => keys.clear());
+
+// ================= HUD =================
+const $ = id => document.getElementById(id);
+let toastT = 0;
+function toast(s) { const t = $("toast"); t.textContent = s; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => t.style.opacity = 0, 1800); }
+function flash() { const f = $("flash"); f.style.transition = "none"; f.style.opacity = 1; requestAnimationFrame(() => { f.style.transition = "opacity .6s"; f.style.opacity = 0; }); }
+function vibrate(ms) { try { navigator.vibrate?.(ms); } catch (e) {} }
+function addFeed(s) {
+  feed.push({ s, t: performance.now() }); if (feed.length > 4) feed.shift();
+  $("feed").innerHTML = feed.map(f => `<div data-t="${f.t}">${esc(f.s)}</div>`).join("");
+}
+const fxList = [];
+function floatText(v, s, color) {
+  const el = document.createElement("div"); el.textContent = s; el.style.color = color;
+  $("fx").appendChild(el); fxList.push({ el, v, t0: performance.now() });
+}
+let lastMine = "";
+function updHud(now) {
+  const mine = view.get(myId);
+  if (mine) {
+    const k = mine.f.join(",") + mine.alive;
+    if (k !== lastMine) {
+      lastMine = k;
+      $("mynum").textContent = mine.alive ? prod(mine.f) : "1";
+      const r = mine.alive ? mine.f.length / mine.max : 0;
+      $("mybar").style.width = (r * 100) + "%";
+      $("mybar").style.background = r > 0.5 ? "#5ad16a" : r > 0.25 ? "#ffc23a" : "#ff5a5a";
+      $("mysub").textContent = mine.alive ? `素因数 のこり${mine.f.length}個` : "やられた";
+    }
+  }
+  const aliveN = [...view.values()].filter(v => v.alive).length;
+  $("alive").textContent = `のこり ${aliveN}人`;
+  const b = $("banner");
+  const bannerTxt = mine && !mine.alive && !overInfo ? "観戦中（移動はできます）" : "";
+  b.textContent = bannerTxt; b.classList.toggle("hidden", !bannerTxt);
+  for (const el of $("feed").children) el.style.opacity = now - Number(el.dataset.t) > 6000 ? 0 : 1;
+}
+$("quit").addEventListener("click", () => { if (confirm("ゲームから抜けますか？")) leave(); });
+
+// ================= 画面（メニューなど） =================
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+// ---------- ボタン配置 ----------
+const LAY_DEF = { me: { x: 0.11, y: 0.14, s: 1 }, quit: { x: 0.95, y: 0.07, s: 1 }, alive: { x: 0.95, y: 0.16, s: 1 }, feed: { x: 0.2, y: 0.42, s: 1 }, pad: { x: 0.8, y: 0.66, s: 1 }, stick: { x: 0.13, y: 0.72, s: 1 } };
+const LAY_NAMES = { me: "自分の数字", quit: "退出ボタン", alive: "のこり人数", feed: "ログ", pad: "入力パッド", stick: "スティック" };
+let LAY = JSON.parse(JSON.stringify(LAY_DEF));
+try { const sv = JSON.parse(store.get("soinsu-layout") || "{}"); for (const k in LAY) if (sv[k] && [sv[k].x, sv[k].y, sv[k].s].every(Number.isFinite)) LAY[k] = sv[k]; } catch (e) {}
+const saveLayout = () => store.set("soinsu-layout", JSON.stringify(LAY));
+function applyLayout() {
+  const W = innerWidth, H = innerHeight;
+  for (const k in LAY) {
+    const el = $(k), L = LAY[k];
+    el.style.left = L.x * W + "px"; el.style.top = L.y * H + "px";
+    el.style.transform = `translate(-50%,-50%) scale(${L.s})`;
+    const r = el.getBoundingClientRect(); if (!r.width) continue;
+    const dx = r.left < 0 ? -r.left : r.right > W ? W - r.right : 0;
+    const dy = r.top < 0 ? -r.top : r.bottom > H ? H - r.bottom : 0;
+    if (dx || dy) { el.style.left = L.x * W + dx + "px"; el.style.top = L.y * H + dy + "px"; }
+  }
+  for (const el of document.querySelectorAll("#hud .lay")) el.classList.toggle("sel", screen === "layout" && el.dataset.lay === editSel);
+}
+let editSel = "pad", drag = null;
+$("hud").addEventListener("pointerdown", e => {
+  if (screen !== "layout") return;
+  const el = e.target.closest(".lay"); if (!el) return;
+  e.preventDefault(); e.stopPropagation();
+  const k = el.dataset.lay; editSel = k;
+  drag = { k, id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: LAY[k].x, oy: LAY[k].y };
+  try { el.setPointerCapture(e.pointerId); } catch (_) {}
+  renderUI();
+}, true);
+addEventListener("pointermove", e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const L = LAY[drag.k];
+  L.x = clamp(drag.ox + (e.clientX - drag.sx) / innerWidth, 0, 1); L.y = clamp(drag.oy + (e.clientY - drag.sy) / innerHeight, 0, 1);
+  applyLayout();
+});
+addEventListener("pointerup", e => { if (drag && e.pointerId === drag.id) { drag = null; saveLayout(); applyLayout(); } });
+function enterLayout() {
+  screen = "layout"; goLandscape();
+  $("pad").classList.remove("hidden");
+  $("ptname").textContent = "→ 相手の名前"; $("ptrange").textContent = ""; $("pdisp").textContent = "2×3";
+  $("mynum").textContent = "360"; $("mybar").style.width = "100%"; $("mysub").textContent = "素因数 のこり5個";
+  $("alive").textContent = "のこり 4人"; $("feed").innerHTML = "<div>ログがここに出ます</div><div>ゲスト → CPU-A：2×3 命中</div>";
+  renderUI();
+}
+function exitLayout() {
+  saveLayout(); screen = "menu";
+  if (selId == null) $("pad").classList.add("hidden");
+  $("feed").innerHTML = ""; lastMine = ""; renderUI();
+}
+
+// ---------- 横向き ----------
+function goLandscape() {
+  try {
+    const d = document.documentElement;
+    if (!document.fullscreenElement && d.requestFullscreen && matchMedia("(pointer:coarse)").matches)
+      d.requestFullscreen({ navigationUI: "hide" }).then(() => window.screen.orientation?.lock?.("landscape")).catch(() => {});
+    else window.screen.orientation?.lock?.("landscape")?.catch?.(() => {});
+  } catch (e) {}
+}
+function checkRotate() { $("rotate").classList.toggle("hidden", !((screen === "game" || screen === "layout") && innerHeight > innerWidth)); }
+
+// ---------- 足音 ----------
+let actx = null, noiseBuf = null, soundOn = store.get("soinsu-sound") !== "0";
+function initAudio() {
+  try {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      actx = new AC();
+      noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.2), actx.sampleRate);
+      const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (actx.state === "suspended") actx.resume();
+  } catch (e) {}
+}
+addEventListener("pointerdown", initAudio, true);
+addEventListener("keydown", initAudio, true);
+function setParam(p, v, t) { if (p.setValueAtTime) p.setValueAtTime(v, t); else p.value = v; }
+function updListener() {
+  if (!actx) return;
+  const L = actx.listener, t = actx.currentTime, fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw);
+  if (L.positionX) { setParam(L.positionX, me.x, t); setParam(L.positionY, EYE, t); setParam(L.positionZ, me.z, t); setParam(L.forwardX, fx, t); setParam(L.forwardY, 0, t); setParam(L.forwardZ, fz, t); setParam(L.upX, 0, t); setParam(L.upY, 1, t); setParam(L.upZ, 0, t); }
+  else { L.setPosition(me.x, EYE, me.z); L.setOrientation(fx, 0, fz, 0, 1, 0); }
+}
+function stepSound(x, z, mine) {
+  if (!actx || !soundOn || actx.state !== "running") return;
+  const t = actx.currentTime;
+  const src = actx.createBufferSource(); src.buffer = noiseBuf; src.playbackRate.value = 0.7 + Math.random() * 0.5;
+  const f = actx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 350 + Math.random() * 250; f.Q.value = 1.5;
+  const g = actx.createGain(), vol = mine ? 0.35 : 1.6;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+  src.connect(f); f.connect(g);
+  if (mine) g.connect(actx.destination);
+  else {
+    const p = actx.createPanner();
+    p.panningModel = "HRTF"; p.distanceModel = "linear"; p.refDistance = 1.5; p.maxDistance = 26; p.rolloffFactor = 1;
+    if (p.positionX) { p.positionX.value = x; p.positionY.value = 0.2; p.positionZ.value = z; } else p.setPosition(x, 0.2, z);
+    g.connect(p); p.connect(actx.destination);
+  }
+  src.start(t); src.stop(t + 0.16);
+}
+const STRIDE = 1.7;
+
+let meName = "";
+function myName() { if (meName) return meName; return (document.getElementById("name")?.value || store.get("soinsu-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
+function fixName() { meName = ""; meName = myName(); store.set("soinsu-name", meName); }
+const urlRoom = (new URLSearchParams(location.search).get("room") || "").replace(/\D/g, "").slice(0, 4);
+function shareUrl() { const u = new URL(location.href); u.search = "?room=" + host.code + "&openExternalBrowser=1"; u.hash = ""; return u.toString(); }
+
+const RULES = `<div class="rules">
+・みんなの頭に<b>数字</b>が書いてある<br>
+・相手をタップして、その数字の<b>素因数</b>を打ち込む（例 <b>2×3</b>）<br>
+・全部正しければ相手の数字がその分割られる。<b>1</b>になったら撃破<br>
+・1つでも間違えると<b>自分の一番大きい素因数</b>が消えて弱くなる<br>
+・白い円の中（射程内）の相手にしか打ち込めない<br>
+・相手の数字は頭の上にしか出ない。一瞬で覚えよう<br>
+・足音で近くの相手に気づける（イヤホン推奨）<br>
+・最後の1人になったら勝ち</div>`;
+
+function renderUI() {
+  const s = $("screen");
+  $("hud").classList.toggle("hidden", screen !== "game" && screen !== "layout");
+  $("hud").classList.toggle("editing", screen === "layout");
+  s.classList.toggle("clear", screen === "game");
+  s.classList.toggle("toolbar", screen === "layout"); if (screen !== "layout") s.classList.remove("bottom");
+  checkRotate(); applyLayout();
+  if (screen === "game" && !overInfo) { s.classList.add("hidden"); s.innerHTML = ""; return; }
+  s.classList.remove("hidden");
+  let h = "";
+  if (screen === "menu") {
+    h = `<div class="card"><h1>素因数バトル<small>頭の数字を素因数分解して打ち込め</small></h1>${RULES}
+      <label>なまえ</label><input id="name" class="in" maxlength="12" value="${esc(store.get("soinsu-name") || "")}" placeholder="ゲスト">
+      <button class="btn" data-a="host">部屋をつくる</button>
+      <div class="row"><input id="code" class="in" inputmode="numeric" maxlength="4" placeholder="部屋番号（4けた）" value="${esc(urlRoom)}"><button class="btn sub" style="width:40%;margin-top:0" data-a="join">入る</button></div>
+      <div style="margin-top:14px"><label>ひとりで練習（CPUの数）</label>
+      <div class="seg">${[1, 3, 5, 7].map(n => `<button class="${n === practiceBots ? "on" : ""}" data-a="pb-${n}">${n}体</button>`).join("")}</div>
+      <button class="btn sub" data-a="practice">CPUと練習する</button></div>
+      <div class="row" style="margin-top:14px"><button class="btn sub" style="margin-top:0" data-a="layout">ボタン配置を変える</button><button class="btn sub" style="margin-top:0" data-a="sound">足音：${soundOn ? "ON" : "OFF"}</button></div>
+      ${window.IN_HUB ? `<button class="btn sub" data-a="games">← ゲーム一覧へ（you know games）</button>` : ""}
+      ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}</div>`;
+  } else if (screen === "layout") {
+    h = `<div class="card"><span class="lbl">${LAY_NAMES[editSel]} ${Math.round(LAY[editSel].s * 100)}%</span>
+      <button class="btn sub" data-a="lay-">小さく</button><button class="btn sub" data-a="lay+">大きく</button>
+      <button class="btn sub" data-a="layreset">元にもどす</button><button class="btn sub" data-a="laymove">⇅</button><button class="btn" data-a="laydone">完了</button></div>`;
+  } else if (screen === "connecting") {
+    h = `<div class="card"><h2>接続中…</h2><button class="btn sub" data-a="leave">やめる</button></div>`;
+  } else if (screen === "lobby") {
+    const isHost = mode === "host";
+    h = `<div class="card"><h2>部屋番号</h2><div class="code">${esc(host.code)}</div>
+      ${isHost ? `<button class="btn sub" data-a="share">招待リンクを送る</button>` : ""}
+      <ul class="plist">${lobbyPs.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}</span><span>${p.id === 0 ? "ホスト" : p.bot ? "CPU" : ""}</span></li>`).join("")}</ul>
+      <div class="note">${lobbyPs.length} / ${MAX_PLAYERS}人</div>
+      ${isHost ? `<div class="row"><button class="btn sub" style="margin-top:0" data-a="bot+" ${lobbyPs.length >= MAX_PLAYERS ? "disabled" : ""}>CPUを追加</button><button class="btn sub" style="margin-top:0" data-a="bot-" ${host.bots ? "" : "disabled"}>CPUを減らす</button></div>
+        <button class="btn red" data-a="start" ${lobbyPs.length < 2 ? "disabled" : ""}>スタート</button>
+        ${lobbyPs.length < 2 ? `<div class="note">2人以上（CPUを含む）で始められます</div>` : ""}`
+        : `<div class="note">ホストがスタートするのを待っています…</div>`}
+      <button class="btn sub" data-a="leave">退出</button></div>`;
+  } else if (screen === "game" && overInfo) {
+    const w = overInfo.ps.find(p => p.id === overInfo.win);
+    const iWon = overInfo.win === myId;
+    h = `<div class="card"><h2>${iWon ? "🏆 あなたの勝ち！" : w ? `${esc(w.name)} の勝ち` : "引き分け"}</h2>
+      <table class="res">${overInfo.ps.map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}${p.id === myId ? "（自分）" : ""}</td><td>撃破 ${p.kills}</td></tr>`).join("")}</table>
+      ${mode === "local" ? `<button class="btn red" data-a="again">もう一度</button>`
+        : mode === "host" ? `<button class="btn red" data-a="tolobby">部屋にもどる</button>` : `<div class="note">ホストが部屋にもどるのを待っています…</div>`}
+      <button class="btn sub" data-a="leave">メニューへ</button></div>`;
+  }
+  s.innerHTML = h;
+}
+$("screen").addEventListener("click", async e => {
+  const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
+  const a = b.dataset.a;
+  if (a === "host") { fixName(); goLandscape(); startHost(); }
+  else if (a === "join") { fixName(); goLandscape(); joinRoom($("code").value); }
+  else if (a === "practice") { fixName(); goLandscape(); startPractice(); renderUI(); }
+  else if (a === "layout") { fixName(); enterLayout(); }
+  else if (a === "games") location.href = "../";   // ミニゲーム集のゲーム一覧へ
+  else if (a === "laydone") exitLayout();
+  else if (a === "laymove") $("screen").classList.toggle("bottom");
+  else if (a === "lay+" || a === "lay-") { const L = LAY[editSel]; L.s = clamp(Math.round((L.s + (a === "lay+" ? 0.1 : -0.1)) * 10) / 10, 0.5, 2); saveLayout(); renderUI(); }
+  else if (a === "layreset") { LAY = JSON.parse(JSON.stringify(LAY_DEF)); saveLayout(); renderUI(); }
+  else if (a === "sound") { fixName(); soundOn = !soundOn; store.set("soinsu-sound", soundOn ? "1" : "0"); renderUI(); }
+  else if (a.startsWith("pb-")) { const nm = $("name")?.value; practiceBots = Number(a.slice(3)); renderUI(); if (nm != null) $("name").value = nm; }
+  else if (a === "leave") leave();
+  else if (a === "bot+") { host.bots++; hostLobby(); }
+  else if (a === "bot-") { host.bots = Math.max(0, host.bots - 1); hostLobby(); }
+  else if (a === "start") { hostStart(); renderUI(); }
+  else if (a === "again") { startPractice(); renderUI(); }
+  else if (a === "tolobby") { G = null; host.playing = false; hostLobby(); }
+  else if (a === "share") {
+    const url = shareUrl();
+    try { if (navigator.share) { await navigator.share({ title: "素因数バトル", text: `部屋番号 ${host.code} で遊ぼう`, url }); return; } } catch (err) { return; }
+    try { await navigator.clipboard.writeText(url); toastScreen("リンクをコピーしました"); } catch (err) { prompt("このリンクを送ってください", url); }
+  }
+});
+function toastScreen(s) { const n = document.querySelector("#screen .note"); if (n) n.textContent = s; }
+
+// ================= ループ =================
+function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyLayout(); checkRotate(); }
+addEventListener("resize", resize); resize();
+let last = performance.now(), sendT = 0;
+function frame(nowMs) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (nowMs - last) / 1000); last = nowMs;
+  if (screen === "game") {
+    // 自分の移動
+    let fwd = -joy.y, str = joy.x;
+    if (keys.has("w") || keys.has("arrowup")) fwd += 1;
+    if (keys.has("s") || keys.has("arrowdown")) fwd -= 1;
+    if (keys.has("d") || keys.has("arrowright")) str += 1;
+    if (keys.has("a") || keys.has("arrowleft")) str -= 1;
+    const l = Math.hypot(fwd, str); if (l > 1) { fwd /= l; str /= l; }
+    const sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
+    const ox = me.x, oz = me.z;
+    me.x += (-sy * fwd + cy * str) * SPEED * dt; me.z += (-cy * fwd - sy * str) * SPEED * dt;
+    collide(me);
+    me.step = (me.step || 0) + Math.hypot(me.x - ox, me.z - oz);
+    if (me.step > STRIDE) { me.step = 0; stepSound(me.x, me.z, true); }
+    updListener();
+    const mine = view.get(myId); if (mine) { mine.x = me.x; mine.z = me.z; }
+    sendT += dt;
+    if (sendT > 0.1) {
+      sendT = 0;
+      sendHost({ t: "pos", x: +me.x.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(3) });
+      if (G && mode !== "client") broadcast({ t: "st", p: [...G.players.values()].map(p => [p.id, +p.x.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3)]) });
+    }
+    if (G && mode !== "client" && !G.over) for (const p of G.players.values()) if (p.bot) botUpdate(p, dt, nowMs / 1000);
+    // 応答のない相手を切る（タブを閉じた・電波が切れた）
+    if (mode === "host" && G) for (const [id, c] of [...host.conns]) if (nowMs - (c.seen || nowMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
+    if (mode === "client" && nowMs - hostSeen > 10000) { errMsg = "ホストとの接続が切れました"; leave(); return; }
+    // 見た目
+    camera.position.set(me.x, EYE, me.z); camera.rotation.set(me.pitch, me.yaw, 0);
+    rangeRing.position.x = me.x; rangeRing.position.z = me.z; rangeRing.visible = !!(mine && mine.alive);
+    const k = Math.min(1, dt * 12);
+    for (const [id, av] of avatars) {
+      const v = view.get(id);
+      const px = v.x, pz = v.z;
+      v.x += (v.tx - v.x) * k; v.z += (v.tz - v.z) * k;
+      if (v.alive) {
+        const mv = Math.hypot(v.x - px, v.z - pz);
+        v.step = (v.step || 0) + (mv < 2 ? mv : 0);
+        if (v.step > STRIDE) { v.step = 0; stepSound(v.x, v.z, false); }
+      }
+      let dy = v.tyaw - v.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); v.yaw += dy * k;
+      av.g.position.set(v.x, 0, v.z); av.g.rotation.y = v.yaw;
+      if (!v.alive) {
+        const t = v.deadAt ? (nowMs - v.deadAt) / 600 : 1;
+        av.g.visible = t < 1; av.g.scale.setScalar(Math.max(0.01, 1 - t)); continue;
+      }
+      const d = distTo(v);
+      drawLabel(av, v, d <= RANGE, id === selId);
+      const s = clamp(d / 10, 1, 2.6); av.label.scale.set(1.6 * s, s, 1);
+    }
+    const sv = selId != null && view.get(selId);
+    selRing.visible = !!(sv && sv.alive); if (sv) selRing.position.set(sv.x, 0.04, sv.z);
+    for (let i = fxList.length - 1; i >= 0; i--) {
+      const f = fxList[i], t = (nowMs - f.t0) / 1200;
+      if (t >= 1) { f.el.remove(); fxList.splice(i, 1); continue; }
+      tmpV.set(f.v.x, 3.3 + t * 1.2, f.v.z).project(camera);
+      f.el.style.display = tmpV.z > 1 ? "none" : "";
+      f.el.style.left = (tmpV.x + 1) / 2 * innerWidth + "px"; f.el.style.top = (1 - tmpV.y) / 2 * innerHeight + "px";
+      f.el.style.opacity = 1 - t;
+    }
+    updPad(false); updHud(nowMs);
+  } else {
+    const t = nowMs / 6000;
+    camera.position.set(Math.cos(t) * 26, 14, Math.sin(t) * 26); camera.lookAt(0, 0, 0);
+    rangeRing.visible = false; selRing.visible = false;
+  }
+  renderer.render(scene, camera);
+}
+renderUI();
+requestAnimationFrame(frame);
+try { if (window.IN_HUB && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
+window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; } };
+</script>
+</body>
+</html>

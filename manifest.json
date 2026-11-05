@@ -1,7 +1,7 @@
 {
   "name": "you know games",
   "short_name": "you know games",
-  "description": "友だちとあそべるミニゲーム集（シールドファイト・ジェンガ）",
+  "description": "友だちとあそべるミニゲーム集（シールドファイト・ジェンガ・素因数バトル）",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",
