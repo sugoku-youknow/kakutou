@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#161a24">
+<!-- ミニゲーム集「you know games」の中の 1 本。アプリの設定・アイコンは 1 つ上のフォルダにある -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="you know games">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<title>オンラインジェンガ</title>
+<style>
+  :root { --bg:#161a24; --panel:rgba(22,26,36,.92); --line:#2f3646; --text:#e8ebf2; --sub:#9aa3b5; --accent:#f0b25a; --accent2:#5aa9f0; --bad:#f06a5a; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; overflow:hidden; overscroll-behavior:none; }
+  #c { position:fixed; inset:0; width:100%; height:100%; touch-action:none; display:block; }
+  #ui { position:fixed; inset:0; pointer-events:none; }
+  #ui .p { pointer-events:auto; }
+  .screen { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 16px; background:rgba(16,19,27,.78); pointer-events:auto; overflow-y:auto; }
+  .card { width:100%; max-width:380px; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 16px; }
+  h1 { margin:0 0 4px; font-size:28px; letter-spacing:.06em; text-align:center; }
+  .lead { margin:0 0 18px; text-align:center; color:var(--sub); font-size:13px; }
+  label { display:block; font-size:12px; color:var(--sub); margin:12px 0 6px; }
+  input { width:100%; font-size:18px; padding:12px; border-radius:10px; border:1px solid var(--line); background:#0f121a; color:var(--text); }
+  button { font:inherit; font-size:17px; font-weight:700; border:0; border-radius:12px; padding:14px 12px; width:100%; margin-top:10px; background:#2a3142; color:var(--text); cursor:pointer; }
+  button.main { background:var(--accent); color:#2a1a05; }
+  button.blue { background:var(--accent2); color:#06192b; }
+  button:disabled { opacity:.4; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  .sep { margin:18px 0 4px; border-top:1px solid var(--line); }
+  .code { font-size:48px; font-weight:800; letter-spacing:.2em; text-align:center; color:var(--accent); margin:4px 0; }
+  .players { list-style:none; padding:0; margin:8px 0; }
+  .players li { padding:10px 12px; border-radius:10px; background:#0f121a; margin-top:6px; display:flex; justify-content:space-between; }
+  .err { color:var(--bad); font-size:14px; margin-top:10px; text-align:center; }
+  .hud { position:absolute; left:0; right:0; top:0; padding:calc(env(safe-area-inset-top) + 10px) 12px 10px; display:flex; align-items:flex-start; gap:8px; background:linear-gradient(rgba(10,12,18,.85),rgba(10,12,18,0)); }
+  .hud .who { flex:1; }
+  .hud .turn { font-size:19px; font-weight:800; }
+  .hud .turn.me { color:var(--accent); }
+  .hud .hint { font-size:13px; color:var(--sub); margin-top:3px; line-height:1.4; }
+  .hud .cnt { font-size:12px; color:var(--sub); text-align:right; }
+  .hud .cnt b { display:block; font-size:22px; color:var(--text); }
+  .x { width:40px; height:40px; padding:0; margin:0; border-radius:20px; font-size:18px; background:rgba(42,49,66,.9); flex:none; }
+  .bottom { position:absolute; left:0; right:0; bottom:0; padding:10px 12px calc(env(safe-area-inset-bottom) + 14px); display:flex; gap:8px; }
+  .bottom button { margin:0; padding:18px 8px; font-size:18px; }
+  .bottom .arrow { flex:0 0 72px; }
+  .bottom .row button { padding:14px 4px; font-size:16px; }
+  .bottom button.hold { background:#3a4560; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  .order { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+  .order span { font-size:11px; padding:2px 8px; border-radius:99px; background:#2a3142; color:var(--sub); }
+  .order span.on { background:var(--accent); color:#2a1a05; font-weight:700; }
+  .toast { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); background:rgba(10,12,18,.9); padding:12px 18px; border-radius:12px; font-size:15px; white-space:nowrap; pointer-events:none; }
+  .big { font-size:30px; font-weight:900; text-align:center; margin:4px 0 10px; }
+  .seg { display:flex; gap:6px; }
+  .seg button { margin-top:0; padding:10px 4px; }
+  .seg button.on { background:var(--accent); color:#2a1a05; }
+  .diffnote { font-size:12px; color:var(--sub); margin-top:6px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui"><div class="screen"><div class="card"><h1>ジェンガ</h1><p class="lead">読み込み中…</p></div></div></div>
+<script type="module">
+import * as THREE from "three";
+import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/rapier.es.js";
+
+await RAPIER.init();
+
+// ================= 数値 =================
+// 長さの単位：ブロックの幅 = 1（本物のジェンガ 7.5×2.5×1.5cm を 3×1×0.6 に）
+const BL = 3, SLOT = 1, BW = 0.97, BH = 0.6;   // ブロックの長さ / 置き場の間隔 / ブロックの幅（すき間をあける）/ 高さ
+const LEVELS = 18, N = LEVELS * 3;
+const GRAV = -25;                  // 重力（見ためが軽すぎないよう本物より強め）
+const DT = 1 / 120;                // 物理の 1 ステップ
+let HVAR = 0.03;                 // ブロックの高さのばらつき（±3%）。高いブロックが重さを受け、低いブロックはゆるくなる
+let FRICTION = 0.45;
+let LIFT_MAX = 0.2;               // 押す・引くときに、指の上下でブロックを上下できる幅（元の高さから ±）。上下にゆらすとタワーも揺れる
+const ROT_SPEED = 50 * Math.PI / 180;   // 置くときの回転ボタンを押している間の回る速さ（1秒あたり）
+const FINGER_VMAX = 25;             // 指についていく速さの上限（1秒あたり）。ふつうに動かすぶんには指とぴったり同じに動く
+let JITTER = 0.08;                 // 最初に積むときのずれ（長さ方向）。きっちりそろっていないぶん崩れやすい
+const FALL_DROP = 0.75 * BH;       // ターン開始時からこれ以上下がったブロックがあれば「崩れた」
+const SNAP_MS = 80;                // 動きを送る間隔
+const PREFIX = "jenga-online-room-";
+const MAX_PLAYERS = 4;
+// 倒れやすさ（難易度）4段階。部屋ごとにホストが決め、開始のときに全員へ送る。4 が一番倒れやすい
+const DIFFS = {
+  1: { label: "1", HVAR: 0.02, JITTER: 0, FRICTION: 0.65, LIFT: 0.1, note: "いちばん倒れにくい。ブロックがきっちりそろっていて、すべりにくい" },
+  2: { label: "2", HVAR: 0.025, JITTER: 0.02, FRICTION: 0.55, LIFT: 0.15, note: "倒れにくい" },
+  3: { label: "3", HVAR: 0.028, JITTER: 0.05, FRICTION: 0.5, LIFT: 0.18, note: "やや倒れやすい" },
+  4: { label: "4", HVAR: 0.03, JITTER: 0.08, FRICTION: 0.45, LIFT: 0.2, note: "いちばん倒れやすい。ずれがあって、すべりやすい" },
+};
+const DIFF_DEFAULT = "2";
+const OLD_DIFF = { s: "2", m: "4", l: "4" };   // 前の 小・中・大 で覚えていた値の読みかえ
+let diff = DIFF_DEFAULT;
+function applyDiff(k) {
+  k = String(OLD_DIFF[k] || k);
+  const d = DIFFS[k] || DIFFS[DIFF_DEFAULT]; diff = DIFFS[k] ? k : DIFF_DEFAULT;
+  HVAR = d.HVAR; JITTER = d.JITTER; FRICTION = d.FRICTION; LIFT_MAX = d.LIFT;
+}
+const ACTIVE = ["pull", "carry", "place", "settle", "fallen"];   // 自分が物理を動かしている間
+
+// ================= 3D 表示 =================
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x161a24);
+scene.fog = new THREE.Fog(0x161a24, 30, 60);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x5a4532, 1.15));
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.35);
+sun.position.set(8, 20, 6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 14, bottom: -4, near: 1, far: 50 });
+scene.add(sun);
+// カメラ側から当てる弱い光（影の側のブロックも見えるように）
+const fill = new THREE.DirectionalLight(0xffffff, 0.75);
+scene.add(fill); scene.add(fill.target);
+const table = new THREE.Mesh(new THREE.CylinderGeometry(15, 15, 0.4, 64), new THREE.MeshStandardMaterial({ color: 0x4a3322, roughness: 0.9 }));
+table.position.y = -0.2; table.receiveShadow = true; scene.add(table);
+
+function woodTexture() {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = "#dcb47c"; g.fillRect(0, 0, 512, 128);
+  for (let i = 0; i < 70; i++) {
+    g.strokeStyle = `rgba(${110 + Math.random() * 30},${70 + Math.random() * 20},35,${0.05 + Math.random() * 0.13})`;
+    g.lineWidth = 0.6 + Math.random() * 2.2;
+    g.beginPath(); let y = Math.random() * 128; g.moveTo(0, y);
+    for (let x = 0; x <= 512; x += 32) { y += (Math.random() - 0.5) * 3; g.lineTo(x, y); }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const WOOD = woodTexture();
+const EDGE_MAT = new THREE.LineBasicMaterial({ color: 0x5a3c1e, transparent: true, opacity: 0.55 });
+
+// 選んだ・持っているブロックを、ほかのブロックの向こうでも見えるように重ねて描く
+const xray = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshBasicMaterial({ color: 0x4d7cff, transparent: true, opacity: 0.28, depthTest: false, depthWrite: false }));
+xray.add(new THREE.LineSegments(new THREE.EdgesGeometry(xray.geometry),
+  new THREE.LineBasicMaterial({ color: 0x9fbaff, transparent: true, opacity: 0.95, depthTest: false })));
+xray.renderOrder = 10; xray.children[0].renderOrder = 11; xray.visible = false; scene.add(xray);
+function updateXray() {
+  const i = screen !== "game" || phase === "over" ? -1 : isMine() ? (sel >= 0 ? sel : held) : viewSel;
+  xray.visible = i >= 0 && !!meshes[i];
+  if (!xray.visible) return;
+  xray.position.copy(meshes[i].position); xray.quaternion.copy(meshes[i].quaternion); xray.scale.set(BL, heights[i], BW);
+}
+
+function resize() {
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+
+const cam = { yaw: 0.65, pitch: 0.28, dist: 18, ty: 5, goal: null };
+const PITCH_MIN = -0.25, PITCH_MAX = 1.4;   // 見上げる〜ほぼ真上から   // goal: 自動で視点の高さを合わせる先
+function updateCamera() {
+  if (cam.goal != null) { cam.ty += (cam.goal - cam.ty) * 0.08; if (Math.abs(cam.goal - cam.ty) < 0.02) cam.goal = null; }
+  const cp = Math.cos(cam.pitch);
+  camera.position.set(Math.sin(cam.yaw) * cp * cam.dist, cam.ty + Math.sin(cam.pitch) * cam.dist, Math.cos(cam.yaw) * cp * cam.dist);
+  camera.lookAt(0, cam.ty, 0);
+  fill.position.set(camera.position.x + Math.cos(cam.yaw) * 4, camera.position.y + 6, camera.position.z - Math.sin(cam.yaw) * 4);
+  fill.target.position.set(0, cam.ty, 0);
+}
+
+// ================= 物理 =================
+let world = null, bodies = [], cols = [], meshes = [], heights = [];
+const tgtPos = [], tgtQuat = [];       // 見ているだけのときに近づけていく先
+const Q_Y90 = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 }, Q_ID = { x: 0, y: 0, z: 0, w: 1 };
+const ZERO = { x: 0, y: 0, z: 0 };
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+function buildTower(seed) {
+  if (world) world.free();
+  for (const m of meshes) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); m.children[0]?.geometry.dispose(); }
+  world = new RAPIER.World({ x: 0, y: GRAV, z: 0 });
+  world.timestep = DT;
+  world.integrationParameters.numSolverIterations = 8;
+  world.createCollider(RAPIER.ColliderDesc.cuboid(30, 0.5, 30).setTranslation(0, -0.5, 0).setFriction(0.7));
+  bodies = []; cols = []; meshes = []; heights = [];
+  const rnd = mulberry32(seed);
+  let base = 0;
+  for (let lv = 0; lv < LEVELS; lv++) {
+    let top = 0;
+    for (let k = 0; k < 3; k++) {
+      const h = BH * (1 + (rnd() * 2 - 1) * HVAR);
+      top = Math.max(top, h);
+      const odd = lv % 2 === 1, off = (k - 1) * SLOT + (rnd() * 2 - 1) * 0.008, along = (rnd() * 2 - 1) * JITTER;
+      const yaw = (odd ? Math.PI / 2 : 0) + (rnd() * 2 - 1) * 0.005;
+      const b = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(odd ? off : along, base + h / 2, odd ? along : off).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
+      const c = world.createCollider(RAPIER.ColliderDesc.cuboid(BL / 2, h / 2, BW / 2).setFriction(FRICTION).setRestitution(0).setDensity(1), b);
+      bodies.push(b); cols.push(c); heights.push(h);
+      const tint = 0.9 + rnd() * 0.12;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(BL, h, BW),
+        new THREE.MeshStandardMaterial({ map: WOOD, roughness: 0.75, color: new THREE.Color(tint, tint * 0.98, tint * 0.95) }));
+      m.castShadow = m.receiveShadow = true; m.userData.i = bodies.length - 1;
+      m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), EDGE_MAT));   // ふちの線（ブロックの境目を見やすく）
+      scene.add(m); meshes.push(m);
+      tgtPos.push(new THREE.Vector3()); tgtQuat.push(new THREE.Quaternion());
+    }
+    base += top;
+  }
+  tgtPos.length = tgtQuat.length = N;
+  for (let i = 0; i < 240; i++) world.step();   // 積んだ直後のなじみ（少し沈む）を済ませてから始める
+  syncMeshesFromBodies(true);
+}
+
+function syncMeshesFromBodies(alsoTarget) {
+  for (let i = 0; i < N; i++) {
+    const p = bodies[i].translation(), q = bodies[i].rotation();
+    meshes[i].position.set(p.x, p.y, p.z); meshes[i].quaternion.set(q.x, q.y, q.z, q.w);
+    if (alsoTarget) { tgtPos[i].copy(meshes[i].position); tgtQuat[i].copy(meshes[i].quaternion); }
+  }
+}
+function lerpMeshes() {
+  for (let i = 0; i < N; i++) { meshes[i].position.lerp(tgtPos[i], 0.3); meshes[i].quaternion.slerp(tgtQuat[i], 0.3); }
+}
+const r4 = v => Math.round(v * 10000) / 10000;
+function snapshot() {
+  const d = new Array(N * 7);
+  for (let i = 0; i < N; i++) {
+    const p = bodies[i].translation(), q = bodies[i].rotation(), o = i * 7;
+    d[o] = r4(p.x); d[o + 1] = r4(p.y); d[o + 2] = r4(p.z); d[o + 3] = r4(q.x); d[o + 4] = r4(q.y); d[o + 5] = r4(q.z); d[o + 6] = r4(q.w);
+  }
+  return d;
+}
+function setTargets(d) {
+  for (let i = 0; i < N; i++) { const o = i * 7; tgtPos[i].set(d[o], d[o + 1], d[o + 2]); tgtQuat[i].set(d[o + 3], d[o + 4], d[o + 5], d[o + 6]); }
+}
+function applySnapshot(d) {
+  for (let i = 0; i < N; i++) {
+    const b = bodies[i], o = i * 7;
+    resetBody(i);
+    b.setTranslation({ x: d[o], y: d[o + 1], z: d[o + 2] }, true);
+    b.setRotation({ x: d[o + 3], y: d[o + 4], z: d[o + 5], w: d[o + 6] }, true);
+    b.setLinvel(ZERO, true); b.setAngvel(ZERO, true);
+  }
+  syncMeshesFromBodies(true);
+}
+function resetBody(i) {
+  const b = bodies[i];
+  if (b.bodyType() !== RAPIER.RigidBodyType.Dynamic) b.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+  cols[i].setSensor(false);
+  b.setGravityScale(1, true); b.setLinearDamping(0); b.setAngularDamping(0); b.lockRotations(false, true);
+}
+
+const levelOf = i => Math.round((bodies[i].translation().y - BH / 2) / BH);
+const axisOf = i => { const q = bodies[i].rotation(); return new THREE.Vector3(1, 0, 0).applyQuaternion(new THREE.Quaternion(q.x, q.y, q.z, q.w)).setY(0).normalize(); };
+
+function towerInfo(excl) {
+  const by = new Map(); let top = 0;
+  for (let i = 0; i < N; i++) {
+    if (i === excl) continue;
+    const l = levelOf(i); if (!by.has(l)) by.set(l, []); by.get(l).push(i); top = Math.max(top, l);
+  }
+  return { by, top };
+}
+function canPick(i) {
+  const { by, top } = towerInfo(-1), l = levelOf(i);
+  return by.get(top).length < 3 ? l < top - 1 : l < top;   // 一番上の段（作りかけならその下の段も）は抜けない
+}
+// 抜いたブロックを置ける場所
+function placeInfo(excl) {
+  const { by, top } = towerInfo(excl);
+  let lt = top, occ = new Set();
+  if ((by.get(top) || []).length >= 3) lt = top + 1;
+  const below = by.get(lt - 1) || [];
+  let cx = 0, cz = 0;
+  for (const i of below) { const p = bodies[i].translation(); cx += p.x; cz += p.z; }
+  if (below.length) { cx /= below.length; cz /= below.length; }
+  const odd = lt % 2 === 1;
+  for (const i of by.get(lt) || []) {
+    if (lt === top + 1) break;
+    const p = bodies[i].translation();
+    occ.add(Math.max(0, Math.min(2, Math.round((odd ? p.x - cx : p.z - cz) / SLOT) + 1)));
+  }
+  const free = [0, 1, 2].filter(k => !occ.has(k));
+  return { lt, odd, cx, cz, free };
+}
+function slotPose(info, k) {
+  const off = (k - 1) * SLOT;
+  const x = info.cx + (info.odd ? off : 0), z = info.cz + (info.odd ? 0 : off);
+  // 真上から光線を落として、置く面の高さを調べる（ブロックの両端と真ん中）
+  let surf = 0;
+  const ax = info.odd ? { x: 0, z: 1 } : { x: 1, z: 0 };
+  for (const t of [-0.4, 0, 0.4]) {
+    const ray = new RAPIER.Ray({ x: x + ax.x * BL * t, y: 60, z: z + ax.z * BL * t }, { x: 0, y: -1, z: 0 });
+    const hit = world.castRay(ray, 120, true, undefined, undefined, cols[held], bodies[held]);
+    if (hit) surf = Math.max(surf, 60 - hit.toi);
+  }
+  return { x, z, surf, q: info.odd ? Q_Y90 : Q_ID };
+}
+
+// ================= ゲームの状態 =================
+let mode = null;          // "local" / "host" / "client"
+let screen = "loading";   // loading / menu / connecting / lobby / game
+let myId = 0, curId = 0, moves = 0, players = [], order = [];
+let phase = "idle";       // pull / place / settle / fallen / wait / watch / over
+let sel = -1, held = -1, viewSel = -1, phaseT = 0, quietT = 0;
+let drag = null;          // { axis, off0, target, ty, y0, A, U, det, sx, sy } 押す・引くときの指
+let rotHold = 0;          // 回転ボタンを押している向き（+1 左回り / -1 右回り）
+let place = null;         // { info, k, pose, tx, ty, tz } 置き場の候補と、指で持っている目標の位置
+let turnPos = [], baseY = [];
+let overInfo = null, errMsg = "", toastMsg = "", toastT = 0, lastSend = 0;
+let peer = null, hostConn = null, lobby = [];
+
+const isMine = () => mode === "local" || curId === myId;
+const nameOf = id => (players.find(p => p.id === id) || { name: "?" }).name;
+
+function beginMyTurn() {
+  phase = "pull"; sel = -1; held = -1; place = null; drag = null; phaseT = 0;
+  turnPos = []; baseY = [];
+  for (let i = 0; i < N; i++) setHighlight(i, false);
+  for (let i = 0; i < N; i++) { const p = bodies[i].translation(); turnPos.push(new THREE.Vector3(p.x, p.y, p.z)); baseY.push(p.y); }
+}
+function setHighlight(i, on) {
+  if (i < 0 || !meshes[i]) return;
+  meshes[i].material.emissive.setHex(on ? 0x2a55ff : 0x000000);
+  meshes[i].material.emissiveIntensity = on ? 0.55 : 0;
+}
+function selectBlock(i) {
+  if (sel === i) return;
+  releaseSel();
+  sel = i; setHighlight(i, true);
+  const b = bodies[i];
+  cam.goal = b.translation().y;
+  b.setGravityScale(0, true);      // 指でつまんでいるので、引き出しても落ちない
+  b.setLinearDamping(4); b.setAngularDamping(8);
+}
+function releaseSel() {
+  if (sel < 0) return;
+  setHighlight(sel, false);
+  const b = bodies[sel]; b.setGravityScale(1, true); b.setLinearDamping(0); b.setAngularDamping(0); b.wakeUp();
+  sel = -1; drag = null;
+}
+
+function physStep() {
+  if (phase === "pull" && sel >= 0 && drag) {
+    const b = bodies[sel], p = b.translation(), v = b.linvel(), o = turnPos[sel];
+    const off = (p.x - o.x) * drag.axis.x + (p.z - o.z) * drag.axis.z;
+    const va = v.x * drag.axis.x + v.z * drag.axis.z;
+    // 指の位置へ 1 ステップで着く速さにする（指は強いので、キツいブロックでも動く。そのぶんタワーを引きずる）
+    const want = Math.max(-FINGER_VMAX, Math.min(FINGER_VMAX, (drag.target - off) / DT));
+    const vy = drag.ty == null ? v.y : Math.max(-FINGER_VMAX, Math.min(FINGER_VMAX, (drag.ty - p.y) / DT));   // 上下も指と同じに
+    b.setLinvel({ x: v.x + drag.axis.x * (want - va), y: vy, z: v.z + drag.axis.z * (want - va) }, true);
+  }
+  if (phase === "carry") {   // 抜いたブロックを、タワーの上（少し浮かせた所）まで自動で運ぶ
+    const b = bodies[held], p = b.translation(), q = b.rotation(), t = place.pose;
+    const k = Math.min(1, 9 * DT), ty = hoverY();
+    b.setNextKinematicTranslation({ x: p.x + (t.x - p.x) * k, y: p.y + (ty - p.y) * k, z: p.z + (t.z - p.z) * k });
+    const cq = new THREE.Quaternion(q.x, q.y, q.z, q.w).slerp(new THREE.Quaternion(t.q.x, t.q.y, t.q.z, t.q.w), k);
+    b.setNextKinematicRotation({ x: cq.x, y: cq.y, z: cq.z, w: cq.w });
+    if (Math.hypot(t.x - p.x, ty - p.y, t.z - p.z) < 0.03) startPlace();
+  }
+  if (phase === "place") {   // 指で持っている：指の位置へ 1 ステップで着く速さにする（ほかのブロックに当たるとそこで止まり、押せばタワーが動く）
+    const b = bodies[held], p = b.translation();
+    let vx = (place.tx - p.x) / DT, vy = (place.ty - p.y) / DT, vz = (place.tz - p.z) / DT;
+    const vm = Math.hypot(vx, vy, vz);
+    if (vm > FINGER_VMAX) { vx *= FINGER_VMAX / vm; vy *= FINGER_VMAX / vm; vz *= FINGER_VMAX / vm; }
+    b.setLinvel({ x: vx, y: vy, z: vz }, true);
+    if (rotHold) {   // 回転ボタンを押している間だけ、少しずつ回す
+      const q = b.rotation();
+      const r = new THREE.Quaternion(q.x, q.y, q.z, q.w).premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotHold * ROT_SPEED * DT));
+      b.setRotation({ x: r.x, y: r.y, z: r.z, w: r.w }, true);
+    }
+  }
+  world.step();
+  phaseT += DT;
+
+  if (phase === "pull" && sel >= 0) {
+    const p = bodies[sel].translation(), o = turnPos[sel], ax = axisOf(sel);
+    if (Math.abs((p.x - o.x) * ax.x + (p.z - o.z) * ax.z) > BL * 0.97) extract();
+  }
+  if (phase === "settle") {
+    let mv = 0;
+    for (const b of bodies) { const v = b.linvel(), w = b.angvel(); mv = Math.max(mv, Math.hypot(v.x, v.y, v.z), Math.hypot(w.x, w.y, w.z) * 0.5); }
+    quietT = mv < 0.08 ? quietT + DT : 0;
+    if ((phaseT > 0.8 && quietT > 0.6) || phaseT > 8) {
+      if (!checkFallen()) { phase = "wait"; send({ t: "end", d: snapshot() }); renderUI(); return; }
+    }
+  }
+  if ((phase === "pull" || phase === "carry" || phase === "place" || phase === "settle") && checkFallen()) {
+    phase = "fallen"; phaseT = 0; releaseSel(); navigator.vibrate?.([80, 40, 160]); renderUI();
+  }
+  if (phase === "fallen" && phaseT > 2.5) { phase = "wait"; send({ t: "fall", d: snapshot() }); return; }
+  const now = performance.now();   // 見ている人へ今の位置を送る
+  if (mode !== "local" && now - lastSend > SNAP_MS && ACTIVE.includes(phase)) {
+    lastSend = now; send({ t: "snap", d: snapshot(), s: sel >= 0 ? sel : held, ph: phase, yaw: +cam.yaw.toFixed(3) });
+  }
+}
+function checkFallen() {
+  for (let i = 0; i < N; i++) {
+    if (i === sel || (i === held && (phase === "carry" || phase === "place"))) continue;
+    if (bodies[i].translation().y < baseY[i] - FALL_DROP) return true;
+  }
+  return false;
+}
+function extract() {
+  held = sel; setHighlight(sel, false); sel = -1; drag = null;
+  const b = bodies[held];
+  b.setGravityScale(1, true); b.setLinearDamping(0); b.setAngularDamping(0);
+  b.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+  cols[held].setSensor(true);      // 運んでいる間はほかのブロックにぶつからない
+  const info = placeInfo(held);
+  const k = info.free.includes(1) ? 1 : info.free[0];
+  place = { info, k, pose: slotPose(info, k) };
+  cam.goal = Math.min(LEVELS * BH + 8, place.pose.surf - 0.5);   // 上の置き場が見えるように
+  phase = "carry"; phaseT = 0; navigator.vibrate?.(30);
+  renderUI();
+}
+const hoverY = () => place.pose.surf + BH * 1.5 + heights[held] / 2;   // 運んできたブロックを浮かせる高さ
+// 運び終わったら、ふつうの（ぶつかる）ブロックに戻して、指で持った状態にする
+function startPlace() {
+  const b = bodies[held], p = b.translation();
+  b.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+  cols[held].setSensor(false);
+  b.setRotation(place.pose.q, true); b.setLinvel(ZERO, true); b.setAngvel(ZERO, true);
+  b.setGravityScale(0, true); b.lockRotations(true, true);
+  place.tx = p.x; place.ty = p.y; place.tz = p.z;
+  phase = "place"; phaseT = 0;
+  renderUI();
+}
+// ◀ ▶：置き場の候補へ移す（ぶつからないよう、低すぎたら少し持ち上げる）
+function moveSlot(dir) {
+  if (phase !== "place") return;
+  const f = place.info.free;
+  if (f.length > 1) { const idx = f.indexOf(place.k); place.k = f[((idx < 0 ? 0 : idx) + dir + f.length) % f.length]; }
+  place.pose = slotPose(place.info, place.k);
+  place.tx = place.pose.x; place.tz = place.pose.z; place.ty = Math.max(place.ty, hoverY());
+  bodies[held].setRotation(place.pose.q, true);
+}
+// 離す：重力を戻す。崩れたかの判定は、真下の面の上に乗った高さを基準にする
+function dropHeld() {
+  if (phase !== "place") return;
+  const b = bodies[held], p = b.translation(), ax = axisOf(held);
+  b.lockRotations(false, true); b.setGravityScale(1, true); b.setLinearDamping(0);
+  let surf = 0;
+  for (const t of [-0.4, 0, 0.4]) {
+    const hit = world.castRay(new RAPIER.Ray({ x: p.x + ax.x * BL * t, y: p.y, z: p.z + ax.z * BL * t }, { x: 0, y: -1, z: 0 }), 120, true, undefined, undefined, cols[held], bodies[held]);
+    if (hit) surf = Math.max(surf, p.y - hit.toi);
+  }
+  baseY[held] = surf + heights[held] / 2;
+  phase = "settle"; phaseT = 0; quietT = 0; place = null; rotHold = 0;
+  renderUI();
+}
+
+// ================= 操作（タッチ）=================
+const ptrs = new Map(); let gesture = null;
+const raycaster = new THREE.Raycaster();
+function pick(x, y) {
+  updateCamera(); scene.updateMatrixWorld(); camera.updateMatrixWorld();
+  raycaster.setFromCamera(new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1), camera);
+  const hit = raycaster.intersectObjects(meshes, false)[0];
+  return hit ? hit.object.userData.i : -1;
+}
+function toScreen(v) { const p = v.clone().project(camera); return { x: (p.x + 1) / 2 * innerWidth, y: (1 - p.y) / 2 * innerHeight }; }
+function startDrag(x, y) {
+  const b = bodies[sel], p = b.translation(), o = turnPos[sel], axis = axisOf(sel);
+  const c = new THREE.Vector3(p.x, p.y, p.z);
+  const s0 = toScreen(c), s1 = toScreen(c.clone().add(axis)), s2 = toScreen(c.clone().add(new THREE.Vector3(0, 1, 0)));
+  let A = { x: s1.x - s0.x, y: s1.y - s0.y };
+  const U = { x: s2.x - s0.x, y: s2.y - s0.y };
+  let det = A.x * U.y - A.y * U.x;
+  // ブロックがこちらを向いている（画面上でほとんど長さがない）ときは、上へなぞる = 奥へ押す。上下には動かさない
+  const facing = Math.hypot(A.x, A.y) < 22 || Math.abs(det) < 300;
+  if (facing) {
+    const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.setY(0).normalize();
+    A = { x: 0, y: -(Math.sign(fwd.dot(axis)) || 1) * 40 }; det = 0;
+  }
+  const off0 = (p.x - o.x) * axis.x + (p.z - o.z) * axis.z;
+  drag = { axis, off0, target: off0, ty: facing ? null : p.y, py0: p.y, y0: turnPos[sel].y, A, U, det, sx: x, sy: y };
+}
+canvas.addEventListener("pointerdown", e => {
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 1) {
+    const hit = pick(e.clientX, e.clientY);
+    if (screen === "game" && isMine() && phase === "pull" && sel >= 0 && hit === sel) { startDrag(e.clientX, e.clientY); gesture = { type: "push" }; }
+    else if (screen === "game" && isMine() && phase === "place" && hit === held) gesture = startMove(e.clientX, e.clientY);
+    else gesture = { type: "orbit", hit, moved: 0, lx: e.clientX, ly: e.clientY };
+    cam.goal = null;
+  } else if (ptrs.size === 2) {
+    drag = null;
+    const [a, b] = [...ptrs.values()];
+    gesture = { type: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y), dist0: cam.dist, ty0: cam.ty, my0: (a.y + b.y) / 2 };
+  }
+});
+canvas.addEventListener("pointermove", e => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!gesture) return;
+  if (gesture.type === "orbit") {
+    const dx = e.clientX - gesture.lx, dy = e.clientY - gesture.ly;
+    gesture.lx = e.clientX; gesture.ly = e.clientY; gesture.moved += Math.abs(dx) + Math.abs(dy);
+    cam.yaw -= dx * 0.009;
+    cam.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, cam.pitch + dy * 0.006));
+  } else if (gesture.type === "push" && drag) {
+    // 指の動き = s ×（ブロックの長さ方向 1 の画面上の長さ）+ v ×（上 1 の画面上の長さ）を解いて、両方とも指とぴったり同じに動かす
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    let s, v = 0;
+    if (drag.det) { s = (dx * drag.U.y - dy * drag.U.x) / drag.det; v = (drag.A.x * dy - drag.A.y * dx) / drag.det; }
+    else s = (dx * drag.A.x + dy * drag.A.y) / (drag.A.x * drag.A.x + drag.A.y * drag.A.y);
+    drag.target = Math.max(-BL - 0.5, Math.min(BL + 0.5, drag.off0 + s));
+    if (drag.ty != null) drag.ty = Math.max(drag.y0 - LIFT_MAX, Math.min(drag.y0 + LIFT_MAX, drag.py0 + v));
+  } else if (gesture.type === "move" && phase === "place") {
+    const h = planeHit(e.clientX, e.clientY, gesture.plane);
+    if (h) {
+      place.tx = gesture.t0.x + h.x - gesture.h0.x; place.tz = gesture.t0.z + h.z - gesture.h0.z;
+      place.ty = Math.max(heights[held] / 2, gesture.t0.y + h.y - gesture.h0.y);
+    }
+  } else if (gesture.type === "pinch" && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()];
+    cam.dist = Math.max(7, Math.min(32, gesture.dist0 * gesture.d0 / Math.max(10, Math.hypot(a.x - b.x, a.y - b.y))));
+    cam.ty = Math.max(0.5, Math.min(LEVELS * BH + 8, gesture.ty0 + ((a.y + b.y) / 2 - gesture.my0) * 0.025));
+  }
+});
+// 置くとき：持っているブロックをなぞると、指とぴったり同じだけ動く。
+// 横から見ているときは画面に平行な縦の面の上で動く（上下・左右）。上から見下ろしているときは水平な面の上で動く（奥行き）
+const LOOK_DOWN = 0.9;   // これより見下ろす角度が大きいと水平に動かす
+function planeHit(x, y, plane) {
+  updateCamera(); camera.updateMatrixWorld();
+  raycaster.setFromCamera(new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1), camera);
+  return raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+}
+function startMove(x, y) {
+  const p = bodies[held].translation(), c = new THREE.Vector3(p.x, p.y, p.z);
+  const n = cam.pitch > LOOK_DOWN ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw));
+  const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, c);
+  const h0 = planeHit(x, y, plane);
+  if (!h0) return { type: "orbit", hit: -1, moved: 99, lx: x, ly: y };
+  return { type: "move", plane, h0, t0: c };
+}
+function pointerEnd(e) {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.delete(e.pointerId);
+  if (gesture?.type === "orbit" && gesture.moved < 10 && gesture.hit >= 0 && ptrs.size === 0) tapBlock(gesture.hit);
+  if (gesture?.type === "push") drag = null;
+  if (gesture?.type === "move" && phase === "place") { const p = bodies[held].translation(); place.tx = p.x; place.ty = p.y; place.tz = p.z; }
+  if (ptrs.size === 1) { const p = [...ptrs.values()][0]; gesture = { type: "orbit", hit: -1, moved: 99, lx: p.x, ly: p.y }; }
+  else if (ptrs.size === 0) gesture = null;
+}
+canvas.addEventListener("pointerup", pointerEnd);
+canvas.addEventListener("pointercancel", pointerEnd);
+function tapBlock(i) {
+  if (screen !== "game" || !isMine() || phase !== "pull") return;
+  if (!canPick(i)) { toast("上の段からは抜けません"); return; }
+  selectBlock(i); renderUI();
+}
+function toast(t) { toastMsg = t; toastT = performance.now() + 1500; renderUI(); setTimeout(renderUI, 1600); }
+
+// ================= 通信 =================
+// ホストがまとめ役。参加者 → ホスト → みんな。動かしている人だけが物理を計算し、ほかの人は送られてきた位置を表示する
+const host = { conns: new Map(), nextId: 1, playing: false, turnI: 0, n: 0, last: null };
+
+function send(m) {
+  if (mode === "client") { try { hostConn.send(m); } catch (e) {} }
+  else hostHandle(mode === "local" ? curId : 0, m);
+}
+function bcast(m, except) {
+  for (const [id, c] of host.conns) if (id !== except && c.open) { try { c.send(m); } catch (e) {} }
+  if (except !== 0) onMsg(m);
+}
+function hostLobby() { lobby = [{ id: 0, name: myName() }, ...[...host.conns.keys()].map(id => ({ id, name: host.conns.get(id).pname }))]; bcast({ t: "lobby", players: lobby, diff }); }
+function hostStart() {
+  host.playing = true; host.turnI = 0; host.n = 0; host.last = null;
+  const ps = mode === "local" ? players : lobby.slice();
+  const ord = ps.map(p => p.id);
+  for (let i = ord.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ord[i], ord[j]] = [ord[j], ord[i]]; }
+  if (mode === "local") ord.sort((a, b) => a - b);
+  bcast({ t: "start", seed: (Math.random() * 2 ** 31) | 0, players: ps, order: ord, diff });
+  bcast({ t: "turn", cur: ord[0], d: null, n: 0 });
+}
+function hostHandle(from, m) {
+  if (m.t === "hello") return;
+  if (!host.playing) return;
+  if (m.t === "look") { bcast({ t: "look", id: from, yaw: m.yaw }, from); return; }
+  const cur = order[host.turnI % order.length];
+  if (from !== cur) return;
+  if (m.t === "snap") { host.last = m.d; bcast(m, from); }
+  else if (m.t === "end") {
+    host.last = m.d; host.n++; host.turnI = (host.turnI + 1) % order.length;
+    bcast({ t: "turn", cur: order[host.turnI], d: m.d, n: host.n });
+  } else if (m.t === "fall") {
+    host.playing = false;
+    bcast({ t: "over", loser: from, d: m.d, n: host.n });
+  }
+}
+function hostDrop(id) {
+  host.conns.delete(id);
+  if (!host.playing) { hostLobby(); return; }
+  const wasCur = order[host.turnI] === id;
+  const idx = order.indexOf(id);
+  const nextOrder = order.filter(x => x !== id);
+  if (idx >= 0 && idx < host.turnI) host.turnI--;
+  bcast({ t: "order", order: nextOrder, left: id });
+  if (nextOrder.length < 2) { host.playing = false; bcast({ t: "over", loser: -1, left: id, d: host.last, n: host.n }); return; }
+  host.turnI %= nextOrder.length;
+  if (wasCur) bcast({ t: "turn", cur: nextOrder[host.turnI], d: host.last, n: host.n });
+}
+
+function onMsg(m) {
+  switch (m.t) {
+    case "welcome": myId = m.you; screen = "lobby"; break;
+    case "reject": errMsg = m.why; screen = "menu"; cleanupNet(); break;
+    case "lobby": lobby = m.players; if (m.diff) diff = m.diff; break;
+    case "start": {
+      players = m.players; order = m.order; overInfo = null;
+      applyDiff(m.diff); buildTower(m.seed); screen = "game"; phase = "watch"; viewSel = -1;
+      // オンラインでは、最初の視点を人ごとにずらす（テーブルのまわりに散らばって立つ）
+      const me = mode === "local" ? 0 : Math.max(0, players.findIndex(p => p.id === myId));
+      Object.assign(cam, { yaw: 0.65 + me * spreadAngle(), dist: 18, ty: 5, pitch: 0.28 });
+      buildAvatars();
+      break;
+    }
+    case "order": {
+      order = m.order;
+      const a = avatars.get(m.left);
+      if (a) { for (const o of [a.g, a.arm, a.hand]) scene.remove(o); avatars.delete(m.left); }
+      break;
+    }
+    case "turn":
+      if (viewSel >= 0) setHighlight(viewSel, false); viewSel = -1;
+      curId = m.cur; moves = m.n; activeInfo = null;
+      if (m.d) applySnapshot(m.d);
+      if (isMine()) beginMyTurn(); else phase = "watch";
+      break;
+    case "look": { const a = avatars.get(m.id); if (a) a.tyaw = m.yaw; return; }
+    case "snap": {
+      if (isMine() || screen !== "game") return;
+      setTargets(m.d);
+      activeInfo = { ph: m.ph, s: m.s };
+      const a = avatars.get(curId); if (a && m.yaw != null) a.tyaw = m.yaw;
+      if (m.s !== viewSel) { setHighlight(viewSel, false); viewSel = m.s; setHighlight(viewSel, true); }
+      return;
+    }
+    case "over":
+      setHighlight(viewSel, false); viewSel = -1;
+      phase = "over"; overInfo = m; moves = m.n;
+      if (m.d && !isMine()) setTargets(m.d);
+      break;
+  }
+  renderUI();
+}
+
+function cleanupNet() { try { peer?.destroy(); } catch (e) {} peer = null; hostConn = null; host.conns.clear(); host.playing = false; }
+const randCode = () => String(Math.floor(1000 + Math.random() * 9000));
+let hostTries = 0;
+function startHost() {
+  mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; renderUI();
+  const code = randCode();
+  peer = new Peer(PREFIX + code);
+  peer.on("open", () => { host.code = code; screen = "lobby"; hostLobby(); renderUI(); });
+  peer.on("error", e => {
+    if (e.type === "unavailable-id" && ++hostTries < 20) { peer.destroy(); startHost(); return; }
+    if (screen === "game") { toast("通信エラー: " + e.type); return; }
+    errMsg = "接続エラー: " + e.type; screen = "menu"; cleanupNet(); renderUI();
+  });
+  peer.on("connection", conn => {
+    conn.on("data", m => {
+      if (m && m.t === "hello") {
+        if (host.playing) { conn.send({ t: "reject", why: "もう始まっています" }); setTimeout(() => conn.close(), 500); return; }
+        if (host.conns.size + 1 >= MAX_PLAYERS) { conn.send({ t: "reject", why: "満員です（4人まで）" }); setTimeout(() => conn.close(), 500); return; }
+        const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12);
+        host.conns.set(id, conn); conn.send({ t: "welcome", you: id }); hostLobby(); renderUI(); return;
+      }
+      if (conn.pid) hostHandle(conn.pid, m);
+    });
+    conn.on("close", () => { if (conn.pid && host.conns.get(conn.pid) === conn) { hostDrop(conn.pid); renderUI(); } });
+  });
+}
+function joinRoom(code) {
+  code = String(code).replace(/\D/g, "");
+  if (code.length !== 4) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
+  mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; renderUI();
+  peer = new Peer();
+  peer.on("open", () => {
+    hostConn = peer.connect(PREFIX + code, { reliable: true });
+    hostConn.on("open", () => hostConn.send({ t: "hello", name: myName() }));
+    hostConn.on("data", onMsg);
+    hostConn.on("close", () => { if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; cleanupNet(); renderUI(); } });
+  });
+  peer.on("error", e => {
+    errMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（番号ちがい、またはホストが閉じました）" : "接続エラー: " + e.type;
+    screen = "menu"; cleanupNet(); renderUI();
+  });
+}
+function startLocal(n) {
+  mode = "local"; myId = 0;
+  players = Array.from({ length: n }, (_, i) => ({ id: i, name: n === 1 ? myName() : `プレイヤー${i + 1}` }));
+  hostStart();
+}
+
+// ================= 画面 =================
+const ui = document.getElementById("ui");
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+{ const v = store.get("jenga-diff"), k = OLD_DIFF[v] || v; diff = DIFFS[k] ? k : DIFF_DEFAULT; }
+let meName = "";
+function myName() { if (meName) return meName; return (document.getElementById("name")?.value || store.get("jenga-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
+function fixName() { meName = ""; meName = myName(); store.set("jenga-name", meName); }
+const urlRoom = new URLSearchParams(location.search).get("room") || "";
+function shareUrl() { const u = new URL(location.href); u.search = "?room=" + host.code + "&openExternalBrowser=1"; u.hash = ""; return u.toString(); }
+
+function diffSeg(canEdit) {
+  return `<div class="seg">${Object.entries(DIFFS).map(([k, d]) => `<button class="${k === diff ? "on" : ""}" ${canEdit ? `data-a="diff-${k}"` : "disabled"}>${d.label}</button>`).join("")}</div>
+    <div class="diffnote">${esc(DIFFS[diff].note)}</div>`;
+}
+function renderUI() {
+  let h = "";
+  if (screen === "menu") {
+    h = `<div class="screen"><div class="card">
+      <h1>ジェンガ</h1><p class="lead">崩したら負け。2〜4人でオンライン対戦</p>
+      <label>なまえ</label><input id="name" maxlength="12" value="${esc(store.get("jenga-name") || "")}" placeholder="ゲスト">
+      <button class="main" data-a="host">部屋を作る</button>
+      <label>部屋番号で入る</label>
+      <div class="row"><input id="code" inputmode="numeric" maxlength="4" placeholder="1234" value="${esc(urlRoom)}"><button class="blue" data-a="join" style="margin-top:0">入る</button></div>
+      <div class="sep"></div>
+      <label>倒れやすさ（部屋を作るとき・この端末で遊ぶとき）</label>${diffSeg(true)}
+      <button data-a="solo">ひとりで練習</button>
+      <div class="row"><button data-a="local2">2人で交代</button><button data-a="local3">3人</button><button data-a="local4">4人</button></div>
+      ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}
+      <div class="sep"></div>
+      <button data-a="games">← ゲーム一覧へ（you know games）</button>
+    </div></div>`;
+  } else if (screen === "loading" || screen === "connecting") {
+    h = `<div class="screen"><div class="card"><h1>ジェンガ</h1><p class="lead">${screen === "loading" ? "読み込み中…" : "つないでいます…"}</p>
+      <button data-a="back">やめる</button></div></div>`;
+  } else if (screen === "lobby") {
+    h = `<div class="screen"><div class="card">
+      <p class="lead" style="margin:0">部屋番号</p><div class="code">${esc(host.code || "")}</div>
+      <button class="blue" data-a="share">招待リンクを送る</button>
+      <ul class="players">${lobby.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（あなた）" : ""}</span><span style="color:var(--sub)">${p.id === 0 ? "ホスト" : ""}</span></li>`).join("")}</ul>
+      <label>倒れやすさ${mode === "host" ? "" : "（ホストが決めます）"}</label>${diffSeg(mode === "host")}
+      ${mode === "host" ? `<button class="main" data-a="start" ${lobby.length < 2 ? "disabled" : ""}>${lobby.length < 2 ? "参加者を待っています…" : `${lobby.length}人で始める`}</button>`
+        : `<p class="lead" style="margin-top:12px">ホストが始めるのを待っています…</p>`}
+      <button data-a="back">ぬける</button>
+    </div></div>`;
+  } else if (screen === "game") {
+    const mine = isMine() && phase !== "over";
+    const hints = {
+      pull: sel < 0 ? "抜くブロックをタップ。背景をなぞると視点が回る（上下で角度）。2本指で高さとズーム" : "青いブロックをなぞると指と同じに動く（押す・引く・少し上下）。ほかをタップで選び直し",
+      carry: "上へ運んでいます…",
+      place: "ブロックをなぞると指と同じに動く（上下も）。真上から見るとなぞって奥行きを合わせられる。⟲ ⟳ は押している間だけ回る。乗せたら「離す」",
+      settle: "揺れがおさまるのを待っています…",
+      fallen: "崩れた！",
+      wait: "…",
+      watch: `${esc(nameOf(curId))}が挑戦中`,
+    };
+    const turnTxt = phase === "over" ? "おわり" : mode === "local" && players.length === 1 ? "練習中" : mine ? (mode === "local" ? `${esc(nameOf(curId))}の番` : "あなたの番") : `${esc(nameOf(curId))}の番`;
+    h = `<div class="hud p"><div class="who"><div class="turn ${mine ? "me" : ""}">${turnTxt}</div>
+        <div class="hint">${hints[phase] || ""}</div>
+        ${order.length > 1 ? `<div class="order">${order.map(id => `<span class="${id === curId && phase !== "over" ? "on" : ""}">${esc(nameOf(id))}</span>`).join("")}</div>` : ""}</div>
+      <div class="cnt">ターン<b>${moves}</b>倒れやすさ ${DIFFS[diff].label}</div><button class="x" data-a="quit">✕</button></div>`;
+    if (mine && phase === "place") {
+      h += `<div class="bottom p" style="flex-direction:column">
+        <div class="row"><button data-a="left">◀ 置き場</button><button data-a="right">置き場 ▶</button></div>
+        <div class="row"><button class="hold" data-r="1">⟲ 回す</button><button class="main" data-a="drop">離す</button><button class="hold" data-r="-1">回す ⟳</button></div>
+      </div>`;
+    }
+    if (phase === "over" && overInfo) {
+      const o = overInfo;
+      let title, sub;
+      if (o.loser === -1) { title = "相手がいなくなりました"; sub = `${o.n}ターン`; }
+      else if (mode === "local" && players.length === 1) { title = "崩れた！"; sub = `記録：${o.n}本 積みました`; }
+      else { title = o.loser === myId && mode !== "local" ? "あなたの負け…" : `${esc(nameOf(o.loser))}の負け`; sub = `${esc(nameOf(o.loser))}が崩しました（${o.n + 1}ターン目）`; }
+      const canRestart = mode === "local" || (mode === "host" && lobby.length >= 2);
+      h += `<div class="screen" style="background:rgba(16,19,27,.55)"><div class="card"><div class="big">${title}</div><p class="lead">${sub}</p>
+        ${canRestart ? `<button class="main" data-a="again">もう一回</button>` : mode === "client" ? `<p class="lead">ホストがもう一回を押すのを待っています…</p>` : ""}
+        <button data-a="back">メニューへ</button></div></div>`;
+    }
+  }
+  if (toastMsg && performance.now() < toastT) h += `<div class="toast">${esc(toastMsg)}</div>`;
+  ui.innerHTML = h;
+  const nm = document.getElementById("name"); if (nm) nm.oninput = () => store.set("jenga-name", nm.value);
+}
+ui.addEventListener("click", e => {
+  const a = e.target.closest("[data-a]")?.dataset.a; if (!a) return;
+  if (a === "host") { fixName(); startHost(); }
+  else if (a === "join") { fixName(); joinRoom(document.getElementById("code").value); }
+  else if (a === "solo") { fixName(); startLocal(1); }
+  else if (a.startsWith("local")) startLocal(+a.slice(5));
+  else if (a === "start") hostStart();
+  else if (a.startsWith("diff-")) { diff = a.slice(5); store.set("jenga-diff", diff); if (mode === "host" && screen === "lobby") hostLobby(); else { for (const b of document.querySelectorAll(".seg button")) b.classList.toggle("on", b.dataset.a === "diff-" + diff); const n = document.querySelector(".diffnote"); if (n) n.textContent = DIFFS[diff].note; } }
+  else if (a === "again") { if (mode === "local") hostStart(); else if (mode === "host") hostStart(); }
+  else if (a === "share") {
+    const url = shareUrl();
+    if (navigator.share) navigator.share({ title: "ジェンガやろう", text: `部屋番号 ${host.code}`, url }).catch(() => {});
+    else navigator.clipboard?.writeText(url).then(() => toast("リンクをコピーしました"), () => toast(url));
+  }
+  else if (a === "left") moveSlot(-1);
+  else if (a === "right") moveSlot(1);
+  else if (a === "drop") dropHeld();
+  else if (a === "quit") { if (confirm("ゲームをやめてメニューに戻りますか？")) backToMenu(); }
+  else if (a === "back") backToMenu();
+  else if (a === "games") location.href = "../";   // ミニゲーム集のゲーム一覧へ
+});
+// 回転ボタンは押している間だけ回る
+ui.addEventListener("pointerdown", e => { const b = e.target.closest("[data-r]"); if (b) { rotHold = +b.dataset.r; e.preventDefault(); } });
+for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { rotHold = 0; });
+ui.addEventListener("contextmenu", e => { if (e.target.closest("[data-r]")) e.preventDefault(); });   // 長押しでメニューが出ないように
+function backToMenu() { cleanupNet(); clearAvatars(); mode = null; screen = "menu"; phase = "idle"; errMsg = ""; renderUI(); }
+
+// ================= ほかのプレイヤー（オンラインのとき）=================
+// テーブルのまわりに、ほかの人の姿と名前を出す。立つ場所は、その人が見ている向き（カメラの向き）。
+// 番の人が引いているときは、腕を伸ばしてブロックの手前の端を指でつまむ。置くときは上からつまむ。
+const AV_R = 5.2;    // テーブルの中心から立つ場所まで（スマホの縦長の画面にも入るよう、タワーの近く）
+const AV_SCALE = 0.8; // 人の大きさ
+const LOOKS = [   // 人ごとの見た目（部屋に入った順）
+  { body: 0xe0533d, skin: 0xf2c9a0, hair: 0x3b2a20, hat: "cap", hatC: 0x2b59c3, pants: 0x2d3446 },
+  { body: 0x3d9be0, skin: 0xe9b98f, hair: 0xe8c25a, hat: "none", hatC: 0, pants: 0x4a3a2a },
+  { body: 0x58b85c, skin: 0xc98d64, hair: 0x1d1d1d, hat: "beanie", hatC: 0xf0b25a, pants: 0x30343c },
+  { body: 0x9b59d0, skin: 0xf5d5b8, hair: 0xb04a2a, hat: "crown", hatC: 0xf5c542, pants: 0x3a2f4a },
+];
+const avatars = new Map();   // id → アバター
+// 最初に立つ向きの間隔（2〜3人なら120度、4人なら90度。真向かいだとタワーに隠れるので）
+const spreadAngle = () => Math.min(Math.PI * 2 / Math.max(1, players.length), Math.PI * 2 / 3);
+let activeInfo = null;       // 番の人の { ph, s }（snap で届く）
+function nameSprite(name, on) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = on ? "rgba(240,178,90,.95)" : "rgba(16,19,27,.8)";
+  g.beginPath(); g.roundRect(8, 16, 496, 96, 48); g.fill();
+  g.fillStyle = on ? "#2a1a05" : "#ffffff"; g.font = "bold 56px system-ui, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(name, 256, 66, 470);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function makeAvatar(p, idx) {
+  const L = LOOKS[idx % LOOKS.length], mats = [];
+  const mat = c => { const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, transparent: true }); mats.push(m); return m; };
+  const g = new THREE.Group();
+  const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+  const skin = mat(L.skin), body = mat(L.body), pants = mat(L.pants), hair = mat(L.hair), dark = mat(0x1a1a1a);
+  for (const x of [-0.6, 0.6]) { add(new THREE.CylinderGeometry(0.45, 0.42, 3, 12), pants, x, 1.5, 0); add(new THREE.SphereGeometry(0.5, 12, 8), dark, x, 0.2, 0.25).scale.set(1, 0.6, 1.4); }
+  add(new THREE.CylinderGeometry(1.15, 1.35, 3.3, 16), body, 0, 4.6, 0);
+  add(new THREE.SphereGeometry(1.15, 16, 10), body, 0, 6.2, 0).scale.set(1, 0.45, 0.85);   // 肩
+  add(new THREE.CylinderGeometry(0.4, 0.45, 0.6, 10), skin, 0, 6.6, 0);   // 首
+  add(new THREE.SphereGeometry(1.3, 20, 14), skin, 0, 7.9, 0);   // 頭
+  add(new THREE.SphereGeometry(1.36, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.45), hair, 0, 8.0, -0.05);   // 髪
+  for (const x of [-0.45, 0.45]) add(new THREE.SphereGeometry(0.17, 8, 6), dark, x, 8.0, 1.18);   // 目
+  add(new THREE.BoxGeometry(0.5, 0.08, 0.05), dark, 0, 7.45, 1.25);   // 口
+  if (L.hat === "cap") { add(new THREE.SphereGeometry(1.4, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), mat(L.hatC), 0, 8.2, 0); add(new THREE.BoxGeometry(1.6, 0.12, 1.2), mats.at(-1), 0, 8.75, 1.2); }
+  if (L.hat === "beanie") { add(new THREE.SphereGeometry(1.42, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), mat(L.hatC), 0, 8.1, 0); add(new THREE.SphereGeometry(0.35, 10, 8), mats.at(-1), 0, 9.6, 0); }
+  if (L.hat === "crown") { const cm = mat(L.hatC); add(new THREE.CylinderGeometry(0.9, 0.9, 0.5, 5, 1, true), cm, 0, 9.45, 0); for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; add(new THREE.ConeGeometry(0.22, 0.5, 6), cm, Math.sin(a) * 0.85, 9.95, Math.cos(a) * 0.85); } }
+  const armL = add(new THREE.CylinderGeometry(0.33, 0.3, 2.8, 10), body, -1.5, 4.7, 0);   // 左腕（下ろしたまま）
+  add(new THREE.SphereGeometry(0.42, 10, 8), skin, -1.5, 3.2, 0);
+  // 右腕と手はシーンに直接置き、毎フレーム肩から手の位置まで伸ばす
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1, 10), body);
+  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), skin);
+  const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.5, 4, 8), skin);
+  hand.add(finger); finger.position.set(0, 0, 0.45); finger.rotation.x = Math.PI / 2;
+  scene.add(arm); scene.add(hand);
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameSprite(p.name, false), transparent: true, depthWrite: false }));
+  label.scale.set(5, 1.25, 1); label.position.set(0, 11.2, 0); g.add(label);
+  g.scale.setScalar(AV_SCALE); scene.add(g);
+  const yaw = 0.65 + idx * spreadAngle();
+  const a = { id: p.id, name: p.name, g, arm, hand, label, mats: [...mats, label.material], yaw, tyaw: yaw, on: false,
+    handPos: new THREE.Vector3(), handDir: new THREE.Vector3(0, -1, 0), texOff: label.material.map, texOn: null };
+  a.handPos.copy(restHand(a));
+  avatars.set(p.id, a);
+}
+function clearAvatars() {
+  for (const a of avatars.values()) {
+    for (const o of [a.g, a.arm, a.hand]) { scene.remove(o); o.traverse(c => c.geometry?.dispose()); }
+    for (const m of a.mats) { m.map?.dispose(); m.dispose(); }
+    a.texOn?.dispose();
+  }
+  avatars.clear(); activeInfo = null;
+}
+function buildAvatars() {
+  clearAvatars();
+  if (mode === "local") return;
+  players.forEach((p, i) => { if (p.id !== myId) makeAvatar(p, i); });
+}
+const shoulderOf = a => a.g.localToWorld(new THREE.Vector3(1.5, 6.0, 0.1));
+const restHand = a => a.g.localToWorld(new THREE.Vector3(1.6, 3.2, 0.3));
+const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+function updateAvatars() {
+  for (const a of avatars.values()) {
+    a.yaw += angDiff(a.tyaw, a.yaw) * 0.12;
+    a.g.position.set(Math.sin(a.yaw) * AV_R, 0, Math.cos(a.yaw) * AV_R);
+    a.g.lookAt(0, 0, 0);
+    // 番の人の名札を光らせる
+    const on = a.id === curId && phase !== "over";
+    if (on !== a.on) {
+      a.on = on;
+      if (on && !a.texOn) a.texOn = nameSprite(a.name, true);
+      a.label.material.map = on ? a.texOn : a.texOff; a.label.material.needsUpdate = true;
+    }
+    // 手の行き先
+    let tgt = restHand(a), dir = new THREE.Vector3(0, -1, 0);
+    const info = on ? activeInfo : null;
+    if (info && info.s >= 0 && meshes[info.s]) {
+      const m = meshes[info.s], c = m.position, ax = new THREE.Vector3(1, 0, 0).applyQuaternion(m.quaternion);
+      if (info.ph === "pull") {   // 自分に近いほうの端をつまむ
+        const sg = Math.sign(ax.dot(a.g.position.clone().sub(c))) || 1;
+        tgt = c.clone().addScaledVector(ax, sg * (BL / 2 + 0.35));
+        dir = ax.clone().multiplyScalar(-sg);
+      } else if (info.ph === "carry" || info.ph === "place") {   // 上からつまむ
+        tgt = c.clone().add(new THREE.Vector3(0, heights[info.s] / 2 + 0.45, 0));
+      }
+    }
+    a.handPos.lerp(tgt, 0.25); a.handDir.lerp(dir, 0.25).normalize();
+    const sh = shoulderOf(a), v = a.handPos.clone().sub(sh), len = Math.max(0.01, v.length());
+    a.arm.position.copy(sh).addScaledVector(v, 0.5);
+    a.arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.clone().divideScalar(len));
+    a.arm.scale.set(1, len, 1);
+    a.hand.position.copy(a.handPos);
+    a.hand.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), a.handDir);
+    // 自分の視点のすぐ前に立っている人は、透けさせる（タワーが見えなくならないように）
+    const op = Math.abs(angDiff(a.yaw, cam.yaw)) < 0.45 ? 0.18 : 1;
+    for (const m of a.mats) m.opacity = op;
+  }
+}
+// 自分の見ている向きを、ほかの人へときどき知らせる（番の人は snap で送っている）
+let lookSent = 0, lookYaw = 99;
+function sendLook(now) {
+  if (mode === "local" || !mode || screen !== "game" || (isMine() && ACTIVE.includes(phase))) return;
+  if (now - lookSent < 400 || Math.abs(angDiff(cam.yaw, lookYaw)) < 0.05) return;
+  lookSent = now; lookYaw = cam.yaw; send({ t: "look", yaw: +cam.yaw.toFixed(3) });
+}
+
+// ================= ループ =================
+let acc = 0, last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const sim = screen === "game" && isMine() && ACTIVE.includes(phase);
+  if (sim) {
+    acc += dt; let k = 0;
+    while (acc >= DT && k < 8) { physStep(); acc -= DT; k++; }
+    if (k === 8) acc = 0;
+    syncMeshesFromBodies(true);
+  } else if (screen === "game") { acc = 0; if (!isMine() || phase === "over") lerpMeshes(); }
+  updateCamera(); updateXray();
+  if (screen === "game") { updateAvatars(); sendLook(now); }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+buildTower(1);
+screen = "menu"; renderUI();
+// アプリとして入れたときに使うサービスワーカー（ミニゲーム集で 1 つ。1 つ上のフォルダにある）
+try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
+requestAnimationFrame(frame);
+// 動作確認用（コンソールから __jenga.tap(10) / __jenga.pull(3.2) など）
+window.__jenga = {
+  get phase() { return phase; }, get sel() { return sel; }, get drag() { return drag; }, get gesture() { return gesture; }, pick,
+  shown: i => [...tgtPos[i].toArray(), viewSel], get moves() { return moves; }, bodies: () => bodies, canPick,
+  snap: snapshot, load: d => { applySnapshot(d); beginMyTurn(); }, build: s => { buildTower(s); beginMyTurn(); },
+  set: o => { if (o.JITTER != null) JITTER = o.JITTER; if (o.HVAR != null) HVAR = o.HVAR; if (o.FRICTION != null) FRICTION = o.FRICTION; },
+  tap: tapBlock, drop: dropHeld, moveSlot, rot: v => { rotHold = v; }, step: n => { for (let i = 0; i < n && ACTIVE.includes(phase); i++) physStep(); syncMeshesFromBodies(true); },
+  get place() { return place; }, get cam() { return cam; }, avatars: () => avatars, get diff() { return diff; },
+  render: n => { for (let i = 0; i < (n || 1); i++) { if (!isMine()) lerpMeshes(); updateCamera(); updateXray(); updateAvatars(); } renderer.render(scene, camera); },
+  raw: n => { for (let i = 0; i < n; i++) world.step(); syncMeshesFromBodies(true); },
+  pull: t => { if (sel >= 0) drag = { axis: axisOf(sel), off0: 0, target: t, ty: null, A: { x: 50, y: 0 }, U: { x: 0, y: -50 }, det: 0, sx: 0, sy: 0 }; },
+};
+</script>
+</body>
+</html>
