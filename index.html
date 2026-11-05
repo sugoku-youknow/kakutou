@@ -12,6 +12,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>you know games</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 // 招待リンクの読みかえ。前からの「?zone=」（シールドファイト）と「?room=」（ジェンガ）は、そのゲームのページへそのまま送る
 (function () {
@@ -40,6 +41,24 @@
   .tags span { font-size:11px; padding:2px 8px; border-radius:99px; background:#2a3142; color:var(--sub); }
   .go { margin-left:auto; color:var(--sub); font-size:22px; }
   .foot { margin-top:28px; font-size:12px; color:var(--sub); line-height:1.6; }
+  .party { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:18px; }
+  .party h2 { margin:0 0 4px; font-size:15px; color:var(--sub); font-weight:700; }
+  .party input { width:100%; font:inherit; font-size:17px; padding:11px 12px; border-radius:10px; border:1px solid var(--line); background:#0f141f; color:var(--text); }
+  .party .row { display:flex; gap:8px; margin-top:8px; }
+  .party .row > * { flex:1; }
+  .party button { font:inherit; font-weight:700; font-size:16px; border:0; border-radius:12px; padding:12px 8px; background:#2a3142; color:var(--text); cursor:pointer; }
+  .party button.main { background:var(--accent); color:#2a1a05; }
+  .party button.blue { background:#5aa9f0; color:#06192b; }
+  .party .code { font-size:44px; font-weight:900; color:var(--accent); line-height:1; }
+  .party .members { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .party .members span { font-size:13px; padding:4px 10px; border-radius:99px; background:#0f141f; }
+  .party .members span.me { outline:1px solid var(--accent); }
+  .party .note { font-size:13px; color:var(--sub); margin-top:8px; line-height:1.5; }
+  .party .err { color:#f06a5a; font-size:13px; margin-top:8px; }
+  .party .small { font-size:13px; padding:8px; margin-top:10px; width:100%; }
+  a.game.locked { opacity:.55; }
+  a.game .solo { font-size:11px; color:#f0b25a; }
+  .toast { position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 24px); transform:translateX(-50%); background:rgba(10,12,18,.94); border:1px solid var(--line); padding:10px 16px; border-radius:12px; font-size:14px; }
   button.install { margin-top:20px; width:100%; padding:14px; border:0; border-radius:12px; font:inherit; font-weight:700; font-size:16px; background:var(--accent); color:#2a1a05; }
 </style>
 </head>
@@ -47,15 +66,16 @@
 <main>
   <h1>you know <span>games</span></h1>
   <p class="lead">友だちとあそべるミニゲーム集</p>
+  <section class="party" id="party"></section>
   <div class="games">
-    <a class="game" href="shieldfight/">
+    <a class="game" href="shieldfight/" data-party="1">
       <div class="icon"><img src="icon-192.png" alt=""></div>
       <div><div class="name">シールドファイト</div>
         <div class="desc">盾が外れた隙を突いて、相手をステージから落とす対戦ゲーム</div>
         <div class="tags"><span>1〜4人</span><span>オンライン</span><span>CPU戦</span></div></div>
       <div class="go">›</div>
     </a>
-    <a class="game" href="jenga/">
+    <a class="game" href="jenga/" data-party="1">
       <div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
         <rect width="72" height="72" fill="#1b2a3f"/>
         <g stroke="#7a5230" stroke-width="1.2">
@@ -97,6 +117,138 @@ addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = 
 document.getElementById("install").onclick = () => { if (!installEvt) return; installEvt.prompt(); document.getElementById("install").hidden = true; installEvt = null; };
 if (/iPhone|iPad/.test(navigator.userAgent) && !standalone)
   document.getElementById("foot").textContent = "アプリのように使うには: 共有ボタン（□↑）→「ホーム画面に追加」";
+// ================= パーティ =================
+// 最初に 1 回だけ、ホストが部屋を作り、ゲストが 1 桁の番号で入る。そのあとはホストがゲームを選ぶと、
+// みんなの画面も同じゲームへ移って自動で部屋に入る（番号を入れ直さない）。ゲームから戻ってきても、パーティはそのまま。
+// 状態は sessionStorage の ykg-party（{ role: "host" | "guest", code, name }）に置き、ゲームのページもこれを読む。
+const PP = "ykg-party-";   // PeerJS の ID の頭（ゲームのページとは別の ID を使う）
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+const partyStore = {
+  get() { try { return JSON.parse(sessionStorage.getItem("ykg-party") || "null"); } catch (e) { return null; } },
+  set(v) { try { if (v) sessionStorage.setItem("ykg-party", JSON.stringify(v)); else sessionStorage.removeItem("ykg-party"); } catch (e) {} },
+};
+let party = partyStore.get();
+let peer = null, hostConn = null, members = [], status = "", errMsg = "", tries = 0;
+const guests = new Map();   // ホスト: 相手の PeerJS の ID → { conn, name }
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const myName = () => ((document.getElementById("pname")?.value ?? store.get("ykg-name")) || "").trim().slice(0, 12) || "ゲスト";
+
+function render() {
+  const el = document.getElementById("party");
+  if (!party) {
+    el.innerHTML = `<h2>みんなで遊ぶ</h2>
+      <input id="pname" maxlength="12" placeholder="なまえ" value="${esc(store.get("ykg-name") || "")}">
+      <div class="row"><button class="main" data-p="host">ホスト（部屋を作る）</button></div>
+      <div class="row"><input id="pcode" inputmode="numeric" maxlength="1" placeholder="番号" value="${esc(store.get("ykg-last") || "")}"><button class="blue" data-p="join">ゲストで入る</button></div>
+      <div class="note">ゲストは最初に 1 回だけ、ホストの番号（1けた）を入れます。あとはホストがゲームを選ぶと、みんな一緒にそのゲームへ移ります。ひとりで遊ぶときは、下のゲームをそのまま選んでください。</div>
+      ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}`;
+    const n = document.getElementById("pname"); n.oninput = () => store.set("ykg-name", n.value);
+  } else {
+    const host = party.role === "host";
+    el.innerHTML = `<h2>${host ? "あなたがホスト" : "パーティに参加中"}</h2>
+      <div style="display:flex;align-items:flex-end;gap:12px"><div class="code">${esc(party.code)}</div>
+        <div class="note" style="margin:0">${host ? "この番号をゲストに伝えてください" : status === "joined" ? "ホストがゲームを選ぶのを待っています" : "ホストを探しています…"}</div></div>
+      <div class="members">${members.map(m => `<span class="${m.me ? "me" : ""}">${esc(m.name)}${m.host ? "（ホスト）" : ""}</span>`).join("")}</div>
+      <div class="note">${host ? "下のゲームを選ぶと、みんなも一緒に移ります。" : "ゲームはホストが選びます。"}</div>
+      ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}
+      <button class="small" data-p="leave">${host ? "パーティを解散" : "パーティをぬける"}</button>`;
+  }
+  for (const a of document.querySelectorAll("a.game")) a.classList.toggle("locked", !!party && party.role === "guest");
+}
+function toast(t) {
+  const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d);
+  setTimeout(() => d.remove(), 2200);
+}
+
+// ホスト: 部屋を作る（ゲームから戻ってきたときは同じ番号で作り直す。前の接続が残っていると少し待つ）
+function hostParty(code, again) {
+  const name = party ? party.name : myName();
+  code = code ?? String(Math.floor(Math.random() * 10));
+  peer = new Peer(PP + code);
+  peer.on("open", () => {
+    tries = 0; errMsg = "";
+    party = { role: "host", code, name }; partyStore.set(party);
+    sendMembers();
+  });
+  peer.on("error", e => {
+    if (e.type === "unavailable-id" && ++tries < 25) {
+      try { peer.destroy(); } catch (x) {}
+      if (again) setTimeout(() => hostParty(code, true), 1000);   // 戻ってきたとき: 同じ番号が空くのを待つ
+      else hostParty(null, false);                                // 新しく作るとき: ほかの番号を試す
+      return;
+    }
+    errMsg = e.type === "unavailable-id" ? "空いている番号がありません。少し待ってからやり直してください" : "接続エラー: " + e.type; render();
+  });
+  peer.on("connection", conn => {
+    conn.on("data", m => { if (m && m.t === "hi") { guests.set(conn.peer, { conn, name: String(m.name || "ゲスト").slice(0, 12) }); sendMembers(); } });
+    conn.on("close", () => { if (guests.get(conn.peer)?.conn === conn) { guests.delete(conn.peer); sendMembers(); } });
+  });
+}
+function sendMembers() {
+  const list = [{ name: party.name, host: true }, ...[...guests.values()].map(g => ({ name: g.name }))];
+  for (const g of guests.values()) { try { g.conn.send({ t: "members", list }); } catch (e) {} }
+  members = list.map((m, i) => ({ ...m, me: i === 0 }));
+  render();
+}
+
+// ゲスト: 番号で入る。ホストが見つからないあいだ（ホストがゲームから戻る途中など）は、少しずつ探し続ける
+function joinParty(code) {
+  party = { role: "guest", code, name: party ? party.name : myName() }; partyStore.set(party);
+  store.set("ykg-last", code);
+  status = "looking"; render();
+  peer = new Peer();
+  peer.on("open", connectHost);
+  peer.on("error", e => {
+    if (e.type === "peer-unavailable") { status = "looking"; render(); setTimeout(connectHost, 1500); return; }
+    errMsg = "接続エラー: " + e.type; render();
+  });
+}
+function connectHost() {
+  if (!party || party.role !== "guest" || !peer || peer.destroyed) return;
+  const c = hostConn = peer.connect(PP + party.code, { reliable: true });
+  c.on("open", () => { status = "joined"; errMsg = ""; c.send({ t: "hi", name: party.name }); render(); });
+  c.on("data", m => {
+    if (!m) return;
+    if (m.t === "members") { members = m.list.map(x => ({ ...x, me: !x.host && x.name === party.name })); render(); }
+    else if (m.t === "go") location.href = m.game + "?party=1";   // ホストがゲームを選んだ
+  });
+  c.on("close", () => { if (hostConn !== c || !party) return; status = "looking"; members = []; render(); setTimeout(connectHost, 1500); });
+}
+function leaveParty() {
+  party = null; partyStore.set(null); members = []; status = ""; errMsg = ""; guests.clear();
+  try { peer?.destroy(); } catch (e) {} peer = null; hostConn = null;
+  render();
+}
+
+document.getElementById("party").addEventListener("click", e => {
+  const a = e.target.closest("[data-p]")?.dataset.p; if (!a) return;
+  if (a === "host") { store.set("ykg-name", myName()); errMsg = ""; tries = 0; party = null; const n = myName(); hostParty(null, false); party = { role: "host", code: "…", name: n }; members = [{ name: n, host: true, me: true }]; render(); }
+  else if (a === "join") {
+    const c = (document.getElementById("pcode").value || "").replace(/\D/g, "");
+    if (c.length !== 1) { errMsg = "番号は 1けたです"; render(); return; }
+    store.set("ykg-name", myName()); errMsg = ""; joinParty(c);
+  }
+  else if (a === "leave") leaveParty();
+});
+// ゲームを選んだとき: パーティのホストなら、みんなにも同じゲームへ移ってもらう
+document.querySelector(".games").addEventListener("click", e => {
+  const a = e.target.closest("a.game"); if (!a || !party) return;
+  e.preventDefault();
+  if (party.role === "guest") { toast("ゲームはホストが選びます"); return; }
+  if (party.code === "…") return;
+  const game = a.getAttribute("href");
+  if (!a.dataset.party) toast("このゲームはまだパーティの自動参加に対応していません（ゲームの中で番号を入れてください）");
+  for (const g of guests.values()) { try { g.conn.send({ t: "go", game }); } catch (x) {} }
+  setTimeout(() => { location.href = game + (a.dataset.party ? "?party=1" : ""); }, a.dataset.party ? 400 : 1500);
+});
+
+if (party && party.role === "host") hostParty(party.code, true);
+else if (party && party.role === "guest") joinParty(party.code);
+render();
+
 try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) {}
 </script>
 </body>

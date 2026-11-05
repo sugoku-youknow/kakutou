@@ -87,6 +87,13 @@ let JITTER = 0.08;                 // 最初に積むときのずれ（長さ方
 const FALL_DROP = 0.75 * BH;       // ターン開始時からこれ以上下がったブロックがあれば「崩れた」
 const SNAP_MS = 80;                // 動きを送る間隔
 const PREFIX = "jenga-online-room-";
+// パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
+// ホストはパーティの番号（1けた）で部屋を作り、ゲストはその部屋が開くまで探し続ける。ホストがいなくなったら、ゲストもゲーム一覧へ戻る。
+const PARTY = (() => {
+  try { if (!new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
+})();
+const netId = code => (PARTY ? "jenga-party-" : PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
+let partyTries = 0;
 const MAX_PLAYERS = 4;
 // 倒れやすさ（難易度）4段階。部屋ごとにホストが決め、開始のときに全員へ送る。4 が一番倒れやすい
 const DIFFS = {
@@ -660,10 +667,11 @@ const randCode = () => String(Math.floor(1000 + Math.random() * 9000));
 let hostTries = 0;
 function startHost() {
   mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; renderUI();
-  const code = randCode();
-  peer = new Peer(PREFIX + code);
+  const code = PARTY ? PARTY.code : randCode();
+  peer = new Peer(netId(code));
   peer.on("open", () => { host.code = code; screen = "lobby"; hostLobby(); renderUI(); });
   peer.on("error", e => {
+    if (PARTY && e.type === "unavailable-id" && ++hostTries < 30) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている: 空くのを待つ
     if (e.type === "unavailable-id" && ++hostTries < 20) { peer.destroy(); startHost(); return; }
     if (screen === "game") { toast("通信エラー: " + e.type); return; }
     errMsg = "接続エラー: " + e.type; screen = "menu"; cleanupNet(); renderUI();
@@ -683,16 +691,21 @@ function startHost() {
 }
 function joinRoom(code) {
   code = String(code).replace(/\D/g, "");
-  if (code.length !== 4) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
+  if (code.length !== 4 && !PARTY) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
   mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; renderUI();
   peer = new Peer();
   peer.on("open", () => {
-    hostConn = peer.connect(PREFIX + code, { reliable: true });
+    hostConn = peer.connect(netId(code), { reliable: true });
     hostConn.on("open", () => hostConn.send({ t: "hello", name: myName() }));
     hostConn.on("data", onMsg);
-    hostConn.on("close", () => { if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; cleanupNet(); renderUI(); } });
+    hostConn.on("close", () => {
+      if (PARTY) { location.href = "../"; return; }   // パーティ: ホストがいなくなったらゲーム一覧へ
+      if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; cleanupNet(); renderUI(); }
+    });
   });
   peer.on("error", e => {
+    // パーティ: ホストの部屋がまだ開いていない。少し待って探し直す
+    if (PARTY && e.type === "peer-unavailable" && ++partyTries < 40) { cleanupNet(); setTimeout(() => joinRoom(code), 1500); return; }
     errMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（番号ちがい、またはホストが閉じました）" : "接続エラー: " + e.type;
     screen = "menu"; cleanupNet(); renderUI();
   });
@@ -741,7 +754,7 @@ function renderUI() {
   } else if (screen === "lobby") {
     h = `<div class="screen"><div class="card">
       <p class="lead" style="margin:0">部屋番号</p><div class="code">${esc(host.code || "")}</div>
-      <button class="blue" data-a="share">招待リンクを送る</button>
+      ${PARTY ? "" : `<button class="blue" data-a="share">招待リンクを送る</button>`}
       <ul class="players">${lobby.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（あなた）" : ""}</span><span style="color:var(--sub)">${p.id === 0 ? "ホスト" : ""}</span></li>`).join("")}</ul>
       <label>倒れやすさ${mode === "host" ? "" : "（ホストが決めます）"}</label>${diffSeg(mode === "host")}
       ${mode === "host" ? `<button class="main" data-a="start" ${lobby.length < 2 ? "disabled" : ""}>${lobby.length < 2 ? "参加者を待っています…" : `${lobby.length}人で始める`}</button>`
@@ -811,7 +824,7 @@ ui.addEventListener("click", e => {
 ui.addEventListener("pointerdown", e => { const b = e.target.closest("[data-r]"); if (b) { rotHold = +b.dataset.r; e.preventDefault(); } });
 for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { rotHold = 0; });
 ui.addEventListener("contextmenu", e => { if (e.target.closest("[data-r]")) e.preventDefault(); });   // 長押しでメニューが出ないように
-function backToMenu() { cleanupNet(); clearAvatars(); mode = null; screen = "menu"; phase = "idle"; errMsg = ""; renderUI(); }
+function backToMenu() { if (PARTY) { location.href = "../"; return; } cleanupNet(); clearAvatars(); mode = null; screen = "menu"; phase = "idle"; errMsg = ""; renderUI(); }
 
 // ================= ほかのプレイヤー（オンラインのとき）=================
 // テーブルのまわりに、ほかの人の姿と名前を出す。立つ場所は、その人が見ている向き（カメラの向き）。
@@ -951,6 +964,8 @@ function frame(now) {
 }
 buildTower(1);
 screen = "menu"; renderUI();
+// パーティから開いたときは、メニューを飛ばして自動で部屋を作る・入る
+if (PARTY) { meName = String(PARTY.name || "").slice(0, 12); if (PARTY.role === "host") startHost(); else joinRoom(PARTY.code); }
 // アプリとして入れたときに使うサービスワーカー（ミニゲーム集で 1 つ。1 つ上のフォルダにある）
 try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
 requestAnimationFrame(frame);

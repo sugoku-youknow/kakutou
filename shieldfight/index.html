@@ -3218,11 +3218,19 @@ function startSolo(keepTraining) {
 // ---------- ネットワーク ----------
 function randCode() { return String(Math.floor(Math.random() * 10)); }
 const PREFIX = "shieldfight-zone-";
+// パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
+// ホストはパーティの番号で部屋を作り、ゲストはその部屋が開くまで探し続ける。ホストがいなくなったら、ゲストもゲーム一覧へ戻る。
+const PARTY = (() => {
+  try { if (!new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
+})();
+const netId = code => (PARTY ? "shieldfight-party-" : PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
+let partyTries = 0;
 
 let hostTries = 0;
 // タイトルへ戻る: ページを読み込み直さずに、部屋の接続を切り、試合の状態を最初に戻す（読み込み直すと全画面が解除されるため）
 let sessionId = 0;
 function goTitle() {
+  if (PARTY) { location.href = "../"; return; }   // パーティのときは、ゲーム一覧（パーティの画面）へ戻る
   sessionId++;
   for (const u of uchs) { try { if (u) u.close(); } catch (e) {} }
   try { if (uch) uch.close(); } catch (e) {}
@@ -3243,8 +3251,8 @@ function goTitle() {
 }
 function startHost() {
   role = "host"; net = "connecting"; netMsg = ""; renderUI();
-  roomCode = randCode();
-  peer = new Peer(PREFIX + roomCode);
+  roomCode = PARTY ? PARTY.code : randCode();
+  peer = new Peer(netId(roomCode));
   peer.on("open", () => {
     net = "ready"; myId = 0; game.wr = winRounds;
     const me = game.p[0] = newPlayer(); me.own = 0; spawn(me, 0, 1); me.al = true;
@@ -3252,6 +3260,7 @@ function startHost() {
     renderUI();
   });
   peer.on("error", e => {
+    if (PARTY && e.type === "unavailable-id" && ++hostTries < 30) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている: 空くのを待つ
     if (e.type === "unavailable-id" && net === "connecting" && ++hostTries < 30) { peer.destroy(); startHost(); return; }
     if (e.type === "unavailable-id") { net = "error"; netMsg = "空いている部屋番号がありません。しばらくしてからやり直してください"; renderUI(); return; }
     net = "error"; netMsg = "接続エラー: " + e.type; renderUI();
@@ -3318,7 +3327,7 @@ function startClient(code) {
   const sid = sessionId;
   peer = new Peer();
   peer.on("open", () => {
-    hostConn = peer.connect(PREFIX + code, { reliable: true });
+    hostConn = peer.connect(netId(code), { reliable: true });
     hostConn.on("data", d => {
       if (!d) return;
       if (d.t === "hello") {
@@ -3334,15 +3343,19 @@ function startClient(code) {
       else if (d.t === "s") applySnapshot(d);
       else if (d.t === "pause") { hostPause = !!d.v; if (d.v) pauseQ = d.q | 0; }   // ホストが画面を離れた / 戻った
     });
-    hostConn.on("close", () => { net = "error"; netMsg = "ホストとの接続が切れました"; renderUI(); });
-    setTimeout(() => { if (sid === sessionId && net === "connecting") { net = "error"; netMsg = "部屋が見つかりません（番号を確認してください）"; renderUI(); } }, 10000);
+    hostConn.on("close", () => { if (PARTY && net === "ready") { location.href = "../"; return; } net = "error"; netMsg = "ホストとの接続が切れました"; renderUI(); });
+    if (!PARTY) setTimeout(() => { if (sid === sessionId && net === "connecting") { net = "error"; netMsg = "部屋が見つかりません（番号を確認してください）"; renderUI(); } }, 10000);
   });
-  peer.on("error", e => { net = "error"; netMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（ホストが閉じたか、番号が違います）" : "接続エラー: " + e.type; renderUI(); });
+  peer.on("error", e => {
+    // パーティ: ホストの部屋がまだ開いていない。少し待って探し直す
+    if (PARTY && e.type === "peer-unavailable" && ++partyTries < 40) { setTimeout(() => { if (sid !== sessionId) return; try { peer.destroy(); } catch (x) {} peer = null; startClient(code); }, 1500); return; }
+    net = "error"; netMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（ホストが閉じたか、番号が違います）" : "接続エラー: " + e.type; renderUI();
+  });
 }
 // 参加者側: 速い通り道を開く（開けなくても、ふつうの接続のまま遊べる）
 function openFast(code, sid) {
   if (fastConn || !peer) return;
-  try { fastConn = peer.connect(PREFIX + code, { reliable: false, serialization: "raw", metadata: { f: 1 } }); } catch (e) { fastConn = null; return; }
+  try { fastConn = peer.connect(netId(code), { reliable: false, serialization: "raw", metadata: { f: 1 } }); } catch (e) { fastConn = null; return; }
   const fc = fastConn;
   fc.on("open", () => { if (sid === sessionId) { sentKeys = -1; pushKeys(); } });
   fc.on("data", s => {
@@ -4367,7 +4380,7 @@ const Sfx = (() => {
 // タイトルへ戻るボタン: 2 回押すと戻る（押し間違い防止）。オンラインでは部屋から抜ける（ホストなら部屋が消える）
 const homeBtn = document.getElementById("home"), HOME_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>';
 let homeT = 0;
-const paintHome = ask => { homeBtn.classList.toggle("ask", ask); homeBtn.innerHTML = ask ? (role === "host" && !solo ? "もう一度押すと部屋を閉じてタイトルへ" : "もう一度押すとタイトルへ") : HOME_ICON; };
+const paintHome = ask => { homeBtn.classList.toggle("ask", ask); homeBtn.innerHTML = ask ? (PARTY ? (role === "host" ? "もう一度押すとみんなでゲーム一覧へ" : "もう一度押すとゲーム一覧へ") : role === "host" && !solo ? "もう一度押すと部屋を閉じてタイトルへ" : "もう一度押すとタイトルへ") : HOME_ICON; };
 paintHome(false);
 homeBtn.onclick = () => {
   homeBtn.blur();
@@ -4457,6 +4470,8 @@ rotBtn.onclick = () => {
 paintFs();
 // アプリとしてのインストール: サービスワーカー（sw.js）を登録する（Chrome がインストールできると判断するのに必要）。https か localhost のときだけ
 try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
+// パーティから開いたときは、タイトル画面を飛ばして自動で部屋を作る・入る
+if (PARTY) { if (PARTY.role === "host") startHost(); else startClient(PARTY.code); }
 // Chrome がインストールできると判断したら、タイトル画面に「アプリとして入れる」ボタンを出す（押すと Chrome の確認が出る）
 let installEvt = null;
 addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; if (uiKey === "title") { uiKey = ""; renderUI(); } });
