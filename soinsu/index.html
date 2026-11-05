@@ -22,52 +22,57 @@ input{font:inherit}
 .hidden{display:none!important}
 
 /* ---- HUD ---- */
-#hud{position:fixed;inset:0;pointer-events:none}
+#hud{position:fixed;inset:0;pointer-events:none;touch-action:none}
 .lay{position:absolute;left:0;top:0;transform-origin:center center;width:max-content;white-space:nowrap}
-#me{background:rgba(10,15,30,.72);border-radius:12px;padding:6px 12px;min-width:130px}
+#me{background:rgba(10,15,30,.72);border-radius:12px;padding:6px 14px}
 #me .lab{font-size:11px;opacity:.7}
 #me .num{font-size:30px;font-weight:800;letter-spacing:1px;line-height:1.1}
-.bar{height:6px;background:#2a3142;border-radius:3px;overflow:hidden;margin-top:4px}
-.bar i{display:block;height:100%;background:#5ad16a;transition:width .3s}
-#me .sub{font-size:11px;opacity:.8;margin-top:3px}
 #quit{pointer-events:auto;background:rgba(10,15,30,.72);border:1px solid #556;border-radius:8px;padding:4px 12px;font-size:13px}
-#alive{font-size:12px;background:rgba(10,15,30,.72);border-radius:8px;padding:3px 8px;white-space:nowrap}
+#alive{font-size:12px;background:rgba(10,15,30,.72);border-radius:8px;padding:3px 8px}
 #feed{width:min(300px,40vw);display:flex;flex-direction:column;align-items:flex-start;white-space:normal}
-#feed div{background:rgba(10,15,30,.7);font-size:12px;padding:3px 8px;border-radius:8px;margin-top:3px;text-align:left;transition:opacity .6s}
-#cross{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(255,255,255,.6)}
-#banner{position:absolute;left:50%;top:22%;transform:translateX(-50%);background:rgba(10,15,30,.75);padding:6px 16px;border-radius:12px;font-weight:700;font-size:15px;white-space:nowrap}
-#toast{position:absolute;left:50%;top:34%;transform:translateX(-50%);background:rgba(0,0,0,.8);padding:8px 16px;border-radius:12px;font-size:14px;transition:opacity .3s;opacity:0;white-space:nowrap}
+#feed div{background:rgba(10,15,30,.65);font-size:12px;padding:3px 8px;border-radius:8px;margin-top:3px;transition:opacity .6s}
+#target{pointer-events:auto;width:84px;height:84px;border-radius:50%;border:3px solid rgba(255,212,0,.85);background:rgba(10,15,30,.45);font-weight:800;font-size:13px;line-height:1.2;touch-action:none}
+#target b{display:block;font-size:26px}
+#target:active{background:rgba(255,212,0,.35)}
+#cross{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(255,255,255,.7)}
+#banner{position:absolute;left:50%;top:20%;transform:translateX(-50%);background:rgba(10,15,30,.75);padding:6px 16px;border-radius:12px;font-weight:700;font-size:15px;white-space:nowrap}
+#toast{position:absolute;left:50%;top:32%;transform:translateX(-50%);background:rgba(0,0,0,.8);padding:8px 16px;border-radius:12px;font-size:14px;transition:opacity .3s;opacity:0;white-space:nowrap}
 #flash{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(255,0,0,0) 40%,rgba(255,0,0,.55));opacity:0;transition:opacity .5s}
 #fx{position:absolute;inset:0;overflow:hidden}
 #fx div{position:absolute;transform:translate(-50%,-50%);font-weight:900;font-size:22px;text-shadow:0 2px 4px #000;white-space:nowrap}
 #stick{width:120px;height:120px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08)}
 #knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
-#hud.editing .lay{pointer-events:auto;outline:2px dashed rgba(255,212,0,.7);outline-offset:3px;cursor:move}
+
+/* ---- 入力パッド（素数を選ぶ・半透明） ---- */
+#pad{width:312px;background:rgba(10,15,30,.28);border:2px solid rgba(255,212,0,.55);border-radius:14px;padding:6px;pointer-events:none}
+#padhead{display:flex;align-items:center;gap:8px;padding:0 4px 4px;text-shadow:0 1px 3px #000}
+#ptname{font-size:13px;font-weight:700;color:#ffd400;flex:none}
+#pdisp{flex:1;text-align:right;font-size:20px;font-weight:800;min-height:26px;letter-spacing:1px;overflow:hidden;text-overflow:ellipsis}
+#pdisp:empty::before{content:"素数をえらんで打ち込む";font-size:12px;font-weight:400;opacity:.6}
+.keys{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.keys button{pointer-events:auto;height:38px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(42,51,72,.45);font-size:18px;font-weight:800;touch-action:manipulation;text-shadow:0 1px 3px #000}
+.keys button:active{background:rgba(110,130,170,.7)}
+.keys .op{background:rgba(70,55,100,.5)}
+.keys .send{grid-column:span 4;background:rgba(194,59,59,.65)}
+.keys .send.cool{opacity:.45}
+.keys .close{font-size:13px}
+
+/* ---- ボタン配置の編集 ---- */
+#hud.editing .lay{pointer-events:auto;outline:2px dashed rgba(255,212,0,.75);outline-offset:3px}
 #hud.editing .lay.sel{outline:3px solid #ffd400}
 #hud.editing .lay *{pointer-events:none}
+#hud.editing .lay::after{content:attr(data-name);position:absolute;left:50%;top:-22px;transform:translateX(-50%);font-size:11px;font-weight:700;background:#ffd400;color:#111;padding:1px 7px;border-radius:7px;white-space:nowrap}
+#screen.toolbar{inset:auto;left:50%;top:6px;transform:translateX(-50%);background:none;padding:0;overflow:visible;transition:opacity .15s}
+#screen.toolbar.bottom{top:auto;bottom:6px}
+#screen.toolbar.dragging{opacity:.12;pointer-events:none}
+#screen.toolbar .card{width:auto;padding:6px 10px;background:rgba(22,30,51,.94);display:flex;align-items:center;gap:8px;white-space:nowrap}
+#screen.toolbar .card .btn{width:auto;margin:0;padding:8px 10px;font-size:13px}
+#screen.toolbar .lbl{font-size:13px;font-weight:700;color:#ffd400;min-width:5em}
+#screen.toolbar input[type=range]{width:min(160px,22vw);accent-color:#ffd400}
+#screen.toolbar .pct{font-size:12px;width:3.2em}
 #rotate{position:fixed;inset:0;z-index:50;background:#0d1320;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:18px;font-weight:700;text-align:center;padding:20px}
 #rotate .ico{font-size:56px;animation:rot 2s infinite}
 @keyframes rot{0%,30%{transform:rotate(0)}60%,100%{transform:rotate(90deg)}}
-#screen.toolbar{inset:auto;left:50%;top:8px;transform:translateX(-50%);background:none;padding:0;overflow:visible}
-#screen.toolbar.bottom{top:auto;bottom:8px}
-#screen.toolbar .card{width:auto;padding:6px 8px;background:rgba(22,30,51,.92);display:flex;align-items:center;gap:6px;white-space:nowrap}
-#screen.toolbar .card .btn{width:auto;margin:0;padding:7px 10px;font-size:13px}
-#screen.toolbar .card .lbl{font-size:12px;font-weight:700;padding:0 4px}
-
-/* ---- 入力パッド ---- */
-#pad{width:280px;background:rgba(10,15,30,.85);border:2px solid #ffd400;border-radius:14px;padding:6px;pointer-events:auto}
-#padhead{display:flex;align-items:baseline;gap:6px;font-size:12px;padding:0 4px}
-#padhead b{font-size:20px;color:#ffd400}
-#ptrange{margin-left:auto;font-size:11px}
-#pdisp{background:#000;border-radius:8px;margin:4px 0;padding:4px 8px;font-size:22px;font-weight:700;min-height:36px;letter-spacing:1px;word-break:break-all}
-#pdisp:empty::before{content:"例: 2×3";opacity:.3;font-weight:400}
-.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
-.keys button{height:36px;border:none;border-radius:8px;background:#2a3348;font-size:20px;font-weight:700;touch-action:manipulation}
-.keys button:active{background:#46536f}
-.keys .op{background:#3a2f55}
-.keys .send{grid-column:span 3;background:#c23b3b}
-.keys .send.cool{background:#5a3a3a;opacity:.6}
-.keys .close{background:#333;font-size:14px}
 
 /* ---- 画面 ---- */
 #screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(6,10,20,.82);overflow:auto;padding:16px}
@@ -104,22 +109,17 @@ table.res td:last-child{text-align:right}
   <div id="fx"></div>
   <div id="flash"></div>
   <div id="cross"></div>
-  <div id="me" class="lay" data-lay="me"><div class="lab">自分の数字</div><div class="num" id="mynum">-</div><div class="bar"><i id="mybar"></i></div><div class="sub" id="mysub"></div></div>
-  <button id="quit" class="lay" data-lay="quit">退出</button>
-  <div id="alive" class="lay" data-lay="alive"></div>
-  <div id="feed" class="lay" data-lay="feed"></div>
+  <div id="me" class="lay" data-lay="me" data-name="自分の数字"><div class="lab">自分の数字</div><div class="num" id="mynum">-</div></div>
+  <button id="quit" class="lay" data-lay="quit" data-name="退出">退出</button>
+  <div id="alive" class="lay" data-lay="alive" data-name="のこり人数"></div>
+  <div id="feed" class="lay" data-lay="feed" data-name="ログ"></div>
   <div id="banner" class="hidden"></div>
   <div id="toast"></div>
-  <div id="stick" class="lay" data-lay="stick"><div id="knob"></div></div>
-  <div id="pad" class="lay hidden" data-lay="pad">
-    <div id="padhead"><span id="ptname"></span><span id="ptrange"></span></div>
-    <div id="pdisp"></div>
-    <div class="keys">
-      <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button data-k="bs" class="op">⌫</button>
-      <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button data-k="x" class="op">×</button>
-      <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button data-k="0">0</button>
-      <button data-k="close" class="close">閉じる</button><button data-k="send" class="send" id="sendbtn">打ち込む</button>
-    </div>
+  <div id="stick" class="lay" data-lay="stick" data-name="スティック"><div id="knob"></div></div>
+  <button id="target" class="lay" data-lay="target" data-name="相手をえらぶ"><b>🎯</b>相手</button>
+  <div id="pad" class="lay hidden" data-lay="pad" data-name="入力パッド">
+    <div id="padhead"><span id="ptname"></span><span id="pdisp"></span></div>
+    <div class="keys" id="keys"></div>
   </div>
 </div>
 <div id="screen"></div>
@@ -134,21 +134,15 @@ import * as THREE from "three";
 const PREFIX = "soinsu-battle-v1-";
 const MAX_PLAYERS = 8;
 const ARENA = 30;        // 半径（フィールドは 60×60）
-const RANGE = 14;        // 打ち込める距離
 const SPEED = 6;
 const RADIUS = 0.5;
 const EYE = 1.6;
+const STEP = 0.55;       // これ以下の段差は登れる
+const GRAV = 22;
 const COOLDOWN = 1.0;    // 打ち込み後に待つ秒数
+const BOT_RANGE = 16;    // CPU が打ち込みに行く距離（プレイヤーには射程なし）
+const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
 const COLORS = [0xff5a5a, 0x4aa3ff, 0x5ad16a, 0xffc23a, 0xc77dff, 0xff8fc8, 0x3ad6d0, 0xff8a3a];
-const OBST = [
-  { x: 0, z: 0, w: 4, d: 4, h: 3 },
-  { x: -12, z: -8, w: 6, d: 2, h: 2.2 }, { x: 12, z: 8, w: 6, d: 2, h: 2.2 },
-  { x: -10, z: 12, w: 2, d: 6, h: 2.5 }, { x: 10, z: -12, w: 2, d: 6, h: 2.5 },
-  { x: -20, z: -20, w: 3, d: 3, h: 3 }, { x: 20, z: 20, w: 3, d: 3, h: 3 },
-  { x: 20, z: -20, w: 3, d: 3, h: 3 }, { x: -20, z: 20, w: 3, d: 3, h: 3 },
-  { x: 0, z: -20, w: 8, d: 1.5, h: 1.6 }, { x: 0, z: 20, w: 8, d: 1.5, h: 1.6 },
-  { x: -22, z: 0, w: 1.5, d: 8, h: 1.6 }, { x: 22, z: 0, w: 1.5, d: 8, h: 1.6 },
-];
 
 // ================= 数学 =================
 const isPrime = n => { if (!Number.isInteger(n) || n < 2) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; };
@@ -165,14 +159,77 @@ function genFactors() {
     if (p >= 100 && p <= 20000) return f.sort((a, b) => a - b);
   }
 }
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+
+// ================= ステージ（毎回ランダム。シードから全員同じ形を作る） =================
+const CELL = 6, NC = 10;
+function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function genStage(seed) {
+  const R = mulberry(seed), ri = n => Math.floor(R() * n), S = [];
+  const used = [...Array(NC)].map(() => Array(NC).fill(false));
+  const cc = i => -ARENA + CELL * i + CELL / 2;
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // 坂つきの台（高台）
+  const want = 5 + ri(3); let plats = 0, tries = 0;
+  while (plats < want && tries++ < 300) {
+    const i = ri(NC), j = ri(NC); if (used[i][j]) continue;
+    const ds = DIRS.filter(([di, dj]) => { const a = i + di, b = j + dj; return a >= 0 && b >= 0 && a < NC && b < NC && !used[a][b]; });
+    if (!ds.length) continue;
+    const [di, dj] = ds[ri(ds.length)];
+    const h = 1.5 + ri(6) * 0.5, half = CELL / 2 - 0.3, x = cc(i), z = cc(j), L = CELL - 0.6, rw = 3;
+    S.push({ x, z, w: half * 2, d: half * 2, h, kind: "plat" });
+    if (di) S.push({ x: x + di * (half + L / 2), z, w: L, d: rw, h, ramp: { axis: "x", dir: -di }, kind: "ramp" });
+    else S.push({ x, z: z + dj * (half + L / 2), w: rw, d: L, h, ramp: { axis: "z", dir: -dj }, kind: "ramp" });
+    used[i][j] = used[i + di][j + dj] = true; plats++;
+    // となりに一段高い台をつなげることもある
+    const ds2 = DIRS.filter(([ei, ej]) => { const a = i + ei, b = j + ej; return (ei !== di || ej !== dj) && a >= 0 && b >= 0 && a < NC && b < NC && !used[a][b]; });
+    if (ds2.length && R() < 0.4) {
+      const [ei, ej] = ds2[ri(ds2.length)], h2 = h + 1.5;
+      const x2 = cc(i + ei), z2 = cc(j + ej), bx = (x + x2) / 2, bz = (z + z2) / 2;
+      // 台どうしをつなぐ坂（低い台のふちから 2.4m で一段上へ）と、その先の高い台
+      S.push({ x: bx + ei * 0.9, z: bz + ej * 0.9, w: ei ? 2.4 : rw, d: ej ? 2.4 : rw, h: h2, ramp: ei ? { axis: "x", dir: ei } : { axis: "z", dir: ej }, kind: "ramp", base: h });
+      S.push({ x: x2 + ei * 0.9, z: z2 + ej * 0.9, w: ei ? 3.6 : CELL - 0.6, d: ej ? 3.6 : CELL - 0.6, h: h2, kind: "plat" });
+      used[i + ei][j + ej] = true;
+    }
+  }
+  // 遮るもの（箱・壁・階段）
+  for (let i = 0; i < NC; i++) for (let j = 0; j < NC; j++) {
+    if (used[i][j] || R() > 0.45) continue;
+    used[i][j] = true;
+    const t = R(), x = cc(i), z = cc(j);
+    if (t < 0.4) S.push({ x: x + (R() - 0.5) * 1.5, z: z + (R() - 0.5) * 1.5, w: 1.2 + R() * 2.3, d: 1.2 + R() * 2.3, h: 1.4 + R() * 1.2, kind: "box" });
+    else if (t < 0.72) { const along = R() < 0.5; S.push({ x: x + (R() - 0.5), z: z + (R() - 0.5), w: along ? 5 : 0.7, d: along ? 0.7 : 5, h: 2.4, kind: "wall" }); }
+    else {
+      const ax = R() < 0.5, sg = R() < 0.5 ? 1 : -1;
+      for (let k = 0; k < 3; k++) { const off = (k - 1) * 1.5 * sg; S.push({ x: ax ? x + off : x, z: ax ? z : z + off, w: ax ? 1.5 : 3, d: ax ? 3 : 1.5, h: 0.45 * (k + 1), kind: "step" }); }
+    }
+  }
+  const free = [];
+  for (let i = 0; i < NC; i++) for (let j = 0; j < NC; j++) if (!used[i][j]) free.push([cc(i), cc(j)]);
+  return { S, free };
+}
+let STAGE = genStage(12345);
+function topAt(o, x, z) {
+  if (!o.ramp) return o.h;
+  const a = o.ramp.axis === "x" ? (x - (o.x - o.w / 2)) / o.w : (z - (o.z - o.d / 2)) / o.d;
+  const u = clamp(o.ramp.dir > 0 ? a : 1 - a, 0, 1);
+  const b = o.base || 0;
+  return b + u * (o.h - b);
+}
+function groundAt(x, z) {
+  let g = 0;
+  for (const o of STAGE.S) if (Math.abs(x - o.x) <= o.w / 2 && Math.abs(z - o.z) <= o.d / 2) { const t = topAt(o, x, z); if (t > g) g = t; }
+  return g;
+}
 function collide(p) {
-  const lim = ARENA - RADIUS;
+  const lim = ARENA - RADIUS, y = p.y || 0;
   p.x = clamp(p.x, -lim, lim); p.z = clamp(p.z, -lim, lim);
-  for (const o of OBST) {
+  for (const o of STAGE.S) {
     const hx = o.w / 2, hz = o.d / 2;
     const cx = clamp(p.x, o.x - hx, o.x + hx), cz = clamp(p.z, o.z - hz, o.z + hz);
     const dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
     if (d2 >= RADIUS * RADIUS) continue;
+    if (topAt(o, cx, cz) <= y + STEP) continue;   // 低い段差・坂は通れる
     if (d2 > 1e-8) { const d = Math.sqrt(d2); p.x = cx + dx / d * RADIUS; p.z = cz + dz / d * RADIUS; }
     else {
       const gaps = [o.x + hx - p.x, p.x - (o.x - hx), o.z + hz - p.z, p.z - (o.z - hz)];
@@ -182,19 +239,23 @@ function collide(p) {
     }
   }
 }
-const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+function updY(p, dt) {
+  const g = groundAt(p.x, p.z), y = p.y || 0;
+  if (g >= y - 0.001) { p.y = g; p.vy = 0; return; }
+  p.vy = (p.vy || 0) - GRAV * dt; p.y = Math.max(g, y + p.vy * dt); if (p.y === g) p.vy = 0;
+}
 
 // ================= 状態 =================
 let mode = "none";        // local / host / client
-let screen = "menu";      // menu / connecting / lobby / game
+let screen = "menu";      // menu / connecting / lobby / game / layout
 let peer = null, hostConn = null, hostSeen = 0;
 const host = { code: "", conns: new Map(), nextId: 1, playing: false, bots: 0 };
 let myId = 0, errMsg = "";
 let lobbyPs = [];
 let G = null;             // ホストだけが持つ正式な状態
 const view = new Map();   // 画面に出す全員の状態
-const me = { x: 0, z: 0, yaw: 0, pitch: 0 };
-let selId = null, inp = "", lastAtk = -99, overInfo = null, practiceBots = 3;
+const me = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, pitch: 0 };
+let selId = null, inp = [], kbuf = "", lastAtk = -99, overInfo = null, practiceBots = 3;
 const feed = [];
 
 // ================= 通信 =================
@@ -218,27 +279,41 @@ function hostLobby() {
   for (let i = 0; i < host.bots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABCDEFGH"[i], bot: true });
   broadcast({ t: "lobby", ps: lobbyPs, code: host.code });
 }
+function pickSpawns(n) {
+  const pool = STAGE.free.slice().sort(() => Math.random() - 0.5), out = [];
+  if (pool.length) out.push(pool.pop());
+  while (out.length < n && pool.length) {
+    let best = 0, bd = -1;
+    for (let k = 0; k < pool.length; k++) {
+      const md = Math.min(...out.map(o => Math.hypot(o[0] - pool[k][0], o[1] - pool[k][1])));
+      if (md > bd) { bd = md; best = k; }
+    }
+    out.push(pool.splice(best, 1)[0]);
+  }
+  while (out.length < n) out.push([(Math.random() - 0.5) * 40, (Math.random() - 0.5) * 40]);
+  return out;
+}
 function hostStart() {
   const list = lobbyPs.slice();
-  const n = list.length, base = Math.random() * Math.PI * 2;
-  const order = list.map((_, i) => i).sort(() => Math.random() - 0.5);
-  G = { players: new Map(), over: false, lastSt: 0 };
+  const seed = Math.floor(Math.random() * 2 ** 31);
+  STAGE = genStage(seed);
+  const sp = pickSpawns(list.length);
+  G = { players: new Map(), over: false };
   list.forEach((p, i) => {
-    const a = base + order[i] / n * Math.PI * 2;
-    const q = { id: p.id, name: p.name, bot: !!p.bot, color: COLORS[i % COLORS.length], x: Math.cos(a) * 17, z: Math.sin(a) * 17, yaw: 0, f: genFactors(), alive: true, kills: 0, cd: 0 };
-    collide(q); q.yaw = Math.atan2(q.x, q.z); q.max = q.f.length;
+    const q = { id: p.id, name: p.name, bot: !!p.bot, color: COLORS[i % COLORS.length], x: sp[i][0], z: sp[i][1], y: 0, vy: 0, yaw: 0, f: genFactors(), alive: true, kills: 0, cd: 0 };
+    collide(q); q.y = groundAt(q.x, q.z); q.yaw = Math.atan2(q.x, q.z); q.max = q.f.length;
     G.players.set(q.id, q);
   });
   host.playing = true;
   for (const c of host.conns.values()) c.seen = performance.now();
-  broadcast({ t: "start", ps: [...G.players.values()].map(p => ({ id: p.id, name: p.name, bot: p.bot, color: p.color, x: p.x, z: p.z, yaw: p.yaw, f: p.f, max: p.max })) });
+  broadcast({ t: "start", seed, ps: [...G.players.values()].map(p => ({ id: p.id, name: p.name, bot: p.bot, color: p.color, x: p.x, z: p.z, yaw: p.yaw, f: p.f, max: p.max })) });
 }
 function hostHandle(id, m) {
   if (!G || !m) return;
   const p = G.players.get(id); if (!p) return;
   if (m.t === "pos") {
     if (![m.x, m.z, m.yaw].every(Number.isFinite)) return;
-    p.x = clamp(m.x, -ARENA, ARENA); p.z = clamp(m.z, -ARENA, ARENA); p.yaw = m.yaw;
+    p.x = clamp(m.x, -ARENA, ARENA); p.z = clamp(m.z, -ARENA, ARENA); p.yaw = m.yaw; p.y = groundAt(p.x, p.z);
   } else if (m.t === "atk") doAttack(id, m.to, m.p);
 }
 function doAttack(aid, tid, primes) {
@@ -247,15 +322,14 @@ function doAttack(aid, tid, primes) {
   if (!Array.isArray(primes) || !primes.length || primes.length > 20 || !primes.every(isPrime)) return;
   const now = performance.now() / 1000;
   if (now < a.cd) return;
-  if (dist(a, t) > RANGE + 1.5) { sendTo(aid, { t: "msg", s: "遠すぎます" }); return; }
   a.cd = now + COOLDOWN * 0.8;
-  const before = prod(t.f), abefore = prod(a.f);
+  const abefore = prod(a.f);
   const rest = t.f.slice(); let ok = true;
   for (const q of primes) { const i = rest.indexOf(q); if (i < 0) { ok = false; break; } rest.splice(i, 1); }
   let dead = false;
   if (ok) { t.f = rest; if (!rest.length) { t.alive = false; dead = true; a.kills++; } }
   else if (a.f.length > 1) a.f.splice(a.f.lastIndexOf(Math.max(...a.f)), 1);
-  broadcast({ t: "ev", a: aid, to: tid, p: primes, ok, fa: a.f, ft: t.f, dead, b: before, ab: abefore });
+  broadcast({ t: "ev", a: aid, to: tid, p: primes, ok, fa: a.f, ft: t.f, dead, ab: abefore });
   checkOver();
 }
 function checkOver() {
@@ -266,7 +340,7 @@ function checkOver() {
   const g = G;
   setTimeout(() => {
     if (G !== g) return;
-    const ps = [...g.players.values()].map(p => ({ id: p.id, name: p.name, kills: p.kills, alive: p.alive, n: prod(p.f) }))
+    const ps = [...g.players.values()].map(p => ({ id: p.id, name: p.name, kills: p.kills, alive: p.alive }))
       .sort((x, y) => (y.alive - x.alive) || (y.kills - x.kills));
     broadcast({ t: "over", win: alive[0]?.id ?? null, ps });
   }, 1500);
@@ -291,25 +365,28 @@ function botUpdate(p, dt, now) {
   if (now < b.unstick) { mx = Math.cos(b.wander); mz = Math.sin(b.wander); }
   else if (t && t.alive) {
     const dx = t.x - p.x, dz = t.z - p.z, d = Math.hypot(dx, dz) || 1;
-    if (d > RANGE * 0.6) { mx = dx / d; mz = dz / d; }
+    if (d > BOT_RANGE * 0.6) { mx = dx / d; mz = dz / d; }
     else { mx = -dz / d * b.dir * 0.6; mz = dx / d * b.dir * 0.6; }
     p.yaw = Math.atan2(-dx, -dz);
-    if (d < RANGE && now > b.next) {
-      b.next = now + 2.5 + Math.random() * 3;
-      let primes;
-      if (Math.random() < 0.7) {
-        const k = Math.min(t.f.length, Math.random() < 0.6 ? 1 : 2);
-        const pool = t.f.slice(); primes = [];
-        for (let i = 0; i < k; i++) primes.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
-      } else {
-        const wrong = [2, 3, 5, 7, 11, 13, 17, 19].filter(q => !t.f.includes(q));
-        primes = [wrong.length ? pick(wrong) : 41];
+    if (d < BOT_RANGE && now > b.next) {
+      b.next = now + 0.8;
+      if (losClear(p, t)) {
+        b.next = now + 2.5 + Math.random() * 3;
+        let primes;
+        if (Math.random() < 0.7) {
+          const k = Math.min(t.f.length, Math.random() < 0.6 ? 1 : 2);
+          const pool = t.f.slice(); primes = [];
+          for (let i = 0; i < k; i++) primes.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+        } else {
+          const wrong = PRIMES.filter(q => !t.f.includes(q));
+          primes = [wrong.length ? pick(wrong) : 41];
+        }
+        doAttack(p.id, t.id, primes);
       }
-      doAttack(p.id, t.id, primes);
     }
   } else { mx = Math.cos(b.wander); mz = Math.sin(b.wander); if (Math.random() < dt * 0.5) b.wander = Math.random() * 6.28; }
   p.x += mx * SPEED * 0.7 * dt; p.z += mz * SPEED * 0.7 * dt;
-  collide(p);
+  collide(p); updY(p, dt);
   if (now - b.stuck > 1) {
     if ((mx || mz) && Math.hypot(p.x - b.lx, p.z - b.lz) < 0.8) { b.wander = Math.random() * 6.28; b.unstick = now + 1.2; }
     b.stuck = now; b.lx = p.x; b.lz = p.z;
@@ -323,7 +400,7 @@ function onMsg(m) {
     case "welcome": myId = m.you; return;
     case "reject": errMsg = m.why; cleanupNet(); screen = "menu"; break;
     case "lobby": lobbyPs = m.ps; host.code = m.code; screen = "lobby"; overInfo = null; clearGame(); break;
-    case "start": startView(m.ps); break;
+    case "start": startView(m.seed, m.ps); break;
     case "st":
       for (const [id, x, z, yaw] of m.p) { const v = view.get(id); if (v && id !== myId) { v.tx = x; v.tz = z; v.tyaw = yaw; } }
       return;
@@ -410,88 +487,117 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8fb8e8);
-scene.fog = new THREE.Fog(0x8fb8e8, 30, 90);
+scene.fog = new THREE.Fog(0x8fb8e8, 35, 95);
 const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
 camera.rotation.order = "YXZ";
-scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
-const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(20, 40, 10); scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.5));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(20, 40, 10); scene.add(sun);
 {
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2, ARENA * 2), new THREE.MeshLambertMaterial({ color: 0x6f9a5a }));
   ground.rotation.x = -Math.PI / 2; scene.add(ground);
-  const grid = new THREE.GridHelper(ARENA * 2, 30, 0x557744, 0x557744); grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.4; scene.add(grid);
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0x8a8f9c });
-  for (const [x, z, w, d] of [[0, -ARENA, ARENA * 2, 0.6], [0, ARENA, ARENA * 2, 0.6], [-ARENA, 0, 0.6, ARENA * 2], [ARENA, 0, 0.6, ARENA * 2]]) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), wallMat); m.position.set(x, 0.6, z); scene.add(m);
-  }
-  const boxCols = [0xd9a066, 0xb07a4a, 0x9aa3b5, 0xc9b27c];
-  OBST.forEach((o, i) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(o.w, o.h, o.d), new THREE.MeshLambertMaterial({ color: boxCols[i % boxCols.length] }));
-    m.position.set(o.x, o.h / 2, o.z); scene.add(m);
-  });
+  const grid = new THREE.GridHelper(ARENA * 2, 30, 0x557744, 0x557744); grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.35; scene.add(grid);
 }
-const rangeRing = new THREE.Mesh(new THREE.RingGeometry(RANGE - 0.12, RANGE, 96), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
-rangeRing.rotation.x = -Math.PI / 2; rangeRing.position.y = 0.03; scene.add(rangeRing);
-const selRing = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 40), new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.DoubleSide, depthWrite: false }));
-selRing.rotation.x = -Math.PI / 2; selRing.position.y = 0.04; selRing.visible = false; scene.add(selRing);
+const stageGroup = new THREE.Group(); scene.add(stageGroup);
+const stageMeshes = [];
+const MATS = {
+  plat: new THREE.MeshLambertMaterial({ color: 0xb59d74 }), ramp: new THREE.MeshLambertMaterial({ color: 0xd8c08e }),
+  box: new THREE.MeshLambertMaterial({ color: 0xc98b55 }), wall: new THREE.MeshLambertMaterial({ color: 0x9aa3b5 }),
+  step: new THREE.MeshLambertMaterial({ color: 0xc9b27c }), edge: new THREE.LineBasicMaterial({ color: 0x3b3326, transparent: true, opacity: 0.45 }),
+  border: new THREE.MeshLambertMaterial({ color: 0x8a8f9c }),
+};
+function addSolid(geo, mat, x, y, z) {
+  const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); stageGroup.add(m); stageMeshes.push(m);
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), MATS.edge); e.position.copy(m.position); stageGroup.add(e);
+}
+function buildStage() {
+  for (const c of [...stageGroup.children]) { stageGroup.remove(c); c.geometry?.dispose(); }
+  stageMeshes.length = 0;
+  for (const [x, z, w, d] of [[0, -ARENA, ARENA * 2, 0.6], [0, ARENA, ARENA * 2, 0.6], [-ARENA, 0, 0.6, ARENA * 2], [ARENA, 0, 0.6, ARENA * 2]])
+    addSolid(new THREE.BoxGeometry(w, 2.4, d), MATS.border, x, 1.2, z);
+  for (const o of STAGE.S) {
+    const g = new THREE.BoxGeometry(o.w, o.h, o.d);
+    if (o.ramp) {
+      const pos = g.attributes.position, b = o.base || 0;
+      for (let k = 0; k < pos.count; k++) {
+        if (pos.getY(k) <= 0) continue;
+        const a = o.ramp.axis === "x" ? pos.getX(k) / o.w + 0.5 : pos.getZ(k) / o.d + 0.5;
+        const u = o.ramp.dir > 0 ? a : 1 - a;
+        pos.setY(k, -o.h / 2 + Math.max(0.03, b + u * (o.h - b)));
+      }
+      g.computeVertexNormals();
+    }
+    addSolid(g, MATS[o.kind], o.x, o.h / 2, o.z);
+  }
+}
+buildStage();
+const ray = new THREE.Raycaster();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+function rayClear(from, to) {
+  _b.copy(to).sub(from); const d = _b.length(); if (d < 0.01) return true;
+  ray.set(from, _b.normalize()); ray.far = d - 0.3;
+  return ray.intersectObjects(stageMeshes, false).length === 0;
+}
+function losClear(a, b) { return rayClear(_a.set(a.x, (a.y || 0) + 1.8, a.z), new THREE.Vector3(b.x, (b.y || 0) + 1.95, b.z)); }
 
+// ---------- アバター（数字はおでこに貼る。後ろや障害物の向こうからは見えない） ----------
 const avatars = new Map();
-const bodyGeo = new THREE.CapsuleGeometry(0.4, 0.8, 4, 12), headGeo = new THREE.SphereGeometry(0.3, 16, 12), eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.05);
+const bodyGeo = new THREE.CapsuleGeometry(0.4, 0.8, 4, 12), headGeo = new THREE.SphereGeometry(0.38, 18, 14), eyeGeo = new THREE.BoxGeometry(0.08, 0.06, 0.05);
 const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+const plateGeo = new THREE.PlaneGeometry(0.9, 0.45);
 function makeAvatar(v) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color: v.color });
-  const body = new THREE.Mesh(bodyGeo, mat); body.position.y = 0.8; g.add(body);
-  const head = new THREE.Mesh(headGeo, new THREE.MeshLambertMaterial({ color: 0xffe0bd })); head.position.y = 1.85; g.add(head);
-  for (const s of [-0.11, 0.11]) { const e = new THREE.Mesh(eyeGeo, eyeMat); e.position.set(s, 1.9, -0.28); g.add(e); }
-  const cv = document.createElement("canvas"); cv.width = 256; cv.height = 160;
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
-  label.position.y = 2.75; g.add(label);
+  const body = new THREE.Mesh(bodyGeo, new THREE.MeshLambertMaterial({ color: v.color })); body.position.y = 0.8; g.add(body);
+  const head = new THREE.Mesh(headGeo, new THREE.MeshLambertMaterial({ color: 0xffe0bd })); head.position.y = 1.9; g.add(head);
+  for (const s of [-0.12, 0.12]) { const e = new THREE.Mesh(eyeGeo, eyeMat); e.position.set(s, 1.76, -0.355); g.add(e); }
+  const cv = document.createElement("canvas"); cv.width = 256; cv.height = 128;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const plate = new THREE.Mesh(plateGeo, new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+  plate.position.set(0, 1.98, -0.4); plate.rotation.y = Math.PI; plate.renderOrder = 1;   // おでこ（体の前は -z）
+  g.add(plate);
   scene.add(g);
-  return { g, label, cv, ctx: cv.getContext("2d"), tex, key: "" };
+  return { g, plate, ctx: cv.getContext("2d"), tex, key: "" };
 }
 function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 const hex = c => "#" + c.toString(16).padStart(6, "0");
-function drawLabel(av, v, inRange, sel) {
-  const key = [v.f.join(","), inRange, sel].join("|");
+function drawPlate(av, v, sel) {
+  const key = v.f.join(",") + "|" + sel;
   if (av.key === key) return; av.key = key;
-  const c = av.ctx; c.clearRect(0, 0, 256, 160);
-  rrect(c, 6, 6, 244, 148, 22); c.fillStyle = "rgba(10,15,30,0.78)"; c.fill();
-  c.lineWidth = sel ? 10 : 5; c.strokeStyle = sel ? "#ffd400" : hex(v.color); c.stroke();
+  const c = av.ctx; c.clearRect(0, 0, 256, 128);
+  rrect(c, 4, 4, 248, 120, 18); c.fillStyle = "rgba(255,255,255,0.95)"; c.fill();
+  c.lineWidth = sel ? 10 : 6; c.strokeStyle = sel ? "#ffd400" : hex(v.color); c.stroke();
   c.textAlign = "center"; c.textBaseline = "middle";
-  c.fillStyle = "#ddd"; c.font = "bold 24px sans-serif"; c.fillText(v.name, 128, 34);
+  c.fillStyle = "#555"; c.font = "bold 20px sans-serif"; c.fillText(v.name, 128, 24);
   const s = String(prod(v.f));
-  c.fillStyle = inRange ? "#ffffff" : "#9aa0ad";
-  c.font = `900 ${Math.min(70, Math.floor(330 / (s.length + 0.6)))}px sans-serif`; c.fillText(s, 128, 86);
-  const r = v.f.length / v.max;
-  c.fillStyle = "#2a3142"; rrect(c, 30, 122, 196, 14, 7); c.fill();
-  c.fillStyle = r > 0.5 ? "#5ad16a" : r > 0.25 ? "#ffc23a" : "#ff5a5a"; rrect(c, 30, 122, Math.max(14, 196 * r), 14, 7); c.fill();
+  c.fillStyle = "#111"; c.font = `900 ${Math.min(78, Math.floor(360 / (s.length + 0.5)))}px sans-serif`; c.fillText(s, 128, 76);
   av.tex.needsUpdate = true;
-  av.label.material.opacity = inRange ? 1 : 0.6;
 }
 function clearGame() {
-  for (const av of avatars.values()) scene.remove(av.g);
-  avatars.clear(); view.clear(); closePad(); feed.length = 0;
-  document.getElementById("fx").innerHTML = ""; fxList.length = 0;
+  for (const av of avatars.values()) { scene.remove(av.g); av.tex.dispose(); }
+  avatars.clear(); view.clear(); closePad(); feed.length = 0; $("feed").innerHTML = "";
+  $("fx").innerHTML = ""; fxList.length = 0;
 }
-function startView(ps) {
+function startView(seed, ps) {
   clearGame(); overInfo = null;
+  if (mode === "client") STAGE = genStage(seed);
+  buildStage();
   for (const p of ps) {
-    const v = { ...p, tx: p.x, tz: p.z, tyaw: p.yaw, alive: true };
+    const y = groundAt(p.x, p.z);
+    const v = { ...p, y, tx: p.x, tz: p.z, tyaw: p.yaw, alive: true };
     view.set(p.id, v);
     if (p.id !== myId) avatars.set(p.id, makeAvatar(v));
   }
   const mine = view.get(myId);
-  if (mine) { me.x = mine.x; me.z = mine.z; me.yaw = mine.yaw; me.pitch = 0; }
+  if (mine) { me.x = mine.x; me.z = mine.z; me.y = mine.y; me.vy = 0; me.yaw = mine.yaw; me.pitch = 0; }
   lastAtk = -99; screen = "game"; lastMine = ""; hostSeen = performance.now();
-  toast("相手の頭の数字を素因数分解して打ち込もう！");
+  toast("おでこの数字を覚えて、素因数を打ち込もう！");
 }
 
 // ================= 入力 =================
 const joy = { x: 0, y: 0 };
 const keys = new Set();
 const touches = new Map();
-const stickEl = document.getElementById("stick"), knobEl = document.getElementById("knob");
+const $ = id => document.getElementById(id);
+const stickEl = $("stick"), knobEl = $("knob");
 canvas.addEventListener("pointerdown", e => {
   if (screen !== "game") return;
   e.preventDefault();
@@ -528,15 +634,35 @@ canvas.addEventListener("pointercancel", endTouch);
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 
 const tmpV = new THREE.Vector3();
-function tapSelect(x, y) {
-  let best = null, bd = 70;
+const headPos = v => new THREE.Vector3(v.x, (v.y || 0) + 1.95, v.z);
+// 画面に見えている相手（障害物にかくれていない）を、照準に近い順に
+function visibleTargets() {
+  const out = [];
   for (const v of view.values()) {
     if (v.id === myId || !v.alive) continue;
-    for (const h of [1.0, 1.85, 2.75]) {
-      tmpV.set(v.x, h, v.z).project(camera);
-      if (tmpV.z > 1) continue;
+    tmpV.copy(headPos(v)).project(camera);
+    if (tmpV.z > 1 || Math.abs(tmpV.x) > 1.02 || Math.abs(tmpV.y) > 1.02) continue;
+    const sx = tmpV.x, sy = tmpV.y;
+    if (!rayClear(camera.position, headPos(v))) continue;
+    out.push({ v, d: Math.hypot(sx * camera.aspect, sy), sx: (sx + 1) / 2 * innerWidth, sy: (1 - sy) / 2 * innerHeight });
+  }
+  return out.sort((a, b) => a.d - b.d);
+}
+function pickTarget() {
+  const myV = view.get(myId);
+  if (myV && !myV.alive) { toast("観戦中は打ち込めません"); return; }
+  const c = visibleTargets();
+  if (!c.length) { toast("見えている相手がいません"); return; }
+  const i = c.findIndex(o => o.v.id === selId);
+  selectTarget(c[i >= 0 ? (i + 1) % c.length : 0].v.id);
+}
+function tapSelect(x, y) {
+  let best = null, bd = 70;
+  for (const o of visibleTargets()) {
+    for (const h of [1.0, 1.95]) {
+      tmpV.set(o.v.x, (o.v.y || 0) + h, o.v.z).project(camera);
       const d = Math.hypot((tmpV.x + 1) / 2 * innerWidth - x, (1 - tmpV.y) / 2 * innerHeight - y);
-      if (d < bd) { bd = d; best = v; }
+      if (d < bd) { bd = d; best = o.v; }
     }
   }
   if (best) selectTarget(best.id);
@@ -544,59 +670,59 @@ function tapSelect(x, y) {
 function selectTarget(id) {
   const myV = view.get(myId);
   if (myV && !myV.alive) { toast("観戦中は打ち込めません"); return; }
-  if (selId !== id) inp = "";
-  selId = id; document.getElementById("pad").classList.remove("hidden"); applyLayout(); padKey = ""; updPad(true);
-  const v = view.get(id); if (v && distTo(v) > RANGE) toast("遠すぎます。近づいてください");
+  if (selId !== id) { inp = []; kbuf = ""; }
+  selId = id; $("pad").classList.remove("hidden"); applyLayout(); padKey = ""; updPad(true);
 }
-function closePad() { selId = null; inp = ""; document.getElementById("pad").classList.add("hidden"); }
-const distTo = v => Math.hypot(v.x - me.x, v.z - me.z);
+function closePad() { selId = null; inp = []; kbuf = ""; $("pad").classList.add("hidden"); }
+$("target").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game") pickTarget(); });
 
-document.querySelector("#pad .keys").addEventListener("pointerdown", e => {
-  const b = e.target.closest("button"); if (!b) return;
+$("keys").innerHTML = PRIMES.map(p => `<button data-k="${p}">${p}</button>`).join("") +
+  `<button data-k="close" class="close">閉じる</button><button data-k="bs" class="op">⌫</button><button data-k="send" class="send" id="sendbtn">打ち込む</button>`;
+$("keys").addEventListener("pointerdown", e => {
+  const b = e.target.closest("button"); if (!b || screen !== "game") return;
   e.preventDefault(); padPress(b.dataset.k);
 });
 function padPress(k) {
   if (k === "close") { closePad(); return; }
   if (k === "send") { submit(); return; }
-  if (k === "bs") inp = inp.slice(0, -1);
-  else if (k === "x") { if (inp && !inp.endsWith("×")) inp += "×"; }
-  else if (/^\d$/.test(k)) { if (inp.length < 40 && !(k === "0" && (inp === "" || inp.endsWith("×")))) inp += k; }
+  if (k === "bs") { if (kbuf) kbuf = kbuf.slice(0, -1); else inp.pop(); }
+  else if (isPrime(Number(k)) && inp.length < 12) inp.push(Number(k));
   updPad(true);
 }
 function submit() {
   const t = view.get(selId); if (!t || !t.alive) { closePad(); return; }
-  const toks = inp.split("×").filter(s => s !== "");
-  if (!toks.length) { toast("素因数を入力してください"); return; }
-  const ps = toks.map(Number);
-  const bad = ps.find(n => !isPrime(n));
-  if (bad !== undefined) { toast(`${bad} は素数ではありません`); return; }
-  if (distTo(t) > RANGE) { toast("遠すぎます。近づいてください"); return; }
+  if (kbuf) { if (!commitKbuf()) return; }
+  if (!inp.length) { toast("素数をえらんでください"); return; }
   const now = performance.now() / 1000;
   if (now < lastAtk + COOLDOWN) return;
   lastAtk = now;
-  sendHost({ t: "atk", to: selId, p: ps });
-  inp = ""; updPad(true);
+  sendHost({ t: "atk", to: selId, p: inp.slice() });
+  inp = []; updPad(true);
+}
+function commitKbuf() {
+  const n = Number(kbuf); kbuf = "";
+  if (!isPrime(n)) { toast(`${n} は素数ではありません`); updPad(true); return false; }
+  if (inp.length < 12) inp.push(n);
+  updPad(true); return true;
 }
 let padKey = "";
 function updPad(force) {
   if (selId == null) return;
   const t = view.get(selId); if (!t) return;
-  const inR = distTo(t) <= RANGE;
   const cool = performance.now() / 1000 < lastAtk + COOLDOWN;
-  const key = [inp, inR, cool, t.name].join("|");
+  const key = [inp.join("×"), kbuf, cool, t.name].join("|");
   if (!force && key === padKey) return; padKey = key;
-  document.getElementById("ptname").textContent = "→ " + t.name;
-  const r = document.getElementById("ptrange");
-  r.textContent = inR ? "射程内" : "遠すぎ"; r.style.color = inR ? "#5ad16a" : "#ff8080";
-  document.getElementById("pdisp").textContent = inp;
-  document.getElementById("sendbtn").classList.toggle("cool", cool || !inR);
+  $("ptname").textContent = "→ " + t.name;
+  $("pdisp").textContent = inp.join("×") + (kbuf ? (inp.length ? "×" : "") + kbuf : "");
+  $("sendbtn").classList.toggle("cool", cool);
 }
 addEventListener("keydown", e => {
   if (screen !== "game" || e.target.tagName === "INPUT") return;
   const k = e.key;
+  if (k === "e" || k === "E" || k === "Tab") { e.preventDefault(); pickTarget(); return; }
   if (selId != null) {
-    if (/^\d$/.test(k)) { padPress(k); return; }
-    if (k === "x" || k === "*" || k === " ") { padPress("x"); e.preventDefault(); return; }
+    if (/^\d$/.test(k)) { if (kbuf.length < 3) kbuf += k; updPad(true); return; }
+    if (k === "x" || k === "*" || k === " ") { e.preventDefault(); if (kbuf) commitKbuf(); return; }
     if (k === "Backspace") { padPress("bs"); return; }
     if (k === "Enter") { submit(); return; }
     if (k === "Escape") { closePad(); return; }
@@ -607,11 +733,10 @@ addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
 addEventListener("blur", () => keys.clear());
 
 // ================= HUD =================
-const $ = id => document.getElementById(id);
 let toastT = 0;
 function toast(s) { const t = $("toast"); t.textContent = s; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => t.style.opacity = 0, 1800); }
 function flash() { const f = $("flash"); f.style.transition = "none"; f.style.opacity = 1; requestAnimationFrame(() => { f.style.transition = "opacity .6s"; f.style.opacity = 0; }); }
-function vibrate(ms) { try { navigator.vibrate?.(ms); } catch (e) {} }
+function vibrate(ms) { try { navigator.userActivation?.hasBeenActive && navigator.vibrate?.(ms); } catch (e) {} }
 function addFeed(s) {
   feed.push({ s, t: performance.now() }); if (feed.length > 4) feed.shift();
   $("feed").innerHTML = feed.map(f => `<div data-t="${f.t}">${esc(f.s)}</div>`).join("");
@@ -626,34 +751,29 @@ function updHud(now) {
   const mine = view.get(myId);
   if (mine) {
     const k = mine.f.join(",") + mine.alive;
-    if (k !== lastMine) {
-      lastMine = k;
-      $("mynum").textContent = mine.alive ? prod(mine.f) : "1";
-      const r = mine.alive ? mine.f.length / mine.max : 0;
-      $("mybar").style.width = (r * 100) + "%";
-      $("mybar").style.background = r > 0.5 ? "#5ad16a" : r > 0.25 ? "#ffc23a" : "#ff5a5a";
-      $("mysub").textContent = mine.alive ? `素因数 のこり${mine.f.length}個` : "やられた";
-    }
+    if (k !== lastMine) { lastMine = k; $("mynum").textContent = mine.alive ? prod(mine.f) : "1"; }
   }
-  const aliveN = [...view.values()].filter(v => v.alive).length;
-  $("alive").textContent = `のこり ${aliveN}人`;
+  $("alive").textContent = `のこり ${[...view.values()].filter(v => v.alive).length}人`;
   const b = $("banner");
   const bannerTxt = mine && !mine.alive && !overInfo ? "観戦中（移動はできます）" : "";
   b.textContent = bannerTxt; b.classList.toggle("hidden", !bannerTxt);
   for (const el of $("feed").children) el.style.opacity = now - Number(el.dataset.t) > 6000 ? 0 : 1;
 }
-$("quit").addEventListener("click", () => { if (confirm("ゲームから抜けますか？")) leave(); });
+$("quit").addEventListener("click", () => { if (screen === "game" && confirm("ゲームから抜けますか？")) leave(); });
 
 // ================= 画面（メニューなど） =================
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
 // ---------- ボタン配置 ----------
-const LAY_DEF = { me: { x: 0.11, y: 0.14, s: 1 }, quit: { x: 0.95, y: 0.07, s: 1 }, alive: { x: 0.95, y: 0.16, s: 1 }, feed: { x: 0.2, y: 0.42, s: 1 }, pad: { x: 0.8, y: 0.66, s: 1 }, stick: { x: 0.13, y: 0.72, s: 1 } };
-const LAY_NAMES = { me: "自分の数字", quit: "退出ボタン", alive: "のこり人数", feed: "ログ", pad: "入力パッド", stick: "スティック" };
-let LAY = JSON.parse(JSON.stringify(LAY_DEF));
-try { const sv = JSON.parse(store.get("soinsu-layout") || "{}"); for (const k in LAY) if (sv[k] && [sv[k].x, sv[k].y, sv[k].s].every(Number.isFinite)) LAY[k] = sv[k]; } catch (e) {}
-const saveLayout = () => store.set("soinsu-layout", JSON.stringify(LAY));
+const LAY_KEY = "soinsu-layout2";
+const LAY_DEF = { me: { x: 0.09, y: 0.1, s: 1 }, quit: { x: 0.95, y: 0.07, s: 1 }, alive: { x: 0.95, y: 0.17, s: 1 }, feed: { x: 0.2, y: 0.33, s: 1 }, pad: { x: 0.5, y: 0.82, s: 1 }, stick: { x: 0.13, y: 0.72, s: 1 }, target: { x: 0.89, y: 0.6, s: 1 } };
+const LAY_NAMES = { me: "自分の数字", quit: "退出", alive: "のこり人数", feed: "ログ", pad: "入力パッド", stick: "スティック", target: "相手をえらぶ" };
+const copyDef = k => ({ ...LAY_DEF[k] });
+let LAY = {}; for (const k in LAY_DEF) LAY[k] = copyDef(k);
+try { const sv = JSON.parse(store.get(LAY_KEY) || "{}"); for (const k in LAY) if (sv[k] && [sv[k].x, sv[k].y, sv[k].s].every(Number.isFinite)) LAY[k] = sv[k]; } catch (e) {}
+const saveLayout = () => store.set(LAY_KEY, JSON.stringify(LAY));
+let editSel = "pad";
 function applyLayout() {
   const W = innerWidth, H = innerHeight;
   for (const k in LAY) {
@@ -664,31 +784,54 @@ function applyLayout() {
     const dx = r.left < 0 ? -r.left : r.right > W ? W - r.right : 0;
     const dy = r.top < 0 ? -r.top : r.bottom > H ? H - r.bottom : 0;
     if (dx || dy) { el.style.left = L.x * W + dx + "px"; el.style.top = L.y * H + dy + "px"; }
+    el.classList.toggle("sel", screen === "layout" && k === editSel);
   }
-  for (const el of document.querySelectorAll("#hud .lay")) el.classList.toggle("sel", screen === "layout" && el.dataset.lay === editSel);
 }
-let editSel = "pad", drag = null;
-$("hud").addEventListener("pointerdown", e => {
-  if (screen !== "layout") return;
-  const el = e.target.closest(".lay"); if (!el) return;
-  e.preventDefault(); e.stopPropagation();
-  const k = el.dataset.lay; editSel = k;
-  drag = { k, id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: LAY[k].x, oy: LAY[k].y };
-  try { el.setPointerCapture(e.pointerId); } catch (_) {}
-  renderUI();
+// ドラッグで移動・2本指で拡大縮小（どこをつまんでも、選んでいる部品が変わる）
+const edPtrs = new Map(); let drag = null, pinch = null;
+addEventListener("pointerdown", e => {
+  if (screen !== "layout" || e.target.closest?.("#screen")) return;
+  e.preventDefault();
+  edPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (edPtrs.size === 1) {
+    const el = e.target.closest?.(".lay");
+    if (el) { editSel = el.dataset.lay; drag = { k: editSel, id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: LAY[editSel].x, oy: LAY[editSel].y }; $("screen").classList.add("dragging"); }
+    renderUI();
+  } else if (edPtrs.size === 2) {
+    drag = null; const [a, b] = [...edPtrs.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: LAY[editSel].s }; $("screen").classList.add("dragging");
+  }
 }, true);
 addEventListener("pointermove", e => {
-  if (!drag || e.pointerId !== drag.id) return;
-  const L = LAY[drag.k];
-  L.x = clamp(drag.ox + (e.clientX - drag.sx) / innerWidth, 0, 1); L.y = clamp(drag.oy + (e.clientY - drag.sy) / innerHeight, 0, 1);
-  applyLayout();
+  if (screen !== "layout" || !edPtrs.has(e.pointerId)) return;
+  edPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && edPtrs.size >= 2) {
+    const [a, b] = [...edPtrs.values()];
+    LAY[editSel].s = clamp(Math.round(pinch.s * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d * 20) / 20, 0.5, 2.5);
+    applyLayout(); updLayBar();
+  } else if (drag && e.pointerId === drag.id) {
+    const L = LAY[drag.k];
+    L.x = clamp(drag.ox + (e.clientX - drag.sx) / innerWidth, 0, 1); L.y = clamp(drag.oy + (e.clientY - drag.sy) / innerHeight, 0, 1);
+    applyLayout();
+  }
 });
-addEventListener("pointerup", e => { if (drag && e.pointerId === drag.id) { drag = null; saveLayout(); applyLayout(); } });
+function endEd(e) {
+  if (!edPtrs.delete(e.pointerId)) return;
+  if (edPtrs.size < 2) pinch = null;
+  if (drag && e.pointerId === drag.id) drag = null;
+  if (!edPtrs.size) { saveLayout(); $("screen").classList.remove("dragging"); renderUI(); }
+}
+addEventListener("pointerup", endEd); addEventListener("pointercancel", endEd);
+function updLayBar() {
+  const r = $("laysize"), p = $("laypct");
+  if (r) r.value = Math.round(LAY[editSel].s * 100);
+  if (p) p.textContent = Math.round(LAY[editSel].s * 100) + "%";
+}
 function enterLayout() {
   screen = "layout"; goLandscape();
   $("pad").classList.remove("hidden");
-  $("ptname").textContent = "→ 相手の名前"; $("ptrange").textContent = ""; $("pdisp").textContent = "2×3";
-  $("mynum").textContent = "360"; $("mybar").style.width = "100%"; $("mysub").textContent = "素因数 のこり5個";
+  $("ptname").textContent = "→ 相手"; $("pdisp").textContent = "2×3";
+  $("mynum").textContent = "360";
   $("alive").textContent = "のこり 4人"; $("feed").innerHTML = "<div>ログがここに出ます</div><div>ゲスト → CPU-A：2×3 命中</div>";
   renderUI();
 }
@@ -727,11 +870,11 @@ addEventListener("keydown", initAudio, true);
 function setParam(p, v, t) { if (p.setValueAtTime) p.setValueAtTime(v, t); else p.value = v; }
 function updListener() {
   if (!actx) return;
-  const L = actx.listener, t = actx.currentTime, fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw);
-  if (L.positionX) { setParam(L.positionX, me.x, t); setParam(L.positionY, EYE, t); setParam(L.positionZ, me.z, t); setParam(L.forwardX, fx, t); setParam(L.forwardY, 0, t); setParam(L.forwardZ, fz, t); setParam(L.upX, 0, t); setParam(L.upY, 1, t); setParam(L.upZ, 0, t); }
-  else { L.setPosition(me.x, EYE, me.z); L.setOrientation(fx, 0, fz, 0, 1, 0); }
+  const L = actx.listener, t = actx.currentTime, fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw), y = me.y + EYE;
+  if (L.positionX) { setParam(L.positionX, me.x, t); setParam(L.positionY, y, t); setParam(L.positionZ, me.z, t); setParam(L.forwardX, fx, t); setParam(L.forwardY, 0, t); setParam(L.forwardZ, fz, t); setParam(L.upX, 0, t); setParam(L.upY, 1, t); setParam(L.upZ, 0, t); }
+  else { L.setPosition(me.x, y, me.z); L.setOrientation(fx, 0, fz, 0, 1, 0); }
 }
-function stepSound(x, z, mine) {
+function stepSound(x, y, z, mine) {
   if (!actx || !soundOn || actx.state !== "running") return;
   const t = actx.currentTime;
   const src = actx.createBufferSource(); src.buffer = noiseBuf; src.playbackRate.value = 0.7 + Math.random() * 0.5;
@@ -743,7 +886,7 @@ function stepSound(x, z, mine) {
   else {
     const p = actx.createPanner();
     p.panningModel = "HRTF"; p.distanceModel = "linear"; p.refDistance = 1.5; p.maxDistance = 26; p.rolloffFactor = 1;
-    if (p.positionX) { p.positionX.value = x; p.positionY.value = 0.2; p.positionZ.value = z; } else p.setPosition(x, 0.2, z);
+    if (p.positionX) { p.positionX.value = x; p.positionY.value = y + 0.2; p.positionZ.value = z; } else p.setPosition(x, y + 0.2, z);
     g.connect(p); p.connect(actx.destination);
   }
   src.start(t); src.stop(t + 0.16);
@@ -757,12 +900,12 @@ const urlRoom = (new URLSearchParams(location.search).get("room") || "").replace
 function shareUrl() { const u = new URL(location.href); u.search = "?room=" + host.code + "&openExternalBrowser=1"; u.hash = ""; return u.toString(); }
 
 const RULES = `<div class="rules">
-・みんなの頭に<b>数字</b>が書いてある<br>
-・相手をタップして、その数字の<b>素因数</b>を打ち込む（例 <b>2×3</b>）<br>
-・全部正しければ相手の数字がその分割られる。<b>1</b>になったら撃破<br>
+・みんなの<b>おでこに数字</b>が書いてある（後ろや物かげからは見えない）<br>
+・右の<b>🎯ボタン</b>（または相手をタップ）で見えている相手をえらぶ<br>
+・その数字の<b>素因数</b>をボタンでえらんで打ち込む（例 <b>2</b>→<b>3</b>）<br>
+・全部正しければ相手の数字が割られる。<b>1</b>になったら撃破<br>
 ・1つでも間違えると<b>自分の一番大きい素因数</b>が消えて弱くなる<br>
-・白い円の中（射程内）の相手にしか打ち込めない<br>
-・相手の数字は頭の上にしか出ない。一瞬で覚えよう<br>
+・射程はなし。数字を一瞬で覚えよう。坂の上の高台からは遠くまで見える<br>
 ・足音で近くの相手に気づける（イヤホン推奨）<br>
 ・最後の1人になったら勝ち</div>`;
 
@@ -771,13 +914,15 @@ function renderUI() {
   $("hud").classList.toggle("hidden", screen !== "game" && screen !== "layout");
   $("hud").classList.toggle("editing", screen === "layout");
   s.classList.toggle("clear", screen === "game");
-  s.classList.toggle("toolbar", screen === "layout"); if (screen !== "layout") s.classList.remove("bottom");
+  s.classList.toggle("toolbar", screen === "layout");
+  if (screen === "layout") s.classList.toggle("bottom", LAY[editSel].y < 0.45);
+  else s.classList.remove("bottom", "dragging");
   checkRotate(); applyLayout();
   if (screen === "game" && !overInfo) { s.classList.add("hidden"); s.innerHTML = ""; return; }
   s.classList.remove("hidden");
   let h = "";
   if (screen === "menu") {
-    h = `<div class="card"><h1>素因数バトル<small>頭の数字を素因数分解して打ち込め</small></h1>${RULES}
+    h = `<div class="card"><h1>素因数バトル<small>おでこの数字を素因数分解して打ち込め</small></h1>${RULES}
       <label>なまえ</label><input id="name" class="in" maxlength="12" value="${esc(store.get("soinsu-name") || "")}" placeholder="ゲスト">
       <button class="btn" data-a="host">部屋をつくる</button>
       <div class="row"><input id="code" class="in" inputmode="numeric" maxlength="4" placeholder="部屋番号（4けた）" value="${esc(urlRoom)}"><button class="btn sub" style="width:40%;margin-top:0" data-a="join">入る</button></div>
@@ -788,9 +933,10 @@ function renderUI() {
       ${window.IN_HUB ? `<button class="btn sub" data-a="games">← ゲーム一覧へ（you know games）</button>` : ""}
       ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}</div>`;
   } else if (screen === "layout") {
-    h = `<div class="card"><span class="lbl">${LAY_NAMES[editSel]} ${Math.round(LAY[editSel].s * 100)}%</span>
-      <button class="btn sub" data-a="lay-">小さく</button><button class="btn sub" data-a="lay+">大きく</button>
-      <button class="btn sub" data-a="layreset">元にもどす</button><button class="btn sub" data-a="laymove">⇅</button><button class="btn" data-a="laydone">完了</button></div>`;
+    const pct = Math.round(LAY[editSel].s * 100);
+    h = `<div class="card"><span class="lbl">${LAY_NAMES[editSel]}</span>
+      <input type="range" id="laysize" min="50" max="250" step="5" value="${pct}"><span class="pct" id="laypct">${pct}%</span>
+      <button class="btn sub" data-a="layone">この部品を戻す</button><button class="btn sub" data-a="layreset">全部戻す</button><button class="btn" data-a="laydone">完了</button></div>`;
   } else if (screen === "connecting") {
     h = `<div class="card"><h2>接続中…</h2><button class="btn sub" data-a="leave">やめる</button></div>`;
   } else if (screen === "lobby") {
@@ -814,6 +960,7 @@ function renderUI() {
       <button class="btn sub" data-a="leave">メニューへ</button></div>`;
   }
   s.innerHTML = h;
+  $("laysize")?.addEventListener("input", e => { LAY[editSel].s = Number(e.target.value) / 100; applyLayout(); updLayBar(); saveLayout(); });
 }
 $("screen").addEventListener("click", async e => {
   const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
@@ -822,12 +969,11 @@ $("screen").addEventListener("click", async e => {
   else if (a === "join") { fixName(); goLandscape(); joinRoom($("code").value); }
   else if (a === "practice") { fixName(); goLandscape(); startPractice(); renderUI(); }
   else if (a === "layout") { fixName(); enterLayout(); }
-  else if (a === "games") location.href = "../";   // ミニゲーム集のゲーム一覧へ
   else if (a === "laydone") exitLayout();
-  else if (a === "laymove") $("screen").classList.toggle("bottom");
-  else if (a === "lay+" || a === "lay-") { const L = LAY[editSel]; L.s = clamp(Math.round((L.s + (a === "lay+" ? 0.1 : -0.1)) * 10) / 10, 0.5, 2); saveLayout(); renderUI(); }
-  else if (a === "layreset") { LAY = JSON.parse(JSON.stringify(LAY_DEF)); saveLayout(); renderUI(); }
+  else if (a === "layone") { LAY[editSel] = copyDef(editSel); saveLayout(); renderUI(); }
+  else if (a === "layreset") { for (const k in LAY_DEF) LAY[k] = copyDef(k); saveLayout(); renderUI(); }
   else if (a === "sound") { fixName(); soundOn = !soundOn; store.set("soinsu-sound", soundOn ? "1" : "0"); renderUI(); }
+  else if (a === "games") location.href = "../";   // ミニゲーム集のゲーム一覧へ
   else if (a.startsWith("pb-")) { const nm = $("name")?.value; practiceBots = Number(a.slice(3)); renderUI(); if (nm != null) $("name").value = nm; }
   else if (a === "leave") leave();
   else if (a === "bot+") { host.bots++; hostLobby(); }
@@ -861,11 +1007,11 @@ function frame(nowMs) {
     const sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
     const ox = me.x, oz = me.z;
     me.x += (-sy * fwd + cy * str) * SPEED * dt; me.z += (-cy * fwd - sy * str) * SPEED * dt;
-    collide(me);
+    collide(me); updY(me, dt);
     me.step = (me.step || 0) + Math.hypot(me.x - ox, me.z - oz);
-    if (me.step > STRIDE) { me.step = 0; stepSound(me.x, me.z, true); }
+    if (me.step > STRIDE) { me.step = 0; stepSound(me.x, me.y, me.z, true); }
     updListener();
-    const mine = view.get(myId); if (mine) { mine.x = me.x; mine.z = me.z; }
+    const mine = view.get(myId); if (mine) { mine.x = me.x; mine.z = me.z; mine.y = me.y; }
     sendT += dt;
     if (sendT > 0.1) {
       sendT = 0;
@@ -877,34 +1023,32 @@ function frame(nowMs) {
     if (mode === "host" && G) for (const [id, c] of [...host.conns]) if (nowMs - (c.seen || nowMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
     if (mode === "client" && nowMs - hostSeen > 10000) { errMsg = "ホストとの接続が切れました"; leave(); return; }
     // 見た目
-    camera.position.set(me.x, EYE, me.z); camera.rotation.set(me.pitch, me.yaw, 0);
-    rangeRing.position.x = me.x; rangeRing.position.z = me.z; rangeRing.visible = !!(mine && mine.alive);
+    camera.position.set(me.x, me.y + EYE, me.z); camera.rotation.set(me.pitch, me.yaw, 0);
     const k = Math.min(1, dt * 12);
     for (const [id, av] of avatars) {
       const v = view.get(id);
       const px = v.x, pz = v.z;
       v.x += (v.tx - v.x) * k; v.z += (v.tz - v.z) * k;
+      const gy = groundAt(v.x, v.z); v.y = gy > v.y ? gy : v.y + (gy - v.y) * Math.min(1, dt * 8);
       if (v.alive) {
         const mv = Math.hypot(v.x - px, v.z - pz);
         v.step = (v.step || 0) + (mv < 2 ? mv : 0);
-        if (v.step > STRIDE) { v.step = 0; stepSound(v.x, v.z, false); }
+        if (v.step > STRIDE) { v.step = 0; stepSound(v.x, v.y, v.z, false); }
       }
       let dy = v.tyaw - v.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); v.yaw += dy * k;
-      av.g.position.set(v.x, 0, v.z); av.g.rotation.y = v.yaw;
+      av.g.position.set(v.x, v.y, v.z); av.g.rotation.y = v.yaw;
       if (!v.alive) {
         const t = v.deadAt ? (nowMs - v.deadAt) / 600 : 1;
         av.g.visible = t < 1; av.g.scale.setScalar(Math.max(0.01, 1 - t)); continue;
       }
-      const d = distTo(v);
-      drawLabel(av, v, d <= RANGE, id === selId);
-      const s = clamp(d / 10, 1, 2.6); av.label.scale.set(1.6 * s, s, 1);
+      drawPlate(av, v, id === selId);
+      // 遠くても読めるよう、おでこの札だけ少し大きくする
+      const s = clamp(Math.hypot(v.x - me.x, v.z - me.z) / 10, 1, 2.2); av.plate.scale.set(s, s, 1);
     }
-    const sv = selId != null && view.get(selId);
-    selRing.visible = !!(sv && sv.alive); if (sv) selRing.position.set(sv.x, 0.04, sv.z);
     for (let i = fxList.length - 1; i >= 0; i--) {
       const f = fxList[i], t = (nowMs - f.t0) / 1200;
       if (t >= 1) { f.el.remove(); fxList.splice(i, 1); continue; }
-      tmpV.set(f.v.x, 3.3 + t * 1.2, f.v.z).project(camera);
+      tmpV.set(f.v.x, (f.v.y || 0) + 2.9 + t * 1.2, f.v.z).project(camera);
       f.el.style.display = tmpV.z > 1 ? "none" : "";
       f.el.style.left = (tmpV.x + 1) / 2 * innerWidth + "px"; f.el.style.top = (1 - tmpV.y) / 2 * innerHeight + "px";
       f.el.style.opacity = 1 - t;
@@ -912,15 +1056,14 @@ function frame(nowMs) {
     updPad(false); updHud(nowMs);
   } else {
     const t = nowMs / 6000;
-    camera.position.set(Math.cos(t) * 26, 14, Math.sin(t) * 26); camera.lookAt(0, 0, 0);
-    rangeRing.visible = false; selRing.visible = false;
+    camera.position.set(Math.cos(t) * 30, 18, Math.sin(t) * 30); camera.lookAt(0, 0, 0);
   }
   renderer.render(scene, camera);
 }
 renderUI();
 requestAnimationFrame(frame);
 try { if (window.IN_HUB && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
-window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; } };
+window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; }, get STAGE() { return STAGE; }, pickTarget, groundAt };
 </script>
 </body>
 </html>
