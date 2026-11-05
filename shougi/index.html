@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>フリータイム将棋</title>
+<!-- ミニゲーム集「you know games」の中の 1 本（2026-11-06 にリポジトリ shougi から移した）。アプリの設定・アイコンは 1 つ上のフォルダにある -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="you know games">
+<meta name="theme-color" content="#F6EFE3">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<style>
+  :root{
+    --wood:#E4C596;
+    --wood-dark:#C79E64;
+    --board-line:#5A3A22;
+    --board-frame:#7A4B26;
+    --bg:#F6EFE3;
+    --ink:#2A2320;
+    --sente-piece:#F3E3C4;
+    --sente-text:#1C1712;
+    --gote-piece:#3A2A22;
+    --gote-text:#F0DAB8;
+    --accent:#A6432A;
+    --accent-soft:#D98A5F;
+    --panel:#EFE3CC;
+    --panel-border:#C9AE7E;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;
+    padding:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Hiragino Mincho ProN","Yu Mincho",serif;
+    -webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;
+  }
+  .wrap{
+    max-width:640px;
+    margin:0 auto;
+    padding:14px 12px 28px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+  }
+  .screen{display:none;}
+  .screen.active{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    width:100%;
+  }
+  h1{
+    font-size:1.15rem;
+    font-weight:600;
+    letter-spacing:.08em;
+    margin:2px 0 0;
+    color:var(--ink);
+  }
+  .sub{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;
+    font-size:.72rem;
+    color:#7A6A55;
+    margin:0 0 4px;
+    text-align:center;
+    line-height:1.5;
+  }
+  .hand{
+    width:100%;
+    max-width:640px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:6px 8px;
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    min-height:44px;
+  }
+  .hand-label{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;
+    font-size:.68rem;
+    color:#7A6A55;
+    width:34px;
+    flex-shrink:0;
+    letter-spacing:.03em;
+  }
+  .hand-pieces{
+    display:flex;
+    gap:5px;
+    flex-wrap:wrap;
+    flex:1;
+  }
+  .hand-piece{
+    position:relative;
+    width:32px;
+    height:34px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.25));
+    transition:transform .1s ease;
+  }
+  .hand-piece.empty{visibility:hidden;}
+  .hand-piece .pent{width:30px;height:32px;font-size:.95rem;}
+  .hand-piece.selected{transform:scale(1.15);}
+  .hand-piece .badge{
+    position:absolute;
+    bottom:-4px;
+    right:-4px;
+    background:var(--accent);
+    color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    font-size:.6rem;
+    font-weight:700;
+    border-radius:50%;
+    width:15px;
+    height:15px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    line-height:1;
+  }
+  .hand-piece.selected .pent{outline:2px solid var(--accent);outline-offset:1px;border-radius:3px;}
+
+  .board-frame{
+    position:relative;
+    padding:10px;
+    background:var(--board-frame);
+    border-radius:6px;
+    box-shadow:0 6px 18px rgba(0,0,0,.25), inset 0 0 0 2px rgba(0,0,0,.15);
+    flex:0 0 auto;
+  }
+  .board{
+    position:relative;
+    width:min(94vw,560px);
+    height:min(103.4vw,616px);
+    background:var(--wood);
+    background-image:linear-gradient(135deg, var(--wood) 0%, var(--wood-dark) 100%);
+    display:grid;
+    grid-template-columns:repeat(9,1fr);
+    grid-template-rows:repeat(9,1fr);
+  }
+  .cell{
+    position:relative;
+    border-right:1px solid var(--board-line);
+    border-bottom:1px solid var(--board-line);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .cell:nth-child(9n){border-right:none;}
+  .cell:nth-child(n+73){border-bottom:none;}
+  .cell.legal::after{
+    content:"";
+    position:absolute;
+    width:22%;
+    height:22%;
+    border-radius:50%;
+    background:rgba(166,67,42,.55);
+  }
+  .cell.legal-capture::after{
+    content:"";
+    position:absolute;
+    inset:8%;
+    border-radius:50%;
+    background:transparent;
+    border:3px solid rgba(166,67,42,.65);
+  }
+
+  .piece{
+    position:relative;
+    width:88%;
+    height:88%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    user-select:none;
+    transition:transform .1s ease;
+  }
+  .piece.disabled{cursor:default;}
+  .piece.selected{transform:scale(1.08);}
+  .pent{
+    width:100%;
+    height:100%;
+    clip-path:polygon(50% 0%, 100% 22%, 100% 100%, 0% 100%, 0% 22%);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:min(4.6vw,17px);
+    font-weight:700;
+    line-height:1;
+    letter-spacing:-1px;
+  }
+  .owner-sente .pent{
+    background:linear-gradient(180deg,#F7EAC8,#E9D19E);
+    color:var(--sente-text);
+    box-shadow:inset 0 0 0 1px #8a6a3a;
+  }
+  .owner-gote .pent{
+    background:linear-gradient(180deg,#4A362B,#2C1F19);
+    color:var(--gote-text);
+    box-shadow:inset 0 0 0 1px #000;
+  }
+  .owner-gote{transform:none;}
+  .board:not(.flipped) .owner-gote .pent{transform:rotate(180deg);}
+  .board.flipped .owner-sente .pent{transform:rotate(180deg);}
+  #battleStatus, #roomCodeBox, #readyRow{order:-10;}
+  /* 修正4: readyRowをdisplay:noneで消すと高さが無くなり盤が上下にずれるため、
+     常に高さを確保したままvisibilityで表示/非表示を切り替える */
+  #readyRow{
+    visibility:hidden;
+    min-height:38px;
+  }
+  #readyRow.visible{
+    visibility:visible;
+  }
+  /* 修正5: battleStatusの文言が対局開始前後で長さが変わり、
+     折り返し行数が変化して盤がずれるため、高さを完全に固定する
+     （端末やフォントによって3行になっても、はみ出た分は表示しないことで
+     高さの変動そのものを起こさない） */
+  #battleStatus{
+    height:2.9em;
+    max-height:2.9em;
+    overflow:hidden;
+    line-height:1.45;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .board-frame{order:0;}
+  #handGote{order:-1;}
+  #handSente{order:1;}
+  #battleScreen.flip-hands #handGote{order:1;}
+  #battleScreen.flip-hands #handSente{order:-1;}
+  #restartRow, #status{order:10;}
+
+  /* 修正2: カウントダウンUIをレイアウトから独立させる（Absolute Positioning） */
+  #countdownStatus{
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 30;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 16px 32px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .cooldown-ring{
+    position:absolute;
+    inset:0;
+    border-radius:4px;
+    background:conic-gradient(rgba(0,0,0,.55) var(--pct,0%), transparent 0);
+    pointer-events:none;
+    mix-blend-mode:normal;
+  }
+  .piece.cooling .pent{opacity:.55;}
+
+  .controls{
+    width:100%;
+    max-width:400px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    padding:8px 12px;
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;
+  }
+  .controls label{font-size:.72rem;color:#7A6A55;white-space:nowrap;}
+  .controls input[type=range]{flex:1;accent-color:var(--accent);}
+  .controls .val{font-size:.72rem;width:34px;text-align:right;color:var(--ink);}
+  .btnrow{display:flex;gap:8px;width:100%;max-width:400px;}
+  button.action{
+    flex:1;
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;
+    font-size:.78rem;
+    padding:9px 10px;
+    border-radius:8px;
+    border:1px solid var(--panel-border);
+    background:#fff;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  button.action:active{background:var(--panel);}
+
+  .status{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;
+    font-size:.75rem;
+    color:#7A6A55;
+    min-height:16px;
+    text-align:center;
+  }
+
+  .overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(20,14,10,.72);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:40; /* 修正: Z-Indexの調整 */
+  }
+  .overlay.show{display:flex;}
+  .win-card{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:14px;
+    padding:26px 30px;
+    text-align:center;
+    max-width:280px;
+  }
+  .win-card .big{
+    font-size:1.3rem;
+    font-weight:700;
+    margin-bottom:6px;
+  }
+  .win-card p{
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    font-size:.78rem;
+    color:#6A5A45;
+    margin:0 0 16px;
+  }
+  .win-card button{
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    padding:10px 22px;
+    border-radius:8px;
+    font-size:.85rem;
+    cursor:pointer;
+  }
+
+  .drop-hint{
+    position:fixed;
+    left:50%;
+    bottom:18px;
+    transform:translateX(-50%);
+    background:var(--accent);
+    color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    font-size:.72rem;
+    padding:7px 14px;
+    border-radius:20px;
+    display:none;
+    z-index:10;
+  }
+  .drop-hint.show{display:block;}
+
+  /* 修正3: 「成る」UIを画像（駒要素）化し、直上に表示するためのスタイル変更 */
+  .promote-prompt{
+    position:fixed;
+    display:none;
+    align-items:center;
+    gap:8px;
+    z-index:100;
+    background:rgba(255, 255, 255, 0.85);
+    padding:8px 12px;
+    border-radius:12px;
+    box-shadow:0 6px 16px rgba(0,0,0,.3);
+  }
+  .promote-prompt.show{display:flex;}
+  .promote-btn{
+    width: 48px;
+    height: 52px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border-radius: 6px;
+    transition: transform 0.1s ease;
+  }
+  .promote-btn:active{
+    transform: scale(0.95);
+  }
+  /* ボタン内部に配置する駒要素の調整 */
+  .promote-btn .piece {
+    width: 40px;
+    height: 40px;
+    pointer-events: none; /* クリックイベントは親の.promote-btnで受ける */
+  }
+  .promote-btn .pent {
+    font-size: 1.1rem;
+  }
+  #ykgBack{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:50;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;padding:7px 12px;border-radius:99px;border:1px solid #C79E64;background:rgba(246,239,227,.95);color:#2A2320}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="lobbyScreen" class="screen active">
+    <h1>フリータイム将棋</h1>
+    <p class="sub">手番なし。駒ごとにクールダウンがあり、動かした直後だけ少し待てば、あとは好きなタイミングで自由に指せます。相手の玉を取ったら勝ちです。</p>
+
+    <div class="controls" id="netPanel">
+      <button class="action" id="createRoomBtn" style="flex:none;padding:8px 12px;">部屋を作る</button>
+      <label for="roomInput">部屋番号</label>
+      <input type="text" id="roomInput" inputmode="numeric" autocomplete="off" maxlength="1" placeholder="1桁" style="width:52px;flex:none;text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:.9rem;padding:6px 8px;border-radius:6px;border:1px solid var(--panel-border);">
+      <button class="action" id="connectBtn" style="flex:none;padding:8px 12px;">入室</button>
+    </div>
+    <div class="btnrow">
+      <button class="action" id="offlineBtn">この端末だけで2人プレイする</button>
+    </div>
+    <div class="btnrow">
+      <button class="action" id="ykgGames">← ゲーム一覧へ（you know games）</button>
+    </div>
+    <div class="status" id="netStatus">部屋を作る、または部屋番号を入力して入室してください</div>
+  </div>
+
+  <div id="battleScreen" class="screen">
+    <div class="status" id="battleStatus"></div>
+    <div id="roomCodeBox" style="display:none;text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+      <div style="font-size:.68rem;color:#7A6A55;letter-spacing:.05em;">部屋番号</div>
+      <div id="roomCodeValue" style="font-size:2.2rem;font-weight:700;color:var(--accent);line-height:1.2;letter-spacing:.15em;"></div>
+    </div>
+    <div class="btnrow" id="readyRow">
+      <button class="action" id="readyBtn">準備完了</button>
+    </div>
+
+    <!-- 修正2: style属性を整理し、CSS側でレイアウトを独立管理 -->
+    <div id="countdownStatus" style="display:none;"></div>
+
+    <div class="hand" id="handGote">
+      <div class="hand-label">後手</div>
+      <div class="hand-pieces" id="handGotePieces"></div>
+    </div>
+
+    <div class="board-frame">
+      <div class="board" id="board"></div>
+    </div>
+
+    <div class="hand" id="handSente">
+      <div class="hand-label">先手</div>
+      <div class="hand-pieces" id="handSentePieces"></div>
+    </div>
+
+    <div class="btnrow" id="restartRow">
+      <button class="action" id="restartBtn">最初から</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<div class="drop-hint" id="dropHint">持ち駒を打つマスを選んでください</div>
+
+<!-- 修正3: 「成る」選択肢をテキストボタンから画像(DIV構成)ボタンを格納する枠に変更 -->
+<div class="promote-prompt" id="promotePrompt">
+  <div class="promote-btn" id="promotePromoteBtn" title="成る"></div>
+  <div class="promote-btn" id="promoteStayBtn" title="そのまま"></div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="win-card">
+    <div class="big" id="winText">勝利</div>
+    <p>玉を取ったチームの勝ちです。</p>
+    <button id="playAgain">もう一度遊ぶ</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(function(){
+  const ROWS=9, COLS=9;
+  const KANJI={
+    P:'歩', L:'香', N:'桂', S:'銀', G:'金', B:'角', R:'飛', K:'王',
+    '+P':'と', '+L':'成香', '+N':'成桂', '+S':'成銀', '+B':'馬', '+R':'龍'
+  };
+  function kingGlyph(owner){ return owner==='sente' ? '王' : '玉'; }
+
+  const boardEl=document.getElementById('board');
+  const statusEl=document.getElementById('status');
+  const overlayEl=document.getElementById('overlay');
+  const winText=document.getElementById('winText');
+  const dropHint=document.getElementById('dropHint');
+  const promotePrompt=document.getElementById('promotePrompt');
+  const promoteStayBtn=document.getElementById('promoteStayBtn');
+  const promotePromoteBtn=document.getElementById('promotePromoteBtn');
+  promoteStayBtn.addEventListener('click', ()=>{
+    const r=parseInt(promotePrompt.dataset.r,10), c=parseInt(promotePrompt.dataset.c,10);
+    if(Number.isInteger(r) && Number.isInteger(c)) attemptAction({kind:'decline-promote', r, c});
+  });
+  promotePromoteBtn.addEventListener('click', ()=>{
+    const r=parseInt(promotePrompt.dataset.r,10), c=parseInt(promotePrompt.dataset.c,10);
+    if(Number.isInteger(r) && Number.isInteger(c)) attemptAction({kind:'promote', r, c});
+  });
+  const handSenteEl=document.getElementById('handSentePieces');
+  const handGoteEl=document.getElementById('handGotePieces');
+
+  const PIECE_COOLDOWN_MS = {
+    P: 1000,  // 歩
+    L: 1500,  // 香
+    N: 1500,  // 桂
+    S: 2000,  // 銀
+    G: 2000,  // 金
+    B: 3000,  // 角
+    R: 3500,  // 飛
+    K: 1000   // 王/玉
+  };
+  function cooldownFor(type){
+    return PIECE_COOLDOWN_MS[type] != null ? PIECE_COOLDOWN_MS[type] : 2500;
+  }
+
+  let board, hands, selected, dropSelection, gameOver, winnerColor=null, cells=[];
+  let netRoom=null, netSend=null, myColor=null, colorAssigned=false, netActive=false, isHost=false, roomCreator=false;
+  let syncSeq=0, lastAppliedSeq=-1;
+  let matchStarted = true;
+  let readyState = {sente:false, gote:false};
+  let countdownUntil = 0;
+
+  function freshBoard(){
+    const b = Array.from({length:ROWS},()=>Array(COLS).fill(null));
+    const backRow = ['L','N','S','G','K','G','S','N','L'];
+    for(let c=0;c<COLS;c++){
+      b[0][c] = {type:backRow[c], owner:'gote', promoted:false, cooldownUntil:0};
+      b[8][c] = {type:backRow[c], owner:'sente', promoted:false, cooldownUntil:0};
+    }
+    b[1][1] = {type:'R', owner:'gote', promoted:false, cooldownUntil:0};
+    b[1][7] = {type:'B', owner:'gote', promoted:false, cooldownUntil:0};
+    b[7][1] = {type:'B', owner:'sente', promoted:false, cooldownUntil:0};
+    b[7][7] = {type:'R', owner:'sente', promoted:false, cooldownUntil:0};
+    for(let c=0;c<COLS;c++){
+      b[2][c] = {type:'P', owner:'gote', promoted:false, cooldownUntil:0};
+      b[6][c] = {type:'P', owner:'sente', promoted:false, cooldownUntil:0};
+    }
+    return b;
+  }
+
+  function init(){
+    board = freshBoard();
+    hands = { sente:{P:0,L:0,N:0,S:0,G:0,B:0,R:0}, gote:{P:0,L:0,N:0,S:0,G:0,B:0,R:0} };
+    selected = null;       // {r,c}
+    dropSelection = null;  // {owner, type}
+    gameOver = false;
+    winnerColor = null;
+    lastMovedForPromotionOffer = null;
+    overlayEl.classList.remove('show');
+    dropHint.classList.remove('show');
+    statusEl.textContent='';
+    buildBoardDom();
+    renderAll();
+  }
+
+  function buildBoardDom(){
+    const flipped = myColor==='gote';
+    boardEl.classList.toggle('flipped', flipped);
+    const battleScreenEl = document.getElementById('battleScreen');
+    if(battleScreenEl) battleScreenEl.classList.toggle('flip-hands', flipped);
+
+    boardEl.innerHTML='';
+    cells=[];
+    for(let r=0;r<ROWS;r++) cells.push(new Array(COLS));
+    for(let sr=0;sr<ROWS;sr++){
+      for(let sc=0;sc<COLS;sc++){
+        const r = flipped ? ROWS-1-sr : sr;
+        const c = flipped ? COLS-1-sc : sc;
+        const cell=document.createElement('div');
+        cell.className='cell';
+        cell.dataset.r=r; cell.dataset.c=c;
+        cell.addEventListener('click',()=>onCellClick(r,c));
+        boardEl.appendChild(cell);
+        cells[r][c]=cell;
+      }
+    }
+  }
+
+  function dir(owner){ return owner==='sente' ? -1 : 1; }
+  function inZone(owner,r){
+    return owner==='sente' ? r<=2 : r>=6;
+  }
+  function lastRow(owner){ return owner==='sente' ? 0 : 8; }
+  function lastTwoRows(owner){ return owner==='sente' ? [0,1] : [7,8]; }
+
+  function slideMoves(r,c,owner,board){
+    const moves=[];
+    const p=board[r][c];
+    const directions = (p.type==='B'||p.promoted&&p.type==='B') ? [[1,1],[1,-1],[-1,1],[-1,-1]] : [[1,0],[-1,0],[0,1],[0,-1]];
+    for(const [dr,dc] of directions){
+      let nr=r+dr, nc=c+dc;
+      while(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS){
+        const occ=board[nr][nc];
+        if(!occ){ moves.push({r:nr,c:nc,capture:false}); }
+        else{
+          if(occ.owner!==owner) moves.push({r:nr,c:nc,capture:true});
+          break;
+        }
+        nr+=dr; nc+=dc;
+      }
+    }
+    return moves;
+  }
+  function stepMoves(r,c,owner,deltas,board){
+    const moves=[];
+    for(const [dr,dc] of deltas){
+      const nr=r+dr, nc=c+dc;
+      if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+      const occ=board[nr][nc];
+      if(!occ) moves.push({r:nr,c:nc,capture:false});
+      else if(occ.owner!==owner) moves.push({r:nr,c:nc,capture:true});
+    }
+    return moves;
+  }
+
+  function goldDeltas(d){ return [[d,-1],[d,0],[d,1],[0,-1],[0,1],[-d,0]]; }
+
+  function legalMovesFor(r,c,board){
+    const p=board[r][c];
+    if(!p) return [];
+    const d=dir(p.owner);
+    const key = p.promoted ? '+'+p.type : p.type;
+    switch(key){
+      case 'P': return stepMoves(r,c,p.owner,[[d,0]],board);
+      case 'L': return slideMoves(r,c,p.owner,board);
+      case 'N': return stepMoves(r,c,p.owner,[[2*d,-1],[2*d,1]],board);
+      case 'S': return stepMoves(r,c,p.owner,[[d,-1],[d,0],[d,1],[-d,-1],[-d,1]],board);
+      case 'G': case '+P': case '+L': case '+N': case '+S':
+        return stepMoves(r,c,p.owner,goldDeltas(d),board);
+      case 'B': return slideMoves(r,c,p.owner,board);
+      case 'R': return slideMoves(r,c,p.owner,board);
+      case '+B': return slideMoves(r,c,p.owner,board)
+                  .concat(stepMoves(r,c,p.owner,[[1,0],[-1,0],[0,1],[0,-1]],board));
+      case '+R': return slideMoves(r,c,p.owner,board)
+                  .concat(stepMoves(r,c,p.owner,[[1,1],[1,-1],[-1,1],[-1,-1]],board));
+      case 'K': return stepMoves(r,c,p.owner,[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]],board);
+    }
+    return [];
+  }
+
+  function mustPromote(type,owner,destR){
+    if(type==='P'||type==='L') return destR===lastRow(owner);
+    if(type==='N') return lastTwoRows(owner).includes(destR);
+    return false;
+  }
+  function canPromote(type){ return !['G','K'].includes(type); }
+
+  function now(){ return performance.now(); }
+  function isCooling(p){ return p.cooldownUntil > now(); }
+
+  function onCellClick(r,c){
+    if(gameOver) return;
+    if(netActive && colorAssigned && !matchStarted){
+      flashStatus('両者が「準備完了」を押すと対局が始まります');
+      return;
+    }
+    const clicked = board[r][c];
+
+    if(dropSelection){
+      const {owner,type} = dropSelection;
+      if(clicked){
+        cancelDrop();
+        if(clicked.owner && !isCooling(clicked) && isMine(clicked.owner)) selectSquare(r,c);
+        return;
+      }
+      if(!dropIsLegal(owner,type,r,c)){
+        flashStatus('そこには打てません');
+        return;
+      }
+      attemptAction({kind:'drop',owner,type,r,c});
+      cancelDrop();
+      return;
+    }
+
+    if(selected){
+      const {r:sr,c:sc}=selected;
+      if(sr===r&&sc===c){ clearSelection(); return; }
+      const moves = legalMovesFor(sr,sc,board).filter(m=>m.r===r&&m.c===c);
+      if(moves.length){
+        attemptAction({kind:'move',owner:board[sr][sc].owner,sr,sc,dr:r,dc:c});
+        selected=null;
+        renderAll();
+        return;
+      }
+      if(clicked && clicked.owner===board[sr][sc].owner && !isCooling(clicked) && isMine(clicked.owner)){
+        selectSquare(r,c);
+        return;
+      }
+      clearSelection();
+      return;
+    }
+
+    if(clicked && !isMine(clicked.owner)){
+      flashStatus('相手の駒は動かせません');
+      return;
+    }
+    if(clicked && !isCooling(clicked)){
+      selectSquare(r,c);
+    } else if(clicked && isCooling(clicked)){
+      flashStatus('この駒はクールダウン中です');
+    }
+  }
+
+  function isMine(owner){ return myColor===null || myColor===owner; }
+
+  function selectSquare(r,c){
+    selected={r,c};
+    renderAll();
+  }
+  function clearSelection(){
+    selected=null;
+    renderAll();
+  }
+  function cancelDrop(){
+    dropSelection=null;
+    dropHint.classList.remove('show');
+    renderHands();
+  }
+
+  function movePiece(sr,sc,dr,dc){
+    const p = board[sr][sc];
+    const target = board[dr][dc];
+    if(target){
+      const capturedIsKing = target.type==='K';
+      const capturedBase = target.type;
+      hands[p.owner][capturedBase] = (hands[p.owner][capturedBase]||0)+1;
+      if(capturedIsKing){
+        board[dr][dc]=null;
+        board[sr][sc]=null;
+        finishMove(p,dr,dc,sr,sc);
+        endGame(p.owner);
+        return;
+      }
+    }
+    finishMove(p,dr,dc,sr,sc);
+  }
+
+  function finishMove(p,dr,dc,sr,sc){
+    board[sr][sc]=null;
+    let promoted = p.promoted;
+    if(!promoted && canPromote(p.type)){
+      const enteringZone = inZone(p.owner,dr) || inZone(p.owner,sr);
+      if(mustPromote(p.type,p.owner,dr)){
+        promoted = true;
+      } else if(enteringZone){
+        promoted = false;
+      }
+    }
+    p.promoted = promoted;
+    p.cooldownUntil = now()+cooldownFor(p.type);
+    board[dr][dc]=p;
+    selected=null;
+    lastMovedForPromotionOffer = (!promoted && canPromote(p.type) && (inZone(p.owner,dr)||inZone(p.owner,sr))) ? {r:dr,c:dc} : null;
+    renderAll();
+    checkKingCapture();
+  }
+
+  let lastMovedForPromotionOffer=null;
+
+  function checkKingCapture(){
+    let senteKing=false, goteKing=false;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const p=board[r][c];
+      if(p&&p.type==='K'){ if(p.owner==='sente') senteKing=true; else goteKing=true; }
+    }
+    if(!senteKing) endGame('gote');
+    else if(!goteKing) endGame('sente');
+  }
+
+  function endGame(winner){
+    gameOver=true;
+    winnerColor=winner;
+    winText.textContent = (winner==='sente' ? '先手の勝ち！' : '後手の勝ち！');
+    overlayEl.classList.add('show');
+  }
+
+  function dropIsLegal(owner,type,r,c){
+    if(board[r][c]) return false;
+    if(type==='P'){
+      if(r===lastRow(owner)) return false;
+      for(let rr=0;rr<ROWS;rr++){
+        const q=board[rr][c];
+        if(q && q.owner===owner && q.type==='P' && !q.promoted) return false;
+      }
+      return true;
+    }
+    if(type==='L'){ return r!==lastRow(owner); }
+    if(type==='N'){ return !lastTwoRows(owner).includes(r); }
+    return true;
+  }
+
+  function performDrop(owner,type,r,c){
+    board[r][c] = {type, owner, promoted:false, cooldownUntil: now()+cooldownFor(type)};
+    hands[owner][type]--;
+    renderAll();
+    checkKingCapture();
+  }
+
+  function performPromote(r,c){
+    const p = board[r][c];
+    if(p){ p.promoted = true; }
+    if(lastMovedForPromotionOffer && lastMovedForPromotionOffer.r===r && lastMovedForPromotionOffer.c===c){
+      lastMovedForPromotionOffer=null;
+    }
+    renderAll();
+  }
+
+  function flashStatus(msg){
+    statusEl.textContent = msg;
+    clearTimeout(flashStatus._t);
+    flashStatus._t = setTimeout(()=>{ if(statusEl.textContent===msg) statusEl.textContent=''; }, 1400);
+  }
+
+  function pieceGlyph(p){
+    if(p.type==='K') return kingGlyph(p.owner);
+    const key = p.promoted ? '+'+p.type : p.type;
+    return KANJI[key];
+  }
+
+  function renderAll(){
+    renderBoard();
+    renderHands();
+    updatePromotePrompt();
+  }
+
+  function renderBoard(){
+    let legalSet = [];
+    if(selected){
+      legalSet = legalMovesFor(selected.r,selected.c,board);
+    }
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const cellEl = cells[r][c];
+        cellEl.classList.remove('legal','legal-capture');
+        cellEl.innerHTML='';
+        const p = board[r][c];
+        const lm = legalSet.find(m=>m.r===r&&m.c===c);
+        if(lm){ cellEl.classList.add(lm.capture?'legal-capture':'legal'); }
+        if(p){
+          const pieceEl=document.createElement('div');
+          pieceEl.className = 'piece owner-'+p.owner;
+          if(selected && selected.r===r && selected.c===c) pieceEl.classList.add('selected');
+          const cooling = isCooling(p);
+          if(cooling) pieceEl.classList.add('cooling');
+          const pent=document.createElement('div');
+          pent.className='pent';
+          pent.textContent = pieceGlyph(p);
+          pieceEl.appendChild(pent);
+          if(cooling){
+            const ring=document.createElement('div');
+            ring.className='cooldown-ring';
+            const remaining = p.cooldownUntil-now();
+            const pct = Math.max(0,Math.min(100, (remaining/cooldownFor(p.type))*100));
+            ring.style.setProperty('--pct',pct+'%');
+            pieceEl.appendChild(ring);
+          }
+          cellEl.appendChild(pieceEl);
+        }
+      }
+    }
+  }
+
+  /* 修正3: 「成る」UIの中身を画像化し、対象マスの直上に配置する */
+  function updatePromotePrompt(){
+    if(lastMovedForPromotionOffer){
+      const {r,c} = lastMovedForPromotionOffer;
+      const p = board[r] && board[r][c];
+      if(p && isMine(p.owner)){
+        const key = p.type;
+        const promotedKey = '+' + key;
+        const baseGlyph = KANJI[key];
+        const promotedGlyph = KANJI[promotedKey] || KANJI[key];
+
+        // 実際の駒UI（画像相当）をHTMLで構築
+        promoteStayBtn.innerHTML = `
+          <div class="piece owner-${p.owner}">
+            <div class="pent">${baseGlyph}</div>
+          </div>
+        `;
+        promotePromoteBtn.innerHTML = `
+          <div class="piece owner-${p.owner}">
+            <div class="pent" style="color:var(--accent);">${promotedGlyph}</div>
+          </div>
+        `;
+
+        promotePrompt.dataset.r = r;
+        promotePrompt.dataset.c = c;
+
+        // 対象マスの座標を取得して直上に配置
+        const cell = cells[r][c];
+        const rect = cell.getBoundingClientRect();
+        
+        promotePrompt.style.left = (rect.left + rect.width / 2) + 'px';
+        promotePrompt.style.top = (rect.top - 5) + 'px';
+        promotePrompt.style.transform = 'translate(-50%, -100%)';
+
+        promotePrompt.classList.add('show');
+        return;
+      }
+    }
+    promotePrompt.classList.remove('show');
+  }
+
+  function renderHands(){
+    handSenteEl.innerHTML='';
+    handGoteEl.innerHTML='';
+    renderHandSide('sente',handSenteEl);
+    renderHandSide('gote',handGoteEl);
+  }
+  function renderHandSide(owner,container){
+    const order=['R','B','G','S','N','L','P'];
+    for(const type of order){
+      const count = hands[owner][type];
+      const el=document.createElement('div');
+      el.className='hand-piece'+(count<=0?' empty':'');
+      if(dropSelection && dropSelection.owner===owner && dropSelection.type===type) el.classList.add('selected');
+      const pent=document.createElement('div');
+      pent.className='pent';
+      pent.style.background = owner==='sente' ? 'linear-gradient(180deg,#F7EAC8,#E9D19E)' : 'linear-gradient(180deg,#4A362B,#2C1F19)';
+      pent.style.color = owner==='sente' ? 'var(--sente-text)' : 'var(--gote-text)';
+      pent.style.clipPath='polygon(50% 0%, 100% 22%, 100% 100%, 0% 100%, 0% 22%)';
+      pent.style.boxShadow='inset 0 0 0 1px rgba(0,0,0,.35)';
+      pent.textContent = KANJI[type];
+      el.appendChild(pent);
+      if(count>0){
+        const badge=document.createElement('div');
+        badge.className='badge';
+        badge.textContent=count;
+        el.appendChild(badge);
+      }
+      el.addEventListener('click',()=>{
+        if(gameOver) return;
+        if(count<=0) return;
+        if(!isMine(owner)){ flashStatus('相手の持ち駒は打てません'); return; }
+        clearSelection();
+        if(dropSelection && dropSelection.owner===owner && dropSelection.type===type){
+          cancelDrop();
+          return;
+        }
+        dropSelection = {owner,type};
+        dropHint.classList.add('show');
+        renderHands();
+      });
+      container.appendChild(el);
+    }
+  }
+
+  function localRestart(){
+    attemptAction({kind:'restart'});
+  }
+  document.getElementById('restartBtn').addEventListener('click',localRestart);
+  document.getElementById('playAgain').addEventListener('click',localRestart);
+
+  function tick(){
+    if(!gameOver){
+      let needsRender=false;
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+        const p=board[r][c];
+        if(p && p.cooldownUntil>0){
+          /* 修正1: クールタイム終了時にタイマーを0にリセットし、UIを更新する処理を追加 */
+          if(p.cooldownUntil>now()){
+            needsRender=true;
+          } else {
+            p.cooldownUntil = 0; // 終了を確定
+            needsRender=true;    // リセット状態を描画させる
+          }
+        }
+      }
+      if(needsRender) renderBoard();
+    }
+    updateCountdownDisplay();
+    requestAnimationFrame(tick);
+  }
+
+  function updateCountdownDisplay(){
+    if(countdownUntil>0 && !matchStarted){
+      const remain = countdownUntil-now();
+      const secs = Math.max(1, Math.ceil(remain/1000));
+      countdownStatusEl.textContent = secs+'…';
+      countdownStatusEl.style.display = 'block';
+    } else {
+      countdownStatusEl.style.display = 'none';
+    }
+  }
+
+  const netStatusEl = document.getElementById('netStatus');
+  const battleStatusEl = document.getElementById('battleStatus');
+  const roomInput = document.getElementById('roomInput');
+  const createRoomBtn = document.getElementById('createRoomBtn');
+  const connectBtn = document.getElementById('connectBtn');
+  const offlineBtn = document.getElementById('offlineBtn');
+  const roomCodeBox = document.getElementById('roomCodeBox');
+  const roomCodeValue = document.getElementById('roomCodeValue');
+  const readyRow = document.getElementById('readyRow');
+  const readyBtn = document.getElementById('readyBtn');
+  const countdownStatusEl = document.getElementById('countdownStatus');
+  const lobbyScreen = document.getElementById('lobbyScreen');
+  const battleScreen = document.getElementById('battleScreen');
+
+  function showScreen(name){
+    lobbyScreen.classList.toggle('active', name==='lobby');
+    battleScreen.classList.toggle('active', name==='battle');
+    if(name==='battle'){
+      requestAnimationFrame(fitBoard);
+    }
+  }
+
+  function fitBoard(){
+    if(!battleScreen.classList.contains('active')) return;
+    boardEl.style.width = '';
+    boardEl.style.height = '';
+    const boardFrame = battleScreen.querySelector('.board-frame');
+    if(!boardFrame) return;
+    let usedHeight = 0;
+    let flowCount = 0;
+    Array.from(battleScreen.children).forEach(el=>{
+      if(el===boardFrame) return;
+      // 修正6: position:absolute/fixedの要素（カウントダウン表示など）は
+      // ドキュメントフロー上の高さを持たないため、盤サイズ計算から除外する
+      const cs = getComputedStyle(el);
+      if(cs.position==='absolute' || cs.position==='fixed') return;
+      const rect = el.getBoundingClientRect();
+      if(rect.height>0){ usedHeight += rect.height; flowCount++; }
+    });
+    const gapPx = 10 * flowCount;
+    const wrapPadding = 42;
+    const framePadding = 20;
+    const availableHeight = window.innerHeight - usedHeight - gapPx - wrapPadding - framePadding;
+    const availableWidth = battleScreen.clientWidth - framePadding;
+    // マス目を正方形(1:1)ではなく縦長(幅:高さ = 1:1.1)にする
+    const ASPECT = 1.2;
+    const width = Math.max(200, Math.floor(Math.min(availableWidth, availableHeight/ASPECT)));
+    const height = Math.floor(width*ASPECT);
+    boardEl.style.width = width+'px';
+    boardEl.style.height = height+'px';
+  }
+  window.addEventListener('resize', fitBoard);
+  window.addEventListener('orientationchange', ()=>{ setTimeout(fitBoard, 100); });
+
+  function setLobbyStatus(text){ netStatusEl.textContent = text; }
+  function setBattleStatus(text){ battleStatusEl.textContent = text; }
+
+  const ID_PREFIX = 'jp-freetime-shogi-';
+  // パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
+  // ホストはパーティの番号で部屋を作り（先手）、ゲストはその部屋が開くまで探し続ける（後手）。2人用なので、3人目以降は入れない。
+  const PARTY = (()=>{
+    try { if(!new URLSearchParams(location.search).has('party')) return null; const j = JSON.parse(sessionStorage.getItem('ykg-party') || 'null'); return (j && /^\d$/.test(j.code)) ? j : null; } catch(e){ return null; }
+  })();
+  const netId = code => (PARTY ? 'jp-shogi-party-' : ID_PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
+  const toGames = () => { location.href = '../'; };   // ゲーム一覧へ
+  let partyTries = 0;
+  let peer=null, conn=null, peerCount=0;
+
+  function applyActionAsHost(action, actorColor){
+    const requireActor = actorColor !== undefined;
+    switch(action.kind){
+      case 'move': {
+        const {sr,sc,dr,dc,owner} = action;
+        const p = board[sr] && board[sr][sc];
+        if(!p || p.owner!==owner || isCooling(p)) return false;
+        if(requireActor && p.owner!==actorColor) return false;
+        const legal = legalMovesFor(sr,sc,board).some(m=>m.r===dr&&m.c===dc);
+        if(!legal) return false;
+        movePiece(sr,sc,dr,dc);
+        return true;
+      }
+      case 'drop': {
+        const {owner,type,r,c} = action;
+        if(requireActor && owner!==actorColor) return false;
+        if(!hands[owner] || !hands[owner][type]) return false;
+        if(!dropIsLegal(owner,type,r,c)) return false;
+        performDrop(owner,type,r,c);
+        return true;
+      }
+      case 'promote': {
+        const {r,c} = action;
+        const p = board[r] && board[r][c];
+        if(!p || p.promoted || !canPromote(p.type)) return false;
+        if(requireActor && p.owner!==actorColor) return false;
+        performPromote(r,c);
+        return true;
+      }
+      case 'decline-promote': {
+        const {r,c} = action;
+        if(!lastMovedForPromotionOffer || lastMovedForPromotionOffer.r!==r || lastMovedForPromotionOffer.c!==c) return false;
+        const p = board[r] && board[r][c];
+        if(requireActor && p && p.owner!==actorColor) return false;
+        lastMovedForPromotionOffer = null;
+        renderAll();
+        return true;
+      }
+      case 'restart': {
+        init();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function attemptAction(action){
+    if(netActive && colorAssigned && !matchStarted){
+      flashStatus('両者が「準備完了」を押すと対局が始まります');
+      return;
+    }
+    if(!netActive || !colorAssigned){
+      applyActionAsHost(action);
+      return;
+    }
+    if(isHost){
+      const applied = applyActionAsHost(action);
+      if(applied) broadcastSync();
+    } else {
+      netSend({kind:'request', action});
+    }
+  }
+
+  function now2ms(remain){ return remain>0 ? now()+remain : 0; }
+
+  function serializeState(){
+    return {
+      board: board.map(row=>row.map(p=>{
+        if(!p) return null;
+        const remain = p.cooldownUntil ? Math.max(0, p.cooldownUntil-now()) : 0;
+        return {type:p.type, owner:p.owner, promoted:p.promoted, remain};
+      })),
+      hands: JSON.parse(JSON.stringify(hands)),
+      gameOver,
+      winner: winnerColor,
+      promoOffer: lastMovedForPromotionOffer ? {r:lastMovedForPromotionOffer.r, c:lastMovedForPromotionOffer.c} : null,
+      matchStarted,
+      readyState: {sente:readyState.sente, gote:readyState.gote},
+      countdownRemain: countdownUntil>0 ? Math.max(0, countdownUntil-now()) : 0
+    };
+  }
+
+  function applySyncState(state){
+    const wasMatchStarted = matchStarted;
+    board = state.board.map(row=>row.map(p=>{
+      if(!p) return null;
+      return {type:p.type, owner:p.owner, promoted:p.promoted, cooldownUntil: now2ms(p.remain)};
+    }));
+    hands = state.hands;
+    gameOver = state.gameOver;
+    winnerColor = state.winner;
+    selected = null;
+    dropSelection = null;
+    dropHint.classList.remove('show');
+    lastMovedForPromotionOffer = state.promoOffer;
+    if(typeof state.matchStarted==='boolean') matchStarted = state.matchStarted;
+    if(state.readyState) readyState = {sente:!!state.readyState.sente, gote:!!state.readyState.gote};
+    countdownUntil = state.countdownRemain>0 ? now()+state.countdownRemain : 0;
+    
+    if(!wasMatchStarted && matchStarted){
+      buildBoardDom();
+    }
+    
+    updateReadyUI();
+    updateNetStatus(1);
+    renderAll();
+    if(gameOver){
+      winText.textContent = (winnerColor==='sente' ? '先手の勝ち！' : '後手の勝ち！');
+      overlayEl.classList.add('show');
+    } else {
+      overlayEl.classList.remove('show');
+    }
+  }
+
+  function broadcastSync(){
+    const state = serializeState();
+    state.seq = ++syncSeq;
+    netBroadcast({kind:'sync', state});
+  }
+
+  function netBroadcast(action){
+    if(netActive && netSend) netSend(action);
+  }
+
+  function handleRemote(data){
+    if(!data || !data.kind) return;
+    if(data.kind==='request'){
+      if(isHost){
+        const applied = applyActionAsHost(data.action, 'gote');
+        if(applied) broadcastSync();
+      }
+      return;
+    }
+    if(data.kind==='ready-request'){
+      if(isHost){
+        readyState.gote = true;
+        checkMatchStart();
+        broadcastSync();
+        updateReadyUI();
+      }
+      return;
+    }
+    if(data.kind==='sync'){
+      if(typeof data.state.seq==='number'){
+        if(data.state.seq<=lastAppliedSeq) return;
+        lastAppliedSeq = data.state.seq;
+      }
+      applySyncState(data.state);
+    }
+  }
+
+  function updateNetStatus(count){
+    if(!colorAssigned){
+      setBattleStatus(count>0
+        ? '接続中…'
+        : '相手の参加を待っています（部屋番号を共有してください）');
+      return;
+    }
+    const label = myColor==='sente' ? '先手' : '後手';
+    if(!matchStarted){
+      setBattleStatus('あなたは'+label+'です。接続完了。準備ができたら「準備完了」を押してください');
+      return;
+    }
+    setBattleStatus(count>0
+      ? ('あなたは'+label+'です。オンライン対局中（'+count+'人接続）')
+      : ('あなたは'+label+'です。相手の再接続を待っています…'));
+  }
+
+  function checkMatchStart(){
+    if(readyState.sente && readyState.gote && !matchStarted && countdownUntil<=0){
+      countdownUntil = now()+3000;
+      setTimeout(()=>{
+        if(!matchStarted){
+          matchStarted = true;
+          countdownUntil = 0;
+          buildBoardDom();
+          broadcastSync();
+          updateReadyUI();
+          renderAll();
+        }
+      }, 3000);
+    }
+  }
+
+  function updateReadyUI(){
+    if(!colorAssigned || matchStarted || countdownUntil>0){
+      readyRow.classList.remove('visible');
+      return;
+    }
+    readyRow.classList.add('visible');
+    const already = readyState[myColor];
+    readyBtn.disabled = already;
+    readyBtn.textContent = already ? '準備完了（相手を待っています）' : '準備完了';
+  }
+
+  function generateRoomNumber(){
+    const n = crypto.getRandomValues(new Uint32Array(1))[0] % 10;
+    return String(n);
+  }
+
+  function netSendFn(data){
+    if(conn && conn.open) conn.send(data);
+  }
+
+  function createRoom(){
+    if(netActive) return;
+    if(typeof Peer === 'undefined'){
+      setLobbyStatus('通信ライブラリの読み込みに失敗しました。回線を確認して再読み込みしてください');
+      showScreen('lobby');
+      return;
+    }
+    roomCreator = true;
+    isHost = true;
+    myColor = 'sente';
+    const code = PARTY ? PARTY.code : generateRoomNumber();
+    roomInput.value = code;
+    connectBtn.disabled = true;
+    createRoomBtn.disabled = true;
+    showScreen('battle');
+    setBattleStatus('部屋を作成しています…（部屋番号：'+code+'）');
+
+    peer = new Peer(netId(code));
+
+    peer.on('open', ()=>{
+      colorAssigned = true;
+      netActive = true;
+      netSend = netSendFn;
+      matchStarted = false;
+      readyState = {sente:false, gote:false};
+      roomInput.disabled = true;
+      connectBtn.textContent = '入室済み';
+      roomCodeValue.textContent = code;
+      roomCodeBox.style.display = 'block';
+      buildBoardDom();
+      renderAll();
+      updateNetStatus(0);
+      updateReadyUI();
+      requestAnimationFrame(fitBoard);
+    });
+
+    peer.on('connection', (c)=>{
+      if(PARTY && conn && conn.open){   // パーティの 3 人目以降: 2 人用なので断る
+        c.on('open', ()=>{ try { c.send({kind:'party-full'}); } catch(e){} setTimeout(()=>{ try { c.close(); } catch(e){} }, 500); });
+        return;
+      }
+      conn = c;
+      conn.on('open', ()=>{
+        peerCount++;
+        broadcastSync();
+        updateNetStatus(peerCount);
+      });
+      conn.on('data', (data)=>{ handleRemote(data); });
+      conn.on('close', ()=>{
+        peerCount = Math.max(0, peerCount-1);
+        updateNetStatus(peerCount);
+      });
+    });
+
+    peer.on('error', (err)=>{
+      console.error(err);
+      if(PARTY && err.type === 'unavailable-id' && ++partyTries < 30){   // 前の部屋がまだ残っている: 空くのを待つ
+        try { peer.destroy(); } catch(e){}
+        netActive = false;
+        setTimeout(createRoom, 1000);
+        return;
+      }
+      connectBtn.disabled = false;
+      createRoomBtn.disabled = false;
+      roomCreator = false;
+      isHost = false;
+      netActive = false;
+      colorAssigned = false;
+      setLobbyStatus('接続に失敗しました。通信環境を確認してもう一度お試しください。');
+      showScreen('lobby');
+    });
+  }
+
+  function connectRoom(){
+    const code = roomInput.value.trim();
+    if(!/^\d$/.test(code)){
+      setLobbyStatus('部屋番号は1桁の数字で入力してください');
+      return;
+    }
+    if(typeof Peer === 'undefined'){
+      setLobbyStatus('通信ライブラリの読み込みに失敗しました。回線を確認して再読み込みしてください');
+      return;
+    }
+    connectBtn.disabled = true;
+    createRoomBtn.disabled = true;
+    showScreen('battle');
+    setBattleStatus(PARTY ? 'ホストの部屋に入っています…' : '入室しています…');
+
+    isHost = false;
+    myColor = 'gote';
+    peer = new Peer();
+
+    peer.on('open', ()=>{
+      const c = conn = peer.connect(netId(code), {reliable:true});
+      netSend = netSendFn;
+      // パーティ: ホストの部屋がまだ開いていないとき。PeerJS は 2 回目以降の「見つからない」を知らせないことがあるので、
+      // 2.5 秒たってもつながらなければ peer から作り直してつなぎ直す
+      if(PARTY) setTimeout(()=>{
+        if(conn !== c || c.open) return;
+        try { peer.destroy(); } catch(e){}
+        if(++partyTries > 150){ setBattleStatus('ホストが見つかりません（ゲーム一覧へ戻ります）'); setTimeout(toGames, 3000); return; }
+        connectRoom();
+      }, 2500);
+
+      conn.on('open', ()=>{
+        colorAssigned = true;
+        netActive = true;
+        matchStarted = false;
+        readyState = {sente:false, gote:false};
+        roomInput.disabled = true;
+        connectBtn.textContent = '入室済み';
+        buildBoardDom();
+        renderAll();
+        updateNetStatus(1);
+        updateReadyUI();
+      });
+      conn.on('data', (data)=>{
+        if(data && data.kind === 'party-full'){ setBattleStatus('2人用のゲームです。いまは遊べません（ゲーム一覧へ戻ります）'); setTimeout(toGames, 3500); return; }
+        handleRemote(data);
+      });
+      conn.on('close', ()=>{
+        if(PARTY && conn === c && colorAssigned){ toGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ
+        updateNetStatus(0);
+      });
+      conn.on('error', (err)=>{
+        if(PARTY) return;   // パーティ: 上の時間切れで探し直す
+        console.error(err);
+        connectBtn.disabled = false;
+        createRoomBtn.disabled = false;
+        setLobbyStatus('接続に失敗しました。部屋番号を確認してください。');
+        showScreen('lobby');
+      });
+    });
+
+    peer.on('error', (err)=>{
+      if(PARTY && err.type === 'peer-unavailable') return;   // パーティ: ホストがまだ来ていない。時間切れで探し直す
+      console.error(err);
+      const msg = (err.type === 'peer-unavailable')
+        ? '部屋が見つかりません。番号をご確認ください'
+        : '接続エラーが発生しました(' + err.type + ')';
+      connectBtn.disabled = false;
+      createRoomBtn.disabled = false;
+      setLobbyStatus(msg);
+      showScreen('lobby');
+    });
+  }
+
+  function startOffline(){
+    roomCreator = false;
+    isHost = false;
+    myColor = null;
+    colorAssigned = false;
+    netActive = false;
+    buildBoardDom();
+    renderAll();
+    setBattleStatus('この端末だけで2人プレイ中（手番なし）');
+    showScreen('battle');
+  }
+
+  createRoomBtn.addEventListener('click', ()=>{ roomCreator=true; createRoom(); });
+  connectBtn.addEventListener('click', ()=>{ roomCreator=false; connectRoom(); });
+  offlineBtn.addEventListener('click', startOffline);
+  readyBtn.addEventListener('click', ()=>{
+    if(!colorAssigned || matchStarted) return;
+    if(readyState[myColor]) return;
+    if(isHost){
+      readyState.sente = true;
+      checkMatchStart();
+      broadcastSync();
+      updateReadyUI();
+      updateNetStatus(peerCount);
+    } else {
+      readyState.gote = true;
+      netSend({kind:'ready-request'});
+      updateReadyUI();
+    }
+  });
+
+  const urlParams = new URLSearchParams(location.search);
+  const initialRoom = urlParams.get('room');
+  if(initialRoom){
+    roomCreator = false;
+    roomInput.value = initialRoom;
+  }
+
+  init();
+  requestAnimationFrame(tick);
+
+  document.getElementById('ykgGames').addEventListener('click', toGames);
+  if(PARTY){
+    // パーティから開いたとき: ホストは部屋を作り、ゲストは自動で入る。どの画面でも左上に「← 一覧」を出す
+    const back = document.createElement('button');
+    back.id = 'ykgBack'; back.textContent = '← 一覧';
+    back.addEventListener('click', ()=>{ if(confirm('ゲーム一覧へ戻りますか？' + (isHost ? '（相手も一覧へ戻ります）' : ''))) toGames(); });
+    document.body.appendChild(back);
+    if(PARTY.role === 'host'){ roomCreator = true; createRoom(); }
+    else { roomCreator = false; roomInput.value = PARTY.code; connectRoom(); }
+  } else if(initialRoom){
+    connectRoom();
+  }
+  // アプリとして入れたときに使うサービスワーカー（ミニゲーム集で 1 つ。1 つ上のフォルダにある）
+  try { if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) navigator.serviceWorker.register('../sw.js').catch(()=>{}); } catch(e){}
+})();
+</script>
+</body>
+</html>
