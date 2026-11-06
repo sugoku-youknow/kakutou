@@ -85,7 +85,7 @@ const ROT_SPEED = 50 * Math.PI / 180;   // 置くときの回転ボタンを押�
 const FINGER_VMAX = 25;             // 指についていく速さの上限（1秒あたり）。ふつうに動かすぶんには指とぴったり同じに動く
 let JITTER = 0.08;                 // 最初に積むときのずれ（長さ方向）。きっちりそろっていないぶん崩れやすい
 const FALL_DROP = 0.75 * BH;       // ターン開始時からこれ以上下がったブロックがあれば「崩れた」
-const SNAP_MS = 80;                // 動きを送る間隔
+const SNAP_MS = 50;                // 動きを送る間隔（2026-11-06 に 80 → 50。落としてよい通り道で送るので増やしても詰まらない）
 const PREFIX = "jenga-online-room-";
 // パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
 // ホストはパーティの番号（1けた）で部屋を作り、ゲストはその部屋が開くまで探し続ける。ホストがいなくなったら、ゲストもゲーム一覧へ戻る。
@@ -94,6 +94,12 @@ const PARTY = (() => {
 })();
 const netId = code => (PARTY ? "jenga-party-" : PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
 let partyTries = 0;
+let spectating = false, lobbySpecs = [];   // 観戦している / ロビーに出す観戦の人の名前
+// パーティの成績: 勝ち負けが決まったら、ゲーム一覧で集計するために置いておく（ホストだけ）
+function partyReport(w, l) {
+  if (!PARTY || PARTY.role !== "host") return;
+  try { const a = JSON.parse(sessionStorage.getItem("ykg-results") || "[]"); a.push({ game: "jenga", w, l }); sessionStorage.setItem("ykg-results", JSON.stringify(a)); } catch (e) {}
+}
 const MAX_PLAYERS = 4;
 // 倒れやすさ（難易度）4段階。部屋ごとにホストが決め、開始のときに全員へ送る。4 が一番倒れやすい
 const DIFFS = {
@@ -572,41 +578,75 @@ function toast(t) { toastMsg = t; toastT = performance.now() + 1500; renderUI();
 // ホストがまとめ役。参加者 → ホスト → みんな。動かしている人だけが物理を計算し、ほかの人は送られてきた位置を表示する
 const host = { conns: new Map(), nextId: 1, playing: false, turnI: 0, n: 0, last: null };
 
+// 落としてよい通り道（シールドファイトと同じ）: ふつうの接続と同じ RTCPeerConnection の上に、届き直しをしない・順番を待たない
+// データチャンネルを両側で同じ番号で作る。動いているあいだの位置（snap）だけこちらで送り、なくなったものは捨てて次の新しいものを使う。
+// 順番が入れ替わって届くので、送る人が番号（q）を付け、受け取る側は古いものを捨てる
+const UCH_ID = 8;
+function openUch(conn, onMsg) {
+  try {
+    const pc = conn && conn.peerConnection;
+    if (!pc || !pc.createDataChannel) return null;
+    const ch = pc.createDataChannel("jenga-u", { negotiated: true, id: UCH_ID, ordered: false, maxRetransmits: 0 });
+    ch.onmessage = e => { if (typeof e.data === "string") { let m; try { m = JSON.parse(e.data); } catch (x) { return; } onMsg(m); } };
+    return ch;
+  } catch (e) { return null; }
+}
+const uchOpen = ch => !!ch && ch.readyState === "open";
+let hostUch = null, snapSeq = 0;
+const snapQs = new Map();   // 送った人ごとに、最後に使った snap の番号
+const freshSnap = (from, m) => { if (!m.q) return true; if (m.q <= (snapQs.get(from) || 0)) return false; snapQs.set(from, m.q); return true; };
 function send(m) {
-  if (mode === "client") { try { hostConn.send(m); } catch (e) {} }
+  if (m.t === "snap") m.q = ++snapSeq;
+  if (mode === "client") {
+    try { if (m.t === "snap" && uchOpen(hostUch)) hostUch.send(JSON.stringify(m)); else hostConn.send(m); } catch (e) {}
+  }
   else hostHandle(mode === "local" ? curId : 0, m);
 }
 function bcast(m, except) {
-  for (const [id, c] of host.conns) if (id !== except && c.open) { try { c.send(m); } catch (e) {} }
+  const str = m.t === "snap" ? JSON.stringify(m) : null;
+  for (const [id, c] of host.conns) if (id !== except && c.open) {
+    try { if (str && uchOpen(c.uch)) c.uch.send(str); else c.send(m); } catch (e) {}
+  }
   if (except !== 0) onMsg(m);
 }
-function hostLobby() { lobby = [{ id: 0, name: myName() }, ...[...host.conns.keys()].map(id => ({ id, name: host.conns.get(id).pname }))]; bcast({ t: "lobby", players: lobby, diff }); }
+function hostLobby() {
+  const ids = [...host.conns.keys()];
+  lobby = [{ id: 0, name: myName() }, ...ids.filter(id => !host.conns.get(id).spec).map(id => ({ id, name: host.conns.get(id).pname }))];
+  lobbySpecs = ids.filter(id => host.conns.get(id).spec).map(id => host.conns.get(id).pname);   // 観戦の人（遊ぶ人には入らない）
+  bcast({ t: "lobby", players: lobby, specs: lobbySpecs, diff });
+}
 function hostStart() {
   host.playing = true; host.turnI = 0; host.n = 0; host.last = null;
   const ps = mode === "local" ? players : lobby.slice();
   const ord = ps.map(p => p.id);
   for (let i = ord.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ord[i], ord[j]] = [ord[j], ord[i]]; }
   if (mode === "local") ord.sort((a, b) => a - b);
-  bcast({ t: "start", seed: (Math.random() * 2 ** 31) | 0, players: ps, order: ord, diff });
+  host.seed = (Math.random() * 2 ** 31) | 0; host.ps = ps;   // 途中から入る観戦の人にも同じタワーを作ってもらう
+  bcast({ t: "start", seed: host.seed, players: ps, order: ord, diff });
   bcast({ t: "turn", cur: ord[0], d: null, n: 0 });
 }
 function hostHandle(from, m) {
   if (m.t === "hello") return;
+  if (m.t === "rename") { const c = host.conns.get(from); if (c && !host.playing) { c.pname = String(m.name || "ゲスト").slice(0, 12); hostLobby(); } return; }
+  if (host.conns.get(from)?.spec) return;   // 観戦の人からの操作は受けない
   if (!host.playing) return;
   if (m.t === "look") { bcast({ t: "look", id: from, yaw: m.yaw }, from); return; }
   const cur = order[host.turnI % order.length];
   if (from !== cur) return;
-  if (m.t === "snap") { host.last = m.d; bcast(m, from); }
+  if (m.t === "snap") { if (!freshSnap(from, m)) return; host.last = m.d; bcast(m, from); }
   else if (m.t === "end") {
     host.last = m.d; host.n++; host.turnI = (host.turnI + 1) % order.length;
     bcast({ t: "turn", cur: order[host.turnI], d: m.d, n: host.n });
   } else if (m.t === "fall") {
     host.playing = false;
+    partyReport(order.filter(id => id !== from).map(nameOf), [nameOf(from)]);   // 崩した人の負け、ほかの人の勝ち
     bcast({ t: "over", loser: from, d: m.d, n: host.n });
   }
 }
 function hostDrop(id) {
+  const wasSpec = host.conns.get(id)?.spec;
   host.conns.delete(id);
+  if (wasSpec) { hostLobby(); return; }   // 観戦の人が抜けても、ゲームはそのまま
   if (!host.playing) { hostLobby(); return; }
   const wasCur = order[host.turnI] === id;
   const idx = order.indexOf(id);
@@ -620,9 +660,9 @@ function hostDrop(id) {
 
 function onMsg(m) {
   switch (m.t) {
-    case "welcome": myId = m.you; screen = "lobby"; break;
+    case "welcome": myId = m.you; spectating = !!m.spec; if (screen !== "game") screen = "lobby"; break;
     case "reject": errMsg = m.why; screen = "menu"; cleanupNet(); break;
-    case "lobby": lobby = m.players; if (m.diff) diff = m.diff; break;
+    case "lobby": lobby = m.players; lobbySpecs = m.specs || []; if (m.diff) diff = m.diff; break;
     case "start": {
       players = m.players; order = m.order; overInfo = null;
       applyDiff(m.diff); buildTower(m.seed); screen = "game"; phase = "watch"; viewSel = -1;
@@ -647,6 +687,7 @@ function onMsg(m) {
     case "look": { const a = avatars.get(m.id); if (a) a.tyaw = m.yaw; return; }
     case "snap": {
       if (isMine() || screen !== "game") return;
+      if (m.q && !freshSnap("cur" + curId, m)) return;   // 遅れて届いた古い位置は使わない
       setTargets(m.d);
       activeInfo = { ph: m.ph, s: m.s };
       const a = avatars.get(curId); if (a && m.yaw != null) a.tyaw = m.yaw;
@@ -677,10 +718,22 @@ function startHost() {
     errMsg = "接続エラー: " + e.type; screen = "menu"; cleanupNet(); renderUI();
   });
   peer.on("connection", conn => {
+    conn.on("open", () => { conn.uch = openUch(conn, m => { if (conn.pid) hostHandle(conn.pid, m); }); });
     conn.on("data", m => {
       if (m && m.t === "hello") {
+        // パーティ: 観戦を選んだ人、始まったあとに来た人、満員のときの人は観戦にする（遊ぶ人の数には入らない）
+        const nPlayers = [...host.conns.values()].filter(c => !c.spec).length;
+        if (PARTY && (m.spec || host.playing || nPlayers + 1 >= MAX_PLAYERS)) {
+          const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12); conn.spec = true;
+          host.conns.set(id, conn); conn.send({ t: "welcome", you: id, spec: true }); hostLobby();
+          if (host.playing) {   // 途中から: 今のタワーと番を送る
+            conn.send({ t: "start", seed: host.seed, players: host.ps, order, diff });
+            conn.send({ t: "turn", cur: order[host.turnI % order.length], d: host.last, n: host.n });
+          }
+          renderUI(); return;
+        }
         if (host.playing) { conn.send({ t: "reject", why: "もう始まっています" }); setTimeout(() => conn.close(), 500); return; }
-        if (host.conns.size + 1 >= MAX_PLAYERS) { conn.send({ t: "reject", why: "満員です（4人まで）" }); setTimeout(() => conn.close(), 500); return; }
+        if (nPlayers + 1 >= MAX_PLAYERS) { conn.send({ t: "reject", why: "満員です（4人まで）" }); setTimeout(() => conn.close(), 500); return; }
         const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12);
         host.conns.set(id, conn); conn.send({ t: "welcome", you: id }); hostLobby(); renderUI(); return;
       }
@@ -695,11 +748,13 @@ function joinRoom(code) {
   mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; renderUI();
   peer = new Peer();
   peer.on("open", () => {
-    hostConn = peer.connect(netId(code), { reliable: true });
-    hostConn.on("open", () => hostConn.send({ t: "hello", name: myName() }));
+    const hc = hostConn = peer.connect(netId(code), { reliable: true });
+    // パーティ: PeerJS は「相手が見つからない」を知らせないまま止まることがあるので、2.5 秒でつながらなければ peer から作り直す
+    if (PARTY) setTimeout(() => { if (hostConn === hc && !hc.open && screen === "connecting" && ++partyTries < 60) { cleanupNet(); joinRoom(code); } }, 2500);
+    hostConn.on("open", () => { hc.opened = true; hostUch = openUch(hc, onMsg); hostConn.send({ t: "hello", name: myName(), spec: !!(PARTY && PARTY.spec) }); });
     hostConn.on("data", onMsg);
     hostConn.on("close", () => {
-      if (PARTY) { location.href = "../"; return; }   // パーティ: ホストがいなくなったらゲーム一覧へ
+      if (PARTY) { if (hc.opened) location.href = "../"; return; }   // パーティ: ホストがいなくなったらゲーム一覧へ（つながる前の失敗は探し直しに任せる）
       if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; cleanupNet(); renderUI(); }
     });
   });
@@ -756,6 +811,8 @@ function renderUI() {
       <p class="lead" style="margin:0">部屋番号</p><div class="code">${esc(host.code || "")}</div>
       ${PARTY ? "" : `<button class="blue" data-a="share">招待リンクを送る</button>`}
       <ul class="players">${lobby.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（あなた）" : ""}</span><span style="color:var(--sub)">${p.id === 0 ? "ホスト" : ""}</span></li>`).join("")}</ul>
+      ${lobbySpecs.length ? `<p class="lead" style="margin:4px 0 0">観戦: ${lobbySpecs.map(esc).join("、")}${spectating ? "（あなたは観戦します）" : ""}</p>` : ""}
+      <div class="row" style="margin-top:8px"><input id="rename" maxlength="12" value="${esc(myName())}"><button data-a="rename" style="margin-top:0;flex:0 0 auto">名前を変える</button></div>
       <label>倒れやすさ${mode === "host" ? "" : "（ホストが決めます）"}</label>${diffSeg(mode === "host")}
       ${mode === "host" ? `<button class="main" data-a="start" ${lobby.length < 2 ? "disabled" : ""}>${lobby.length < 2 ? "参加者を待っています…" : `${lobby.length}人で始める`}</button>`
         : `<p class="lead" style="margin-top:12px">ホストが始めるのを待っています…</p>`}
@@ -770,7 +827,7 @@ function renderUI() {
       settle: "揺れがおさまるのを待っています…",
       fallen: "崩れた！",
       wait: "…",
-      watch: `${esc(nameOf(curId))}が挑戦中`,
+      watch: `${spectating ? "観戦中 ・ " : ""}${esc(nameOf(curId))}が挑戦中`,
     };
     const turnTxt = phase === "over" ? "おわり" : mode === "local" && players.length === 1 ? "練習中" : mine ? (mode === "local" ? `${esc(nameOf(curId))}の番` : "あなたの番") : `${esc(nameOf(curId))}の番`;
     h = `<div class="hud p"><div class="who"><div class="turn ${mine ? "me" : ""}">${turnTxt}</div>
@@ -816,6 +873,12 @@ ui.addEventListener("click", e => {
   else if (a === "left") moveSlot(-1);
   else if (a === "right") moveSlot(1);
   else if (a === "drop") dropHeld();
+  else if (a === "rename") {   // 部屋に入ったあとでも名前を変えられる（ゲームが始まる前）
+    const n = (document.getElementById("rename")?.value || "").trim().slice(0, 12) || "ゲスト";
+    meName = n; store.set("jenga-name", n);
+    if (mode === "host") hostLobby(); else send({ t: "rename", name: n });
+    toast("名前を変えました");
+  }
   else if (a === "quit") { if (confirm("ゲームをやめてメニューに戻りますか？")) backToMenu(); }
   else if (a === "back") backToMenu();
   else if (a === "games") location.href = "../";   // ミニゲーム集のゲーム一覧へ

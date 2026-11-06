@@ -56,6 +56,14 @@
   .party .note { font-size:13px; color:var(--sub); margin-top:8px; line-height:1.5; }
   .party .err { color:#f06a5a; font-size:13px; margin-top:8px; }
   .party .small { font-size:13px; padding:8px; margin-top:10px; width:100%; }
+  .statsbox { margin-top:10px; padding:10px; border-radius:12px; background:#0f141f; border:1px solid var(--line); }
+  .statshead { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .statshead button { padding:6px 10px; font-size:13px; }
+  .statsbox table { width:100%; border-collapse:collapse; font-size:14px; }
+  .statsbox th { color:var(--sub); font-weight:700; font-size:12px; text-align:left; padding:4px; }
+  .statsbox td { padding:6px 4px; border-top:1px solid var(--line); }
+  .statsbox td:nth-child(1), .statsbox td:nth-child(3), .statsbox td:nth-child(4), .statsbox th:nth-child(1), .statsbox th:nth-child(3), .statsbox th:nth-child(4) { text-align:center; width:3.5em; }
+  .statsbox tr.me td { color:var(--accent); font-weight:700; }
   a.game.locked { opacity:.55; }
   a.game .solo { font-size:11px; color:#f0b25a; }
   .toast { position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 24px); transform:translateX(-50%); background:rgba(10,12,18,.94); border:1px solid var(--line); padding:10px 16px; border-radius:12px; font-size:14px; }
@@ -69,7 +77,7 @@
   <section class="party" id="party"></section>
   <div class="games">
     <a class="game" href="shieldfight/" data-party="1">
-      <div class="icon"><img src="icon-192.png" alt=""></div>
+      <div class="icon"><img src="shieldfight/icon.png" alt=""></div>
       <div><div class="name">シールドファイト</div>
         <div class="desc">盾が外れた隙を突いて、相手をステージから落とす対戦ゲーム</div>
         <div class="tags"><span>1〜4人</span><span>オンライン</span><span>CPU戦</span></div></div>
@@ -118,7 +126,23 @@
         <div class="tags"><span>2人</span><span>オンライン</span><span>1台で2人</span></div></div>
       <div class="go">›</div>
     </a>
-    <a class="game" href="soinsu/">
+    <a class="game" href="gomu/" data-party="1">
+      <div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
+        <rect width="72" height="72" fill="#232733"/>
+        <circle cx="36" cy="36" r="30" fill="#efe6cf"/>
+        <path d="M36 36 L36 6 A30 30 0 0 1 62 51 Z" fill="#e2793d" opacity=".35"/>
+        <path d="M36 36 L62 51 A30 30 0 0 1 10 51 Z" fill="#3f7fd1" opacity=".35"/>
+        <path d="M36 36 L10 51 A30 30 0 0 1 36 6 Z" fill="#4caf7d" opacity=".35"/>
+        <g stroke="#4a4438" stroke-width="2.5"><path d="M36 36V22M36 36L48 43M36 36L24 43"/></g>
+        <circle cx="47" cy="22" r="5" fill="#e2793d"/><circle cx="25" cy="25" r="5" fill="#4caf7d"/><circle cx="36" cy="54" r="5" fill="#3f7fd1"/>
+        <path d="M44 56 L54 62" stroke="#ffb347" stroke-width="2.5" stroke-linecap="round"/>
+      </svg></div>
+      <div><div class="name">ゴム弾き陣取りバトル</div>
+        <div class="desc">自分の陣地の玉をゴムで弾いて相手の陣地へ。先に0個にした人の勝ち</div>
+        <div class="tags"><span>2〜4人</span><span>オンライン</span></div></div>
+      <div class="go">›</div>
+    </a>
+    <a class="game" href="soinsu/" data-party="1">
       <div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
         <rect width="72" height="72" fill="#8fb8e8"/>
         <rect y="50" width="72" height="22" fill="#6f9a5a"/>
@@ -147,21 +171,45 @@ if (/iPhone|iPad/.test(navigator.userAgent) && !standalone)
 // ================= パーティ =================
 // 最初に 1 回だけ、ホストが部屋を作り、ゲストが 1 桁の番号で入る。そのあとはホストがゲームを選ぶと、
 // みんなの画面も同じゲームへ移って自動で部屋に入る（番号を入れ直さない）。ゲームから戻ってきても、パーティはそのまま。
-// 状態は sessionStorage の ykg-party（{ role: "host" | "guest", code, name }）に置き、ゲームのページもこれを読む。
+// 状態は sessionStorage の ykg-party（{ role: "host" | "guest", code, name, spec }）に置き、ゲームのページもこれを読む。
+//   name: パーティの中での名前（ホストが重ならないようにする。途中で変えられる）/ spec: 観戦する（ゲストだけ）
+// 成績（勝ち・負け）はホストの端末の sessionStorage ykg-stats（{ 名前: { w, l } }）。パーティを解散すると消える。
+// ゲームのページ（ホスト側）は、勝ち負けが決まると ykg-results に { game, w: [名前], l: [名前] } を足しておき、ゲーム一覧に戻ったときにここで集計する。
 const PP = "ykg-party-";   // PeerJS の ID の頭（ゲームのページとは別の ID を使う）
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
 };
-const partyStore = {
-  get() { try { return JSON.parse(sessionStorage.getItem("ykg-party") || "null"); } catch (e) { return null; } },
-  set(v) { try { if (v) sessionStorage.setItem("ykg-party", JSON.stringify(v)); else sessionStorage.removeItem("ykg-party"); } catch (e) {} },
+const sjson = {
+  get(k, d) { try { return JSON.parse(sessionStorage.getItem(k) || "null") ?? d; } catch (e) { return d; } },
+  set(k, v) { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
 };
+const partyStore = { get: () => sjson.get("ykg-party", null), set: v => sjson.set("ykg-party", v) };
 let party = partyStore.get();
-let peer = null, hostConn = null, members = [], status = "", errMsg = "", tries = 0;
-const guests = new Map();   // ホスト: 相手の PeerJS の ID → { conn, name }
+let peer = null, hostConn = null, members = [], status = "", errMsg = "", tries = 0, stats = {}, showStats = false;
+const guests = new Map();   // ホスト: 相手の PeerJS の ID → { conn, name, spec }
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const myName = () => ((document.getElementById("pname")?.value ?? store.get("ykg-name")) || "").trim().slice(0, 12) || "ゲスト";
+const cleanName = v => String(v || "").trim().slice(0, 12) || "ゲスト";
+const myName = () => cleanName(document.getElementById("pname")?.value ?? store.get("ykg-name"));
+const saveParty = () => partyStore.set(party);
+
+// 成績の表（勝ち数の多い順。同じなら負けの少ない順。どちらも同じなら同じ順位）
+function rankRows() {
+  const names = members.map(m => m.name);
+  for (const n of Object.keys(stats)) if (!names.includes(n)) names.push(n);   // 抜けた人の成績も残す
+  const rows = names.map(n => ({ name: n, w: stats[n]?.w || 0, l: stats[n]?.l || 0, here: members.some(m => m.name === n) }));
+  rows.sort((a, b) => b.w - a.w || a.l - b.l);
+  rows.forEach((r, i) => { r.rank = i && rows[i - 1].w === r.w && rows[i - 1].l === r.l ? rows[i - 1].rank : i + 1; });
+  return rows;
+}
+function statsHtml() {
+  const rows = rankRows();
+  return `<div class="statsbox"><div class="statshead"><b>成績（このパーティ）</b><button data-p="stats">とじる</button></div>
+    ${rows.length ? `<table><tr><th>順位</th><th>名前</th><th>勝ち</th><th>負け</th></tr>
+      ${rows.map(r => `<tr class="${r.name === party.name ? "me" : ""}"><td>${r.rank}</td><td>${esc(r.name)}${r.here ? "" : "（抜けた）"}</td><td>${r.w}</td><td>${r.l}</td></tr>`).join("")}</table>`
+      : `<div class="note">まだ勝負がついていません</div>`}
+    <div class="note">パーティでオンライン対戦したゲームの勝ち負けを数えます（観戦・ひとり用・CPU戦・この端末で交代は数えません）。順位は勝ち数の多い順です。</div></div>`;
+}
 
 function render() {
   const el = document.getElementById("party");
@@ -175,13 +223,21 @@ function render() {
     const n = document.getElementById("pname"); n.oninput = () => store.set("ykg-name", n.value);
   } else {
     const host = party.role === "host";
+    const nameBox = document.getElementById("pname");
+    const typing = nameBox && document.activeElement === nameBox ? nameBox.value : null;   // 名前を入力中なら消さない
     el.innerHTML = `<h2>${host ? "あなたがホスト" : "パーティに参加中"}</h2>
       <div style="display:flex;align-items:flex-end;gap:12px"><div class="code">${esc(party.code)}</div>
         <div class="note" style="margin:0">${host ? "この番号をゲストに伝えてください" : status === "joined" ? "ホストがゲームを選ぶのを待っています" : "ホストを探しています…"}</div></div>
-      <div class="members">${members.map(m => `<span class="${m.me ? "me" : ""}">${esc(m.name)}${m.host ? "（ホスト）" : ""}</span>`).join("")}</div>
-      <div class="note">${host ? "下のゲームを選ぶと、みんなも一緒に移ります。" : "ゲームはホストが選びます。"}</div>
+      <div class="members">${members.map(m => `<span class="${m.name === party.name ? "me" : ""}">${esc(m.name)}${m.host ? "（ホスト）" : m.spec ? "（観戦）" : ""}</span>`).join("")}</div>
+      <div class="row"><input id="pname" maxlength="12" value="${esc(typing ?? party.name)}"><button data-p="rename" style="flex:0 0 auto">名前を変える</button></div>
+      ${host ? "" : `<div class="row"><button data-p="spec" class="${party.spec ? "main" : ""}">${party.spec ? "観戦する（オン）" : "観戦する（オフ）"}</button></div>`}
+      <div class="note">${host ? "下のゲームを選ぶと、みんなも一緒に移ります。ホストは遊ぶ人になります（観戦はできません）。"
+        : party.spec ? "観戦オン: ゲームでは遊ばずに、ホストのゲームの様子を見ます。" : "ゲームはホストが選びます。見るだけにしたいときは「観戦する」をオンに。"}</div>
+      <div class="row"><button data-p="stats">成績（勝ち・負け・順位）</button></div>
+      ${showStats ? statsHtml() : ""}
       ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}
       <button class="small" data-p="leave">${host ? "パーティを解散" : "パーティをぬける"}</button>`;
+    if (typing != null) { const b = document.getElementById("pname"); b.focus(); b.setSelectionRange(b.value.length, b.value.length); }
   }
   for (const a of document.querySelectorAll("a.game")) a.classList.toggle("locked", !!party && party.role === "guest");
 }
@@ -190,6 +246,29 @@ function toast(t) {
   setTimeout(() => d.remove(), 2200);
 }
 
+// ---------- ホスト ----------
+// 名前が重なったら「2」「3」…をつける（selfPeer: 名前を決める本人。ホスト自身は "host"）
+function uniqueName(name, selfPeer) {
+  const taken = n => (selfPeer !== "host" && n === party.name) || [...guests.entries()].some(([k, g]) => k !== selfPeer && g.name === n);
+  let n = name, i = 2;
+  while (taken(n)) n = name.slice(0, 11) + i++;
+  return n;
+}
+function renameStats(from, to) {
+  if (from === to || !stats[from]) return;
+  const a = stats[from], b = stats[to] || { w: 0, l: 0 };
+  stats[to] = { w: a.w + b.w, l: a.l + b.l }; delete stats[from]; sjson.set("ykg-stats", stats);
+}
+// ゲームのページが置いていった勝ち負けを集計する
+function takeResults() {
+  const res = sjson.get("ykg-results", []);
+  if (!res.length) return;
+  for (const r of res) {
+    for (const n of r.w || []) (stats[n] ||= { w: 0, l: 0 }).w++;
+    for (const n of r.l || []) (stats[n] ||= { w: 0, l: 0 }).l++;
+  }
+  sjson.set("ykg-results", null); sjson.set("ykg-stats", stats);
+}
 // ホスト: 部屋を作る（ゲームから戻ってきたときは同じ番号で作り直す。前の接続が残っていると少し待つ）
 function hostParty(code, again) {
   const name = party ? party.name : myName();
@@ -197,7 +276,7 @@ function hostParty(code, again) {
   peer = new Peer(PP + code);
   peer.on("open", () => {
     tries = 0; errMsg = "";
-    party = { role: "host", code, name }; partyStore.set(party);
+    party = { role: "host", code, name: party && party.code !== "…" ? party.name : name }; saveParty();
     sendMembers();
   });
   peer.on("error", e => {
@@ -210,20 +289,33 @@ function hostParty(code, again) {
     errMsg = e.type === "unavailable-id" ? "空いている番号がありません。少し待ってからやり直してください" : "接続エラー: " + e.type; render();
   });
   peer.on("connection", conn => {
-    conn.on("data", m => { if (m && m.t === "hi") { guests.set(conn.peer, { conn, name: String(m.name || "ゲスト").slice(0, 12) }); sendMembers(); } });
+    conn.on("data", m => {
+      if (!m) return;
+      const g = guests.get(conn.peer);
+      if (m.t === "hi") {
+        const name = uniqueName(cleanName(m.name), conn.peer);
+        guests.set(conn.peer, { conn, name, spec: !!m.spec });
+        conn.send({ t: "you", name }); sendMembers();
+      } else if (m.t === "name" && g) {
+        const name = uniqueName(cleanName(m.name), conn.peer);
+        renameStats(g.name, name); g.name = name;
+        conn.send({ t: "you", name }); sendMembers();
+      } else if (m.t === "spec" && g) { g.spec = !!m.spec; sendMembers(); }
+    });
     conn.on("close", () => { if (guests.get(conn.peer)?.conn === conn) { guests.delete(conn.peer); sendMembers(); } });
   });
 }
 function sendMembers() {
-  const list = [{ name: party.name, host: true }, ...[...guests.values()].map(g => ({ name: g.name }))];
-  for (const g of guests.values()) { try { g.conn.send({ t: "members", list }); } catch (e) {} }
-  members = list.map((m, i) => ({ ...m, me: i === 0 }));
+  const list = [{ name: party.name, host: true }, ...[...guests.values()].map(g => ({ name: g.name, spec: g.spec }))];
+  for (const g of guests.values()) { try { g.conn.send({ t: "members", list, stats }); } catch (e) {} }
+  members = list;
   render();
 }
 
-// ゲスト: 番号で入る。ホストが見つからないあいだ（ホストがゲームから戻る途中など）は、少しずつ探し続ける
+// ---------- ゲスト ----------
+// 番号で入る。ホストが見つからないあいだ（ホストがゲームから戻る途中など）は、少しずつ探し続ける
 function joinParty(code) {
-  party = { role: "guest", code, name: party ? party.name : myName() }; partyStore.set(party);
+  party = { role: "guest", code, name: party ? party.name : myName(), spec: !!(party && party.spec) }; saveParty();
   store.set("ykg-last", code);
   status = "looking"; render();
   peer = new Peer();
@@ -245,28 +337,42 @@ function connectHost() {
     if (++lookTries % 6 === 0) { try { peer.destroy(); } catch (e) {} joinParty(party.code); }   // ときどき peer から作り直す
     else connectHost();
   }, 2500);
-  c.on("open", () => { c.opened = true; lookTries = 0; status = "joined"; errMsg = ""; c.send({ t: "hi", name: party.name }); render(); });
+  c.on("open", () => { c.opened = true; lookTries = 0; status = "joined"; errMsg = ""; c.send({ t: "hi", name: party.name, spec: !!party.spec }); render(); });
   c.on("data", m => {
     if (!m) return;
-    if (m.t === "members") { members = m.list.map(x => ({ ...x, me: !x.host && x.name === party.name })); render(); }
+    if (m.t === "you") { party.name = m.name; saveParty(); render(); }                 // ホストが決めた名前（重なったときは番号つき）
+    else if (m.t === "members") { members = m.list; stats = m.stats || {}; render(); }
     else if (m.t === "go") location.href = m.game + "?party=1";   // ホストがゲームを選んだ
   });
   c.on("close", () => { if (hostConn !== c || !party || !c.opened) return; status = "looking"; members = []; render(); setTimeout(connectHost, 1500); });
 }
 function leaveParty() {
-  party = null; partyStore.set(null); members = []; status = ""; errMsg = ""; guests.clear();
+  party = null; partyStore.set(null); members = []; status = ""; errMsg = ""; guests.clear(); stats = {}; showStats = false;
+  sjson.set("ykg-stats", null); sjson.set("ykg-results", null);
   try { peer?.destroy(); } catch (e) {} peer = null; hostConn = null;
   render();
 }
 
 document.getElementById("party").addEventListener("click", e => {
   const a = e.target.closest("[data-p]")?.dataset.p; if (!a) return;
-  if (a === "host") { store.set("ykg-name", myName()); errMsg = ""; tries = 0; party = null; const n = myName(); hostParty(null, false); party = { role: "host", code: "…", name: n }; members = [{ name: n, host: true, me: true }]; render(); }
+  if (a === "host") {
+    store.set("ykg-name", myName()); errMsg = ""; tries = 0; party = null; stats = {}; sjson.set("ykg-stats", null); sjson.set("ykg-results", null);
+    const n = myName(); hostParty(null, false); party = { role: "host", code: "…", name: n }; members = [{ name: n, host: true }]; render();
+  }
   else if (a === "join") {
     const c = (document.getElementById("pcode").value || "").replace(/\D/g, "");
     if (c.length !== 1) { errMsg = "番号は 1けたです"; render(); return; }
     store.set("ykg-name", myName()); errMsg = ""; joinParty(c);
   }
+  else if (a === "rename") {
+    const n = cleanName(document.getElementById("pname").value);
+    store.set("ykg-name", n);
+    if (party.role === "host") { const u = uniqueName(n, "host"); renameStats(party.name, u); party.name = u; saveParty(); sendMembers(); }
+    else { party.name = n; saveParty(); try { hostConn?.send({ t: "name", name: n }); } catch (x) {} render(); }
+    document.activeElement?.blur?.(); toast("名前を変えました");
+  }
+  else if (a === "spec") { party.spec = !party.spec; saveParty(); try { hostConn?.send({ t: "spec", spec: party.spec }); } catch (x) {} render(); }
+  else if (a === "stats") { showStats = !showStats; render(); }
   else if (a === "leave") leaveParty();
 });
 // ゲームを選んだとき: パーティのホストなら、みんなにも同じゲームへ移ってもらう
@@ -281,7 +387,7 @@ document.querySelector(".games").addEventListener("click", e => {
   setTimeout(() => { location.href = game + (a.dataset.party ? "?party=1" : ""); }, a.dataset.party ? 400 : 1500);
 });
 
-if (party && party.role === "host") hostParty(party.code, true);
+if (party && party.role === "host") { stats = sjson.get("ykg-stats", {}); takeResults(); hostParty(party.code, true); }
 else if (party && party.role === "guest") joinParty(party.code);
 render();
 

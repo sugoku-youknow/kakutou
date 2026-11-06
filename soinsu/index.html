@@ -27,10 +27,12 @@ input{font:inherit}
 #me{background:rgba(10,15,30,.72);border-radius:12px;padding:6px 14px}
 #me .lab{font-size:11px;opacity:.7}
 #me .num{font-size:30px;font-weight:800;letter-spacing:1px;line-height:1.1}
-#quit{pointer-events:auto;background:rgba(10,15,30,.72);border:1px solid #556;border-radius:8px;padding:4px 12px;font-size:13px}
-#alive{font-size:12px;background:rgba(10,15,30,.72);border-radius:8px;padding:3px 8px}
+#quit{pointer-events:auto;background:rgba(10,15,30,.72);border:1px solid #556;border-radius:10px;padding:10px 16px;font-size:14px;min-height:40px}
+#timer{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 8px);transform:translateX(-50%);background:rgba(10,15,30,.72);border-radius:10px;padding:4px 12px;font-size:16px;font-weight:800}
+#timer.hot{color:#ffd400}
+#alive{font-size:14px;background:rgba(10,15,30,.72);border-radius:8px;padding:3px 8px}
 #feed{width:min(300px,40vw);display:flex;flex-direction:column;align-items:flex-start;white-space:normal}
-#feed div{background:rgba(10,15,30,.65);font-size:12px;padding:3px 8px;border-radius:8px;margin-top:3px;transition:opacity .6s}
+#feed div{background:rgba(10,15,30,.65);font-size:13px;padding:3px 8px;border-radius:8px;margin-top:3px;transition:opacity .6s}
 #target{pointer-events:auto;width:84px;height:84px;border-radius:50%;border:3px solid rgba(255,212,0,.85);background:rgba(10,15,30,.45);font-weight:800;font-size:13px;line-height:1.2;touch-action:none}
 #target b{display:block;font-size:26px}
 #target:active{background:rgba(255,212,0,.35)}
@@ -50,7 +52,7 @@ input{font:inherit}
 #pdisp{flex:1;text-align:right;font-size:20px;font-weight:800;min-height:26px;letter-spacing:1px;overflow:hidden;text-overflow:ellipsis}
 #pdisp:empty::before{content:"素数をえらんで打ち込む";font-size:12px;font-weight:400;opacity:.6}
 .keys{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
-.keys button{pointer-events:auto;height:38px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(42,51,72,.45);font-size:18px;font-weight:800;touch-action:manipulation;text-shadow:0 1px 3px #000}
+.keys button{pointer-events:auto;height:44px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(42,51,72,.45);font-size:18px;font-weight:800;touch-action:manipulation;text-shadow:0 1px 3px #000}
 .keys button:active{background:rgba(110,130,170,.7)}
 .keys .op{background:rgba(70,55,100,.5)}
 .keys .send{grid-column:span 4;background:rgba(194,59,59,.65)}
@@ -112,6 +114,7 @@ table.res td:last-child{text-align:right}
   <div id="me" class="lay" data-lay="me" data-name="自分の数字"><div class="lab">自分の数字</div><div class="num" id="mynum">-</div></div>
   <button id="quit" class="lay" data-lay="quit" data-name="退出">退出</button>
   <div id="alive" class="lay" data-lay="alive" data-name="のこり人数"></div>
+  <div id="timer">3:00</div>
   <div id="feed" class="lay" data-lay="feed" data-name="ログ"></div>
   <div id="banner" class="hidden"></div>
   <div id="toast"></div>
@@ -132,6 +135,36 @@ import * as THREE from "three";
 
 // ================= 設定 =================
 const PREFIX = "soinsu-battle-v1-";
+// パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
+// ホストはパーティの番号（1けた）で部屋を作り、ゲストはその部屋が開くまで探し続ける。ホストがいなくなるとゲストもゲーム一覧へ戻る
+const PARTY = (() => {
+  try { if (!new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
+})();
+const netId = code => (PARTY ? "soinsu-party-" : PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
+const toGames = () => { location.href = "../"; };
+let partyTries = 0, spectating = false, lobbySpecs = [];
+// パーティの成績: 勝ち負けが決まったら、ゲーム一覧で集計するために置いておく（ホストだけ。CPU は数えない）
+function partyReport(w, l) {
+  if (!PARTY || PARTY.role !== "host" || (!w.length && !l.length)) return;
+  try { const a = JSON.parse(sessionStorage.getItem("ykg-results") || "[]"); a.push({ game: "soinsu", w, l }); sessionStorage.setItem("ykg-results", JSON.stringify(a)); } catch (e) {}
+}
+// 制限時間（2026-11-06 追加。かくれ続けて終わらないのを防ぐ）: 3 分。残り 1 分になると、物かげの向こうの数字も見えるようになる。
+// 時間切れのときは、生きている人のうち数字（素因数の積）がいちばん小さい人の勝ち（同じなら全員の勝ち）
+const TIME_LIMIT = 180, REVEAL_AT = 60;
+const WRONG_LOCK = 2.5;   // 間違えたら、この秒数は打ち込めない（素因数が 1 つだけのときも、連打で当てずっぽうにならないように）
+// 落としてよい通り道（シールドファイトと同じ）: 位置（pos / st）だけを、届き直しをしない・順番を待たないチャンネルで送る
+const UCH_ID = 6;
+function openUch(conn, onMsg) {
+  try {
+    const pc = conn && conn.peerConnection;
+    if (!pc || !pc.createDataChannel) return null;
+    const ch = pc.createDataChannel("soinsu-u", { negotiated: true, id: UCH_ID, ordered: false, maxRetransmits: 0 });
+    ch.onmessage = e => { if (typeof e.data === "string") { let m; try { m = JSON.parse(e.data); } catch (x) { return; } onMsg(m); } };
+    return ch;
+  } catch (e) { return null; }
+}
+const uchOpen = ch => !!ch && ch.readyState === "open";
+let hostUch = null, posQ = 0, stQ = 0, lastStQ = 0, timeLeft = TIME_LIMIT, reveal = false;
 const MAX_PLAYERS = 8;
 const ARENA = 30;        // 半径（フィールドは 60×60）
 const SPEED = 6;
@@ -249,7 +282,7 @@ function updY(p, dt) {
 let mode = "none";        // local / host / client
 let screen = "menu";      // menu / connecting / lobby / game / layout
 let peer = null, hostConn = null, hostSeen = 0;
-const host = { code: "", conns: new Map(), nextId: 1, playing: false, bots: 0 };
+const host = { code: "", conns: new Map(), specs: new Map(), nextId: 1, playing: false, bots: 0 };   // specs: 観戦の人
 let myId = 0, errMsg = "";
 let lobbyPs = [];
 let G = null;             // ホストだけが持つ正式な状態
@@ -260,7 +293,10 @@ const feed = [];
 
 // ================= 通信 =================
 function broadcast(m) {
-  for (const c of host.conns.values()) { try { c.send(m); } catch (e) {} }
+  const fast = m.t === "st" ? JSON.stringify(m) : null;   // 位置は落としてよい通り道で
+  for (const c of [...host.conns.values(), ...host.specs.values()]) {
+    try { if (fast && uchOpen(c.uch)) c.uch.send(fast); else c.send(m); } catch (e) {}
+  }
   onMsg(m);
 }
 function sendTo(id, m) {
@@ -268,7 +304,9 @@ function sendTo(id, m) {
   const c = host.conns.get(id); if (c) { try { c.send(m); } catch (e) {} }
 }
 function sendHost(m) {
-  if (mode === "client") { try { hostConn?.send(m); } catch (e) {} }
+  if (mode === "client") {
+    try { if (m.t === "pos" && uchOpen(hostUch)) { m.q = ++posQ; hostUch.send(JSON.stringify(m)); } else hostConn?.send(m); } catch (e) {}
+  }
   else hostHandle(myId, m);
 }
 
@@ -277,7 +315,8 @@ function hostLobby() {
   lobbyPs = [{ id: 0, name: myName() }];
   for (const [id, c] of host.conns) lobbyPs.push({ id, name: c.pname });
   for (let i = 0; i < host.bots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABCDEFGH"[i], bot: true });
-  broadcast({ t: "lobby", ps: lobbyPs, code: host.code });
+  lobbySpecs = [...host.specs.values()].map(c => c.pname);
+  broadcast({ t: "lobby", ps: lobbyPs, code: host.code, specs: lobbySpecs });
 }
 function pickSpawns(n) {
   const pool = STAGE.free.slice().sort(() => Math.random() - 0.5), out = [];
@@ -298,7 +337,7 @@ function hostStart() {
   const seed = Math.floor(Math.random() * 2 ** 31);
   STAGE = genStage(seed);
   const sp = pickSpawns(list.length);
-  G = { players: new Map(), over: false };
+  G = { players: new Map(), over: false, seed, t0: performance.now() / 1000 };
   list.forEach((p, i) => {
     const q = { id: p.id, name: p.name, bot: !!p.bot, color: COLORS[i % COLORS.length], x: sp[i][0], z: sp[i][1], y: 0, vy: 0, yaw: 0, f: genFactors(), alive: true, kills: 0, cd: 0 };
     collide(q); q.y = groundAt(q.x, q.z); q.yaw = Math.atan2(q.x, q.z); q.max = q.f.length;
@@ -308,10 +347,15 @@ function hostStart() {
   for (const c of host.conns.values()) c.seen = performance.now();
   broadcast({ t: "start", seed, ps: [...G.players.values()].map(p => ({ id: p.id, name: p.name, bot: p.bot, color: p.color, x: p.x, z: p.z, yaw: p.yaw, f: p.f, max: p.max })) });
 }
+// 途中から来た観戦の人へ: 今の数字・位置・生きているか
+function startMsg() {
+  return { t: "start", seed: G.seed, ps: [...G.players.values()].map(p => ({ id: p.id, name: p.name, bot: p.bot, color: p.color, x: p.x, z: p.z, yaw: p.yaw, f: p.f, max: p.max, alive: p.alive })) };
+}
 function hostHandle(id, m) {
   if (!G || !m) return;
   const p = G.players.get(id); if (!p) return;
   if (m.t === "pos") {
+    if (m.q) { if (m.q <= (p.posQ || 0)) return; p.posQ = m.q; }   // 遅れて届いた古い位置は使わない
     if (![m.x, m.z, m.yaw].every(Number.isFinite)) return;
     p.x = clamp(m.x, -ARENA, ARENA); p.z = clamp(m.z, -ARENA, ARENA); p.yaw = m.yaw; p.y = groundAt(p.x, p.z);
   } else if (m.t === "atk") doAttack(id, m.to, m.p);
@@ -328,24 +372,34 @@ function doAttack(aid, tid, primes) {
   for (const q of primes) { const i = rest.indexOf(q); if (i < 0) { ok = false; break; } rest.splice(i, 1); }
   let dead = false;
   if (ok) { t.f = rest; if (!rest.length) { t.alive = false; dead = true; a.kills++; } }
-  else if (a.f.length > 1) a.f.splice(a.f.lastIndexOf(Math.max(...a.f)), 1);
+  else {
+    if (a.f.length > 1) a.f.splice(a.f.lastIndexOf(Math.max(...a.f)), 1);
+    a.cd = now + WRONG_LOCK;   // 間違えたらしばらく打ち込めない
+  }
   broadcast({ t: "ev", a: aid, to: tid, p: primes, ok, fa: a.f, ft: t.f, dead, ab: abefore });
   checkOver();
 }
-function checkOver() {
+function checkOver(timeUp) {
   if (!G || G.over) return;
-  const alive = [...G.players.values()].filter(p => p.alive);
-  if (alive.length > 1) return;
+  let alive = [...G.players.values()].filter(p => p.alive);
+  if (alive.length > 1 && !timeUp) return;
+  if (timeUp && alive.length > 1) {   // 時間切れ: 数字がいちばん小さい人の勝ち
+    const min = Math.min(...alive.map(p => prod(p.f)));
+    alive = alive.filter(p => prod(p.f) === min);
+  }
   G.over = true;
-  const g = G;
+  const g = G, wins = alive.map(p => p.id);
+  const human = p => !p.bot;
+  partyReport(alive.filter(human).map(p => p.name), [...g.players.values()].filter(p => human(p) && !wins.includes(p.id)).map(p => p.name));
   setTimeout(() => {
     if (G !== g) return;
-    const ps = [...g.players.values()].map(p => ({ id: p.id, name: p.name, kills: p.kills, alive: p.alive }))
-      .sort((x, y) => (y.alive - x.alive) || (y.kills - x.kills));
-    broadcast({ t: "over", win: alive[0]?.id ?? null, ps });
-  }, 1500);
+    const ps = [...g.players.values()].map(p => ({ id: p.id, name: p.name, kills: p.kills, alive: p.alive, n: prod(p.f) }))
+      .sort((x, y) => (wins.includes(y.id) - wins.includes(x.id)) || (y.alive - x.alive) || (y.kills - x.kills) || (x.n - y.n));
+    broadcast({ t: "over", win: wins.length === 1 ? wins[0] : null, wins, timeUp: !!timeUp, ps });
+  }, timeUp ? 300 : 1500);
 }
 function hostDrop(id) {
+  if (host.specs.has(id)) { host.specs.delete(id); if (!host.playing) hostLobby(); return; }   // 観戦の人
   host.conns.delete(id);
   if (G && G.players.has(id)) { const p = G.players.get(id); p.alive = false; broadcast({ t: "gone", id }); checkOver(); }
   else if (!host.playing) hostLobby();
@@ -373,8 +427,8 @@ function botUpdate(p, dt, now) {
       if (losClear(p, t)) {
         b.next = now + 2.5 + Math.random() * 3;
         let primes;
-        if (Math.random() < 0.7) {
-          const k = Math.min(t.f.length, Math.random() < 0.6 ? 1 : 2);
+        if (Math.random() < 0.85) {   // 2026-11-06: 当てる確率 70 → 85%、1 回に 1〜3 個（弱すぎたので）
+          const k = Math.min(t.f.length, Math.random() < 0.45 ? 1 : Math.random() < 0.7 ? 2 : 3);
           const pool = t.f.slice(); primes = [];
           for (let i = 0; i < k; i++) primes.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
         } else {
@@ -397,11 +451,13 @@ function botUpdate(p, dt, now) {
 function onMsg(m) {
   if (!m || typeof m !== "object") return;
   switch (m.t) {
-    case "welcome": myId = m.you; return;
+    case "welcome": myId = m.spec ? -1 : m.you; spectating = !!m.spec; return;
     case "reject": errMsg = m.why; cleanupNet(); screen = "menu"; break;
-    case "lobby": lobbyPs = m.ps; host.code = m.code; screen = "lobby"; overInfo = null; clearGame(); break;
+    case "lobby": lobbyPs = m.ps; lobbySpecs = m.specs || []; host.code = m.code; screen = "lobby"; overInfo = null; clearGame(); break;
     case "start": startView(m.seed, m.ps); break;
+    case "tm": timeLeft = m.l; if (m.rv && !reveal) { reveal = true; setReveal(true); toast("残り1分！ 物かげの向こうの数字も見える"); } return;
     case "st":
+      if (m.q) { if (m.q <= lastStQ) return; lastStQ = m.q; }   // 遅れて届いた古い位置は使わない
       for (const [id, x, z, yaw] of m.p) { const v = view.get(id); if (v && id !== myId) { v.tx = x; v.tz = z; v.tyaw = yaw; } }
       return;
     case "ev": applyEv(m); return;
@@ -424,7 +480,7 @@ function applyEv(m) {
   } else {
     addFeed(`${a.name} の ${ps} は外れ`);
     if (a.id !== myId) floatText(a, "失敗", "#ff9a3a");
-    else { flash(); vibrate(150); toast(`失敗！ 自分の数字 ${m.ab} → ${prod(m.fa)}`); }
+    else { flash(); vibrate(150); lastAtk = performance.now() / 1000 + WRONG_LOCK - COOLDOWN; toast(`失敗！ 自分の数字 ${m.ab} → ${prod(m.fa)}（${WRONG_LOCK}秒 打ち込めない）`); }
   }
   if (selId === m.to && m.dead) closePad();
 }
@@ -435,40 +491,64 @@ const randCode = () => String(Math.floor(1000 + Math.random() * 9000));
 let hostTries = 0;
 function startHost() {
   mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; host.bots = 0; host.nextId = 1; renderUI();
-  const code = randCode();
-  peer = new Peer(PREFIX + code);
+  const code = PARTY ? PARTY.code : randCode();
+  peer = new Peer(netId(code));
   peer.on("open", () => { host.code = code; hostTries = 0; hostLobby(); });
   peer.on("error", e => {
+    if (PARTY && e.type === "unavailable-id" && ++hostTries < 30) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている
     if (e.type === "unavailable-id" && ++hostTries < 20) { peer.destroy(); startHost(); return; }
     if (screen === "game" || screen === "lobby") { toast("通信エラー: " + e.type); return; }
     errMsg = "接続エラー: " + e.type; screen = "menu"; cleanupNet(); renderUI();
   });
   peer.on("connection", conn => {
+    conn.on("open", () => { conn.uch = openUch(conn, m => { conn.seen = performance.now(); if (conn.pid && !conn.spec) hostHandle(conn.pid, m); }); });
     conn.on("data", m => {
       conn.seen = performance.now();
       if (m && m.t === "hello") {
+        // パーティ: 観戦を選んだ人・始まったあとに来た人・満員のときの人は観戦（遊ぶ人の数に入らない。動き回って見られる）
+        if (PARTY && (m.spec || host.playing || lobbyPs.length >= MAX_PLAYERS)) {
+          const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12); conn.spec = true;
+          host.specs.set(id, conn); conn.send({ t: "welcome", you: id, spec: 1 });
+          if (host.playing && G) conn.send(startMsg()); else hostLobby();
+          return;
+        }
         if (host.playing) { conn.send({ t: "reject", why: "もう始まっています。終わるまで待ってください" }); setTimeout(() => conn.close(), 500); return; }
         if (lobbyPs.length >= MAX_PLAYERS) { conn.send({ t: "reject", why: `満員です（${MAX_PLAYERS}人まで）` }); setTimeout(() => conn.close(), 500); return; }
         const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12);
         host.conns.set(id, conn); conn.send({ t: "welcome", you: id }); hostLobby(); return;
       }
-      if (conn.pid) hostHandle(conn.pid, m);
+      if (m && m.t === "rename" && conn.pid && !host.playing) {
+        conn.pname = String(m.name || "ゲスト").slice(0, 12);
+        if (conn.spec) host.specs.set(conn.pid, conn);
+        hostLobby(); return;
+      }
+      if (conn.pid && !conn.spec) hostHandle(conn.pid, m);
     });
-    conn.on("close", () => { if (conn.pid && host.conns.get(conn.pid) === conn) hostDrop(conn.pid); });
+    conn.on("close", () => { if (conn.pid && (host.conns.get(conn.pid) === conn || host.specs.get(conn.pid) === conn)) hostDrop(conn.pid); });
   });
 }
 function joinRoom(code) {
   code = String(code).replace(/\D/g, "");
-  if (code.length !== 4) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
+  if (code.length !== 4 && !PARTY) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
   mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; renderUI();
   peer = new Peer();
   peer.on("open", () => {
-    hostConn = peer.connect(PREFIX + code, { reliable: true });
-    hostConn.on("open", () => hostConn.send({ t: "hello", name: myName() }));
+    const hc = hostConn = peer.connect(netId(code), { reliable: true });
+    // パーティ: PeerJS は「相手が見つからない」を知らせないまま止まることがあるので、2.5 秒でつながらなければ peer から作り直す
+    if (PARTY) setTimeout(() => { if (hostConn === hc && !hc.open && screen === "connecting" && ++partyTries < 60) { cleanupNet(); joinRoom(code); } }, 2500);
+    hostConn.on("open", () => {
+      hc.opened = true;
+      hostUch = openUch(hc, m => { hostSeen = performance.now(); onMsg(m); });
+      hostConn.send({ t: "hello", name: myName(), spec: !!(PARTY && PARTY.spec) });
+    });
     hostConn.on("data", m => { hostSeen = performance.now(); onMsg(m); });
-    hostConn.on("close", () => { if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; clearGame(); cleanupNet(); renderUI(); } });
+    hostConn.on("close", () => {
+      if (PARTY) { if (hc.opened) toGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ
+      if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; clearGame(); cleanupNet(); renderUI(); }
+    });
   });
   peer.on("error", e => {
+    if (PARTY && e.type === "peer-unavailable") return;   // パーティ: 上の時間切れで探し直す
     errMsg = e.type === "peer-unavailable" ? "部屋が見つかりません（番号ちがい、またはホストが閉じました）" : "接続エラー: " + e.type;
     screen = "menu"; clearGame(); cleanupNet(); renderUI();
   });
@@ -479,7 +559,7 @@ function startPractice() {
   for (let i = 0; i < practiceBots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABCDEFGH"[i], bot: true });
   hostStart();
 }
-function leave() { clearGame(); cleanupNet(); mode = "none"; screen = "menu"; overInfo = null; renderUI(); }
+function leave() { if (PARTY) { toGames(); return; } clearGame(); cleanupNet(); mode = "none"; screen = "menu"; overInfo = null; renderUI(); }
 
 // ================= 3D =================
 const canvas = document.getElementById("c");
@@ -549,10 +629,11 @@ function makeAvatar(v) {
   const body = new THREE.Mesh(bodyGeo, new THREE.MeshLambertMaterial({ color: v.color })); body.position.y = 0.8; g.add(body);
   const head = new THREE.Mesh(headGeo, new THREE.MeshLambertMaterial({ color: 0xffe0bd })); head.position.y = 1.9; g.add(head);
   for (const s of [-0.12, 0.12]) { const e = new THREE.Mesh(eyeGeo, eyeMat); e.position.set(s, 1.76, -0.355); g.add(e); }
-  const cv = document.createElement("canvas"); cv.width = 256; cv.height = 128;
+  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 256;   // 2026-11-06 に 2 倍（遠くで札を大きくしてもぼやけないように）
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   const plate = new THREE.Mesh(plateGeo, new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
   plate.position.set(0, 1.98, -0.4); plate.rotation.y = Math.PI; plate.renderOrder = 1;   // おでこ（体の前は -z）
+  if (reveal) { plate.material.depthTest = false; plate.renderOrder = 5; }   // 残り 1 分: 物かげの向こうからも見える
   g.add(plate);
   scene.add(g);
   return { g, plate, ctx: cv.getContext("2d"), tex, key: "" };
@@ -562,7 +643,7 @@ const hex = c => "#" + c.toString(16).padStart(6, "0");
 function drawPlate(av, v, sel) {
   const key = v.f.join(",") + "|" + sel;
   if (av.key === key) return; av.key = key;
-  const c = av.ctx; c.clearRect(0, 0, 256, 128);
+  const c = av.ctx; c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, 256, 128);   // 512×256 の札に 256×128 の大きさで描く
   rrect(c, 4, 4, 248, 120, 18); c.fillStyle = "rgba(255,255,255,0.95)"; c.fill();
   c.lineWidth = sel ? 10 : 6; c.strokeStyle = sel ? "#ffd400" : hex(v.color); c.stroke();
   c.textAlign = "center"; c.textBaseline = "middle";
@@ -582,13 +663,14 @@ function startView(seed, ps) {
   buildStage();
   for (const p of ps) {
     const y = groundAt(p.x, p.z);
-    const v = { ...p, y, tx: p.x, tz: p.z, tyaw: p.yaw, alive: true };
+    const v = { ...p, y, tx: p.x, tz: p.z, tyaw: p.yaw, alive: p.alive !== false };
     view.set(p.id, v);
     if (p.id !== myId) avatars.set(p.id, makeAvatar(v));
   }
   const mine = view.get(myId);
   if (mine) { me.x = mine.x; me.z = mine.z; me.y = mine.y; me.vy = 0; me.yaw = mine.yaw; me.pitch = 0; }
   lastAtk = -99; screen = "game"; lastMine = ""; hostSeen = performance.now();
+  timeLeft = TIME_LIMIT; reveal = false; lastStQ = 0;
   toast("おでこの数字を覚えて、素因数を打ち込もう！");
 }
 
@@ -636,6 +718,8 @@ canvas.addEventListener("contextmenu", e => e.preventDefault());
 const tmpV = new THREE.Vector3();
 const headPos = v => new THREE.Vector3(v.x, (v.y || 0) + 1.95, v.z);
 // 画面に見えている相手（障害物にかくれていない）を、照準に近い順に
+// 残り 1 分になったら、物かげの向こうの札も見えるようにする
+function setReveal(on) { for (const av of avatars.values()) { av.plate.material.depthTest = !on; av.plate.renderOrder = on ? 5 : 1; } }
 function visibleTargets() {
   const out = [];
   for (const v of view.values()) {
@@ -643,12 +727,13 @@ function visibleTargets() {
     tmpV.copy(headPos(v)).project(camera);
     if (tmpV.z > 1 || Math.abs(tmpV.x) > 1.02 || Math.abs(tmpV.y) > 1.02) continue;
     const sx = tmpV.x, sy = tmpV.y;
-    if (!rayClear(camera.position, headPos(v))) continue;
+    if (!reveal && !rayClear(camera.position, headPos(v))) continue;
     out.push({ v, d: Math.hypot(sx * camera.aspect, sy), sx: (sx + 1) / 2 * innerWidth, sy: (1 - sy) / 2 * innerHeight });
   }
   return out.sort((a, b) => a.d - b.d);
 }
 function pickTarget() {
+  if (spectating) { toast("観戦中は打ち込めません"); return; }
   const myV = view.get(myId);
   if (myV && !myV.alive) { toast("観戦中は打ち込めません"); return; }
   const c = visibleTargets();
@@ -668,6 +753,7 @@ function tapSelect(x, y) {
   if (best) selectTarget(best.id);
 }
 function selectTarget(id) {
+  if (spectating) return;
   const myV = view.get(myId);
   if (myV && !myV.alive) { toast("観戦中は打ち込めません"); return; }
   if (selId !== id) { inp = []; kbuf = ""; }
@@ -755,7 +841,8 @@ function updHud(now) {
   }
   $("alive").textContent = `のこり ${[...view.values()].filter(v => v.alive).length}人`;
   const b = $("banner");
-  const bannerTxt = mine && !mine.alive && !overInfo ? "観戦中（移動はできます）" : "";
+  const bannerTxt = spectating && !overInfo ? "観戦中（動き回って見られます）" : mine && !mine.alive && !overInfo ? "観戦中（移動はできます）" : "";
+  const tm = $("timer"); if (tm) { const t = Math.max(0, Math.ceil(timeLeft)); tm.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; tm.classList.toggle("hot", t <= REVEAL_AT); }
   b.textContent = bannerTxt; b.classList.toggle("hidden", !bannerTxt);
   for (const el of $("feed").children) el.style.opacity = now - Number(el.dataset.t) > 6000 ? 0 : 1;
 }
@@ -941,9 +1028,12 @@ function renderUI() {
     h = `<div class="card"><h2>接続中…</h2><button class="btn sub" data-a="leave">やめる</button></div>`;
   } else if (screen === "lobby") {
     const isHost = mode === "host";
-    h = `<div class="card"><h2>部屋番号</h2><div class="code">${esc(host.code)}</div>
-      ${isHost ? `<button class="btn sub" data-a="share">招待リンクを送る</button>` : ""}
+    h = `<div class="card">${PARTY ? `<h2>パーティの部屋</h2>` : `<h2>部屋番号</h2><div class="code">${esc(host.code)}</div>`}
+      ${isHost && !PARTY ? `<button class="btn sub" data-a="share">招待リンクを送る</button>` : ""}
       <ul class="plist">${lobbyPs.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}</span><span>${p.id === 0 ? "ホスト" : p.bot ? "CPU" : ""}</span></li>`).join("")}</ul>
+      ${lobbySpecs.length ? `<div class="note">観戦: ${lobbySpecs.map(esc).join("、")}${spectating ? "（あなたは観戦します）" : ""}</div>` : ""}
+      <div class="note">制限時間 3分。残り1分で物かげの向こうの数字も見える。時間切れは数字がいちばん小さい人の勝ち</div>
+      <div class="row" style="margin-top:8px"><input id="rename" class="in" maxlength="12" value="${esc(myName())}"><button class="btn sub" style="width:40%;margin-top:0" data-a="rename">名前を変える</button></div>
       <div class="note">${lobbyPs.length} / ${MAX_PLAYERS}人</div>
       ${isHost ? `<div class="row"><button class="btn sub" style="margin-top:0" data-a="bot+" ${lobbyPs.length >= MAX_PLAYERS ? "disabled" : ""}>CPUを追加</button><button class="btn sub" style="margin-top:0" data-a="bot-" ${host.bots ? "" : "disabled"}>CPUを減らす</button></div>
         <button class="btn red" data-a="start" ${lobbyPs.length < 2 ? "disabled" : ""}>スタート</button>
@@ -951,13 +1041,15 @@ function renderUI() {
         : `<div class="note">ホストがスタートするのを待っています…</div>`}
       <button class="btn sub" data-a="leave">退出</button></div>`;
   } else if (screen === "game" && overInfo) {
+    const wins = overInfo.wins || (overInfo.win != null ? [overInfo.win] : []);
     const w = overInfo.ps.find(p => p.id === overInfo.win);
-    const iWon = overInfo.win === myId;
-    h = `<div class="card"><h2>${iWon ? "🏆 あなたの勝ち！" : w ? `${esc(w.name)} の勝ち` : "引き分け"}</h2>
-      <table class="res">${overInfo.ps.map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}${p.id === myId ? "（自分）" : ""}</td><td>撃破 ${p.kills}</td></tr>`).join("")}</table>
+    const iWon = wins.includes(myId);
+    const title = wins.length > 1 ? (iWon ? "🤝 引き分け（あなたも勝ち）" : "引き分け") : iWon ? "🏆 あなたの勝ち！" : w ? `${esc(w.name)} の勝ち` : "引き分け";
+    h = `<div class="card"><h2>${title}</h2>${overInfo.timeUp ? `<div class="note">時間切れ: 数字がいちばん小さい人の勝ち</div>` : ""}
+      <table class="res">${overInfo.ps.map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}${p.id === myId ? "（自分）" : ""}</td><td>撃破 ${p.kills}${overInfo.timeUp && p.alive ? ` ・ ${p.n}` : ""}</td></tr>`).join("")}</table>
       ${mode === "local" ? `<button class="btn red" data-a="again">もう一度</button>`
         : mode === "host" ? `<button class="btn red" data-a="tolobby">部屋にもどる</button>` : `<div class="note">ホストが部屋にもどるのを待っています…</div>`}
-      <button class="btn sub" data-a="leave">メニューへ</button></div>`;
+      <button class="btn sub" data-a="leave">${PARTY ? "ゲーム一覧へ" : "メニューへ"}</button></div>`;
   }
   s.innerHTML = h;
   $("laysize")?.addEventListener("input", e => { LAY[editSel].s = Number(e.target.value) / 100; applyLayout(); updLayBar(); saveLayout(); });
@@ -976,6 +1068,11 @@ $("screen").addEventListener("click", async e => {
   else if (a === "games") location.href = "../";   // ミニゲーム集のゲーム一覧へ
   else if (a.startsWith("pb-")) { const nm = $("name")?.value; practiceBots = Number(a.slice(3)); renderUI(); if (nm != null) $("name").value = nm; }
   else if (a === "leave") leave();
+  else if (a === "rename") {   // 部屋に入ったあとでも名前を変えられる（始まる前）
+    const n = ($("rename")?.value || "").trim().slice(0, 12) || "ゲスト";
+    meName = n; store.set("soinsu-name", n);
+    if (mode === "host") hostLobby(); else sendHost({ t: "rename", name: n });
+  }
   else if (a === "bot+") { host.bots++; hostLobby(); }
   else if (a === "bot-") { host.bots = Math.max(0, host.bots - 1); hostLobby(); }
   else if (a === "start") { hostStart(); renderUI(); }
@@ -990,7 +1087,7 @@ $("screen").addEventListener("click", async e => {
 function toastScreen(s) { const n = document.querySelector("#screen .note"); if (n) n.textContent = s; }
 
 // ================= ループ =================
-function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyLayout(); checkRotate(); }
+function resize() { renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); applyLayout(); checkRotate(); }
 addEventListener("resize", resize); resize();
 let last = performance.now(), sendT = 0;
 function frame(nowMs) {
@@ -1013,14 +1110,10 @@ function frame(nowMs) {
     updListener();
     const mine = view.get(myId); if (mine) { mine.x = me.x; mine.z = me.z; mine.y = me.y; }
     sendT += dt;
-    if (sendT > 0.1) {
+    if (sendT > 0.05 && !spectating) {   // 2026-11-06: 10 → 20 回/秒（落としてよい通り道で送る）
       sendT = 0;
       sendHost({ t: "pos", x: +me.x.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(3) });
-      if (G && mode !== "client") broadcast({ t: "st", p: [...G.players.values()].map(p => [p.id, +p.x.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3)]) });
     }
-    if (G && mode !== "client" && !G.over) for (const p of G.players.values()) if (p.bot) botUpdate(p, dt, nowMs / 1000);
-    // 応答のない相手を切る（タブを閉じた・電波が切れた）
-    if (mode === "host" && G) for (const [id, c] of [...host.conns]) if (nowMs - (c.seen || nowMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
     if (mode === "client" && nowMs - hostSeen > 10000) { errMsg = "ホストとの接続が切れました"; leave(); return; }
     // 見た目
     camera.position.set(me.x, me.y + EYE, me.z); camera.rotation.set(me.pitch, me.yaw, 0);
@@ -1060,8 +1153,32 @@ function frame(nowMs) {
   }
   renderer.render(scene, camera);
 }
+// ホストの計算（CPU・位置の配信・制限時間・応答のない相手）は、画面の描き直しとは別に 20 回/秒で回す
+// （画面の描き直しは、裏に回ると止まるため。2026-11-06 に描画のループから分けた）
+let hostLastT = performance.now(), tmSent = 0;
+setInterval(() => {
+  const nowMs = performance.now(), dt = Math.min(0.1, (nowMs - hostLastT) / 1000); hostLastT = nowMs;
+  if (screen !== "game" || !G || mode === "client") return;
+  if (!G.over) for (const p of G.players.values()) if (p.bot) botUpdate(p, dt, nowMs / 1000);
+  broadcast({ t: "st", q: ++stQ, p: [...G.players.values()].filter(p => p.alive || p.bot === false).map(p => [p.id, +p.x.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3)]) });
+  const left = TIME_LIMIT - (nowMs / 1000 - G.t0);
+  if (!G.over && nowMs - tmSent > 1000) { tmSent = nowMs; broadcast({ t: "tm", l: Math.max(0, Math.round(left)), rv: left <= REVEAL_AT ? 1 : 0 }); }
+  if (!G.over && left <= 0) checkOver(true);
+  // 応答のない相手を切る（タブを閉じた・電波が切れた）
+  if (mode === "host") for (const [id, c] of [...host.conns]) if (nowMs - (c.seen || nowMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
+}, 50);
 renderUI();
 requestAnimationFrame(frame);
+// パーティから開いたとき: メニューを飛ばして自動で部屋を作る・入る。左上に「← 一覧」
+if (PARTY) {
+  meName = String(PARTY.name || "ゲスト").slice(0, 12);
+  const back = document.createElement("button");
+  back.textContent = "← 一覧";
+  back.style.cssText = "position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom) + 8px);z-index:60;font:inherit;font-size:13px;font-weight:700;padding:9px 12px;border-radius:99px;border:1px solid #556;background:rgba(10,15,30,.85);color:#fff";
+  back.addEventListener("click", () => { if (confirm("ゲーム一覧へ戻りますか？" + (PARTY.role === "host" ? "（みんなも一覧へ戻ります）" : ""))) toGames(); });
+  document.body.appendChild(back);
+  if (PARTY.role === "host") startHost(); else joinRoom(PARTY.code);
+}
 try { if (window.IN_HUB && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
 window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; }, get STAGE() { return STAGE; }, pickTarget, groundAt };
 </script>

@@ -195,7 +195,7 @@
     display:flex;
     align-items:center;
     justify-content:center;
-    font-size:min(4.6vw,17px);
+    font-size:var(--pf, min(4.6vw,17px));
     font-weight:700;
     line-height:1;
     letter-spacing:-1px;
@@ -400,6 +400,9 @@
   .promote-btn .pent {
     font-size: 1.1rem;
   }
+  body.ykg-spec #board, body.ykg-spec .hand, body.ykg-spec #readyRow{pointer-events:none}
+  body.ykg-spec #readyRow{display:none !important}
+  #ykgSpecBar{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;background:rgba(122,75,38,.92);color:#fff}
   #ykgBack{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:50;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;padding:7px 12px;border-radius:99px;border:1px solid #C79E64;background:rgba(246,239,227,.95);color:#2A2320}
 </style>
 </head>
@@ -480,7 +483,7 @@
   const ROWS=9, COLS=9;
   const KANJI={
     P:'歩', L:'香', N:'桂', S:'銀', G:'金', B:'角', R:'飛', K:'王',
-    '+P':'と', '+L':'成香', '+N':'成桂', '+S':'成銀', '+B':'馬', '+R':'龍'
+    '+P':'と', '+L':'杏', '+N':'圭', '+S':'全', '+B':'馬', '+R':'龍'
   };
   function kingGlyph(owner){ return owner==='sente' ? '王' : '玉'; }
 
@@ -653,6 +656,7 @@
   function isCooling(p){ return p.cooldownUntil > now(); }
 
   function onCellClick(r,c){
+    if(spectating) return;
     if(gameOver) return;
     if(netActive && colorAssigned && !matchStarted){
       flashStatus('両者が「準備完了」を押すと対局が始まります');
@@ -705,7 +709,7 @@
     }
   }
 
-  function isMine(owner){ return myColor===null || myColor===owner; }
+  function isMine(owner){ if(spectating) return false; return myColor===null || myColor===owner; }
 
   function selectSquare(r,c){
     selected={r,c};
@@ -772,6 +776,10 @@
   }
 
   function endGame(winner){
+    if(!gameOver && isHost && netActive && PARTY){   // 先手 = ホスト、後手 = ゲスト
+      const w = winner === 'sente' ? PARTY.name : guestName, l = winner === 'sente' ? guestName : PARTY.name;
+      partyReport([w], [l]);
+    }
     gameOver=true;
     winnerColor=winner;
     winText.textContent = (winner==='sente' ? '先手の勝ち！' : '後手の勝ち！');
@@ -950,6 +958,7 @@
   }
 
   function localRestart(){
+    if(netActive && !gameOver){ setBattleStatus('対局中は「最初から」はできません（決着がついてから）'); return; }   // 2026-11-06: 押し間違いで対局が消えないように
     attemptAction({kind:'restart'});
   }
   document.getElementById('restartBtn').addEventListener('click',localRestart);
@@ -957,20 +966,23 @@
 
   function tick(){
     if(!gameOver){
-      let needsRender=false;
+      // 2026-11-06: 毎フレーム盤を作り直すと、作り直しの瞬間のタップが届かない（iPhone）。冷却中の輪だけその場で更新し、
+      // 冷却が終わった駒があるときだけ盤を描き直す
+      let ended=false;
       for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
         const p=board[r][c];
         if(p && p.cooldownUntil>0){
-          /* 修正1: クールタイム終了時にタイマーを0にリセットし、UIを更新する処理を追加 */
           if(p.cooldownUntil>now()){
-            needsRender=true;
+            const ring = cells[r] && cells[r][c] && cells[r][c].querySelector('.cooldown-ring');
+            if(ring){ const pct = Math.max(0,Math.min(100, ((p.cooldownUntil-now())/cooldownFor(p.type))*100)); ring.style.setProperty('--pct',pct+'%'); }
+            else ended=true;   // 輪がまだない（新しく冷却が始まった）
           } else {
             p.cooldownUntil = 0; // 終了を確定
-            needsRender=true;    // リセット状態を描画させる
+            ended=true;
           }
         }
       }
-      if(needsRender) renderBoard();
+      if(ended) renderBoard();
     }
     updateCountdownDisplay();
     requestAnimationFrame(tick);
@@ -1011,6 +1023,9 @@
 
   function fitBoard(){
     if(!battleScreen.classList.contains('active')) return;
+    // 2026-11-06: 盤を大きくするため、相手が来たら部屋番号の箱を、始まったら「準備完了」の行を隠す
+    if(roomCodeBox && (peerCount > 0 || PARTY)) roomCodeBox.style.display = 'none';
+    if(readyRow) readyRow.style.display = matchStarted ? 'none' : '';
     boardEl.style.width = '';
     boardEl.style.height = '';
     const boardFrame = battleScreen.querySelector('.board-frame');
@@ -1032,17 +1047,20 @@
     const availableHeight = window.innerHeight - usedHeight - gapPx - wrapPadding - framePadding;
     const availableWidth = battleScreen.clientWidth - framePadding;
     // マス目を正方形(1:1)ではなく縦長(幅:高さ = 1:1.1)にする
-    const ASPECT = 1.2;
-    const width = Math.max(200, Math.floor(Math.min(availableWidth, availableHeight/ASPECT)));
+    const ASPECT = 1.1;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const availH = vh - usedHeight - gapPx - wrapPadding - framePadding;
+    const width = Math.max(200, Math.floor(Math.min(availableWidth, availH/ASPECT)));
     const height = Math.floor(width*ASPECT);
     boardEl.style.width = width+'px';
     boardEl.style.height = height+'px';
+    document.documentElement.style.setProperty('--pf', Math.max(11, Math.floor(width / COLS * 0.55)) + 'px');   // 駒の字の大きさはマスに合わせる
   }
   window.addEventListener('resize', fitBoard);
   window.addEventListener('orientationchange', ()=>{ setTimeout(fitBoard, 100); });
 
   function setLobbyStatus(text){ netStatusEl.textContent = text; }
-  function setBattleStatus(text){ battleStatusEl.textContent = text; }
+  function setBattleStatus(text){ battleStatusEl.textContent = spectating ? '観戦中（先手 = ホスト / 後手 = ゲスト）' : text; }   // 観戦の人には手番の案内を出さない
 
   const ID_PREFIX = 'jp-freetime-shogi-';
   // パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
@@ -1053,10 +1071,26 @@
   const netId = code => (PARTY ? 'jp-shogi-party-' : ID_PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
   const toGames = () => { location.href = '../'; };   // ゲーム一覧へ
   let partyTries = 0;
+  // 観戦: 観戦を選んだ人と、2人そろったあとに来た人は観戦になる。ホストが相手に送る盤面を観戦の人にも送る（操作はできない）
+  let spectators = [], spectating = false, guestName = 'ゲスト';
+  // パーティの成績: 勝ち負けが決まったら、ゲーム一覧で集計するために置いておく（ホストだけ）
+  function partyReport(w, l){
+    if(!PARTY || PARTY.role !== 'host') return;
+    try { const a = JSON.parse(sessionStorage.getItem('ykg-results') || '[]'); a.push({ game:'shougi', w, l }); sessionStorage.setItem('ykg-results', JSON.stringify(a)); } catch(e){}
+  }
+  function enterSpectate(){
+    spectating = true;
+    document.body.classList.add('ykg-spec');
+    if(!document.getElementById('ykgSpecBar')){
+      const b = document.createElement('div'); b.id = 'ykgSpecBar'; b.textContent = '観戦中（操作はできません）';
+      document.body.appendChild(b);
+    }
+  }
   let peer=null, conn=null, peerCount=0;
 
   function applyActionAsHost(action, actorColor){
     const requireActor = actorColor !== undefined;
+    if((gameOver || (netActive && !matchStarted)) && action.kind !== 'restart') return false;   // 2026-11-06: 決着後・開始前の操作は受けない
     switch(action.kind){
       case 'move': {
         const {sr,sc,dr,dc,owner} = action;
@@ -1181,6 +1215,8 @@
 
   function handleRemote(data){
     if(!data || !data.kind) return;
+    if(data.kind==='party-name'){ if(isHost) guestName = String(data.name || 'ゲスト').slice(0, 12); return; }
+    if(data.kind==='spectate') return;
     if(data.kind==='request'){
       if(isHost){
         const applied = applyActionAsHost(data.action, 'gote');
@@ -1242,6 +1278,7 @@
   function updateReadyUI(){
     if(!colorAssigned || matchStarted || countdownUntil>0){
       readyRow.classList.remove('visible');
+      requestAnimationFrame(fitBoard);   // 始まったら「準備完了」の行を隠して盤を大きくする
       return;
     }
     readyRow.classList.add('visible');
@@ -1257,6 +1294,7 @@
 
   function netSendFn(data){
     if(conn && conn.open) conn.send(data);
+    for(const sc of spectators) if(sc.open){ try { sc.send(data); } catch(e){} }   // 観戦の人にも同じものを送る
   }
 
   function createRoom(){
@@ -1296,13 +1334,22 @@
     });
 
     peer.on('connection', (c)=>{
-      if(PARTY && conn && conn.open){   // パーティの 3 人目以降: 2 人用なので断る
+      if(!PARTY && conn && conn.open){   // 2026-11-06: 2 人目のあとに来た人は断る（ゲストの席を取られないように）
         c.on('open', ()=>{ try { c.send({kind:'party-full'}); } catch(e){} setTimeout(()=>{ try { c.close(); } catch(e){} }, 500); });
+        return;
+      }
+      if(PARTY && ((c.metadata && c.metadata.spec) || (conn && conn.open))){   // 観戦を選んだ人・3 人目以降は観戦
+        c.on('open', ()=>{
+          spectators.push(c);
+          try { c.send({kind:'spectate'}); const st = serializeState(); st.seq = syncSeq; c.send({kind:'sync', state: st}); } catch(e){}
+        });
+        c.on('close', ()=>{ spectators = spectators.filter(x => x !== c); });
         return;
       }
       conn = c;
       conn.on('open', ()=>{
         peerCount++;
+        requestAnimationFrame(fitBoard);   // 相手が来たら部屋番号の箱を隠して盤を大きくする
         broadcastSync();
         updateNetStatus(peerCount);
       });
@@ -1352,7 +1399,7 @@
     peer = new Peer();
 
     peer.on('open', ()=>{
-      const c = conn = peer.connect(netId(code), {reliable:true});
+      const c = conn = peer.connect(netId(code), {reliable:true, metadata: {spec: !!(PARTY && PARTY.spec)}});
       netSend = netSendFn;
       // パーティ: ホストの部屋がまだ開いていないとき。PeerJS は 2 回目以降の「見つからない」を知らせないことがあるので、
       // 2.5 秒たってもつながらなければ peer から作り直してつなぎ直す
@@ -1374,8 +1421,11 @@
         renderAll();
         updateNetStatus(1);
         updateReadyUI();
+        if(PARTY && PARTY.spec){ enterSpectate(); setBattleStatus('観戦中です'); }
+        else if(PARTY) c.send({kind:'party-name', name: PARTY.name});   // 成績に使う名前をホストへ
       });
       conn.on('data', (data)=>{
+        if(data && data.kind === 'spectate'){ enterSpectate(); setBattleStatus('観戦中です'); }
         if(data && data.kind === 'party-full'){ setBattleStatus('2人用のゲームです。いまは遊べません（ゲーム一覧へ戻ります）'); setTimeout(toGames, 3500); return; }
         handleRemote(data);
       });

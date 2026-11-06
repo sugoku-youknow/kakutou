@@ -1,0 +1,183 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap');
+/* ゴム弾き陣取りバトル（you know games の中の 1 本） */
+
+:root {
+  --bg: #232733;
+  --panel: #f4ecd8;
+  --panel-ink: #2b2620;
+  --accent: #ffb347;
+  --accent-ink: #3a2a10;
+  --muted: #9aa1b4;
+  --danger: #e2557a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: #eef0f6;
+  font-family: 'Zen Kaku Gothic New', system-ui, sans-serif;
+}
+
+h1, h2 {
+  font-family: 'Baloo 2', 'Zen Kaku Gothic New', system-ui, sans-serif;
+  margin: 0 0 0.3em;
+}
+
+.app-header {
+  text-align: center;
+  padding: 28px 16px 8px;
+}
+.app-header h1 { font-size: 1.7rem; color: var(--accent); }
+.app-sub { color: var(--muted); margin: 0; font-size: 0.95rem; }
+
+#app {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.screen { display: flex; flex-direction: column; gap: 16px; }
+.screen.hidden { display: none; }
+
+.card {
+  background: var(--panel);
+  color: var(--panel-ink);
+  border-radius: 18px;
+  padding: 20px 22px;
+  box-shadow: 0 6px 0 rgba(0,0,0,0.25);
+}
+.card h2 { font-size: 1.15rem; }
+.hint { font-size: 0.88rem; color: #5a5346; line-height: 1.5; margin: 4px 0 12px; }
+
+.btn {
+  appearance: none;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  background: #dcd2b8;
+  color: var(--panel-ink);
+  transition: transform 0.08s ease;
+}
+.btn:active { transform: translateY(2px); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 0 #c9852c; }
+.btn-primary:active { box-shadow: 0 1px 0 #c9852c; }
+.btn-ghost { background: transparent; color: var(--muted); box-shadow: none; text-decoration: underline; }
+.btn-small { padding: 6px 12px; font-size: 0.85rem; }
+
+.join-row { display: flex; gap: 8px; }
+.join-row input {
+  flex: 1;
+  border-radius: 10px;
+  border: 2px solid #cfc4a4;
+  padding: 10px 12px;
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.error-text { color: var(--danger); font-weight: 700; min-height: 1.2em; }
+
+.room-code {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 2.4rem;
+  letter-spacing: 0.18em;
+  text-align: center;
+  padding: 8px 0;
+  color: #b5551f;
+}
+
+.player-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.player-list li {
+  background: #ece0c4;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.92rem;
+  display: flex;
+  justify-content: space-between;
+}
+.player-list li.me { font-weight: 700; }
+
+.hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.zone-counts { display: flex; gap: 8px; flex-wrap: wrap; }
+.zone-pill {
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+}
+.zone-pill.mine { outline: 2px solid #fff; }
+
+.board-wrap {
+  display: flex;
+  justify-content: center;
+  background: #171a22;
+  border-radius: 18px;
+  padding: 12px;
+}
+#game-canvas { max-width: 100%; height: auto; touch-action: none; border-radius: 10px; }
+
+.center-card { text-align: center; }
+.ended-message { font-size: 1.1rem; margin-bottom: 16px; }
+
+@media (max-width: 480px) {
+  .app-header h1 { font-size: 1.4rem; }
+  .room-code { font-size: 1.9rem; }
+}
+
+/* 対戦中は画面いっぱいに表示（2026-11-06: 100vh → 100dvh。iPhone のアドレスバーの裏に隠れないように。盤面は残りの高さいっぱい） */
+body[data-screen="game"] { overflow: hidden; }
+body[data-screen="game"] .app-header { display: none; }
+body[data-screen="game"] #app { max-width: none; height: 100vh; height: 100dvh; margin: 0; padding: 0; display: block; }
+body[data-screen="game"] #screen-game { height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: 0; }
+.hud { padding: calc(env(safe-area-inset-top) + 8px) 10px 6px; }
+body.party .hud { padding-left: 82px; }
+.board-wrap { flex: 1; min-height: 0; padding: 4px; align-items: center; }
+body[data-screen="game"] .board-wrap { border-radius: 0; background: #171a22; }
+#game-canvas { touch-action: none; border-radius: 10px; display: block; }
+.game-foot { display: flex; align-items: center; gap: 10px; padding: 6px 12px calc(env(safe-area-inset-bottom) + 8px); }
+.game-foot .hint { flex: 1; margin: 0; color: var(--muted); font-size: 0.82rem; }
+#timer { font-family: 'Baloo 2', system-ui, sans-serif; font-weight: 700; font-size: 1.4rem; min-width: 3.4em; text-align: right; color: #fff; }
+#timer.hot { color: var(--danger); }
+.btn-small { padding: 10px 14px; font-size: 0.9rem; min-height: 44px; }
+.player-list li.spec { opacity: 0.7; }
+.result-row { text-align: left; margin: 6px auto; max-width: 260px; padding: 6px 10px; border-left: 6px solid #999; background: #ece0c4; border-radius: 6px; font-weight: 700; }
+.ended-message p { margin: 0 0 8px; }
+#ykgBack { position: fixed; top: calc(env(safe-area-inset-top) + 8px); left: 8px; z-index: 50; font-size: 13px; font-weight: 700; padding: 9px 12px; border-radius: 99px; border: 1px solid #3a3f4d; background: rgba(35,39,51,.94); color: #eef0f6; }
+body.party .app-header { padding-top: 56px; }
+
+.countdown {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 4px 12px rgba(0,0,0,0.7);
+  pointer-events: none;
+}
+
+.countdown.hidden {
+  display: none;
+}

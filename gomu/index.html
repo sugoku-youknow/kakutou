@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<!-- ミニゲーム集「you know games」の中の 1 本（2026-11-06 にリポジトリ taisen-game から移した）。アプリの設定・アイコンは 1 つ上のフォルダにある -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="you know games" />
+<meta name="theme-color" content="#232733" />
+<link rel="manifest" href="../manifest.json" />
+<link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png" />
+<link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+<title>ゴム弾き陣取りバトル</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>ゴム弾き陣取りバトル</h1>
+    <p class="app-sub">自分の陣地の玉をゴムで弾いて相手の陣地へ。先に0個にするか、時間切れのときにいちばん少ない人の勝ち</p>
+  </header>
+
+  <main id="app">
+    <!-- ロビー画面 -->
+    <section id="screen-lobby" class="screen">
+      <div class="card">
+        <h2>プレイヤー名</h2>
+        <input
+          id="input-player-name"
+          type="text"
+          maxlength="10"
+          placeholder="名前を入力"
+          autocomplete="off"
+        />
+      </div>
+      
+      <div class="card">
+        <h2>部屋を作る</h2>
+        <p class="hint">部屋を作るとあなたがホストになります。合言葉(部屋コード)を対戦相手に伝えてください。</p>
+        <button id="btn-create-room" class="btn btn-primary">部屋を作る</button>
+      </div>
+      <div class="card">
+        <h2>部屋に参加する</h2>
+        <p class="hint">ホストから聞いた部屋コードを入力してください。</p>
+        <div class="join-row">
+          <input id="input-room-code" maxlength="1" inputmode="numeric" placeholder="例: 3" autocomplete="off" />
+          <button id="btn-join-room" class="btn">参加する</button>
+        </div>
+      </div>
+      <p id="lobby-error" class="error-text"></p>
+      <button id="btn-games" class="btn btn-ghost">← ゲーム一覧へ（you know games）</button>
+    </section>
+
+    <!-- 待機画面 -->
+    <section id="screen-waiting" class="screen hidden">
+      <div class="card" id="room-code-card">
+        <h2>部屋コード</h2>
+        <div class="room-code" id="room-code-display">-----</div>
+        <p class="hint">このコードを対戦相手に伝えて「部屋に参加する」から入ってもらいましょう(2〜4人)。</p>
+      </div>
+      <div class="card">
+        <h2>参加者 (<span id="player-count">1</span> / 4)</h2>
+        <ul id="player-list" class="player-list"></ul>
+        <div class="join-row" style="margin-bottom:10px"><input id="input-rename" maxlength="10" placeholder="名前" autocomplete="off" /><button id="btn-rename" class="btn">名前を変える</button></div>
+        <p id="host-only-note" class="hint hidden">人数がそろったらゲームを開始してください（2〜4人。5人目以降と観戦の人は見るだけ）。2人なら長方形、3人なら六角形、4人なら八角形の盤面になります。制限時間は2人 90秒、3〜4人 120秒。半分を過ぎると真ん中の仕切りが消えます。</p>
+        <button id="btn-start-game" class="btn btn-primary hidden">ゲームを開始する</button>
+        <p id="guest-wait-note" class="hint">ホストがゲームを開始するのを待っています…</p>
+      </div>
+      <button id="btn-leave-waiting" class="btn btn-ghost">部屋を出る</button>
+    </section>
+
+    <!-- ゲーム画面 -->
+    <section id="screen-game" class="screen hidden">
+      <div class="hud">
+        <div id="zone-counts" class="zone-counts"></div>
+        <div id="timer">1:30</div>
+      </div>
+      <div class="board-wrap">
+        <canvas id="game-canvas"></canvas>
+        <div id="countdown" class="countdown hidden"></div>
+      </div>
+      <div class="game-foot">
+        <p id="game-note" class="hint">自分の陣地(色つき)の玉をドラッグして引っ張り、離すと発射します。</p>
+        <button id="btn-leave-game" class="btn btn-ghost btn-small">退出</button>
+      </div>
+    </section>
+
+    <!-- 終了画面 -->
+    <section id="screen-ended" class="screen hidden">
+      <div class="card center-card">
+        <h2 id="ended-title">対戦終了</h2>
+        <div id="ended-message" class="ended-message"></div>
+        <button id="btn-back-to-lobby" class="btn btn-primary">ロビーに戻る</button>
+        <button id="btn-games-end" class="btn btn-ghost hidden">← ゲーム一覧へ</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

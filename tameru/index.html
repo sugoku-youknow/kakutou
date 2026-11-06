@@ -101,6 +101,7 @@
   .abtn.barrier{ border-color:#264247; } .abtn.barrier:hover:not(.disabled):not(.picked){ border-color:var(--barrier); }
   .abtn.attack{ border-color:#472129; } .abtn.attack:hover:not(.disabled):not(.picked){ border-color:var(--attack); }
   .special-wrap{ width:100%; max-width:600px; margin-top:8px; }
+  .abtn, .special-btn{ touch-action:manipulation; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   .special-btn{ width:100%; padding:14px 10px; border-radius:10px; border:2px solid #9a5f16; background:#fff0c2; color:#16202c; cursor:pointer; text-align:center; font-weight:800; transition:transform .12s, border-color .12s, background .12s; }
   .special-btn:hover:not(.disabled){ transform:translateY(-2px); border-color:#c27a1d; background:#ffe7a0; }
   .special-btn .tt{ font-size:15px; }
@@ -151,6 +152,7 @@
   .setting-label{ font-size:13px; font-weight:700; text-align:left; }
   .setting-ctrl{ display:flex; align-items:center; gap:10px; }
   .setting-note{ margin-top:8px; font-size:11px; color:var(--sub); }
+  .hpbtn{ min-width:44px; min-height:44px; }
   .hpbtn{
     width:30px; height:30px; border-radius:6px; border:2px solid #16202c;
     background:#fff; color:#16202c; font-size:16px; font-weight:800; cursor:pointer; line-height:1;
@@ -161,7 +163,7 @@
   .waitline{ text-align:center; font-size:12px; color:var(--sub); margin-top:12px; }
 
   /* --- split duel layout --- */
-  #app.mode-duel{ padding:0; background:var(--bg); height:100vh; min-height:100vh; display:flex; flex-direction:column; border-radius:0; overflow-y:auto; }
+  #app.mode-duel{ padding:0; background:var(--bg); height:100vh; height:100dvh; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; border-radius:0; overflow-y:auto; }
   #app.mode-duel::before{ display:none; }
 
   .duel-wrap{
@@ -308,6 +310,8 @@
   @keyframes sfx-shock{0%{opacity:0;transform:translate(-50%,-50%) scale(.1)}10%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(18)}}
   @keyframes sfx-result{0%,100%{opacity:1}}
   @keyframes sfx-shake{0%{transform:translate(0,0)}25%{transform:translate(-8px,5px)}50%{transform:translate(7px,-6px)}75%{transform:translate(-5px,-4px)}100%{transform:translate(4px,3px)}}
+  body.ykg-spec #app button, body.ykg-spec #app [data-move]{pointer-events:none;opacity:.75}
+  #ykgSpecBar{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);text-align:center;font-size:13px;font-weight:700;background:rgba(62,201,214,.92);color:#06222a}
   #ykgBack{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:50;font:inherit;font-size:13px;font-weight:700;padding:7px 12px;border-radius:99px;border:1px solid #232a38;background:rgba(18,22,31,.92);color:#e8ecf4}
 </style>
 </head>
@@ -332,6 +336,39 @@
   function netId(code){ return (PARTY ? 'cbs-party-' : ID_PREFIX) + code; }   // パーティは、ふつうの部屋と別の ID を使う
   function toGames(){ location.href = '../'; }   // ゲーム一覧へ
   var partyTries = 0;
+  // 観戦: 観戦を選んだ人と、2人そろったあとに来た人は観戦になる。ホストが相手に送るものを観戦の人にも同じく送り、ゲストと同じ画面を見せる（操作はできない）
+  var spectators = [], spectating = false, lastSentStatus = null;
+  // パーティの成績: 勝ち負けが決まったら、ゲーム一覧で集計するために置いておく（ホストだけ）
+  function partyReport(w, l){
+    if(!PARTY || PARTY.role !== 'host') return;
+    try { var a = JSON.parse(sessionStorage.getItem('ykg-results') || '[]'); a.push({ game:'tameru', w:w, l:l }); sessionStorage.setItem('ykg-results', JSON.stringify(a)); } catch(e){}
+  }
+  // ホスト: 相手への送信を、観戦の人にも配る。勝負がついた state を送るときに成績も記録する
+  function wrapSend(c){
+    var orig = c.send.bind(c);
+    c.send = function(d){
+      orig(d);
+      if(!d || d.type === 'clock-sync' || d.type === 'clock-sync-reply') return;
+      spectators.forEach(function(sc){ if(sc.open){ try { sc.send(d); } catch(e){} } });
+      if(d.type === 'state' && d.state){
+        var st = d.state;
+        if(st.status === 'finished' && lastSentStatus !== 'finished' && (st.winner === 'p1' || st.winner === 'p2')){
+          var w = st.players[st.winner].name, l = st.players[st.winner === 'p1' ? 'p2' : 'p1'].name;
+          partyReport([w], [l]);
+        }
+        lastSentStatus = st.status;
+      }
+    };
+  }
+  function enterSpectate(){
+    spectating = true;
+    clockSyncReady = true;   // 観戦の人は時計あわせをしない（タイマーのバーが止まらないように）
+    document.body.classList.add('ykg-spec');
+    if(!document.getElementById('ykgSpecBar')){
+      var b = document.createElement('div'); b.id = 'ykgSpecBar'; b.textContent = '観戦中（ゲストの視点で表示しています。操作はできません）';
+      document.body.appendChild(b);
+    }
+  }
   var TURN_MS_DEFAULT = 1000;
   var MIN_TURN_MS = 300;
   var MAX_TURN_MS = 3000;
@@ -383,6 +420,9 @@
   var clockSyncReady = false;
   var clockSyncPending = null;
   var ROUND_START_LEAD_MS = 500; // stateが届く時間を確保してから全員同時に開始
+  // 2026-11-06: ゲストの選択は通信のぶん遅れて届くので、締め切りのあと GUEST_GRACE_MS だけ待ってから結果を出す（ホストの選択は締め切りで止める）
+  var GUEST_GRACE_MS = 150, REVEAL_MS = 900;   // REVEAL_MS: 両者の手を見せる時間（1400 → 900。テンポよく）
+  var hostLocalClosed = false, graceTimer = null, resolveTimer = null;
 
   function clearRoundTimer(){
     if(roundTimeout){ clearTimeout(roundTimeout); roundTimeout = null; }
@@ -407,7 +447,7 @@
       state.roundEndsAt = Date.now() + turnMsFor();
     }
 
-    roundClosed = false;
+    roundClosed = false; hostLocalClosed = false;
     var now = role === 'guest' ? Date.now() + hostClockOffset : Date.now();
     var remaining = Math.max(0, state.roundEndsAt - now);
     roundTimeout = setTimeout(function(){
@@ -423,6 +463,19 @@
   function handleRoundDeadline(){
     if(!state || state.status !== 'playing') return;
     if(roundClosed) return;
+    if(role === 'host'){
+      if(hostLocalClosed) return;
+      hostLocalClosed = true; render();
+      graceTimer = setTimeout(function(){
+        graceTimer = null;
+        if(!state || state.status !== 'playing' || roundClosed) return;
+        roundClosed = true;
+        if(!hostPending.p1) hostPending.p1 = moveForAction('barrier');
+        if(!hostPending.p2) hostPending.p2 = moveForAction('barrier');
+        resolveAtDeadline();
+      }, GUEST_GRACE_MS);
+      return;
+    }
     roundClosed = true;
 
     if(role === 'guest'){
@@ -452,7 +505,7 @@
     stopTimerBarAnimation();
     if(conn){ conn.send({ type:'reveal', reveal: reveal }); }
     render();
-    setTimeout(function(){ finishResolveHost(m1, m2); }, 1400);
+    resolveTimer = setTimeout(function(){ resolveTimer = null; finishResolveHost(m1, m2); }, REVEAL_MS);
   }
 
   function getTimerPercent(){
@@ -562,9 +615,15 @@
 
     // 攻撃同士は相殺。バリアには完全に防がれる。
     // それ以外には「攻撃ボタンを押した回数 × 10」のダメージ。
+    // 2026-11-06: バリアを 3 回続けると、3 回目のバリアは割れて攻撃を防げない（バリアだけで粘って終わらないのを防ぐ）
+    var brk1 = a1==='barrier' && (p1.bs||0) >= 2, brk2 = a2==='barrier' && (p2.bs||0) >= 2;
     var dmg1to2=0, dmg2to1=0;
-    if(a1==='attack' && a2!=='attack') dmg1to2=(a2==='barrier')?0:BASE_DMG*n1;
-    if(a2==='attack' && a1!=='attack') dmg2to1=(a1==='barrier')?0:BASE_DMG*n2;
+    if(a1==='attack' && a2!=='attack') dmg1to2=(a2==='barrier' && !brk2)?0:BASE_DMG*n1;
+    if(a2==='attack' && a1!=='attack') dmg2to1=(a1==='barrier' && !brk1)?0:BASE_DMG*n2;
+    if(brk1) lines.push('P1のバリアは3回続けて割れた！');
+    if(brk2) lines.push('P2のバリアは3回続けて割れた！');
+    if(brk1 && a2==='attack') lines.push('P2の'+n2+'回攻撃が割れたバリアを貫いて'+dmg2to1+'ダメージ！');
+    if(brk2 && a1==='attack') lines.push('P1の'+n1+'回攻撃が割れたバリアを貫いて'+dmg1to2+'ダメージ！');
     hp2=Math.max(0,hp2-dmg1to2);
     hp1=Math.max(0,hp1-dmg2to1);
 
@@ -578,13 +637,16 @@
     else if(a1==='attack' && a2==='charge') lines.push('P2が「ためる」の隙をP1が'+n1+'回攻撃！ '+dmg1to2+'ダメージ！');
     else if(a1==='charge' && a2==='attack') lines.push('P1が「ためる」の隙をP2が'+n2+'回攻撃！ '+dmg2to1+'ダメージ！');
 
-    return {hp1:hp1,hp2:hp2,c1:c1,c2:c2,text:lines.join(' ')};
+    return {hp1:hp1,hp2:hp2,c1:c1,c2:c2,text:lines.join(' '),
+      bs1: a1==='barrier' ? (brk1 ? 0 : (p1.bs||0)+1) : 0, bs2: a2==='barrier' ? (brk2 ? 0 : (p2.bs||0)+1) : 0};
   }
 
+  var toastTimer = null;
   function showToast(msg, ms){
     ui.toast = msg;
     render();
-    setTimeout(function(){ ui.toast=''; render(); }, ms || 2500);
+    if(toastTimer) clearTimeout(toastTimer);   // 前の表示を消す予定は取り消す（新しい表示がすぐ消えないように）
+    toastTimer = setTimeout(function(){ toastTimer = null; ui.toast=''; render(); }, ms || 2500);
   }
 
   function esc(s){
@@ -672,15 +734,26 @@
     });
 
     peer.on('connection', function(c){
-      if(PARTY && conn && conn.open){   // パーティの 3 人目以降: 2 人用なので断る
-        c.on('open', function(){ try { c.send({ type:'full' }); } catch(e){} setTimeout(function(){ try { c.close(); } catch(e){} }, 500); });
+      if(PARTY && ((c.metadata && c.metadata.spec) || (conn && conn.open))){   // 観戦を選んだ人・3 人目以降は観戦
+        c.on('open', function(){
+          spectators.push(c);
+          try { c.send({ type:'spectate' }); if(state){ c.send({ type:'state', state: state }); } } catch(e){}
+        });
+        c.on('close', function(){ spectators = spectators.filter(function(x){ return x !== c; }); });
         return;
       }
       conn = c;
+      wrapSend(c);
       conn.on('open', function(){ /* wait for join message */ });
       conn.on('data', function(msg){ handleHostData(msg); });
       conn.on('close', function(){
-        showToast('相手との接続が切れました', 3000);
+        // 相手が抜けた: ラウンドを止めて終わりにする（いつまでも自動バリアで続かないように）
+        clearRoundTimer(); stopTimerBarAnimation();
+        if(graceTimer){ clearTimeout(graceTimer); graceTimer = null; }
+        if(resolveTimer){ clearTimeout(resolveTimer); resolveTimer = null; }
+        if(state && state.status === 'playing'){ state.status = 'finished'; state.winner = null; }
+        showToast('相手との接続が切れました' + (PARTY ? '（ゲーム一覧へ戻ります）' : ''), 3000);
+        if(PARTY) setTimeout(toGames, 2500);
       });
     });
 
@@ -747,6 +820,7 @@
       return;
     }
     if(msg.type === 'debug-max-charge'){
+      return;   // 2026-11-06: 確認用のチャージ満タンは公開版では使わない
       if(!state || state.status !== 'playing') return;
       state.players.p2.charge = state.players.p2.maxCharge;
       if(conn){ conn.send({type:'state', state:state}); }
@@ -754,6 +828,7 @@
       return;
     }
     if(msg.type === 'restart-request'){
+      if(!state || (state.status !== 'finished' && state.status !== 'normal-finish')) return;   // 勝負がついてからだけ
       doRestart();
       return;
     }
@@ -779,8 +854,8 @@
 
   function finishResolveHost(m1, m2){
     var res = resolveRound(state.players.p1, state.players.p2, m1, m2);
-    state.players.p1.hp = res.hp1; state.players.p1.charge = res.c1;
-    state.players.p2.hp = res.hp2; state.players.p2.charge = res.c2;
+    state.players.p1.hp = res.hp1; state.players.p1.charge = res.c1; state.players.p1.bs = res.bs1;
+    state.players.p2.hp = res.hp2; state.players.p2.charge = res.c2; state.players.p2.bs = res.bs2;
     state.log = state.log.concat([{ round: state.round, text: res.text }]);
     if(res.hp1<=0 || res.hp2<=0){
       state.status = 'normal-finish';
@@ -819,6 +894,9 @@
     };
     resetSpecialAnimation();
     resetNormalResultAnimation();
+    if(resolveTimer){ clearTimeout(resolveTimer); resolveTimer = null; }   // 結果を出す途中だった分は捨てる
+    if(graceTimer){ clearTimeout(graceTimer); graceTimer = null; }
+    hostLocalClosed = false;
     state = freshState(hostName, guestName, hpSetting, maxChargeSetting, mode, custom);
     hostPending = { p1:null, p2:null };
     reveal = null;
@@ -851,10 +929,11 @@
     // ホストの部屋へつなぐ。パーティでホストの部屋がまだ開いていないときは、2.5 秒たってもつながらなければつなぎ直す
     // （PeerJS は 2 回目以降の「相手が見つからない」を知らせないことがあるので、エラーを待たずに時間で判断する）
     function connectHost(){
-      var c = conn = peer.connect(netId(code), { reliable:true });
+      var c = conn = peer.connect(netId(code), { reliable:true, metadata: { spec: !!(PARTY && PARTY.spec) } });
 
       c.on('open', function(){
         c.__opened = true;
+        if(PARTY && PARTY.spec){ enterSpectate(); return; }   // 観戦: 参加の知らせは送らない
         c.send({ type:'join', name: ui.nameInput.trim() || 'Player 2' });
         setTimeout(startClockSync, 100);
       });
@@ -894,6 +973,7 @@
 
   function handleGuestData(msg){
     if(msg.type === 'clock-sync-reply') { handleClockSync(msg); return; }
+    if(msg.type === 'spectate'){ enterSpectate(); return; }   // ホストが観戦にした（2人そろっていた）
     if(msg.type === 'full'){ showToast('2人用のゲームです。いまは遊べません（ゲーム一覧へ戻ります）', 3500); setTimeout(toGames, 3500); return; }
     if(msg.type === 'reveal'){
       clearRoundTimer();
@@ -947,6 +1027,7 @@
 
   // ---------- shared ----------
   function pressStart(){
+    if(spectating) return;
     if(!state || state.status !== 'ready') return;
     if(role === 'host'){
       state.ready.p1 = true;
@@ -1139,7 +1220,8 @@
   }
 
   function pickMove(action){
-    if(!state || state.status!=='playing' || reveal || roundClosed) return;
+    if(spectating) return;
+    if(!state || state.status!=='playing' || reveal || roundClosed || (role==='host' && hostLocalClosed)) return;
     var myKey=role==='host'?'p1':'p2';
     var me=state.players[myKey];
     var currentAction=moveAction(myMove);
@@ -1167,6 +1249,7 @@
   }
 
   function requestRestart(){
+    if(spectating) return;
     if(role === 'host'){
       doRestart();
     } else {
@@ -1280,7 +1363,7 @@
     if(ui.screen === 'joining'){
       app.innerHTML =
         (ui.toast ? '<div class="toast">'+esc(ui.toast)+'</div>' : '') +
-        '<div class="wrap"><div class="card center"><p class="muted">' + (PARTY ? 'ホストがモードを選ぶのを待っています…' : '接続しています…') + '</p></div></div>';
+        '<div class="wrap"><div class="card center"><p class="muted">' + (PARTY ? (spectating ? '観戦: バトルが始まるのを待っています…' : 'ホストがモードを選ぶのを待っています…') : '接続しています…') + '</p></div></div>';
       return;
     }
 
@@ -1333,7 +1416,7 @@
 
     html += '<div class="duel-wrap">' +
         '<div class="duel-half opp">' +
-          '<div class="namebox debug-btn" id="oppNameBox">'+esc(opp.name)+'</div>' +
+          '<div class="namebox" id="oppNameBox">'+esc(opp.name)+'</div>' +
           (state.showOppHp !== false ? '<div class="hpbox-outer"><div class="hpbox-fill" style="width:'+Math.round(opp.hp/state.hpSetting*100)+'%"></div><div class="hpbox-num">'+opp.hp+' / '+state.hpSetting+'</div></div>' : '') +
           (state.showOppCharge !== false ? '<div class="pipsrow">' + pipsHtml(opp.charge) + '</div>' : '') +
           '<div class="actionbox '+(reveal?ACTIONS[moveAction(reveal[oppKey])].cls:'')+'">' + oppActionHtml + '</div>' +
@@ -1487,7 +1570,7 @@
     if(startBtn) startBtn.addEventListener('click', pressStart);
 
     var oppNameBox = document.getElementById('oppNameBox');
-    if(oppNameBox) oppNameBox.addEventListener('click', debugMaxCharge);
+    // 2026-11-06: 相手の名前をタップするとチャージが満タンになる確認用の仕掛けを外した
 
     var hostHpMinus = document.getElementById('hostHpMinus');
     if(hostHpMinus) hostHpMinus.addEventListener('click', function(){ adjustHostHp(-10); });

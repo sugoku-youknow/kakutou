@@ -12,7 +12,7 @@
 <!-- アプリとしてインストールできるようにする（Android の Chrome など）。インストールしたアイコンから開くと、最初から全画面で起動し、全画面のお知らせも出ない -->
 <!-- 2026-11-06 からミニゲーム集「you know games」の中の 1 本。アプリの設定・アイコンは 1 つ上のフォルダにある -->
 <link rel="manifest" href="../manifest.json">
-<link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon.png">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png">
 <title>シールドファイト</title>
 <style>
@@ -3042,6 +3042,10 @@ function hostTick() {
       const winners = game.win < 0 ? [] : game.wt ? slots.filter(i => game.p[i].lk && game.p[i].tg === game.wt) : [game.win];   // チーム戦は、落ちていた仲間も含めて全員の勝ち数が増える
       winners.forEach(i => game.p[i].w++);
       game.ph = winners.some(i => game.p[i].w >= game.wr) ? "match" : "round";
+      if (game.ph === "match" && PARTY && role === "host" && !solo) {   // パーティの成績（CPU は数えない）
+        const human = i => game.p[i] && !game.p[i].cpu && (i === 0 || game.p[i].c);
+        partyReport(winners.filter(human).map(partyNameOf), slots.filter(i => human(i) && game.p[i].lk && !winners.includes(i)).map(partyNameOf));
+      }
 
       game.tm = game.ph === "match" ? 360 : 120;
       clearEntities();
@@ -3150,8 +3154,13 @@ function hostLoop() {
   }
   // スナップショットは、計算を進めたら毎回送る（1 秒に最大 60 回。2026-10-17 までは計算 2 回に 1 回 = 30 回）。まとめて計算したときも 1 回だけ
   if (n > 0) {
-    if (conns.some(c => c && c.open)) {
+    if (conns.some(c => c && c.open) || specConns.length) {
       const snap = snapshot(), str = JSON.stringify(snap);   // 文字にするのは 1 回だけ（全員に同じものを送る）
+      for (const sp of specConns) {   // 観戦の人
+        if (!sp.c.open) continue;
+        if (uchOpen(sp.u) && str.length < 16000) { if (sp.u.bufferedAmount < 32000) { try { sp.u.send(str); } catch (e) {} } }
+        else { try { sp.c.send(snap); } catch (e) {} }
+      }
       for (let i = 0; i < MAX_PLAYERS; i++) {
         const c = conns[i], f = fastConns[i], u = uchs[i];
         if (!c || !c.open) continue;
@@ -3225,6 +3234,28 @@ const PARTY = (() => {
 })();
 const netId = code => (PARTY ? "shieldfight-party-" : PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
 let partyTries = 0;
+// 観戦（パーティ）: 観戦を選んだ人と満員のときに来た人は、席をもらわずにスナップショットだけ受け取って見る（操作はできない）
+let specConns = [], spectating = false;   // ホスト: 観戦の人の { c: 接続, u: 落としてよい通り道 } / 参加者: 自分が観戦中
+// パーティの成績: 試合（何本先取）が決まったら、ゲーム一覧で集計するために置いておく（ホストだけ。CPU は数えない）
+function partyReport(w, l) {
+  if (!PARTY || PARTY.role !== "host" || (!w.length && !l.length)) return;
+  try { const a = JSON.parse(sessionStorage.getItem("ykg-results") || "[]"); a.push({ game: "shieldfight", w, l }); sessionStorage.setItem("ykg-results", JSON.stringify(a)); } catch (e) {}
+}
+const partyNameOf = i => i === 0 ? PARTY.name : (game.p[i].pn || game.p[i].n || "プレイヤー" + (i + 1));   // パーティの名前（ゲスト「pname」で届く）
+function addSpectator(conn) {
+  const u = openUch(conn, () => {});
+  specConns.push({ c: conn, u });
+  conn.send({ t: "hello", id: -1, spec: 1 });
+  if (document.hidden) conn.send({ t: "pause", v: 1, q: snapQ });
+  conn.on("data", d => { if (d && d.t === "pg") conn.send({ t: "po", c: d.c }); });   // 往復時間の測定だけ答える（入力は受けない）
+  conn.on("close", () => { specConns = specConns.filter(x => x.c !== conn); try { if (u) u.close(); } catch (e) {} });
+}
+function showSpecBar() {
+  if (document.getElementById("ykgSpecBar")) return;
+  const b = document.createElement("div"); b.id = "ykgSpecBar"; b.textContent = "観戦中（操作はできません）";
+  b.style.cssText = "position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 6px);transform:translateX(-50%);z-index:60;padding:6px 14px;border-radius:99px;font-size:13px;font-weight:700;background:rgba(17,24,39,.85);color:#fbbf24;pointer-events:none";
+  document.body.appendChild(b);
+}
 
 let hostTries = 0;
 // タイトルへ戻る: ページを読み込み直さずに、部屋の接続を切り、試合の状態を最初に戻す（読み込み直すと全画面が解除されるため）
@@ -3281,8 +3312,10 @@ function startHost() {
       return;
     }
     conn.on("open", () => {
+      if (PARTY && conn.metadata && conn.metadata.spec) { addSpectator(conn); return; }   // 観戦を選んだ人
       let slot = -1;
       for (let i = 1; i < MAX_PLAYERS; i++) if (!game.p[i] || !game.p[i].c) { slot = i; break; }
+      if (slot < 0 && PARTY) { addSpectator(conn); return; }   // パーティで満員: 観戦にする
       if (slot < 0) { conn.send({ t: "full" }); setTimeout(() => conn.close(), 300); return; }
       conns[slot] = conn;
       const p = newPlayer(); p.own = slot; game.p[slot] = p;
@@ -3303,6 +3336,7 @@ function startHost() {
         if (!d) return;
         if (d.t === "in") takeInput(slot, d);
         else if (d.t === "prof") { applyProfile(p, sanitizeProfile(d)); renderUI(); }
+        else if (d.t === "pname") p.pn = String(d.n || "").slice(0, 12);   // パーティの名前（成績用）
         else if (d.t === "unprof") { if (canEdit(p)) p.rd = false; renderUI(); }
         else if (d.t === "pg") conn.send({ t: "po", c: d.c });   // 往復時間の測定: そのまま返す
       });
@@ -3327,11 +3361,26 @@ function startClient(code) {
   const sid = sessionId;
   peer = new Peer();
   peer.on("open", () => {
-    hostConn = peer.connect(netId(code), { reliable: true });
+    const hc = hostConn = peer.connect(netId(code), { reliable: true, metadata: { spec: !!(PARTY && PARTY.spec) } });
+    // パーティ: PeerJS は「相手が見つからない」を知らせないまま止まることがあるので、2.5 秒でつながらなければ peer から作り直す
+    if (PARTY) setTimeout(() => {
+      if (sid !== sessionId || hostConn !== hc || hc.open || net !== "connecting") return;
+      if (++partyTries > 60) { net = "error"; netMsg = "ホストが見つかりません"; renderUI(); return; }
+      try { peer.destroy(); } catch (x) {} peer = null; startClient(code);
+    }, 2500);
     hostConn.on("data", d => {
       if (!d) return;
-      if (d.t === "hello") {
+      if (d.t === "hello" && d.spec) {   // 観戦: 席はもらわず、スナップショットだけ受け取る
+        spectating = true; myId = -1; net = "ready"; showSpecBar(); renderUI();
+        uch = openUch(hostConn, str => {
+          if (sid !== sessionId) return;
+          let o; try { o = JSON.parse(str); } catch (e) { return; }
+          if (o && o.t === "s") applySnapshot(o);
+        });
+      }
+      else if (d.t === "hello") {
         myId = d.id; net = "ready"; renderUI(); openFast(code, sid);
+        if (PARTY) hostConn.send({ t: "pname", n: PARTY.name });   // 成績に使うパーティの名前
         uch = openUch(hostConn, str => {                       // 落としてよい通り道で届くスナップショット
           if (sid !== sessionId) return;
           let o; try { o = JSON.parse(str); } catch (e) { return; }
@@ -3461,7 +3510,7 @@ function recalcKeys() {
 const tapBits = () => { const now = performance.now(); let l = 0; for (const b in pressT) if (now - pressT[b] < 34) l |= +b; return l; };   // 2026-10-18 に 80 → 34ms（小ジャンプの「5 フレーム以内に離す」を邪魔しないように）
 // force: 変わっていなくても送る（落としてよい通り道では、毎フレーム今の状態を送り直して、なくなった分を補う）
 function pushKeys(force) {
-  if (role !== "client" || !hostConn || !hostConn.open) return;
+  if (spectating || role !== "client" || !hostConn || !hostConn.open) return;
   if (uchOpen(uch)) {
     if (!force && sentKeys === myKeys) return;
     try { uch.send(JSON.stringify({ t: "in", k: myKeys, l: tapBits(), q: ++inQ })); sentKeys = myKeys; return; } catch (e) {}
@@ -3490,7 +3539,7 @@ function onVisibility() {
   down.clear(); touchDown.clear(); myKeys = 0; held[0] = 0; latch[0] = 0; sentKeys = -1; pushKeys();
   hostLast = 0; hostAcc = 0;
   if (hid) Sfx.suspend(); else Sfx.resume();
-  if (role === "host") for (const c of conns) if (c && c.open) { try { c.send({ t: "pause", v: hid ? 1 : 0, q: snapQ }); } catch (e) {} }
+  if (role === "host") for (const c of [...conns, ...specConns.map(x => x.c)]) if (c && c.open) { try { c.send({ t: "pause", v: hid ? 1 : 0, q: snapQ }); } catch (e) {} }
 }
 document.addEventListener("visibilitychange", onVisibility);
 document.querySelectorAll(".tb").forEach(el => {
@@ -4160,6 +4209,7 @@ function renderUI() {
   if (editing) key = "layout";
   else if (role === null) key = "title";
   else if (net === "error") key = "error";
+  else if (spectating && net === "ready") key = "spectate";
   else if (net !== "ready" || !me) key = "connecting";
   else if (solo && game.ph === "lobby") key = "solo";
   else if (!me.rd) key = "setup";
@@ -4203,6 +4253,7 @@ function renderUI() {
   } else if (key === "setup") showSelect();
   else if (key === "solo") showSolo();
   else if (key === "lobby") showLobby();
+  else if (key === "spectate") ui.innerHTML = game.ph === "lobby" ? `<div class="panel"><h1>観戦</h1><p>試合が始まるのを待っています（遊ぶ人がキャラを選んでいます）</p></div>` : "";
   else ui.innerHTML = "";
 }
 
