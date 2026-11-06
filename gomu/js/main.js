@@ -6,7 +6,7 @@ import { ZONE_COLORS, BALL_RADIUS_PX } from './board.js';
 const PARTY = (() => {
   try { if (!new URLSearchParams(location.search).has('party')) return null; const j = JSON.parse(sessionStorage.getItem('ykg-party') || 'null'); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
 })();
-const toGames = () => { location.href = '../'; };
+const toGames = () => { ykgToGames(); };
 // パーティの成績: 勝ち負けが決まったら、ゲーム一覧で集計するために置いておく（ホストだけ）
 function partyReport(w, l) {
   if (!PARTY || PARTY.role !== 'host') return;

@@ -148,7 +148,7 @@ table.res td:last-child{text-align:right}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=1"></script>
+<script src="../party-beacon.js?v=2"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 <script type="module">
 import * as THREE from "three";
@@ -161,7 +161,7 @@ const PARTY = (() => {
   try { if (!new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
 })();
 const netId = code => (PARTY ? "soinsu-party-" : PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
-const toGames = () => { location.href = "../"; };
+const toGames = () => { ykgToGames(); };
 let partyTries = 0, spectating = false, lobbySpecs = [];
 // パーティの成績: 勝ち負けが決まったら、ゲーム一覧で集計するために置いておく（ホストだけ。CPU は数えない）
 function partyReport(w, l) {
@@ -717,7 +717,7 @@ function startHost() {
   peer = new Peer(netId(code));
   peer.on("open", () => { host.code = code; hostTries = 0; hostLobby(); });
   peer.on("error", e => {
-    if (PARTY && e.type === "unavailable-id" && ++hostTries < 30) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている
+    if (PARTY && e.type === "unavailable-id" && ++hostTries < 90) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている
     if (e.type === "unavailable-id" && ++hostTries < 20) { peer.destroy(); startHost(); return; }
     if (screen === "game" || screen === "lobby") { toast("通信エラー: " + e.type); return; }
     errMsg = "接続エラー: " + e.type; screen = "menu"; cleanupNet(); renderUI();
@@ -1460,7 +1460,7 @@ $("screen").addEventListener("click", async e => {
   else if (a === "layone") { LAY[editSel] = copyDef(editSel); saveLayout(); renderUI(); }
   else if (a === "layreset") { for (const k in LAY_DEF) LAY[k] = copyDef(k); saveLayout(); renderUI(); }
   else if (a === "sound") { fixName(); soundOn = !soundOn; store.set("soinsu-sound", soundOn ? "1" : "0"); renderUI(); }
-  else if (a === "games") location.href = "../";   // ミニゲーム集のゲーム一覧へ
+  else if (a === "games") ykgToGames();   // ミニゲーム集のゲーム一覧へ
   else if (a.startsWith("pb-")) { const nm = $("name")?.value; practiceBots = Number(a.slice(3)); renderUI(); if (nm != null) $("name").value = nm; }
   else if (a === "leave") leave();
   else if (a === "rename") {   // 部屋に入ったあとでも名前を変えられる（始まる前）
@@ -1505,7 +1505,7 @@ function frame(nowMs) {
     updListener();
     const mine = view.get(myId); if (mine) { mine.x = me.x; mine.z = me.z; mine.y = me.y; }
     sendT += dt;
-    if (sendT > 0.05 && !spectating) {   // 2026-11-06: 10 → 20 回/秒（落としてよい通り道で送る）
+    if (sendT > 0.033 && !spectating) {   // 2026-11-07: 20 → 30 回/秒   // 2026-11-06: 10 → 20 回/秒（落としてよい通り道で送る）
       sendT = 0;
       sendHost({ t: "pos", x: +me.x.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(3), y: +me.y.toFixed(2) });
     }
@@ -1515,7 +1515,7 @@ function frame(nowMs) {
     const fov = zoomed ? 22 : 70;
     if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 12); camera.updateProjectionMatrix(); }
     for (const g of itemObjs.values()) { const u = g.userData; u.ph += dt * 2.5; u.sp.position.y = 0.75 + Math.sin(u.ph) * 0.12; }
-    const k = Math.min(1, dt * 12);
+    const k = Math.min(1, dt * 18);   // ほかの人の位置に追いつく速さ（2026-11-07 に 12 → 18）
     outlineMat.color.setRGB(0.75 + 0.25 * Math.sin(nowMs / 110), 0.05, 0.05);   // 赤い輪郭を点滅させる
     for (const [id, av] of avatars) {
       const v = view.get(id);
@@ -1595,7 +1595,7 @@ setInterval(() => {
   if (!G.over && left <= 0) checkOver(true);
   // 応答のない相手を切る（タブを閉じた・電波が切れた）
   if (mode === "host") for (const [id, c] of [...host.conns]) if (nowMs - (c.seen || nowMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
-}, 50);
+}, 33);   // 2026-11-07: 20 → 30 回/秒
 renderUI();
 requestAnimationFrame(frame);
 // パーティから開いたとき: メニューを飛ばして自動で部屋を作る・入る。左上に「← 一覧」

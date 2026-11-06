@@ -317,7 +317,7 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=1"></script>
+<script src="../party-beacon.js?v=2"></script>
 <script>
 "use strict";
 // LINE の中のブラウザ（アプリ内ブラウザ）は、全画面にも横画面にもできない。LINE は URL に openExternalBrowser=1 が付いていると、
@@ -3262,7 +3262,7 @@ let hostTries = 0;
 // タイトルへ戻る: ページを読み込み直さずに、部屋の接続を切り、試合の状態を最初に戻す（読み込み直すと全画面が解除されるため）
 let sessionId = 0;
 function goTitle() {
-  if (PARTY) { location.href = "../"; return; }   // パーティのときは、ゲーム一覧（パーティの画面）へ戻る
+  if (PARTY) { ykgToGames(); return; }   // パーティのときは、ゲーム一覧（パーティの画面）へ戻る
   sessionId++;
   for (const u of uchs) { try { if (u) u.close(); } catch (e) {} }
   try { if (uch) uch.close(); } catch (e) {}
@@ -3292,7 +3292,7 @@ function startHost() {
     renderUI();
   });
   peer.on("error", e => {
-    if (PARTY && e.type === "unavailable-id" && ++hostTries < 30) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている: 空くのを待つ
+    if (PARTY && e.type === "unavailable-id" && ++hostTries < 90) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている: 空くのを待つ
     if (e.type === "unavailable-id" && net === "connecting" && ++hostTries < 30) { peer.destroy(); startHost(); return; }
     if (e.type === "unavailable-id") { net = "error"; netMsg = "空いている部屋番号がありません。しばらくしてからやり直してください"; renderUI(); return; }
     net = "error"; netMsg = "接続エラー: " + e.type; renderUI();
@@ -3393,7 +3393,7 @@ function startClient(code) {
       else if (d.t === "s") applySnapshot(d);
       else if (d.t === "pause") { hostPause = !!d.v; if (d.v) pauseQ = d.q | 0; }   // ホストが画面を離れた / 戻った
     });
-    hostConn.on("close", () => { if (PARTY && net === "ready") { location.href = "../"; return; } net = "error"; netMsg = "ホストとの接続が切れました"; renderUI(); });
+    hostConn.on("close", () => { if (PARTY && net === "ready") { ykgToGames(); return; } net = "error"; netMsg = "ホストとの接続が切れました"; renderUI(); });
     if (!PARTY) setTimeout(() => { if (sid === sessionId && net === "connecting") { net = "error"; netMsg = "部屋が見つかりません（番号を確認してください）"; renderUI(); } }, 10000);
   });
   peer.on("error", e => {
@@ -4237,7 +4237,7 @@ function renderUI() {
     document.getElementById("bHost").onclick = () => { autoFs(); startHost(); };
     document.getElementById("bSolo").onclick = () => { autoFs(); startSolo(); };
     document.getElementById("bTrain").onclick = () => { autoFs(); startTraining(); };
-    document.getElementById("bGames").onclick = () => { location.href = "../"; };   // ミニゲーム集のゲーム一覧へ
+    document.getElementById("bGames").onclick = () => { ykgToGames(); };   // ミニゲーム集のゲーム一覧へ
     const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d$/.test(c)) { autoFs(); startClient(c); } else document.getElementById("code").style.borderColor = "#ef4444"; };
     document.getElementById("bJoin").onclick = join;
     const bl = document.getElementById("bLayout"); if (bl) bl.onclick = openLayoutEditor;

@@ -14,7 +14,7 @@ import { getBoardConfig } from './board.js';
 import { createWorld, buildBoardBodies, buildBallDefs, spawnBalls, launchBall, stepWorld, removeInnerWalls } from './physics.js';
 import { ZONE_COLORS } from './board.js';
 
-const STATE_INTERVAL_MS = 33;      // 玉の位置を送る間隔（約 30 回/秒）
+const STATE_INTERVAL_MS = 16;      // 玉の位置を送る間隔（約 60 回/秒。2026-11-07 に 30 → 60。ラグを減らすため、ホストの負担は増える）
 const IDLE_INTERVAL_MS = 1000;     // 全部止まっているとき
 const STEP_MS = 1000 / 60;
 const SHOT_COOLDOWN_MS = 400;      // 1 人が続けて撃てる間隔
@@ -250,7 +250,7 @@ export class Game {
   // 毎フレーム呼び出す: ゲスト側の表示位置をなめらかに追従させる（画面の速さに関係なく同じ速さで近づける）
   smoothRenderPositions() {
     const now = performance.now();
-    const k = 1 - Math.exp(-(now - this._lastRender) / 45);
+    const k = 1 - Math.exp(-(now - this._lastRender) / 28);   // 追いつく速さ（2026-11-07 に 45 → 28ms）
     this._lastRender = now;
     for (const [id, target] of this.targetPositions) {
       const cur = this.renderPositions.get(id) || target;

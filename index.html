@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <title>you know games</title>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="party-beacon.js?v=2"></script>
 <script>
 // 招待リンクの読みかえ。前からの「?zone=」（シールドファイト）と「?room=」（ジェンガ）は、そのゲームのページへそのまま送る
 (function () {
@@ -270,6 +271,7 @@ function takeResults() {
   sjson.set("ykg-results", null); sjson.set("ykg-stats", stats);
 }
 // ホスト: 部屋を作る（ゲームから戻ってきたときは同じ番号で作り直す。前の接続が残っていると少し待つ）
+let goingTo = null;   // ホストが選んだゲーム（移る途中）
 function hostParty(code, again) {
   const name = party ? party.name : myName();
   code = code ?? String(Math.floor(Math.random() * 10));
@@ -286,9 +288,13 @@ function hostParty(code, again) {
       else hostParty(null, false);                                // 新しく作るとき: ほかの番号を試す
       return;
     }
-    errMsg = e.type === "unavailable-id" ? "空いている番号がありません。少し待ってからやり直してください" : "接続エラー: " + e.type; render();
+    if (e.type !== "unavailable-id") {   // 中継のサーバーにつながらない（network など）: 少し待って作り直す（一度つながったあとの切れ目は party-beacon.js がつなぎ直す）
+      try { peer.destroy(); } catch (x) {}
+      setTimeout(() => { if (party && party.role === "host") hostParty(party.code === "…" ? null : party.code, party.code !== "…"); }, 1500);
+      return;
+    }
+    errMsg = "空いている番号がありません。少し待ってからやり直してください"; render();
   });
-  peer.on("disconnected", () => { try { if (!peer.destroyed) peer.reconnect(); } catch (x) {} });   // 合図の中継が切れたらつなぎ直す
   peer.on("connection", conn => {
     conn.on("data", m => {
       if (!m) return;
@@ -302,6 +308,7 @@ function hostParty(code, again) {
         renameStats(g.name, name); g.name = name;
         conn.send({ t: "you", name }); sendMembers();
       } else if (m.t === "spec" && g) { g.spec = !!m.spec; sendMembers(); }
+      else if (m.t === "where") { try { conn.send({ t: "at", game: goingTo, list: true }); } catch (x) {} }   // ゲームの中のゲスト: ホストは一覧にいる（移る途中ならそのゲーム）
     });
     conn.on("close", () => { if (guests.get(conn.peer)?.conn === conn) { guests.delete(conn.peer); sendMembers(); } });
   });
@@ -323,7 +330,9 @@ function joinParty(code) {
   peer.on("open", connectHost);
   peer.on("error", e => {
     if (e.type === "peer-unavailable") { status = "looking"; render(); return; }   // 探し直しは connectHost の時間切れで行う
-    errMsg = "接続エラー: " + e.type; render();
+    // 中継のサーバーにつながらない（network など）: 少し待って peer から作り直す
+    status = "looking"; render();
+    const p = peer; setTimeout(() => { if (peer === p && party && party.role === "guest" && !(hostConn && hostConn.open)) { try { p.destroy(); } catch (x) {} joinParty(party.code); } }, 1500);
   });
 }
 // PeerJS は 2 回目以降の「相手が見つからない」を知らせないことがあるので、2.5 秒たってもつながらなければつなぎ直す
@@ -343,7 +352,7 @@ function connectHost() {
     if (!m) return;
     if (m.t === "you") { party.name = m.name; saveParty(); render(); }                 // ホストが決めた名前（重なったときは番号つき）
     else if (m.t === "members") { members = m.list; stats = m.stats || {}; render(); }
-    else if (m.t === "go") location.href = m.game + "?party=1";   // ホストがゲームを選んだ
+    else if (m.t === "go") location.replace(m.game + "?party=1");   // ホストがゲームを選んだ（履歴を積まない）
   });
   c.on("close", () => { if (hostConn !== c || !party || !c.opened) return; status = "looking"; members = []; render(); setTimeout(connectHost, 1500); });
 }
@@ -384,10 +393,13 @@ document.querySelector(".games").addEventListener("click", e => {
   if (party.code === "…") return;
   const game = a.getAttribute("href");
   if (!a.dataset.party) toast("このゲームはまだパーティの自動参加に対応していません（ゲームの中で番号を入れてください）");
+  goingTo = game;
   for (const g of guests.values()) { try { g.conn.send({ t: "go", game }); } catch (x) {} }
-  setTimeout(() => { location.href = game + (a.dataset.party ? "?party=1" : ""); }, a.dataset.party ? 400 : 1500);
+  setTimeout(() => { location.replace(game + (a.dataset.party ? "?party=1" : "")); }, a.dataset.party ? 400 : 1500);
 });
 
+// 戻る・進むでページが凍ったまま戻ってきたら読み込み直す（古い接続のままだと、次のゲーム選びがみんなに届かない）
+addEventListener("pageshow", e => { if (e.persisted) location.reload(); });
 if (party && party.role === "host") { stats = sjson.get("ykg-stats", {}); takeResults(); hostParty(party.code, true); }
 else if (party && party.role === "guest") joinParty(party.code);
 render();

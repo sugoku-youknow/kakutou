@@ -68,7 +68,7 @@ export class Network {
         resolve(code);
       });
       peer.on('error', (err) => {
-        if (err.type === 'unavailable-id' && ++this.tries < 30) {   // 番号が使われている（パーティなら前の部屋が残っている）
+        if (err.type === 'unavailable-id' && ++this.tries < 90) {   // 番号が使われている（パーティなら前の部屋が残っている）
           try { peer.destroy(); } catch (e) {}
           setTimeout(() => this.createRoom(playerName, this.party ? code : null).then(resolve, reject), this.party ? 1000 : 0);
           return;
@@ -119,8 +119,17 @@ export class Network {
     this.playerName = playerName;
     this.roomCode = roomCode;
     return new Promise((resolve, reject) => {
-      let done = false;
-      const peer = this.peer = new Peer();
+      let done = false, peer = null;
+      // つながらないときは、ときどき peer から作り直す（PeerJS が止まったままになるのを避ける）
+      const newPeer = () => {
+        try { peer && peer.destroy(); } catch (e) {}
+        peer = this.peer = new Peer();
+        peer.on('open', connect);
+        peer.on('error', (err) => {
+          if (err.type === 'peer-unavailable') return;   // 下の時間切れでつなぎ直す
+          if (!done) { done = true; reject(err); }
+        });
+      };
       const connect = () => {
         const c = this.hostConn = peer.connect(this.prefix + roomCode, { reliable: true, metadata: { spec: !!(this.party && this.party.spec) } });
         // PeerJS は「相手が見つからない」を知らせないまま止まることがあるので、2.5 秒でつながらなければつなぎ直す
@@ -128,7 +137,7 @@ export class Network {
           if (this.hostConn !== c || c.open) return;
           try { c.close(); } catch (e) {}
           if (++this.tries > (this.party ? 60 : 4)) { if (!done) { done = true; reject(new Error('not found')); } return; }
-          connect();
+          if (this.tries % 3 === 0) newPeer(); else connect();
         }, 2500);
         c.on('open', () => {
           c.opened = true;
@@ -143,11 +152,7 @@ export class Network {
         c.on('data', (m) => this._onHostMessage(m));
         c.on('close', () => { if (this.hostConn === c && c.opened) this.onHostLost(); });
       };
-      peer.on('open', connect);
-      peer.on('error', (err) => {
-        if (err.type === 'peer-unavailable') return;   // 上の時間切れでつなぎ直す
-        if (!done) { done = true; reject(err); }
-      });
+      newPeer();
     });
   }
 

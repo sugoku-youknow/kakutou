@@ -61,7 +61,7 @@
   .diffnote { font-size:12px; color:var(--sub); margin-top:6px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=1"></script>
+<script src="../party-beacon.js?v=2"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 </head>
 <body>
@@ -86,7 +86,7 @@ const ROT_SPEED = 50 * Math.PI / 180;   // 置くときの回転ボタンを押�
 const FINGER_VMAX = 25;             // 指についていく速さの上限（1秒あたり）。ふつうに動かすぶんには指とぴったり同じに動く
 let JITTER = 0.08;                 // 最初に積むときのずれ（長さ方向）。きっちりそろっていないぶん崩れやすい
 const FALL_DROP = 0.75 * BH;       // ターン開始時からこれ以上下がったブロックがあれば「崩れた」
-const SNAP_MS = 50;                // 動きを送る間隔（2026-11-06 に 80 → 50。落としてよい通り道で送るので増やしても詰まらない）
+const SNAP_MS = 33;                // 動きを送る間隔（2026-11-06 に 80 → 50、2026-11-07 に 33。落としてよい通り道で送るので増やしても詰まらない）
 const PREFIX = "jenga-online-room-";
 // パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
 // ホストはパーティの番号（1けた）で部屋を作り、ゲストはその部屋が開くまで探し続ける。ホストがいなくなったら、ゲストもゲーム一覧へ戻る。
@@ -713,7 +713,7 @@ function startHost() {
   peer = new Peer(netId(code));
   peer.on("open", () => { host.code = code; screen = "lobby"; hostLobby(); renderUI(); });
   peer.on("error", e => {
-    if (PARTY && e.type === "unavailable-id" && ++hostTries < 30) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている: 空くのを待つ
+    if (PARTY && e.type === "unavailable-id" && ++hostTries < 90) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている: 空くのを待つ
     if (e.type === "unavailable-id" && ++hostTries < 20) { peer.destroy(); startHost(); return; }
     if (screen === "game") { toast("通信エラー: " + e.type); return; }
     errMsg = "接続エラー: " + e.type; screen = "menu"; cleanupNet(); renderUI();
@@ -755,7 +755,7 @@ function joinRoom(code) {
     hostConn.on("open", () => { hc.opened = true; hostUch = openUch(hc, onMsg); hostConn.send({ t: "hello", name: myName(), spec: !!(PARTY && PARTY.spec) }); });
     hostConn.on("data", onMsg);
     hostConn.on("close", () => {
-      if (PARTY) { if (hc.opened) location.href = "../"; return; }   // パーティ: ホストがいなくなったらゲーム一覧へ（つながる前の失敗は探し直しに任せる）
+      if (PARTY) { if (hc.opened) ykgToGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ（つながる前の失敗は探し直しに任せる）
       if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; cleanupNet(); renderUI(); }
     });
   });
@@ -882,13 +882,13 @@ ui.addEventListener("click", e => {
   }
   else if (a === "quit") { if (confirm("ゲームをやめてメニューに戻りますか？")) backToMenu(); }
   else if (a === "back") backToMenu();
-  else if (a === "games") location.href = "../";   // ミニゲーム集のゲーム一覧へ
+  else if (a === "games") ykgToGames();   // ミニゲーム集のゲーム一覧へ
 });
 // 回転ボタンは押している間だけ回る
 ui.addEventListener("pointerdown", e => { const b = e.target.closest("[data-r]"); if (b) { rotHold = +b.dataset.r; e.preventDefault(); } });
 for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { rotHold = 0; });
 ui.addEventListener("contextmenu", e => { if (e.target.closest("[data-r]")) e.preventDefault(); });   // 長押しでメニューが出ないように
-function backToMenu() { if (PARTY) { location.href = "../"; return; } cleanupNet(); clearAvatars(); mode = null; screen = "menu"; phase = "idle"; errMsg = ""; renderUI(); }
+function backToMenu() { if (PARTY) { ykgToGames(); return; } cleanupNet(); clearAvatars(); mode = null; screen = "menu"; phase = "idle"; errMsg = ""; renderUI(); }
 
 // ================= ほかのプレイヤー（オンラインのとき）=================
 // テーブルのまわりに、ほかの人の姿と名前を出す。立つ場所は、その人が見ている向き（カメラの向き）。

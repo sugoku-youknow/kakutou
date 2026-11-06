@@ -318,7 +318,7 @@
 <body>
 <div id="app"></div>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=1"></script>
+<script src="../party-beacon.js?v=2"></script>
 <script>
 (function(){
   "use strict";
@@ -335,7 +335,7 @@
     try { if(!new URLSearchParams(location.search).has('party')) return null; var j = JSON.parse(sessionStorage.getItem('ykg-party') || 'null'); return (j && /^\d$/.test(j.code)) ? j : null; } catch(e){ return null; }
   })();
   function netId(code){ return (PARTY ? 'cbs-party-' : ID_PREFIX) + code; }   // パーティは、ふつうの部屋と別の ID を使う
-  function toGames(){ location.href = '../'; }   // ゲーム一覧へ
+  function toGames(){ ykgToGames(); }   // ゲーム一覧へ
   var partyTries = 0;
   // 観戦: 観戦を選んだ人と、2人そろったあとに来た人は観戦になる。ホストが相手に送るものを観戦の人にも同じく送り、ゲストと同じ画面を見せる（操作はできない）
   var spectators = [], spectating = false, lastSentStatus = null;
@@ -760,7 +760,7 @@
 
     peer.on('error', function(err){
       console.error(err);
-      if(PARTY && err.type === 'unavailable-id' && ++partyTries < 30){   // 前の部屋がまだ残っている: 空くのを待つ
+      if(PARTY && err.type === 'unavailable-id' && ++partyTries < 90){   // 前の部屋がまだ残っている: 空くのを待つ
         try { peer.destroy(); } catch(e){}
         setTimeout(createRoom, 1000);
         return;

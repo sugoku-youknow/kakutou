@@ -478,7 +478,7 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=1"></script>
+<script src="../party-beacon.js?v=2"></script>
 <script>
 (function(){
   const ROWS=9, COLS=9;
@@ -1070,7 +1070,7 @@
     try { if(!new URLSearchParams(location.search).has('party')) return null; const j = JSON.parse(sessionStorage.getItem('ykg-party') || 'null'); return (j && /^\d$/.test(j.code)) ? j : null; } catch(e){ return null; }
   })();
   const netId = code => (PARTY ? 'jp-shogi-party-' : ID_PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
-  const toGames = () => { location.href = '../'; };   // ゲーム一覧へ
+  const toGames = () => { ykgToGames(); };   // ゲーム一覧へ
   let partyTries = 0;
   // 観戦: 観戦を選んだ人と、2人そろったあとに来た人は観戦になる。ホストが相手に送る盤面を観戦の人にも送る（操作はできない）
   let spectators = [], spectating = false, guestName = 'ゲスト';
@@ -1363,7 +1363,7 @@
 
     peer.on('error', (err)=>{
       console.error(err);
-      if(PARTY && err.type === 'unavailable-id' && ++partyTries < 30){   // 前の部屋がまだ残っている: 空くのを待つ
+      if(PARTY && err.type === 'unavailable-id' && ++partyTries < 90){   // 前の部屋がまだ残っている: 空くのを待つ
         try { peer.destroy(); } catch(e){}
         netActive = false;
         setTimeout(createRoom, 1000);
