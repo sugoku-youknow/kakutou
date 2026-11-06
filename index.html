@@ -280,7 +280,7 @@ function hostParty(code, again) {
     sendMembers();
   });
   peer.on("error", e => {
-    if (e.type === "unavailable-id" && ++tries < 25) {
+    if (e.type === "unavailable-id" && ++tries < (again ? 120 : 25)) {   // 戻ってきたとき: ゲームのページの待ち受けが残っていることがあるので長めに待つ
       try { peer.destroy(); } catch (x) {}
       if (again) setTimeout(() => hostParty(code, true), 1000);   // 戻ってきたとき: 同じ番号が空くのを待つ
       else hostParty(null, false);                                // 新しく作るとき: ほかの番号を試す
@@ -288,6 +288,7 @@ function hostParty(code, again) {
     }
     errMsg = e.type === "unavailable-id" ? "空いている番号がありません。少し待ってからやり直してください" : "接続エラー: " + e.type; render();
   });
+  peer.on("disconnected", () => { try { if (!peer.destroyed) peer.reconnect(); } catch (x) {} });   // 合図の中継が切れたらつなぎ直す
   peer.on("connection", conn => {
     conn.on("data", m => {
       if (!m) return;
@@ -334,7 +335,7 @@ function connectHost() {
   setTimeout(() => {
     if (hostConn !== c || c.open || !party) return;
     try { c.close(); } catch (e) {}
-    if (++lookTries % 6 === 0) { try { peer.destroy(); } catch (e) {} joinParty(party.code); }   // ときどき peer から作り直す
+    if (++lookTries % 3 === 0) { try { peer.destroy(); } catch (e) {} joinParty(party.code); }   // ときどき peer から作り直す
     else connectHost();
   }, 2500);
   c.on("open", () => { c.opened = true; lookTries = 0; status = "joined"; errMsg = ""; c.send({ t: "hi", name: party.name, spec: !!party.spec }); render(); });
