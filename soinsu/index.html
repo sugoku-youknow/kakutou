@@ -43,6 +43,7 @@ input{font:inherit}
 #target:active{background:rgba(255,212,0,.35)}
 #cross{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(255,255,255,.7)}
 #banner{position:absolute;left:50%;top:20%;transform:translateX(-50%);background:rgba(10,15,30,.75);padding:6px 16px;border-radius:12px;font-weight:700;font-size:15px;white-space:nowrap}
+#retry{position:absolute;left:50%;top:calc(20% + 44px);transform:translateX(-50%);pointer-events:auto;border:none;border-radius:12px;background:#c23b3b;padding:10px 22px;font-size:16px;font-weight:800;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.4)}
 #toast{position:absolute;left:50%;top:32%;transform:translateX(-50%);background:rgba(0,0,0,.8);padding:8px 16px;border-radius:12px;font-size:14px;transition:opacity .3s;opacity:0;white-space:nowrap}
 #flash{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(255,0,0,0) 40%,rgba(255,0,0,.55));opacity:0;transition:opacity .5s}
 #fx{position:absolute;inset:0;overflow:hidden}
@@ -124,6 +125,7 @@ table.res td:last-child{text-align:right}
   <div id="timer">3:00</div>
   <div id="feed" class="lay" data-lay="feed" data-name="ログ"></div>
   <div id="banner" class="hidden"></div>
+  <button id="retry" class="hidden">もう一度（すぐ再戦）</button>
   <div id="toast"></div>
   <div id="stick" class="lay" data-lay="stick" data-name="スティック"><div id="knob"></div></div>
   <button id="target" class="lay" data-lay="target" data-name="相手をえらぶ"><b>🎯</b>相手</button>
@@ -175,7 +177,7 @@ function openUch(conn, onMsg) {
 const uchOpen = ch => !!ch && ch.readyState === "open";
 let hostUch = null, posQ = 0, stQ = 0, lastStQ = 0, timeLeft = TIME_LIMIT, reveal = false;
 const MAX_PLAYERS = 8;
-const AX = 18, AZ = 42;  // フィールドの半分の幅（x）と長さ（z）。36×84（2026-11-06: 横をせまく縦を長く）
+const AX = 12, AZ = 30;  // フィールドの半分の幅（x）と長さ（z）。24×60（2026-11-06: 横をせまく縦を長く → 広さを半分に）
 const JUMP_V = 8.6;      // ジャンプの速さ（高さ 約1.7m）
 const SPEED = 6;
 const RADIUS = 0.5;
@@ -205,70 +207,111 @@ function genFactors() {
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 // ================= ステージ（毎回ランダム。シードから全員同じ形を作る） =================
-// 2026-11-06: 横（x）をせまく、縦（z）を長くした（36×84）。ジャンプで登る足場・飛び移る台を追加
+// 2026-11-06: 広さを半分（24×60）に。高低差を大きくし、橋（下をくぐれる）と、中に入れて屋根にも登れる簡単な建物を追加。
+// 形はすべて「箱」で、下の面 y0 と上の面 h（坂は場所で変わる）を持つ。下をくぐれるので、足もとの高さは「今いる高さで乗れるもの」で決める
 const CELL = 6, NX = Math.round(AX * 2 / CELL), NZ = Math.round(AZ * 2 / CELL);
+const BODY = 1.8;   // 体の高さ（これより高いところにある橋・屋根の下はくぐれる）
 function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function genStage(seed) {
   const R = mulberry(seed), ri = n => Math.floor(R() * n), S = [];
   const used = [...Array(NX)].map(() => Array(NZ).fill(false));
   const inb = (i, j) => i >= 0 && j >= 0 && i < NX && j < NZ;
+  const free = (i, j) => inb(i, j) && !used[i][j];
   const cx = i => -AX + CELL * i + CELL / 2, cz = j => -AZ + CELL * j + CELL / 2;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const half = CELL / 2 - 0.3, L = CELL - 0.6, rw = 3;
-  // 坂つきの台（高台）。となりに一段高い台（坂でつながる）や、ジャンプで飛び移る台がつくこともある
-  const want = 6 + ri(3); let plats = 0, tries = 0;
-  while (plats < want && tries++ < 400) {
-    const i = ri(NX), j = ri(NZ); if (used[i][j]) continue;
-    const ds = DIRS.filter(([di, dj]) => inb(i + di, j + dj) && !used[i + di][j + dj]);
+  const box = (x, z, w, d, h, kind, y0 = 0) => S.push({ x, z, w, d, h, y0, kind });
+  // 台 (i,j) の高さ h まで、となりのマス (i+di, j+dj) から上る坂
+  const rampTo = (i, j, di, dj, h, half) => {
+    const x = cx(i), z = cz(j), L = CELL - 0.4;
+    if (di) S.push({ x: x + di * (half + L / 2), z, w: L, d: 2.6, h, y0: 0, ramp: { axis: "x", dir: -di }, kind: "ramp" });
+    else S.push({ x, z: z + dj * (half + L / 2), w: 2.6, d: L, h, y0: 0, ramp: { axis: "z", dir: -dj }, kind: "ramp" });
+  };
+  // ---- 橋: 縦に並んだ 3 マスの両はしに高い台、まん中に橋（下は通れる）。台へは横のマスから坂で上る
+  const bridges = 1 + ri(2);
+  for (let n = 0, t = 0; n < bridges && t++ < 100;) {
+    const i = ri(NX), j = ri(NZ - 2);
+    if (!free(i, j) || !free(i, j + 1) || !free(i, j + 2)) continue;
+    const ends = [j, j + 2].map(jj => { const ds = [[1, 0], [-1, 0]].filter(([di]) => free(i + di, jj)); return ds.length ? ds[ri(ds.length)] : null; });
+    if (!ends[0] || !ends[1]) continue;
+    const h = 3.6 + ri(3) * 0.5, half = 2.2, x = cx(i);
+    for (const [k, jj] of [[0, j], [1, j + 2]]) {
+      box(x, cz(jj), half * 2, half * 2, h, "plat");
+      const [di] = ends[k]; rampTo(i, jj, di, 0, h, half); used[i + di][jj] = true;
+    }
+    box(x, cz(j + 1), 2.2, CELL + 1.6, h, "bridge", h - 0.35);   // 橋（厚さ 35cm）
+    used[i][j] = used[i][j + 1] = used[i][j + 2] = true; n++;
+  }
+  // ---- 建物: 壁・入口・屋根。外の木箱をジャンプで登ると屋根に上がれる
+  const houses = 2 + ri(2);
+  for (let n = 0, t = 0; n < houses && t++ < 100;) {
+    const i = ri(NX), j = ri(NZ); if (!free(i, j)) continue;
+    used[i][j] = true; n++;
+    const ax = R() < 0.5, sg = R() < 0.5 ? 1 : -1;            // 登り口（木箱）を置く側
+    const hw = 2.2, H = 3.2, th = 0.35, x = cx(i) - (ax ? sg * 0.7 : 0), z = cz(j) - (ax ? 0 : sg * 0.7);
+    const door = pick2(R, [0, 1, 2, 3]);                      // 入口の向き
+    const sides = [[x + hw, z, th, hw * 2, "x"], [x - hw, z, th, hw * 2, "x"], [x, z + hw, hw * 2, th, "z"], [x, z - hw, hw * 2, th, "z"]];
+    sides.forEach(([wx, wz, ww, wd, axis], k) => {
+      if (k !== door) { box(wx, wz, ww, wd, H, "house"); return; }
+      // 入口: 幅 1.6m・高さ 2.2m のすき間を残す
+      const seg = (hw * 2 - 1.6) / 2;
+      for (const s2 of [-1, 1]) {
+        if (axis === "x") box(wx, wz + s2 * (0.8 + seg / 2), ww, seg, H, "house");
+        else box(wx + s2 * (0.8 + seg / 2), wz, seg, wd, H, "house");
+      }
+      box(wx, wz, axis === "x" ? ww : 1.6, axis === "x" ? 1.6 : wd, H, "house", 2.2);   // 入口の上
+    });
+    box(x, z, hw * 2 + th, hw * 2 + th, H + 0.25, "roof", H - 0.05);   // 屋根（上に乗れる）
+    if (R() < 0.6) box(x + (R() - 0.5) * 1.5, z + (R() - 0.5) * 1.5, 1.2, 1.2, 1.0, "crate");   // 中の木箱
+    // 登り口: 1.2m → 2.3m の木箱
+    const ox = ax ? sg : 0, oz = ax ? 0 : sg;
+    [[1.2, 2.95], [2.3, 2.95]].forEach(([hh], k) => {
+      const along = (k ? 0.75 : -0.75);
+      box(x + ox * (hw + 0.85) + (ax ? 0 : along), z + oz * (hw + 0.85) + (ax ? along : 0), ax ? 1.3 : 1.5, ax ? 1.5 : 1.3, hh, "crate");
+    });
+  }
+  // ---- 坂つきの台（高台）。となりに飛び移る台がつくこともある
+  const want = 3 + ri(2);
+  for (let n = 0, t = 0; n < want && t++ < 200;) {
+    const i = ri(NX), j = ri(NZ); if (!free(i, j)) continue;
+    const ds = DIRS.filter(([di, dj]) => free(i + di, j + dj));
     if (!ds.length) continue;
-    const [di, dj] = ds[ri(ds.length)];
-    const h = 1.5 + ri(5) * 0.5, x = cx(i), z = cz(j);
-    S.push({ x, z, w: half * 2, d: half * 2, h, kind: "plat" });
-    if (di) S.push({ x: x + di * (half + L / 2), z, w: L, d: rw, h, ramp: { axis: "x", dir: -di }, kind: "ramp" });
-    else S.push({ x, z: z + dj * (half + L / 2), w: rw, d: L, h, ramp: { axis: "z", dir: -dj }, kind: "ramp" });
-    used[i][j] = used[i + di][j + dj] = true; plats++;
-    const ds2 = DIRS.filter(([ei, ej]) => (ei !== di || ej !== dj) && inb(i + ei, j + ej) && !used[i + ei][j + ej]);
-    if (!ds2.length) continue;
-    const [ei, ej] = ds2[ri(ds2.length)], x2 = cx(i + ei), z2 = cz(j + ej), r = R();
-    if (r < 0.35) {   // 坂で一段上の台へ
-      const h2 = h + 1.5, bx = (x + x2) / 2, bz = (z + z2) / 2;
-      S.push({ x: bx + ei * 0.9, z: bz + ej * 0.9, w: ei ? 2.4 : rw, d: ej ? 2.4 : rw, h: h2, ramp: ei ? { axis: "x", dir: ei } : { axis: "z", dir: ej }, kind: "ramp", base: h });
-      S.push({ x: x2 + ei * 0.9, z: z2 + ej * 0.9, w: ei ? 3.6 : CELL - 0.6, d: ej ? 3.6 : CELL - 0.6, h: h2, kind: "plat" });
-      used[i + ei][j + ej] = true;
-    } else if (r < 0.75) {   // すき間（1.6m）をジャンプで飛び移る台（同じ高さか、少し高い）
-      const h2 = h + (R() < 0.5 ? 0 : 1);
-      S.push({ x: x2 + ei * 0.8, z: z2 + ej * 0.8, w: ei ? CELL - 2.2 : CELL - 0.6, d: ej ? CELL - 2.2 : CELL - 0.6, h: h2, kind: "plat2" });
+    const [di, dj] = ds[ri(ds.length)], h = 2 + ri(5) * 0.5, half = CELL / 2 - 0.3;
+    box(cx(i), cz(j), half * 2, half * 2, h, "plat");
+    rampTo(i, j, di, dj, h, half);
+    used[i][j] = used[i + di][j + dj] = true; n++;
+    const ds2 = DIRS.filter(([ei, ej]) => (ei !== di || ej !== dj) && free(i + ei, j + ej));
+    if (ds2.length && R() < 0.6) {   // すき間（1.6m）をジャンプで飛び移る、少し高い台
+      const [ei, ej] = ds2[ri(ds2.length)];
+      box(cx(i + ei) + ei * 0.8, cz(j + ej) + ej * 0.8, ei ? CELL - 2.2 : CELL - 0.6, ej ? CELL - 2.2 : CELL - 0.6, h + 1, "plat2");
       used[i + ei][j + ej] = true;
     }
   }
-  // ジャンプで登る塔（低い箱 → 中くらいの柱 → 高い柱）
-  const towers = 3 + ri(3);
-  for (let n = 0, t2 = 0; n < towers && t2++ < 200;) {
-    const i = ri(NX), j = ri(NZ); if (used[i][j]) continue;
+  // ---- ジャンプで登る塔（1.4 → 2.8 → 4.2m）
+  const towers = 1 + ri(2);
+  for (let n = 0, t = 0; n < towers && t++ < 100;) {
+    const i = ri(NX), j = ri(NZ); if (!free(i, j)) continue;
     used[i][j] = true; n++;
-    const x = cx(i), z = cz(j), ax = R() < 0.5, sg = R() < 0.5 ? 1 : -1, hs = [1.2, 2.5, 3.8];
-    hs.forEach((h, k) => { const off = (k - 1) * 2 * sg; S.push({ x: ax ? x + off : x, z: ax ? z : z + off, w: 1.9, d: 1.9, h, kind: k ? "pillar" : "crate" }); });
+    const x = cx(i), z = cz(j), ax = R() < 0.5, sg = R() < 0.5 ? 1 : -1;
+    [1.4, 2.8, 4.2].forEach((h, k) => { const off = (k - 1) * 2 * sg; box(ax ? x + off : x, ax ? z : z + off, 1.9, 1.9, h, k ? "pillar" : "crate"); });
   }
-  // 遮るもの（箱・ジャンプで乗れる木箱・壁・階段）
+  // ---- 遮るもの（箱・木箱・壁・階段）
   for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) {
-    if (used[i][j] || R() > 0.5) continue;
+    if (!free(i, j) || R() > 0.55) continue;
     used[i][j] = true;
     const t = R(), x = cx(i), z = cz(j);
-    if (t < 0.25) S.push({ x: x + (R() - 0.5) * 1.5, z: z + (R() - 0.5) * 1.5, w: 1.4 + R() * 2.2, d: 1.4 + R() * 2.2, h: 1.9 + R() * 0.8, kind: "box" });
-    else if (t < 0.5) {   // 乗れる木箱の山（1つ・2つ重ね）
-      const n = 1 + ri(3);
-      for (let k = 0; k < n; k++) S.push({ x: x + (R() - 0.5) * 3, z: z + (R() - 0.5) * 3, w: 1.6, d: 1.6, h: 1.0 + ri(2) * 0.4, kind: "crate" });
-    }
-    else if (t < 0.75) { const along = R() < 0.5; S.push({ x: x + (R() - 0.5), z: z + (R() - 0.5), w: along ? 5 : 0.7, d: along ? 0.7 : 5, h: 2.4, kind: "wall" }); }
+    if (t < 0.25) box(x + (R() - 0.5) * 1.5, z + (R() - 0.5) * 1.5, 1.4 + R() * 2, 1.4 + R() * 2, 1.9 + R() * 0.8, "box");
+    else if (t < 0.5) { const n = 1 + ri(3); for (let k = 0; k < n; k++) box(x + (R() - 0.5) * 3, z + (R() - 0.5) * 3, 1.6, 1.6, 1.0 + ri(2) * 0.4, "crate"); }
+    else if (t < 0.75) { const along = R() < 0.5; box(x + (R() - 0.5), z + (R() - 0.5), along ? 5 : 0.7, along ? 0.7 : 5, 2.4, "wall"); }
     else {
       const ax = R() < 0.5, sg = R() < 0.5 ? 1 : -1;
-      for (let k = 0; k < 3; k++) { const off = (k - 1) * 1.5 * sg; S.push({ x: ax ? x + off : x, z: ax ? z : z + off, w: ax ? 1.5 : 3, d: ax ? 3 : 1.5, h: 0.45 * (k + 1), kind: "step" }); }
+      for (let k = 0; k < 3; k++) { const off = (k - 1) * 1.5 * sg; box(ax ? x + off : x, ax ? z : z + off, ax ? 1.5 : 3, ax ? 3 : 1.5, 0.45 * (k + 1), "step"); }
     }
   }
-  const free = [];
-  for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) if (!used[i][j]) free.push([cx(i), cz(j)]);
-  return { S, free };
+  const freeCells = [];
+  for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) if (!used[i][j]) freeCells.push([cx(i), cz(j)]);
+  return { S, free: freeCells };
 }
+function pick2(R, a) { return a[Math.floor(R() * a.length)]; }
 let STAGE = genStage(12345);
 function topAt(o, x, z) {
   if (!o.ramp) return o.h;
@@ -277,15 +320,24 @@ function topAt(o, x, z) {
   const b = o.base || 0;
   return b + u * (o.h - b);
 }
-function groundAt(x, z) {
+const inside = (o, x, z) => Math.abs(x - o.x) <= o.w / 2 && Math.abs(z - o.z) <= o.d / 2;
+// 足もとの高さ: 高さ y にいる人が乗れる（上の面が y + 段差 以下の）ものの中でいちばん高い面
+function groundAt(x, z, y = 0) {
   let g = 0;
-  for (const o of STAGE.S) if (Math.abs(x - o.x) <= o.w / 2 && Math.abs(z - o.z) <= o.d / 2) { const t = topAt(o, x, z); if (t > g) g = t; }
+  for (const o of STAGE.S) if (inside(o, x, z)) { const t = topAt(o, x, z); if (t > g && t <= y + STEP) g = t; }
   return g;
+}
+// 頭の上の天井（橋・屋根の下の面）
+function ceilAt(x, z, y) {
+  let c = Infinity;
+  for (const o of STAGE.S) if (o.y0 > y + STEP && o.y0 < c && inside(o, x, z)) c = o.y0;
+  return c;
 }
 function collide(p) {
   const y = p.y || 0;
   p.x = clamp(p.x, -AX + RADIUS, AX - RADIUS); p.z = clamp(p.z, -AZ + RADIUS, AZ - RADIUS);
   for (const o of STAGE.S) {
+    if ((o.y0 || 0) >= y + BODY) continue;   // 頭より上にあるもの（橋・屋根）はくぐれる
     const hx = o.w / 2, hz = o.d / 2;
     const cx = clamp(p.x, o.x - hx, o.x + hx), cz = clamp(p.z, o.z - hz, o.z + hz);
     const dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
@@ -300,11 +352,14 @@ function collide(p) {
     }
   }
 }
-// 上下の動き（重力・ジャンプ）。air: 空中かどうか
+// 上下の動き（重力・ジャンプ・天井）。air: 空中かどうか
 function updY(p, dt) {
-  const g = groundAt(p.x, p.z), y = p.y || 0;
+  const y = p.y || 0, g = groundAt(p.x, p.z, y);
   if ((p.vy || 0) <= 0 && g >= y - 0.001) { p.y = g; p.vy = 0; p.air = false; return; }
-  p.vy = (p.vy || 0) - GRAV * dt; p.y = Math.max(g, y + p.vy * dt);
+  p.vy = (p.vy || 0) - GRAV * dt;
+  let ny = y + p.vy * dt;
+  if (p.vy > 0) { const c = ceilAt(p.x, p.z, y); if (ny + BODY > c) { ny = Math.max(y, c - BODY); p.vy = 0; } }
+  p.y = Math.max(g, ny);
   if (p.y === g && p.vy <= 0) { p.vy = 0; p.air = false; } else p.air = true;
 }
 function jump(p) { if (!p.air && (p.vy || 0) <= 0) { p.vy = JUMP_V; p.air = true; return true; } return false; }
@@ -389,7 +444,7 @@ function hostHandle(id, m) {
     if (m.q) { if (m.q <= (p.posQ || 0)) return; p.posQ = m.q; }   // 遅れて届いた古い位置は使わない
     if (![m.x, m.z, m.yaw].every(Number.isFinite)) return;
     p.x = clamp(m.x, -AX, AX); p.z = clamp(m.z, -AZ, AZ); p.yaw = m.yaw;
-    const g = groundAt(p.x, p.z); p.y = Number.isFinite(m.y) ? clamp(m.y, g, g + 3) : g;   // ジャンプ中の高さも受け取る
+    p.y = Number.isFinite(m.y) ? clamp(m.y, 0, 12) : groundAt(p.x, p.z);   // ジャンプ中・橋の上などの高さも受け取る
   } else if (m.t === "atk") doAttack(id, m.to, m.p);
 }
 function doAttack(aid, tid, primes) {
@@ -631,7 +686,7 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(20, 40, 
 {
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(AX * 2, AZ * 2), new THREE.MeshLambertMaterial({ color: 0x6f9a5a }));
   ground.rotation.x = -Math.PI / 2; scene.add(ground);
-  const grid = new THREE.GridHelper(AZ * 2, 42, 0x557744, 0x557744); grid.scale.x = AX / AZ; grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.35; scene.add(grid);
+  const grid = new THREE.GridHelper(AZ * 2, 30, 0x557744, 0x557744); grid.scale.x = AX / AZ; grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.35; scene.add(grid);
 }
 const stageGroup = new THREE.Group(); scene.add(stageGroup);
 const stageMeshes = [];
@@ -642,6 +697,8 @@ const MATS = {
   border: new THREE.MeshLambertMaterial({ color: 0x8a8f9c }),
   plat2: new THREE.MeshLambertMaterial({ color: 0xa88f68 }), crate: new THREE.MeshLambertMaterial({ color: 0xe0a85a }),
   pillar: new THREE.MeshLambertMaterial({ color: 0x8fa0b8 }),
+  bridge: new THREE.MeshLambertMaterial({ color: 0x9c6b3e }), house: new THREE.MeshLambertMaterial({ color: 0xe8e1d0 }),
+  roof: new THREE.MeshLambertMaterial({ color: 0xb5523b }),
 };
 function addSolid(geo, mat, x, y, z) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); stageGroup.add(m); stageMeshes.push(m);
@@ -653,7 +710,8 @@ function buildStage() {
   for (const [x, z, w, d] of [[0, -AZ, AX * 2, 0.6], [0, AZ, AX * 2, 0.6], [-AX, 0, 0.6, AZ * 2], [AX, 0, 0.6, AZ * 2]])
     addSolid(new THREE.BoxGeometry(w, 2.4, d), MATS.border, x, 1.2, z);
   for (const o of STAGE.S) {
-    const g = new THREE.BoxGeometry(o.w, o.h, o.d);
+    const hh = o.h - (o.y0 || 0);   // 橋・屋根・入口の上は、宙に浮いた箱
+    const g = new THREE.BoxGeometry(o.w, hh, o.d);
     if (o.ramp) {
       const pos = g.attributes.position, b = o.base || 0;
       for (let k = 0; k < pos.count; k++) {
@@ -664,7 +722,7 @@ function buildStage() {
       }
       g.computeVertexNormals();
     }
-    addSolid(g, MATS[o.kind], o.x, o.h / 2, o.z);
+    addSolid(g, MATS[o.kind] || MATS.box, o.x, (o.y0 || 0) + hh / 2, o.z);
   }
 }
 buildStage();
@@ -864,6 +922,7 @@ function selectTarget(id) {
 }
 function closePad() { selId = null; inp = []; kbuf = ""; $("pad").classList.add("hidden"); }
 $("target").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game") pickTarget(); });
+$("retry").addEventListener("click", () => { if (screen === "game" && mode === "local") { $("retry").classList.add("hidden"); startPractice(); renderUI(); } });
 $("jump").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game" && !spectating) jump(me); });
 
 $("keys").innerHTML = PRIMES.map(p => `<button data-k="${p}">${p}</button>`).join("") +
@@ -949,6 +1008,7 @@ function updHud(now) {
   const bannerTxt = spectating && !overInfo ? "観戦中（動き回って見られます）" : mine && !mine.alive && !overInfo ? "観戦中（移動はできます）" : "";
   const tm = $("timer"); if (tm) { const t = Math.max(0, Math.ceil(timeLeft)); tm.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; tm.classList.toggle("hot", t <= REVEAL_AT); }
   b.textContent = bannerTxt; b.classList.toggle("hidden", !bannerTxt);
+  $("retry").classList.toggle("hidden", !(mode === "local" && mine && !mine.alive && !overInfo));   // CPU 戦でやられたら、すぐ再戦できる
   for (const el of $("feed").children) el.style.opacity = now - Number(el.dataset.t) > 6000 ? 0 : 1;
 }
 $("quit").addEventListener("click", () => { if (screen === "game" && confirm("ゲームから抜けますか？")) leave(); });
@@ -1277,7 +1337,7 @@ function frame(nowMs) {
       const v = view.get(id);
       const px = v.x, pz = v.z;
       v.x += (v.tx - v.x) * k; v.z += (v.tz - v.z) * k;
-      const gy = groundAt(v.x, v.z), ty = Number.isFinite(v.ty) ? Math.max(gy, v.ty) : gy;   // ジャンプ中は送られてきた高さ
+      const gy = groundAt(v.x, v.z, Number.isFinite(v.ty) ? v.ty : v.y), ty = Number.isFinite(v.ty) ? Math.max(gy, v.ty) : gy;   // ジャンプ中は送られてきた高さ
       v.y = ty > v.y ? v.y + (ty - v.y) * Math.min(1, dt * 15) : v.y + (ty - v.y) * Math.min(1, dt * 10); if (v.y < gy) v.y = gy;
       if (v.alive) {
         const mv = Math.hypot(v.x - px, v.z - pz);
@@ -1330,7 +1390,7 @@ function frame(nowMs) {
     updPad(false); updHud(nowMs);
   } else {
     const t = nowMs / 6000;
-    camera.position.set(Math.cos(t) * 30, 18, Math.sin(t) * 30); camera.lookAt(0, 0, 0);
+    camera.position.set(Math.cos(t) * 22, 16, Math.sin(t) * 26); camera.lookAt(0, 0, 0);
   }
   renderer.render(scene, camera);
 }
