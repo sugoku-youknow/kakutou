@@ -126,7 +126,7 @@ table.res td:last-child{text-align:right}
   </div>
 </div>
 <div id="screen"></div>
-<div id="rotate" class="hidden"><div class="ico">📱</div>スマホを横向きにしてください</div>
+<div id="rotate" class="hidden"><div class="ico">📱</div>スマホを横向きにしてください<div style="font-size:12px;font-weight:400;opacity:.7">横にしても変わらないときは、画面の回転ロックをオフにしてください</div><button class="btn sub" style="width:auto;padding:10px 18px;font-size:14px">このまま遊ぶ</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
@@ -370,13 +370,27 @@ function doAttack(aid, tid, primes) {
   const abefore = prod(a.f);
   const rest = t.f.slice(); let ok = true;
   for (const q of primes) { const i = rest.indexOf(q); if (i < 0) { ok = false; break; } rest.splice(i, 1); }
-  let dead = false;
-  if (ok) { t.f = rest; if (!rest.length) { t.alive = false; dead = true; a.kills++; } }
+  let dead = false, heal = null;
+  if (ok) {
+    t.f = rest;
+    if (!rest.length) {
+      t.alive = false; dead = true; a.kills++;
+      // 撃破したら回復: 自分の数字に素因数が 2〜4 個ふえる（大きくなりすぎない範囲で）
+      heal = [];
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i++) {
+        const q = pick([2, 2, 3, 3, 5, 5, 7, 7, 11, 13]);
+        if (prod(a.f) * q > 999999) break;
+        a.f.push(q); heal.push(q);
+      }
+      a.f.sort((x, y) => x - y); heal.sort((x, y) => x - y);
+    }
+  }
   else {
     if (a.f.length > 1) a.f.splice(a.f.lastIndexOf(Math.max(...a.f)), 1);
     a.cd = now + WRONG_LOCK;   // 間違えたらしばらく打ち込めない
   }
-  broadcast({ t: "ev", a: aid, to: tid, p: primes, ok, fa: a.f, ft: t.f, dead, ab: abefore });
+  broadcast({ t: "ev", a: aid, to: tid, p: primes, ok, fa: a.f, ft: t.f, dead, ab: abefore, heal });
   checkOver();
 }
 function checkOver(timeUp) {
@@ -475,10 +489,18 @@ function applyEv(m) {
     if (m.dead) { t.alive = false; t.deadAt = performance.now(); addFeed(`💥 ${a.name} が ${t.name} を撃破！（${ps}）`); }
     else addFeed(`${a.name} → ${t.name}：${ps} 命中`);
     if (t.id !== myId) floatText(t, m.dead ? "撃破！" : "−" + ps, m.dead ? "#ffd400" : "#ff6060");
+    hitFx(t, m.dead ? "kill" : "hit");
     if (t.id === myId) { flash(); vibrate(m.dead ? 300 : 80); if (m.dead) toast(`${a.name} にやられた…`); }
-    if (a.id === myId) toast(m.dead ? "撃破！" : "命中！");
+    const hs = m.heal && m.heal.length ? m.heal.join("×") : "";
+    if (a.id === myId) toast(m.dead ? (hs ? `撃破！ 回復 ×${hs} → ${prod(m.fa)}` : "撃破！") : "命中！");
+    if (hs) {
+      addFeed(`💚 ${a.name} が回復（×${hs}）`);
+      if (a.id !== myId) floatText(a, "回復 ×" + hs, "#5ad16a");
+      setTimeout(() => hitFx(a, "heal"), 250);
+    }
   } else {
     addFeed(`${a.name} の ${ps} は外れ`);
+    hitFx(a, "miss");
     if (a.id !== myId) floatText(a, "失敗", "#ff9a3a");
     else { flash(); vibrate(150); lastAtk = performance.now() / 1000 + WRONG_LOCK - COOLDOWN; toast(`失敗！ 自分の数字 ${m.ab} → ${prod(m.fa)}（${WRONG_LOCK}秒 打ち込めない）`); }
   }
@@ -628,6 +650,11 @@ function makeAvatar(v) {
   const g = new THREE.Group();
   const body = new THREE.Mesh(bodyGeo, new THREE.MeshLambertMaterial({ color: v.color })); body.position.y = 0.8; g.add(body);
   const head = new THREE.Mesh(headGeo, new THREE.MeshLambertMaterial({ color: 0xffe0bd })); head.position.y = 1.9; g.add(head);
+  // えらんでいる相手の目印（頭の上の黄色い矢印と足もとの輪）
+  const mark = new THREE.Group(); mark.visible = false;
+  const arrow = new THREE.Mesh(markArrowGeo, markMat); arrow.rotation.x = Math.PI; arrow.position.y = 3.05; mark.add(arrow);
+  const ring = new THREE.Mesh(markRingGeo, markMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; mark.add(ring);
+  g.add(mark);
   for (const s of [-0.12, 0.12]) { const e = new THREE.Mesh(eyeGeo, eyeMat); e.position.set(s, 1.76, -0.355); g.add(e); }
   const cv = document.createElement("canvas"); cv.width = 512; cv.height = 256;   // 2026-11-06 に 2 倍（遠くで札を大きくしてもぼやけないように）
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
@@ -636,8 +663,29 @@ function makeAvatar(v) {
   if (reveal) { plate.material.depthTest = false; plate.renderOrder = 5; }   // 残り 1 分: 物かげの向こうからも見える
   g.add(plate);
   scene.add(g);
-  return { g, plate, ctx: cv.getContext("2d"), tex, key: "" };
+  return { g, plate, body, head, mark, arrow, ctx: cv.getContext("2d"), tex, key: "", hitAt: -1e9, hitKind: "" };
 }
+const markMat = new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.DoubleSide });
+const markArrowGeo = new THREE.ConeGeometry(0.22, 0.45, 12), markRingGeo = new THREE.RingGeometry(0.62, 0.8, 36);
+// 当たったときの光と、飛び散るかけら
+const sparks = [], sparkGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+const SPARK_COL = { hit: 0xff4040, kill: 0xffd400, miss: 0xff9a3a, heal: 0x5ad16a };
+function burst(v, kind, n) {
+  const mat = new THREE.MeshBasicMaterial({ color: SPARK_COL[kind], transparent: true });
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(sparkGeo, mat);
+    m.position.set(v.x, (v.y || 0) + 1.9, v.z);
+    const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * (kind === "kill" ? 6 : 3.5);
+    m.userData = { vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: 2 + Math.random() * 4, t: 0, life: kind === "kill" ? 1.1 : 0.7 };
+    scene.add(m); sparks.push(m);
+  }
+}
+function hitFx(v, kind) {
+  const av = avatars.get(v.id);
+  if (av) { av.hitAt = performance.now(); av.hitKind = kind; }
+  if (v.id !== myId) burst(v, kind, kind === "kill" ? 26 : 12);
+}
+const HIT_EMIS = { hit: 0xff2020, kill: 0xffd400, miss: 0xff8a20, heal: 0x30ff60 };
 function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 const hex = c => "#" + c.toString(16).padStart(6, "0");
 function drawPlate(av, v, sel) {
@@ -654,6 +702,7 @@ function drawPlate(av, v, sel) {
 }
 function clearGame() {
   for (const av of avatars.values()) { scene.remove(av.g); av.tex.dispose(); }
+  for (const m of sparks) scene.remove(m); sparks.length = 0;
   avatars.clear(); view.clear(); closePad(); feed.length = 0; $("feed").innerHTML = "";
   $("fx").innerHTML = ""; fxList.length = 0;
 }
@@ -937,7 +986,28 @@ function goLandscape() {
     else window.screen.orientation?.lock?.("landscape")?.catch?.(() => {});
   } catch (e) {}
 }
-function checkRotate() { $("rotate").classList.toggle("hidden", !((screen === "game" || screen === "layout") && innerHeight > innerWidth)); }
+// 縦向きの案内。回したあと画面の大きさが遅れて変わる端末（iPhone など）でも止まらないよう、
+// 向きの変化を何度か確かめ直し、ループの中でも見直す。回転ロック中などのために「このまま遊ぶ」で閉じられる
+let rotateSkip = false;
+function isPortrait() {
+  const w = window.visualViewport?.width || innerWidth, h = window.visualViewport?.height || innerHeight;
+  return h > w * 1.1;
+}
+function checkRotate() {
+  const p = isPortrait(); if (!p) rotateSkip = false;
+  $("rotate").classList.toggle("hidden", !((screen === "game" || screen === "layout") && p && !rotateSkip));
+}
+$("rotate").addEventListener("click", e => { if (e.target.closest("button")) { rotateSkip = true; checkRotate(); } });
+function recheckSize() { for (const ms of [50, 250, 600, 1200]) setTimeout(resize, ms); }
+addEventListener("orientationchange", recheckSize);
+try { window.screen.orientation?.addEventListener?.("change", recheckSize); } catch (e) {}
+try { window.visualViewport?.addEventListener("resize", recheckSize); } catch (e) {}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) recheckSize(); });
+setInterval(() => {   // 念のため: 大きさがずれていたら直す
+  const c = renderer.domElement;
+  if (Math.abs(c.clientWidth - innerWidth) > 2 || Math.abs(c.clientHeight - innerHeight) > 2 || Math.abs(renderer.getSize(new THREE.Vector2()).x - innerWidth) > 2) resize();
+  else checkRotate();
+}, 700);
 
 // ---------- 足音 ----------
 let actx = null, noiseBuf = null, soundOn = store.get("soinsu-sound") !== "0";
@@ -991,6 +1061,7 @@ const RULES = `<div class="rules">
 ・右の<b>🎯ボタン</b>（または相手をタップ）で見えている相手をえらぶ<br>
 ・その数字の<b>素因数</b>をボタンでえらんで打ち込む（例 <b>2</b>→<b>3</b>）<br>
 ・全部正しければ相手の数字が割られる。<b>1</b>になったら撃破<br>
+・撃破すると<b>回復</b>: 自分の数字に素因数が2〜4個ふえる<br>
 ・1つでも間違えると<b>自分の一番大きい素因数</b>が消えて弱くなる<br>
 ・射程はなし。数字を一瞬で覚えよう。坂の上の高台からは遠くまで見える<br>
 ・足音で近くの相手に気づける（イヤホン推奨）<br>
@@ -1130,6 +1201,18 @@ function frame(nowMs) {
       }
       let dy = v.tyaw - v.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); v.yaw += dy * k;
       av.g.position.set(v.x, v.y, v.z); av.g.rotation.y = v.yaw;
+      // 当たった直後: 体が光って揺れる
+      const ht = (nowMs - av.hitAt) / 600;
+      if (ht < 1) {
+        const k2 = (1 - ht) * (0.6 + 0.4 * Math.sin(ht * 40));
+        av.body.material.emissive.setHex(HIT_EMIS[av.hitKind] || 0xff2020).multiplyScalar(k2);
+        av.head.material.emissive.copy(av.body.material.emissive);
+        const sh = av.hitKind === "heal" ? 0 : (1 - ht) * 0.12;
+        av.g.position.x += (Math.random() - 0.5) * sh; av.g.position.z += (Math.random() - 0.5) * sh;
+      } else if (av.body.material.emissive.r || av.body.material.emissive.g) { av.body.material.emissive.setHex(0); av.head.material.emissive.setHex(0); }
+      // えらんでいる相手の目印
+      av.mark.visible = v.alive && id === selId;
+      if (av.mark.visible) { av.arrow.position.y = 3.05 + Math.sin(nowMs / 180) * 0.12; av.arrow.rotation.y = nowMs / 400; }
       if (!v.alive) {
         const t = v.deadAt ? (nowMs - v.deadAt) / 600 : 1;
         av.g.visible = t < 1; av.g.scale.setScalar(Math.max(0.01, 1 - t)); continue;
@@ -1137,6 +1220,13 @@ function frame(nowMs) {
       drawPlate(av, v, id === selId);
       // 遠くても読めるよう、おでこの札だけ少し大きくする
       const s = clamp(Math.hypot(v.x - me.x, v.z - me.z) / 10, 1, 2.2); av.plate.scale.set(s, s, 1);
+    }
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const m = sparks[i], u = m.userData; u.t += dt;
+      if (u.t >= u.life) { scene.remove(m); sparks.splice(i, 1); continue; }
+      u.vy -= 14 * dt; m.position.x += u.vx * dt; m.position.y += u.vy * dt; m.position.z += u.vz * dt;
+      m.rotation.x += dt * 8; m.rotation.y += dt * 6;
+      m.scale.setScalar(1 - u.t / u.life);
     }
     for (let i = fxList.length - 1; i >= 0; i--) {
       const f = fxList[i], t = (nowMs - f.t0) / 1200;
