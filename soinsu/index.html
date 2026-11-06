@@ -42,6 +42,9 @@ input{font:inherit}
 .itembtn{pointer-events:auto;width:70px;height:70px;border-radius:50%;border:3px solid rgba(255,255,255,.8);background:rgba(10,15,30,.5);font-weight:800;font-size:12px;line-height:1.15;touch-action:none}
 .itembtn b{display:block;font-size:24px}
 .itembtn.on{background:rgba(74,163,255,.55)}
+.itembtn b svg{display:block;margin:0 auto}
+#myphoto{font-size:15px;font-weight:800;color:#fff;margin-top:3px;text-shadow:0 1px 3px #000}
+#myphoto:empty{display:none}
 #mystat{font-size:12px;color:#ffd400;margin-top:2px}
 #mystat:empty{display:none}
 #jump:active{background:rgba(120,200,255,.35)}
@@ -123,7 +126,7 @@ table.res td:last-child{text-align:right}
   <div id="fx"></div>
   <div id="flash"></div>
   <div id="cross"></div>
-  <div id="me" class="lay" data-lay="me" data-name="自分の数字"><div class="lab">自分の数字</div><div class="num" id="mynum">-</div><div id="mystat"></div></div>
+  <div id="me" class="lay" data-lay="me" data-name="自分の数字"><div class="lab">自分の数字</div><div class="num" id="mynum">-</div><div id="mystat"></div><div id="myphoto"></div></div>
   <button id="quit" class="lay" data-lay="quit" data-name="退出">退出</button>
   <button id="flip" class="lay hidden" data-lay="flip" data-name="向きの反転">↻ 上下反転</button>
   <div id="alive" class="lay" data-lay="alive" data-name="のこり人数"></div>
@@ -135,8 +138,7 @@ table.res td:last-child{text-align:right}
   <div id="stick" class="lay" data-lay="stick" data-name="スティック"><div id="knob"></div></div>
   <button id="target" class="lay" data-lay="target" data-name="相手をえらぶ"><b>🎯</b>相手</button>
   <button id="jump" class="lay" data-lay="jump" data-name="ジャンプ"><b>⤒</b>ジャンプ</button>
-  <button id="zoom" class="lay itembtn hidden" data-lay="zoom" data-name="望遠鏡"><b>🔭</b><span id="zoomt">ズーム</span></button>
-  <button id="snap" class="lay itembtn hidden" data-lay="snap" data-name="カメラ"><b>📷</b><span id="snapt">記録</span></button>
+  <button id="item" class="lay itembtn hidden" data-lay="item" data-name="アイテム"><b id="itemi"></b><span id="itemt"></span></button>
   <div id="pad" class="lay hidden" data-lay="pad" data-name="入力パッド">
     <div id="padhead"><span id="ptname"></span><span id="pdisp"></span></div>
     <div class="keys" id="keys"></div>
@@ -200,13 +202,18 @@ const COOLDOWN = 1.0;    // 打ち込み後に待つ秒数
 const BOT_RANGE = 11;    // CPU が打ち込みに行く距離（プレイヤーには射程なし）
 const SEE = 11;          // おでこの数字が読める距離（これより遠いと「？？？」。望遠鏡でズーム中は 3 倍）
 // アイテム（2026-11-06）: 数字＝自分の数字を回復、望遠鏡＝ズームで遠くの数字を読む、カメラ＝相手の数字を記録、はちまき＝自分の数字をかくす
+// 2026-11-07: アイテムはすべて拾って持っておき、ボタンで使う。持てるのは 1 つだけ（別のを拾うと入れかわる）
+//   数字＝使うと回復（なくなる）、はちまき＝使ってから 10 秒かくす（なくなる）、
+//   望遠鏡＝ボタンを押している間だけズーム（なくならない）、カメラ＝1 人分だけ記録（撮りなおすと前の記録は消える、なくならない）
+const BAND_PATHS = ["M3 9 Q24 3 45 9 L45 19 Q24 13 3 19Z", "M42 12 L47 29 L41 26Z", "M40 14 L35 30 L41 27Z"];
+const BAND_SVG = `<svg viewBox="0 0 48 32" width="36" height="24">${BAND_PATHS.map(d => `<path d="${d}" fill="#fff" stroke="#c22" stroke-width="1.5"/>`).join("")}<circle cx="22" cy="13" r="4.5" fill="#d8262b"/></svg>`;
 const ITEM = {
-  num: { name: "数字", icon: "🔢", col: "#5ad16a", w: 4 },
-  scope: { name: "望遠鏡", icon: "🔭", col: "#4aa3ff", w: 2 },
-  cam: { name: "カメラ", icon: "📷", col: "#ffc23a", w: 2 },
-  band: { name: "はちまき", icon: "🎌", col: "#ff5a5a", w: 2 },
+  num: { name: "数字", icon: "🔢", col: "#5ad16a", w: 4, use: "回復", hint: "ボタンで自分の数字を回復" },
+  scope: { name: "望遠鏡", icon: "🔭", col: "#4aa3ff", w: 2, use: "長押し", hint: "ボタンを押している間ズーム" },
+  cam: { name: "カメラ", icon: "📷", col: "#ffc23a", w: 2, use: "記録", hint: "ボタンで見えている相手の数字を記録" },
+  band: { name: "はちまき", icon: "", svg: BAND_SVG, col: "#ff5a5a", w: 2, use: "かくす", hint: "ボタンで10秒 自分の数字をかくす" },
 };
-const SCOPE_SEC = 30, CAM_SHOTS = 3, BAND_SEC = 15;
+const BAND_SEC = 10;
 const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
 const COLORS = [0xff5a5a, 0x4aa3ff, 0x5ad16a, 0xffc23a, 0xc77dff, 0xff8fc8, 0x3ad6d0, 0xff8a3a];
 
@@ -474,6 +481,7 @@ function hostHandle(id, m) {
     p.x = clamp(m.x, -AX, AX); p.z = clamp(m.z, -AZ, AZ); p.yaw = m.yaw;
     p.y = Number.isFinite(m.y) ? clamp(m.y, 0, 12) : groundAt(p.x, p.z);   // ジャンプ中・橋の上などの高さも受け取る
   } else if (m.t === "atk") doAttack(id, m.to, m.p);
+  else if (m.t === "use") useItem(p, performance.now() / 1000);
 }
 function doAttack(aid, tid, primes) {
   const a = G.players.get(aid), t = G.players.get(tid);
@@ -561,19 +569,26 @@ function hostItems(nowS) {
     for (const it of G.items.values()) {
       if (Math.hypot(p.x - it.x, p.z - it.z) > 1.0 || Math.abs((p.y || 0) - it.y) > 1.0) continue;
       G.items.delete(it.id); changed = true;
-      const m = { t: "pick", pid: p.id, iid: it.id, k: it.kind };
-      if (it.kind === "num") {   // 自分の数字に素因数が 1〜2 個ふえる
-        m.add = [];
-        for (let i = 0, n = 1 + (Math.random() < 0.5 ? 1 : 0); i < n; i++) { const q = pick([2, 3, 3, 5, 7, 11, 13]); if (prod(p.f) * q > 999999) break; p.f.push(q); m.add.push(q); }
-        p.f.sort((x, y) => x - y); m.add.sort((x, y) => x - y); m.f = p.f;
-      } else if (it.kind === "band") { p.hideUntil = nowS + BAND_SEC; m.dur = BAND_SEC; }
-      else if (it.kind === "scope") m.dur = SCOPE_SEC;
-      else if (it.kind === "cam") m.n = CAM_SHOTS;
-      broadcast(m);
+      p.item = it.kind;   // アイテム欄は 1 つ。持っていたものは新しいものに入れかわる
+      broadcast({ t: "pick", pid: p.id, iid: it.id, k: it.kind });
+      if (p.bot && (it.kind === "num" || it.kind === "band")) useItem(p, nowS);   // CPU はすぐ使う
       break;
     }
   }
   if (changed || performance.now() - G.itemSent > 3000) { G.itemSent = performance.now(); broadcast({ t: "items", it: itemList() }); }
+}
+
+function useItem(p, nowS) {
+  if (!G || G.over || !p.alive || !p.item) return;
+  const m = { t: "use", pid: p.id, k: p.item };
+  if (p.item === "num") {   // 自分の数字に素因数が 1〜2 個ふえる
+    m.add = [];
+    for (let i = 0, n = 1 + (Math.random() < 0.5 ? 1 : 0); i < n; i++) { const q = pick([2, 3, 3, 5, 7, 11, 13]); if (prod(p.f) * q > 999999) break; p.f.push(q); m.add.push(q); }
+    p.f.sort((x, y) => x - y); m.add.sort((x, y) => x - y); m.f = p.f;
+  } else if (p.item === "band") { p.hideUntil = nowS + BAND_SEC; m.dur = BAND_SEC; }
+  else return;   // 望遠鏡とカメラは手もとだけで使う（使ってもなくならない）
+  p.item = null;
+  broadcast(m);
 }
 
 // ---------- CPU ----------
@@ -637,6 +652,7 @@ function onMsg(m) {
     case "ev": applyEv(m); return;
     case "items": if (Array.isArray(m.it)) syncItems(m.it); return;
     case "pick": applyPick(m); return;
+    case "use": applyUse(m); return;
     case "gone": { const v = view.get(m.id); if (v) { v.alive = false; addFeed(`${v.name} が抜けました`); } if (selId === m.id) closePad(); return; }
     case "msg": toast(m.s); return;
     case "over": overInfo = m; closePad(); break;
@@ -646,22 +662,21 @@ function onMsg(m) {
 function applyEv(m) {
   const a = view.get(m.a), t = view.get(m.to); if (!a || !t) return;
   a.f = m.fa; t.f = m.ft;
-  const ps = m.p.join("×");
   if (m.ok) {
-    if (m.dead) { t.alive = false; t.deadAt = performance.now(); addFeed(`💥 ${a.name} が ${t.name} を撃破！（${ps}）`); }
-    else addFeed(`${a.name} → ${t.name}：${ps} 命中`);
-    if (t.id !== myId) floatText(t, m.dead ? "撃破！" : "−" + ps, m.dead ? "#ffd400" : "#ff6060");
+    if (m.dead) { t.alive = false; t.deadAt = performance.now(); addFeed(`💥 ${a.name} が ${t.name} を撃破！`); photos.delete(t.id); }
+    else addFeed(`${a.name} → ${t.name}：命中`);
+    if (t.id !== myId) floatText(t, m.dead ? "撃破！" : "命中", m.dead ? "#ffd400" : "#ff6060");
     hitFx(t, m.dead ? "kill" : "hit");
     if (t.id === myId) { flash(); vibrate(m.dead ? 300 : 80); if (m.dead) toast(`${a.name} にやられた…`); }
     const hs = m.heal && m.heal.length ? m.heal.join("×") : "";
     if (a.id === myId) toast(m.dead ? (hs ? `撃破！ 回復 ×${hs} → ${prod(m.fa)}` : "撃破！") : "命中！");
     if (hs) {
-      addFeed(`💚 ${a.name} が回復（×${hs}）`);
-      if (a.id !== myId) floatText(a, "回復 ×" + hs, "#5ad16a");
+      addFeed(`💚 ${a.name} が回復`);
+      if (a.id !== myId) floatText(a, "回復", "#5ad16a");
       setTimeout(() => hitFx(a, "heal"), 250);
     }
   } else {
-    addFeed(`${a.name} の ${ps} は外れ`);
+    addFeed(`${a.name} の打ち込みは外れ`);
     hitFx(a, "miss");
     if (a.id !== myId) floatText(a, "失敗", "#ff9a3a");
     else { flash(); vibrate(150); lastAtk = performance.now() / 1000 + WRONG_LOCK - COOLDOWN; toast(`失敗！ 自分の数字 ${m.ab} → ${prod(m.fa)}（${WRONG_LOCK}秒 打ち込めない）`); }
@@ -672,20 +687,23 @@ function applyEv(m) {
 function applyPick(m) {
   const g = itemObjs.get(m.iid); if (g) { scene.remove(g); itemObjs.delete(m.iid); }
   const v = view.get(m.pid), info = ITEM[m.k]; if (!v || !info) return;
-  const mine = m.pid === myId, now = performance.now();
+  addFeed(`${v.name} が ${info.name} を拾った`);
+  if (m.pid === myId) {
+    const old = held; held = m.k; if (m.k !== "scope") zoomed = false;
+    toast(`${info.name}を拾った${old && old !== m.k ? `（${ITEM[old].name}と入れかえ）` : ""}！ ${info.hint}`);
+  }
+}
+function applyUse(m) {
+  const v = view.get(m.pid); if (!v) return;
+  const mine = m.pid === myId;
+  if (mine && held === m.k) held = null;
   if (m.k === "num") {
-    v.f = m.f || v.f; const a = (m.add || []).join("×");
-    addFeed(`💚 ${v.name} が数字を拾った${a ? `（×${a}）` : ""}`);
-    hitFx(v, "heal"); if (!mine) floatText(v, "回復 ×" + a, "#5ad16a");
-    if (mine) toast(`🔢 数字を拾った！ ×${a} → ${prod(v.f)}`);
-  } else {
-    addFeed(`${info.icon} ${v.name} が ${info.name} を拾った`);
-    if (m.k === "band") v.hideUntil = now + m.dur * 1000;
-    if (mine) {
-      if (m.k === "scope") { scopeUntil = now + m.dur * 1000; toast(`🔭 望遠鏡！ ボタンでズーム（${m.dur}秒）`); }
-      else if (m.k === "cam") { shots += m.n || CAM_SHOTS; toast(`📷 カメラ！ 見えている相手の数字を記録できる（${shots}回）`); }
-      else if (m.k === "band") toast(`🎌 はちまき！ ${m.dur}秒 自分の数字がかくれる`);
-    }
+    v.f = m.f || v.f; addFeed(`💚 ${v.name} が数字で回復`);
+    hitFx(v, "heal"); if (!mine) floatText(v, "回復", "#5ad16a");
+    else { const a = (m.add || []).join("×"); toast(a ? `🔢 回復！ ×${a} → ${prod(v.f)}` : "🔢 これ以上は回復できない"); }
+  } else if (m.k === "band") {
+    v.hideUntil = performance.now() + m.dur * 1000; addFeed(`${v.name} がはちまきをしめた`);
+    if (mine) toast(`はちまき！ ${m.dur}秒 自分の数字がかくれる`);
   }
 }
 
@@ -900,7 +918,11 @@ function itemTexture(k) {
   const cv = document.createElement("canvas"); cv.width = 128; cv.height = 160; const c = cv.getContext("2d");
   c.fillStyle = ITEM[k].col; c.beginPath(); c.arc(64, 60, 54, 0, Math.PI * 2); c.fill();
   c.lineWidth = 6; c.strokeStyle = "#fff"; c.stroke();
-  c.textAlign = "center"; c.textBaseline = "middle"; c.font = "60px sans-serif"; c.fillText(ITEM[k].icon, 64, 62);
+  c.textAlign = "center"; c.textBaseline = "middle"; c.font = "60px sans-serif"; if (ITEM[k].svg) {   // はちまき: 白い布に赤丸、右に結び目のたれ
+    c.save(); c.translate(11, 27); c.scale(2.2, 2.2); c.fillStyle = "#fff"; c.strokeStyle = "#c22"; c.lineWidth = 1.5;
+    for (const d of BAND_PATHS) { const p = new Path2D(d); c.fill(p); c.stroke(p); }
+    c.fillStyle = "#d8262b"; c.beginPath(); c.arc(22, 13, 4.5, 0, Math.PI * 2); c.fill(); c.restore();
+  } else c.fillText(ITEM[k].icon, 64, 62);
   c.font = "bold 24px sans-serif"; c.lineWidth = 5; c.strokeStyle = "#000"; c.strokeText(ITEM[k].name, 64, 140); c.fillStyle = "#fff"; c.fillText(ITEM[k].name, 64, 140);
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return itemTex[k] = t;
 }
@@ -918,8 +940,8 @@ function syncItems(list) {
 }
 function clearItems() { for (const g of itemObjs.values()) scene.remove(g); itemObjs.clear(); }
 // 自分が持っているもの
-let scopeUntil = 0, zoomed = false, shots = 0;
-const photos = new Map();   // 相手の id → カメラで記録した数字
+let held = null, zoomed = false;   // held = 持っているアイテム（1 つだけ）
+const photos = new Map();   // 相手の id → カメラで記録した数字（1 人分だけ。撮った時の数字のまま）
 function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 const hex = c => "#" + c.toString(16).padStart(6, "0");
 function drawPlate(av, v, sel, read, hid) {
@@ -938,7 +960,7 @@ function drawPlate(av, v, sel, read, hid) {
 function clearGame() {
   for (const av of avatars.values()) { scene.remove(av.g); av.tex.dispose(); }
   for (const m of sparks) scene.remove(m); sparks.length = 0;
-  clearItems(); scopeUntil = 0; zoomed = false; shots = 0; photos.clear();
+  clearItems(); held = null; zoomed = false; photos.clear();
   avatars.clear(); view.clear(); closePad(); feed.length = 0; $("feed").innerHTML = "";
   $("fx").innerHTML = ""; fxList.length = 0;
 }
@@ -1048,17 +1070,24 @@ function selectTarget(id) {
 function closePad() { selId = null; inp = []; kbuf = ""; $("pad").classList.add("hidden"); }
 $("target").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game") pickTarget(); });
 $("retry").addEventListener("click", () => { if (screen === "game" && mode === "local") { $("retry").classList.add("hidden"); startPractice(); renderUI(); } });
-$("zoom").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game" && performance.now() < scopeUntil) zoomed = !zoomed; });
-$("snap").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game") snapPhoto(); });
+function itemDown() {
+  const mine = view.get(myId); if (screen !== "game" || spectating || !held || !mine || !mine.alive) return;
+  if (held === "scope") zoomed = true;   // 押している間だけ
+  else if (held === "cam") snapPhoto();
+  else sendHost({ t: "use" });
+}
+function itemUp() { zoomed = false; }
+$("item").addEventListener("pointerdown", e => { e.preventDefault(); try { $("item").setPointerCapture(e.pointerId); } catch (e2) {} itemDown(); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) $("item").addEventListener(ev, itemUp);
 function canRead(v) { return !((v.hideUntil || 0) > performance.now()) && Math.hypot(v.x - me.x, v.z - me.z) <= SEE * (zoomed ? 3 : 1); }
 function snapPhoto() {
-  const mine = view.get(myId); if (shots <= 0 || !mine || !mine.alive) return;
+  const mine = view.get(myId); if (held !== "cam" || !mine || !mine.alive) return;
   const c = visibleTargets().filter(o => canRead(o.v));
   const o = c.find(o => o.v.id === selId) || c[0];
   if (!o) { toast("数字が読める相手がいません（近づくか、望遠鏡で）"); return; }
-  photos.set(o.v.id, prod(o.v.f)); shots--;
+  photos.clear(); photos.set(o.v.id, prod(o.v.f));   // 記録は 1 人分だけ
   const f = $("flash"); f.style.background = "rgba(255,255,255,.85)"; flash(); setTimeout(() => f.style.background = "", 700);
-  toast(`📷 ${o.v.name} の数字を記録: ${prod(o.v.f)}`); padKey = ""; updPad(true);
+  toast(`📷 ${o.v.name} の数字を記録`); padKey = ""; updPad(true);
 }
 $("jump").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game" && !spectating) jump(me); });
 
@@ -1105,6 +1134,7 @@ function updPad(force) {
 addEventListener("keydown", e => {
   if (screen !== "game" || e.target.tagName === "INPUT") return;
   const k = e.key;
+  if (k === "q" || k === "Q") { if (!e.repeat) itemDown(); return; }
   if (k === "e" || k === "E" || k === "Tab") { e.preventDefault(); pickTarget(); return; }
   if (selId != null) {
     if (/^\d$/.test(k)) { if (kbuf.length < 3) kbuf += k; updPad(true); return; }
@@ -1116,7 +1146,7 @@ addEventListener("keydown", e => {
   if (k === " ") { e.preventDefault(); if (!spectating) jump(me); return; }
   keys.add(k.toLowerCase());
 });
-addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
+addEventListener("keyup", e => { if (e.key === "q" || e.key === "Q") itemUp(); keys.delete(e.key.toLowerCase()); });
 addEventListener("blur", () => keys.clear());
 
 // ================= HUD =================
@@ -1147,12 +1177,16 @@ function updHud(now) {
   b.textContent = bannerTxt; b.classList.toggle("hidden", !bannerTxt);
   $("retry").classList.toggle("hidden", !(mode === "local" && mine && !mine.alive && !overInfo));   // CPU 戦でやられたら、すぐ再戦できる
   // 持っているアイテム
-  const alive = !!(mine && mine.alive), sl = Math.ceil((scopeUntil - now) / 1000);
-  if (zoomed && (sl <= 0 || !alive)) zoomed = false;
-  $("zoom").classList.toggle("hidden", !(alive && sl > 0)); $("zoom").classList.toggle("on", zoomed); $("zoomt").textContent = (zoomed ? "もどす " : "ズーム ") + Math.max(0, sl);
-  $("snap").classList.toggle("hidden", !(alive && shots > 0)); $("snapt").textContent = "記録 ×" + shots;
+  const alive = !!(mine && mine.alive);
+  if (!alive) held = null;
+  if (zoomed && held !== "scope") zoomed = false;
+  const ib = $("item"), hk = held || "";
+  ib.classList.toggle("hidden", !(alive && held)); ib.classList.toggle("on", zoomed);
+  if (ib.dataset.k !== hk) { ib.dataset.k = hk; if (held) { $("itemi").innerHTML = ITEM[held].svg || ITEM[held].icon; $("itemt").textContent = ITEM[held].use; } }
+  const ph = [...photos][0], pv = ph && view.get(ph[0]), pt = pv ? `📷 ${pv.name}：${ph[1]}` : "";
+  if ($("myphoto").textContent !== pt) $("myphoto").textContent = pt;
   const bl = mine ? Math.ceil(((mine.hideUntil || 0) - now) / 1000) : 0;
-  $("mystat").textContent = bl > 0 ? `🎌 数字をかくし中 ${bl}秒` : "";
+  $("mystat").textContent = bl > 0 ? `はちまき中（数字をかくしている）${bl}秒` : "";
   for (const el of $("feed").children) el.style.opacity = now - Number(el.dataset.t) > 6000 ? 0 : 1;
 }
 $("quit").addEventListener("click", () => { if (screen === "game" && confirm("ゲームから抜けますか？")) leave(); });
@@ -1163,8 +1197,8 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
 
 // ---------- ボタン配置 ----------
 const LAY_KEY = "soinsu-layout2";
-const LAY_DEF = { me: { x: 0.09, y: 0.1, s: 1 }, quit: { x: 0.95, y: 0.07, s: 1 }, flip: { x: 0.8, y: 0.07, s: 1 }, alive: { x: 0.95, y: 0.17, s: 1 }, feed: { x: 0.2, y: 0.33, s: 1 }, pad: { x: 0.5, y: 0.82, s: 1 }, stick: { x: 0.13, y: 0.72, s: 1 }, target: { x: 0.89, y: 0.55, s: 1 }, jump: { x: 0.9, y: 0.83, s: 1 }, zoom: { x: 0.77, y: 0.83, s: 1 }, snap: { x: 0.77, y: 0.6, s: 1 } };
-const LAY_NAMES = { me: "自分の数字", quit: "退出", flip: "向きの反転", alive: "のこり人数", feed: "ログ", pad: "入力パッド", stick: "スティック", target: "相手をえらぶ", jump: "ジャンプ", zoom: "望遠鏡", snap: "カメラ" };
+const LAY_DEF = { me: { x: 0.09, y: 0.1, s: 1 }, quit: { x: 0.95, y: 0.07, s: 1 }, flip: { x: 0.8, y: 0.07, s: 1 }, alive: { x: 0.95, y: 0.17, s: 1 }, feed: { x: 0.2, y: 0.33, s: 1 }, pad: { x: 0.5, y: 0.82, s: 1 }, stick: { x: 0.13, y: 0.72, s: 1 }, target: { x: 0.89, y: 0.55, s: 1 }, jump: { x: 0.9, y: 0.83, s: 1 }, item: { x: 0.77, y: 0.83, s: 1 } };
+const LAY_NAMES = { me: "自分の数字", quit: "退出", flip: "向きの反転", alive: "のこり人数", feed: "ログ", pad: "入力パッド", stick: "スティック", target: "相手をえらぶ", jump: "ジャンプ", item: "アイテム" };
 const copyDef = k => ({ ...LAY_DEF[k] });
 let LAY = {}; for (const k in LAY_DEF) LAY[k] = copyDef(k);
 try { const sv = JSON.parse(store.get(LAY_KEY) || "{}"); for (const k in LAY) if (sv[k] && [sv[k].x, sv[k].y, sv[k].s].every(Number.isFinite)) LAY[k] = sv[k]; } catch (e) {}
@@ -1225,16 +1259,16 @@ function updLayBar() {
 }
 function enterLayout() {
   screen = "layout"; goLandscape();
-  $("pad").classList.remove("hidden"); $("zoom").classList.remove("hidden"); $("snap").classList.remove("hidden");
+  $("pad").classList.remove("hidden"); $("item").classList.remove("hidden"); $("item").dataset.k = ""; $("itemi").textContent = "🔭"; $("itemt").textContent = "アイテム";
   $("ptname").textContent = "→ 相手"; $("pdisp").textContent = "2×3";
   $("mynum").textContent = "360";
-  $("alive").textContent = "のこり 4人"; $("feed").innerHTML = "<div>ログがここに出ます</div><div>ゲスト → CPU-A：2×3 命中</div>";
+  $("alive").textContent = "のこり 4人"; $("feed").innerHTML = "<div>ログがここに出ます</div><div>ゲスト → CPU-A：命中</div>";
   renderUI();
 }
 function exitLayout() {
   saveLayout(); screen = "menu";
   if (selId == null) $("pad").classList.add("hidden");
-  $("zoom").classList.add("hidden"); $("snap").classList.add("hidden");
+  $("item").classList.add("hidden");
   $("feed").innerHTML = ""; lastMine = ""; renderUI();
 }
 
@@ -1575,7 +1609,7 @@ if (PARTY) {
   if (PARTY.role === "host") startHost(); else joinRoom(PARTY.code);
 }
 try { if (window.IN_HUB && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
-window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; }, get STAGE() { return STAGE; }, pickTarget, groundAt, avatars, itemObjs, photos, get shots() { return shots; }, get selId() { return selId; } };
+window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; }, get STAGE() { return STAGE; }, pickTarget, groundAt, avatars, itemObjs, photos, get held() { return held; }, set held(k) { held = k; }, get selId() { return selId; } };
 </script>
 </body>
 </html>
