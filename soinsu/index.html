@@ -39,6 +39,11 @@ input{font:inherit}
 #target b{display:block;font-size:26px}
 #jump{pointer-events:auto;width:78px;height:78px;border-radius:50%;border:3px solid rgba(120,200,255,.85);background:rgba(10,15,30,.45);font-weight:800;font-size:13px;line-height:1.2;touch-action:none}
 #jump b{display:block;font-size:24px}
+.itembtn{pointer-events:auto;width:70px;height:70px;border-radius:50%;border:3px solid rgba(255,255,255,.8);background:rgba(10,15,30,.5);font-weight:800;font-size:12px;line-height:1.15;touch-action:none}
+.itembtn b{display:block;font-size:24px}
+.itembtn.on{background:rgba(74,163,255,.55)}
+#mystat{font-size:12px;color:#ffd400;margin-top:2px}
+#mystat:empty{display:none}
 #jump:active{background:rgba(120,200,255,.35)}
 #target:active{background:rgba(255,212,0,.35)}
 #cross{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:rgba(255,255,255,.7)}
@@ -118,7 +123,7 @@ table.res td:last-child{text-align:right}
   <div id="fx"></div>
   <div id="flash"></div>
   <div id="cross"></div>
-  <div id="me" class="lay" data-lay="me" data-name="自分の数字"><div class="lab">自分の数字</div><div class="num" id="mynum">-</div></div>
+  <div id="me" class="lay" data-lay="me" data-name="自分の数字"><div class="lab">自分の数字</div><div class="num" id="mynum">-</div><div id="mystat"></div></div>
   <button id="quit" class="lay" data-lay="quit" data-name="退出">退出</button>
   <button id="flip" class="lay hidden" data-lay="flip" data-name="向きの反転">↻ 上下反転</button>
   <div id="alive" class="lay" data-lay="alive" data-name="のこり人数"></div>
@@ -130,6 +135,8 @@ table.res td:last-child{text-align:right}
   <div id="stick" class="lay" data-lay="stick" data-name="スティック"><div id="knob"></div></div>
   <button id="target" class="lay" data-lay="target" data-name="相手をえらぶ"><b>🎯</b>相手</button>
   <button id="jump" class="lay" data-lay="jump" data-name="ジャンプ"><b>⤒</b>ジャンプ</button>
+  <button id="zoom" class="lay itembtn hidden" data-lay="zoom" data-name="望遠鏡"><b>🔭</b><span id="zoomt">ズーム</span></button>
+  <button id="snap" class="lay itembtn hidden" data-lay="snap" data-name="カメラ"><b>📷</b><span id="snapt">記録</span></button>
   <div id="pad" class="lay hidden" data-lay="pad" data-name="入力パッド">
     <div id="padhead"><span id="ptname"></span><span id="pdisp"></span></div>
     <div class="keys" id="keys"></div>
@@ -177,7 +184,12 @@ function openUch(conn, onMsg) {
 const uchOpen = ch => !!ch && ch.readyState === "open";
 let hostUch = null, posQ = 0, stQ = 0, lastStQ = 0, timeLeft = TIME_LIMIT, reveal = false;
 const MAX_PLAYERS = 8;
-const AX = 12, AZ = 30;  // フィールドの半分の幅（x）と長さ（z）。24×60（2026-11-06: 横をせまく縦を長く → 広さを半分に）
+let AX = 12, AZ = 30;    // フィールドの半分の幅（x）と長さ（z）。8人で 24×60。人数で変わる（setArena）
+// 2026-11-06: 広さは人数しだい。8人で 24×60、2人でその 1/4（12×30）。あいだは面積が人数に比例するように
+function setArena(n) {
+  const k = Math.sqrt(0.25 + 0.75 * Math.min(1, Math.max(0, (n - 2) / 6)));
+  AX = Math.max(6, Math.round(12 * k / 3) * 3); AZ = Math.max(15, Math.round(30 * k / 3) * 3);
+}
 const JUMP_V = 8.6;      // ジャンプの速さ（高さ 約1.7m）
 const SPEED = 6;
 const RADIUS = 0.5;
@@ -185,7 +197,16 @@ const EYE = 1.6;
 const STEP = 0.55;       // これ以下の段差は登れる
 const GRAV = 22;
 const COOLDOWN = 1.0;    // 打ち込み後に待つ秒数
-const BOT_RANGE = 16;    // CPU が打ち込みに行く距離（プレイヤーには射程なし）
+const BOT_RANGE = 11;    // CPU が打ち込みに行く距離（プレイヤーには射程なし）
+const SEE = 11;          // おでこの数字が読める距離（これより遠いと「？？？」。望遠鏡でズーム中は 3 倍）
+// アイテム（2026-11-06）: 数字＝自分の数字を回復、望遠鏡＝ズームで遠くの数字を読む、カメラ＝相手の数字を記録、はちまき＝自分の数字をかくす
+const ITEM = {
+  num: { name: "数字", icon: "🔢", col: "#5ad16a", w: 4 },
+  scope: { name: "望遠鏡", icon: "🔭", col: "#4aa3ff", w: 2 },
+  cam: { name: "カメラ", icon: "📷", col: "#ffc23a", w: 2 },
+  band: { name: "はちまき", icon: "🎌", col: "#ff5a5a", w: 2 },
+};
+const SCOPE_SEC = 30, CAM_SHOTS = 3, BAND_SEC = 15;
 const PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
 const COLORS = [0xff5a5a, 0x4aa3ff, 0x5ad16a, 0xffc23a, 0xc77dff, 0xff8fc8, 0x3ad6d0, 0xff8a3a];
 
@@ -209,17 +230,23 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 // ================= ステージ（毎回ランダム。シードから全員同じ形を作る） =================
 // 2026-11-06: 広さを半分（24×60）に。高低差を大きくし、橋（下をくぐれる）と、中に入れて屋根にも登れる簡単な建物を追加。
 // 形はすべて「箱」で、下の面 y0 と上の面 h（坂は場所で変わる）を持つ。下をくぐれるので、足もとの高さは「今いる高さで乗れるもの」で決める
-const CELL = 6, NX = Math.round(AX * 2 / CELL), NZ = Math.round(AZ * 2 / CELL);
+const CELL = 6; let NX = 4, NZ = 10;
 const BODY = 1.8;   // 体の高さ（これより高いところにある橋・屋根の下はくぐれる）
 function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-function genStage(seed) {
+function genStage(seed, nPlayers = 8) {
+  setArena(nPlayers); NX = Math.round(AX * 2 / CELL); NZ = Math.round(AZ * 2 / CELL);
   const R = mulberry(seed), ri = n => Math.floor(R() * n), S = [];
+  const sc = NX * NZ / 40;   // 8人のときを 1 として、ものの数をへらす
   const used = [...Array(NX)].map(() => Array(NZ).fill(false));
   const inb = (i, j) => i >= 0 && j >= 0 && i < NX && j < NZ;
   const free = (i, j) => inb(i, j) && !used[i][j];
   const cx = i => -AX + CELL * i + CELL / 2, cz = j => -AZ + CELL * j + CELL / 2;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const box = (x, z, w, d, h, kind, y0 = 0) => S.push({ x, z, w, d, h, y0, kind });
+  // ---- 人数分の空きマスを、出てくる場所として先にとっておく（せまいステージで埋まらないように）
+  const spawnCells = [];
+  { const fr = []; for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) if (free(i, j)) fr.push([i, j]);
+    for (let k = 0; k < nPlayers && fr.length; k++) { const [i, j] = fr.splice(ri(fr.length), 1)[0]; used[i][j] = true; spawnCells.push([cx(i), cz(j)]); } }
   // 台 (i,j) の高さ h まで、となりのマス (i+di, j+dj) から上る坂
   const rampTo = (i, j, di, dj, h, half) => {
     const x = cx(i), z = cz(j), L = CELL - 0.4;
@@ -227,7 +254,7 @@ function genStage(seed) {
     else S.push({ x, z: z + dj * (half + L / 2), w: 2.6, d: L, h, y0: 0, ramp: { axis: "z", dir: -dj }, kind: "ramp" });
   };
   // ---- 橋: 縦に並んだ 3 マスの両はしに高い台、まん中に橋（下は通れる）。台へは横のマスから坂で上る
-  const bridges = 1 + ri(2);
+  const bridges = sc < 0.4 ? (R() < 0.6 ? 1 : 0) : sc < 0.7 ? 1 : 1 + ri(2);
   for (let n = 0, t = 0; n < bridges && t++ < 100;) {
     const i = ri(NX), j = ri(NZ - 2);
     if (!free(i, j) || !free(i, j + 1) || !free(i, j + 2)) continue;
@@ -242,7 +269,7 @@ function genStage(seed) {
     used[i][j] = used[i][j + 1] = used[i][j + 2] = true; n++;
   }
   // ---- 建物: 壁・入口・屋根。外の木箱をジャンプで登ると屋根に上がれる
-  const houses = 2 + ri(2);
+  const houses = Math.max(1, Math.round((2 + ri(2)) * sc));
   for (let n = 0, t = 0; n < houses && t++ < 100;) {
     const i = ri(NX), j = ri(NZ); if (!free(i, j)) continue;
     used[i][j] = true; n++;
@@ -270,7 +297,7 @@ function genStage(seed) {
     });
   }
   // ---- 坂つきの台（高台）。となりに飛び移る台がつくこともある
-  const want = 3 + ri(2);
+  const want = Math.max(1, Math.round((3 + ri(2)) * sc));
   for (let n = 0, t = 0; n < want && t++ < 200;) {
     const i = ri(NX), j = ri(NZ); if (!free(i, j)) continue;
     const ds = DIRS.filter(([di, dj]) => free(i + di, j + dj));
@@ -287,7 +314,7 @@ function genStage(seed) {
     }
   }
   // ---- ジャンプで登る塔（1.4 → 2.8 → 4.2m）
-  const towers = 1 + ri(2);
+  const towers = Math.max(1, Math.round((1 + ri(2)) * sc));
   for (let n = 0, t = 0; n < towers && t++ < 100;) {
     const i = ri(NX), j = ri(NZ); if (!free(i, j)) continue;
     used[i][j] = true; n++;
@@ -309,10 +336,11 @@ function genStage(seed) {
   }
   const freeCells = [];
   for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) if (!used[i][j]) freeCells.push([cx(i), cz(j)]);
+  freeCells.push(...spawnCells);
   return { S, free: freeCells };
 }
 function pick2(R, a) { return a[Math.floor(R() * a.length)]; }
-let STAGE = genStage(12345);
+let STAGE = genStage(12345, 8);
 function topAt(o, x, z) {
   if (!o.ramp) return o.h;
   const a = o.ramp.axis === "x" ? (x - (o.x - o.w / 2)) / o.w : (z - (o.z - o.d / 2)) / o.d;
@@ -421,9 +449,9 @@ function pickSpawns(n) {
 function hostStart() {
   const list = lobbyPs.slice();
   const seed = Math.floor(Math.random() * 2 ** 31);
-  STAGE = genStage(seed);
+  STAGE = genStage(seed, list.length);
   const sp = pickSpawns(list.length);
-  G = { players: new Map(), over: false, seed, t0: performance.now() / 1000 };
+  G = { players: new Map(), over: false, seed, t0: performance.now() / 1000, items: new Map(), nextItem: 1, itemT: performance.now() / 1000 - 4, itemSent: 0 };
   list.forEach((p, i) => {
     const q = { id: p.id, name: p.name, bot: !!p.bot, color: COLORS[i % COLORS.length], x: sp[i][0], z: sp[i][1], y: 0, vy: 0, yaw: 0, f: genFactors(), alive: true, kills: 0, cd: 0 };
     collide(q); q.y = groundAt(q.x, q.z); q.yaw = Math.atan2(q.x, q.z); q.max = q.f.length;
@@ -506,6 +534,48 @@ function hostDrop(id) {
   else if (!host.playing) hostLobby();
 }
 
+// ---------- アイテム（ホスト） ----------
+const ITEM_OK = ["plat", "plat2", "bridge", "roof", "crate", "pillar", "step", "ramp"];
+function surfaceAt(x, z) { let g = 0, k = null; for (const o of STAGE.S) if (inside(o, x, z)) { const t = topAt(o, x, z); if (t > g) { g = t; k = o.kind; } } return [g, k]; }
+function spawnItem() {
+  for (let t = 0; t < 30; t++) {
+    const x = (Math.random() * 2 - 1) * (AX - 1.2), z = (Math.random() * 2 - 1) * (AZ - 1.2);
+    const [y, k] = surfaceAt(x, z);
+    if (k && !ITEM_OK.includes(k)) continue;
+    if ([...G.items.values()].some(it => Math.hypot(it.x - x, it.z - z) < 4)) continue;
+    let r = Math.random() * Object.values(ITEM).reduce((a, b) => a + b.w, 0), kind = "num";
+    for (const [kk, v] of Object.entries(ITEM)) { r -= v.w; if (r < 0) { kind = kk; break; } }
+    const id = G.nextItem++;
+    G.items.set(id, { id, kind, x: +x.toFixed(2), y: +y.toFixed(2), z: +z.toFixed(2) });
+    return true;
+  }
+  return false;
+}
+const itemList = () => [...G.items.values()].map(it => [it.id, it.kind, it.x, it.y, it.z]);
+function hostItems(nowS) {
+  const max = 2 + Math.ceil(G.players.size / 2);
+  let changed = false;
+  if (!G.over && G.items.size < max && nowS - G.itemT > 6) { G.itemT = nowS; changed = spawnItem() || changed; }
+  for (const p of G.players.values()) {
+    if (!p.alive) continue;
+    for (const it of G.items.values()) {
+      if (Math.hypot(p.x - it.x, p.z - it.z) > 1.0 || Math.abs((p.y || 0) - it.y) > 1.0) continue;
+      G.items.delete(it.id); changed = true;
+      const m = { t: "pick", pid: p.id, iid: it.id, k: it.kind };
+      if (it.kind === "num") {   // 自分の数字に素因数が 1〜2 個ふえる
+        m.add = [];
+        for (let i = 0, n = 1 + (Math.random() < 0.5 ? 1 : 0); i < n; i++) { const q = pick([2, 3, 3, 5, 7, 11, 13]); if (prod(p.f) * q > 999999) break; p.f.push(q); m.add.push(q); }
+        p.f.sort((x, y) => x - y); m.add.sort((x, y) => x - y); m.f = p.f;
+      } else if (it.kind === "band") { p.hideUntil = nowS + BAND_SEC; m.dur = BAND_SEC; }
+      else if (it.kind === "scope") m.dur = SCOPE_SEC;
+      else if (it.kind === "cam") m.n = CAM_SHOTS;
+      broadcast(m);
+      break;
+    }
+  }
+  if (changed || performance.now() - G.itemSent > 3000) { G.itemSent = performance.now(); broadcast({ t: "items", it: itemList() }); }
+}
+
 // ---------- CPU ----------
 function botUpdate(p, dt, now) {
   if (!p.alive) return;
@@ -528,7 +598,8 @@ function botUpdate(p, dt, now) {
       if (losClear(p, t)) {
         b.next = now + 2.5 + Math.random() * 3;
         let primes;
-        if (Math.random() < 0.85) {   // 2026-11-06: 当てる確率 70 → 85%、1 回に 1〜3 個（弱すぎたので）
+        const hidden = (t.hideUntil || 0) > now;   // はちまき中の相手は数字が見えないので、ほぼ当てずっぽう
+        if (Math.random() < (hidden ? 0.2 : 0.85)) {   // 2026-11-06: 当てる確率 70 → 85%、1 回に 1〜3 個（弱すぎたので）
           const k = Math.min(t.f.length, Math.random() < 0.45 ? 1 : Math.random() < 0.7 ? 2 : 3);
           const pool = t.f.slice(); primes = [];
           for (let i = 0; i < k; i++) primes.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
@@ -564,6 +635,8 @@ function onMsg(m) {
       for (const [id, x, z, yaw, y] of m.p) { const v = view.get(id); if (v && id !== myId) { v.tx = x; v.tz = z; v.tyaw = yaw; v.ty = y; } }
       return;
     case "ev": applyEv(m); return;
+    case "items": if (Array.isArray(m.it)) syncItems(m.it); return;
+    case "pick": applyPick(m); return;
     case "gone": { const v = view.get(m.id); if (v) { v.alive = false; addFeed(`${v.name} が抜けました`); } if (selId === m.id) closePad(); return; }
     case "msg": toast(m.s); return;
     case "over": overInfo = m; closePad(); break;
@@ -593,7 +666,27 @@ function applyEv(m) {
     if (a.id !== myId) floatText(a, "失敗", "#ff9a3a");
     else { flash(); vibrate(150); lastAtk = performance.now() / 1000 + WRONG_LOCK - COOLDOWN; toast(`失敗！ 自分の数字 ${m.ab} → ${prod(m.fa)}（${WRONG_LOCK}秒 打ち込めない）`); }
   }
-  if (selId === m.to && m.dead) closePad();
+  if (m.dead && (selId === m.to || m.to === myId)) closePad();   // 撃破したら（自分がやられても）入力パッドを閉じる
+}
+
+function applyPick(m) {
+  const g = itemObjs.get(m.iid); if (g) { scene.remove(g); itemObjs.delete(m.iid); }
+  const v = view.get(m.pid), info = ITEM[m.k]; if (!v || !info) return;
+  const mine = m.pid === myId, now = performance.now();
+  if (m.k === "num") {
+    v.f = m.f || v.f; const a = (m.add || []).join("×");
+    addFeed(`💚 ${v.name} が数字を拾った${a ? `（×${a}）` : ""}`);
+    hitFx(v, "heal"); if (!mine) floatText(v, "回復 ×" + a, "#5ad16a");
+    if (mine) toast(`🔢 数字を拾った！ ×${a} → ${prod(v.f)}`);
+  } else {
+    addFeed(`${info.icon} ${v.name} が ${info.name} を拾った`);
+    if (m.k === "band") v.hideUntil = now + m.dur * 1000;
+    if (mine) {
+      if (m.k === "scope") { scopeUntil = now + m.dur * 1000; toast(`🔭 望遠鏡！ ボタンでズーム（${m.dur}秒）`); }
+      else if (m.k === "cam") { shots += m.n || CAM_SHOTS; toast(`📷 カメラ！ 見えている相手の数字を記録できる（${shots}回）`); }
+      else if (m.k === "band") toast(`🎌 はちまき！ ${m.dur}秒 自分の数字がかくれる`);
+    }
+  }
 }
 
 // ---------- 接続 ----------
@@ -683,11 +776,8 @@ const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
 camera.rotation.order = "YXZ";
 scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.5));
 const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(20, 40, 10); scene.add(sun);
-{
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(AX * 2, AZ * 2), new THREE.MeshLambertMaterial({ color: 0x6f9a5a }));
-  ground.rotation.x = -Math.PI / 2; scene.add(ground);
-  const grid = new THREE.GridHelper(AZ * 2, 30, 0x557744, 0x557744); grid.scale.x = AX / AZ; grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.35; scene.add(grid);
-}
+const groundMat = new THREE.MeshLambertMaterial({ color: 0x6f9a5a }), outsideMat = new THREE.MeshLambertMaterial({ color: 0x5b7f4a });
+{ const out = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), outsideMat); out.rotation.x = -Math.PI / 2; out.position.y = -0.02; scene.add(out); }
 const stageGroup = new THREE.Group(); scene.add(stageGroup);
 const stageMeshes = [];
 const MATS = {
@@ -707,6 +797,8 @@ function addSolid(geo, mat, x, y, z) {
 function buildStage() {
   for (const c of [...stageGroup.children]) { stageGroup.remove(c); c.geometry?.dispose(); }
   stageMeshes.length = 0;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(AX * 2, AZ * 2), groundMat); ground.rotation.x = -Math.PI / 2; stageGroup.add(ground);
+  const grid = new THREE.GridHelper(AZ * 2, AZ * 2 / 2, 0x557744, 0x557744); grid.scale.x = AX / AZ; grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.35; stageGroup.add(grid);
   for (const [x, z, w, d] of [[0, -AZ, AX * 2, 0.6], [0, AZ, AX * 2, 0.6], [-AX, 0, 0.6, AZ * 2], [AX, 0, 0.6, AZ * 2]])
     addSolid(new THREE.BoxGeometry(w, 2.4, d), MATS.border, x, 1.2, z);
   for (const o of STAGE.S) {
@@ -746,6 +838,7 @@ const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff }), pupilMat = new 
 const hairMat = new THREE.MeshLambertMaterial({ color: 0x4a3020 });
 const outlineMat = new THREE.MeshBasicMaterial({ color: 0xff1a1a, side: THREE.BackSide });
 const plateGeo = new THREE.PlaneGeometry(0.74, 0.36);
+const G_BAND = new THREE.BoxGeometry(0.72, 0.16, 0.72), bandMat = new THREE.MeshLambertMaterial({ color: 0xd8262b });
 function part(geo, mat, parent, x, y, z, outl) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m);
   if (outl) { const o = new THREE.Mesh(geo, outlineMat); o.scale.setScalar(1.28); o.visible = false; o.renderOrder = -1; m.add(o); outl.push(o); }
@@ -759,6 +852,7 @@ function makeAvatar(v) {
   const arms = [-0.46, 0.46].map(sx => { const piv = new THREE.Group(); piv.position.set(sx, 1.57, 0); g.add(piv); part(G_ARM, shirt, piv, 0, -0.37, 0, outl); return piv; });
   part(G_HEAD, skin, g, 0, 1.93, 0, outl);
   part(G_HAIR, hairMat, g, 0, 2.29, 0.02, null);
+  const band = part(G_BAND, bandMat, g, 0, 2.2, 0, null); band.visible = false;   // はちまき（数字をかくしている間）
   for (const s of [-0.15, 0.15]) {   // 目（顔は -z 側）
     part(eyeGeo, eyeMat, g, s, 1.79, -0.335, null);
     part(pupilGeo, pupilMat, g, s + (s < 0 ? 0.03 : -0.03), 1.79, -0.345, null);
@@ -775,7 +869,7 @@ function makeAvatar(v) {
   if (reveal) { plate.material.depthTest = false; plate.renderOrder = 5; }   // 残り 1 分: 物かげの向こうからも見える
   g.add(plate);
   scene.add(g);
-  return { g, plate, mats: [skin, shirt, pants], outl, legs, arms, walk: 0, mark, arrow, ctx: cv.getContext("2d"), tex, key: "", hitAt: -1e9, hitKind: "" };
+  return { g, plate, band, mats: [skin, shirt, pants], outl, legs, arms, walk: 0, mark, arrow, ctx: cv.getContext("2d"), tex, key: "", hitAt: -1e9, hitKind: "" };
 }
 const markMat = new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.DoubleSide });
 const markArrowGeo = new THREE.ConeGeometry(0.22, 0.45, 12), markRingGeo = new THREE.RingGeometry(0.62, 0.8, 36);
@@ -798,29 +892,59 @@ function hitFx(v, kind) {
   if (v.id !== myId) burst(v, kind, kind === "kill" ? 26 : 12);
 }
 const HIT_EMIS = { hit: 0xff2020, kill: 0xffd400, miss: 0xff8a20, heal: 0x30ff60 };
+// ---------- アイテム ----------
+const itemObjs = new Map(), itemTex = {};
+const itemRingGeo = new THREE.RingGeometry(0.42, 0.55, 28);
+function itemTexture(k) {
+  if (itemTex[k]) return itemTex[k];
+  const cv = document.createElement("canvas"); cv.width = 128; cv.height = 160; const c = cv.getContext("2d");
+  c.fillStyle = ITEM[k].col; c.beginPath(); c.arc(64, 60, 54, 0, Math.PI * 2); c.fill();
+  c.lineWidth = 6; c.strokeStyle = "#fff"; c.stroke();
+  c.textAlign = "center"; c.textBaseline = "middle"; c.font = "60px sans-serif"; c.fillText(ITEM[k].icon, 64, 62);
+  c.font = "bold 24px sans-serif"; c.lineWidth = 5; c.strokeStyle = "#000"; c.strokeText(ITEM[k].name, 64, 140); c.fillStyle = "#fff"; c.fillText(ITEM[k].name, 64, 140);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return itemTex[k] = t;
+}
+function syncItems(list) {
+  const keep = new Set();
+  for (const [id, k, x, y, z] of list) {
+    keep.add(id); if (itemObjs.has(id) || !ITEM[k]) continue;
+    const g = new THREE.Group(); g.position.set(x, y, z);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemTexture(k) })); sp.scale.set(0.8, 1.0, 1); sp.position.y = 0.75; g.add(sp);
+    const ring = new THREE.Mesh(itemRingGeo, new THREE.MeshBasicMaterial({ color: ITEM[k].col, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; g.add(ring);
+    g.userData = { sp, ph: Math.random() * 6 };
+    scene.add(g); itemObjs.set(id, g);
+  }
+  for (const [id, g] of itemObjs) if (!keep.has(id)) { scene.remove(g); itemObjs.delete(id); }
+}
+function clearItems() { for (const g of itemObjs.values()) scene.remove(g); itemObjs.clear(); }
+// 自分が持っているもの
+let scopeUntil = 0, zoomed = false, shots = 0;
+const photos = new Map();   // 相手の id → カメラで記録した数字
 function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 const hex = c => "#" + c.toString(16).padStart(6, "0");
-function drawPlate(av, v, sel) {
-  const key = v.f.join(",") + "|" + sel;
+function drawPlate(av, v, sel, read, hid) {
+  const key = v.f.join(",") + "|" + sel + "|" + read + "|" + hid;
   if (av.key === key) return; av.key = key;
   const c = av.ctx; c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, 256, 128);   // 512×256 の札に 256×128 の大きさで描く
   rrect(c, 4, 4, 248, 120, 18); c.fillStyle = "rgba(255,255,255,0.95)"; c.fill();
   c.lineWidth = sel ? 10 : 6; c.strokeStyle = sel ? "#ffd400" : hex(v.color); c.stroke();
   c.textAlign = "center"; c.textBaseline = "middle";
   c.fillStyle = "#555"; c.font = "bold 20px sans-serif"; c.fillText(v.name, 128, 24);
-  const s = String(prod(v.f));
-  c.fillStyle = "#111"; c.font = `900 ${Math.min(78, Math.floor(360 / (s.length + 0.5)))}px sans-serif`; c.fillText(s, 128, 76);
+  const s = hid ? "？？？" : read ? String(prod(v.f)) : "？？？";   // 遠い・はちまき中は読めない
+  c.fillStyle = read && !hid ? "#111" : hid ? "#c22" : "#999";
+  c.font = `900 ${Math.min(78, Math.floor(360 / (s.length + 0.5)))}px sans-serif`; c.fillText(s, 128, 76);
   av.tex.needsUpdate = true;
 }
 function clearGame() {
   for (const av of avatars.values()) { scene.remove(av.g); av.tex.dispose(); }
   for (const m of sparks) scene.remove(m); sparks.length = 0;
+  clearItems(); scopeUntil = 0; zoomed = false; shots = 0; photos.clear();
   avatars.clear(); view.clear(); closePad(); feed.length = 0; $("feed").innerHTML = "";
   $("fx").innerHTML = ""; fxList.length = 0;
 }
 function startView(seed, ps) {
   clearGame(); overInfo = null;
-  if (mode === "client") STAGE = genStage(seed);
+  if (mode === "client") STAGE = genStage(seed, ps.length);
   buildStage();
   for (const p of ps) {
     const y = groundAt(p.x, p.z);
@@ -856,7 +980,8 @@ canvas.addEventListener("pointermove", e => {
   if (t.kind === "stick") moveStick(t, e);
   else {
     const dx = LX(e) - t.lx, dy = LY(e) - t.ly;
-    me.yaw -= dx * 0.006; me.pitch = clamp(me.pitch - dy * 0.006, -1.2, 1.2);
+    const sens = zoomed ? 0.0022 : 0.006;   // ズーム中はゆっくり
+    me.yaw -= dx * sens; me.pitch = clamp(me.pitch - dy * sens, -1.2, 1.2);
     t.moved += Math.abs(dx) + Math.abs(dy); t.lx = LX(e); t.ly = LY(e);
   }
 });
@@ -923,6 +1048,18 @@ function selectTarget(id) {
 function closePad() { selId = null; inp = []; kbuf = ""; $("pad").classList.add("hidden"); }
 $("target").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game") pickTarget(); });
 $("retry").addEventListener("click", () => { if (screen === "game" && mode === "local") { $("retry").classList.add("hidden"); startPractice(); renderUI(); } });
+$("zoom").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game" && performance.now() < scopeUntil) zoomed = !zoomed; });
+$("snap").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game") snapPhoto(); });
+function canRead(v) { return !((v.hideUntil || 0) > performance.now()) && Math.hypot(v.x - me.x, v.z - me.z) <= SEE * (zoomed ? 3 : 1); }
+function snapPhoto() {
+  const mine = view.get(myId); if (shots <= 0 || !mine || !mine.alive) return;
+  const c = visibleTargets().filter(o => canRead(o.v));
+  const o = c.find(o => o.v.id === selId) || c[0];
+  if (!o) { toast("数字が読める相手がいません（近づくか、望遠鏡で）"); return; }
+  photos.set(o.v.id, prod(o.v.f)); shots--;
+  const f = $("flash"); f.style.background = "rgba(255,255,255,.85)"; flash(); setTimeout(() => f.style.background = "", 700);
+  toast(`📷 ${o.v.name} の数字を記録: ${prod(o.v.f)}`); padKey = ""; updPad(true);
+}
 $("jump").addEventListener("pointerdown", e => { e.preventDefault(); if (screen === "game" && !spectating) jump(me); });
 
 $("keys").innerHTML = PRIMES.map(p => `<button data-k="${p}">${p}</button>`).join("") +
@@ -959,9 +1096,9 @@ function updPad(force) {
   if (selId == null) return;
   const t = view.get(selId); if (!t) return;
   const cool = performance.now() / 1000 < lastAtk + COOLDOWN;
-  const key = [inp.join("×"), kbuf, cool, t.name].join("|");
+  const key = [inp.join("×"), kbuf, cool, t.name, photos.get(t.id)].join("|");
   if (!force && key === padKey) return; padKey = key;
-  $("ptname").textContent = "→ " + t.name;
+  $("ptname").textContent = "→ " + t.name + (photos.has(t.id) ? `  📷${photos.get(t.id)}` : "");
   $("pdisp").textContent = inp.join("×") + (kbuf ? (inp.length ? "×" : "") + kbuf : "");
   $("sendbtn").classList.toggle("cool", cool);
 }
@@ -1009,6 +1146,13 @@ function updHud(now) {
   const tm = $("timer"); if (tm) { const t = Math.max(0, Math.ceil(timeLeft)); tm.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; tm.classList.toggle("hot", t <= REVEAL_AT); }
   b.textContent = bannerTxt; b.classList.toggle("hidden", !bannerTxt);
   $("retry").classList.toggle("hidden", !(mode === "local" && mine && !mine.alive && !overInfo));   // CPU 戦でやられたら、すぐ再戦できる
+  // 持っているアイテム
+  const alive = !!(mine && mine.alive), sl = Math.ceil((scopeUntil - now) / 1000);
+  if (zoomed && (sl <= 0 || !alive)) zoomed = false;
+  $("zoom").classList.toggle("hidden", !(alive && sl > 0)); $("zoom").classList.toggle("on", zoomed); $("zoomt").textContent = (zoomed ? "もどす " : "ズーム ") + Math.max(0, sl);
+  $("snap").classList.toggle("hidden", !(alive && shots > 0)); $("snapt").textContent = "記録 ×" + shots;
+  const bl = mine ? Math.ceil(((mine.hideUntil || 0) - now) / 1000) : 0;
+  $("mystat").textContent = bl > 0 ? `🎌 数字をかくし中 ${bl}秒` : "";
   for (const el of $("feed").children) el.style.opacity = now - Number(el.dataset.t) > 6000 ? 0 : 1;
 }
 $("quit").addEventListener("click", () => { if (screen === "game" && confirm("ゲームから抜けますか？")) leave(); });
@@ -1019,8 +1163,8 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
 
 // ---------- ボタン配置 ----------
 const LAY_KEY = "soinsu-layout2";
-const LAY_DEF = { me: { x: 0.09, y: 0.1, s: 1 }, quit: { x: 0.95, y: 0.07, s: 1 }, flip: { x: 0.8, y: 0.07, s: 1 }, alive: { x: 0.95, y: 0.17, s: 1 }, feed: { x: 0.2, y: 0.33, s: 1 }, pad: { x: 0.5, y: 0.82, s: 1 }, stick: { x: 0.13, y: 0.72, s: 1 }, target: { x: 0.89, y: 0.55, s: 1 }, jump: { x: 0.9, y: 0.83, s: 1 } };
-const LAY_NAMES = { me: "自分の数字", quit: "退出", flip: "向きの反転", alive: "のこり人数", feed: "ログ", pad: "入力パッド", stick: "スティック", target: "相手をえらぶ", jump: "ジャンプ" };
+const LAY_DEF = { me: { x: 0.09, y: 0.1, s: 1 }, quit: { x: 0.95, y: 0.07, s: 1 }, flip: { x: 0.8, y: 0.07, s: 1 }, alive: { x: 0.95, y: 0.17, s: 1 }, feed: { x: 0.2, y: 0.33, s: 1 }, pad: { x: 0.5, y: 0.82, s: 1 }, stick: { x: 0.13, y: 0.72, s: 1 }, target: { x: 0.89, y: 0.55, s: 1 }, jump: { x: 0.9, y: 0.83, s: 1 }, zoom: { x: 0.77, y: 0.83, s: 1 }, snap: { x: 0.77, y: 0.6, s: 1 } };
+const LAY_NAMES = { me: "自分の数字", quit: "退出", flip: "向きの反転", alive: "のこり人数", feed: "ログ", pad: "入力パッド", stick: "スティック", target: "相手をえらぶ", jump: "ジャンプ", zoom: "望遠鏡", snap: "カメラ" };
 const copyDef = k => ({ ...LAY_DEF[k] });
 let LAY = {}; for (const k in LAY_DEF) LAY[k] = copyDef(k);
 try { const sv = JSON.parse(store.get(LAY_KEY) || "{}"); for (const k in LAY) if (sv[k] && [sv[k].x, sv[k].y, sv[k].s].every(Number.isFinite)) LAY[k] = sv[k]; } catch (e) {}
@@ -1081,7 +1225,7 @@ function updLayBar() {
 }
 function enterLayout() {
   screen = "layout"; goLandscape();
-  $("pad").classList.remove("hidden");
+  $("pad").classList.remove("hidden"); $("zoom").classList.remove("hidden"); $("snap").classList.remove("hidden");
   $("ptname").textContent = "→ 相手"; $("pdisp").textContent = "2×3";
   $("mynum").textContent = "360";
   $("alive").textContent = "のこり 4人"; $("feed").innerHTML = "<div>ログがここに出ます</div><div>ゲスト → CPU-A：2×3 命中</div>";
@@ -1090,6 +1234,7 @@ function enterLayout() {
 function exitLayout() {
   saveLayout(); screen = "menu";
   if (selId == null) $("pad").classList.add("hidden");
+  $("zoom").classList.add("hidden"); $("snap").classList.add("hidden");
   $("feed").innerHTML = ""; lastMine = ""; renderUI();
 }
 
@@ -1205,6 +1350,8 @@ const RULES = `<div class="rules">
 ・その数字の<b>素因数</b>をボタンでえらんで打ち込む（例 <b>2</b>→<b>3</b>）<br>
 ・全部正しければ相手の数字が割られる。<b>1</b>になったら撃破<br>
 ・撃破すると<b>回復</b>: 自分の数字に素因数が2〜4個ふえる<br>
+・おでこの数字は<b>近く（約11m）</b>でないと読めない<br>
+・アイテム: 🔢数字（回復） 🔭望遠鏡（ズームで遠くも読める） 📷カメラ（相手の数字を記録） 🎌はちまき（自分の数字をかくす）<br>
 ・1つでも間違えると<b>自分の一番大きい素因数</b>が消えて弱くなる<br>
 ・射程はなし。数字を一瞬で覚えよう。坂の上の高台からは遠くまで見える<br>
 ・足音で近くの相手に気づける（イヤホン推奨）<br>
@@ -1331,6 +1478,9 @@ function frame(nowMs) {
     if (mode === "client" && nowMs - hostSeen > 10000) { errMsg = "ホストとの接続が切れました"; leave(); return; }
     // 見た目
     camera.position.set(me.x, me.y + EYE, me.z); camera.rotation.set(me.pitch, me.yaw, 0);
+    const fov = zoomed ? 22 : 70;
+    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 12); camera.updateProjectionMatrix(); }
+    for (const g of itemObjs.values()) { const u = g.userData; u.ph += dt * 2.5; u.sp.position.y = 0.75 + Math.sin(u.ph) * 0.12; }
     const k = Math.min(1, dt * 12);
     outlineMat.color.setRGB(0.75 + 0.25 * Math.sin(nowMs / 110), 0.05, 0.05);   // 赤い輪郭を点滅させる
     for (const [id, av] of avatars) {
@@ -1368,9 +1518,11 @@ function frame(nowMs) {
         const t = v.deadAt ? (nowMs - v.deadAt) / 600 : 1;
         av.g.visible = t < 1; av.g.scale.setScalar(Math.max(0.01, 1 - t)); continue;
       }
-      drawPlate(av, v, id === selId);
-      // 遠くても読めるよう、おでこの札だけ少し大きくする
-      const s = clamp(Math.hypot(v.x - me.x, v.z - me.z) / 10, 1, 2.2); av.plate.scale.set(s, s, 1);
+      const dd = Math.hypot(v.x - me.x, v.z - me.z), hid = (v.hideUntil || 0) > nowMs;
+      drawPlate(av, v, id === selId, dd <= SEE * (zoomed ? 3 : 1), hid);
+      av.band.visible = hid;   // はちまき
+      // 読める距離のはしでも読みやすいよう、おでこの札だけ少し大きくする
+      const s = clamp(dd / 7, 1, 1.8); av.plate.scale.set(s, s, 1);
     }
     for (let i = sparks.length - 1; i >= 0; i--) {
       const m = sparks[i], u = m.userData; u.t += dt;
@@ -1389,6 +1541,7 @@ function frame(nowMs) {
     }
     updPad(false); updHud(nowMs);
   } else {
+    if (camera.fov !== 70) { camera.fov = 70; camera.updateProjectionMatrix(); }
     const t = nowMs / 6000;
     camera.position.set(Math.cos(t) * 22, 16, Math.sin(t) * 26); camera.lookAt(0, 0, 0);
   }
@@ -1401,6 +1554,7 @@ setInterval(() => {
   const nowMs = performance.now(), dt = Math.min(0.1, (nowMs - hostLastT) / 1000); hostLastT = nowMs;
   if (screen !== "game" || !G || mode === "client") return;
   if (!G.over) for (const p of G.players.values()) if (p.bot) botUpdate(p, dt, nowMs / 1000);
+  hostItems(nowMs / 1000);
   broadcast({ t: "st", q: ++stQ, p: [...G.players.values()].filter(p => p.alive || p.bot === false).map(p => [p.id, +p.x.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +(p.y || 0).toFixed(2)]) });
   const left = TIME_LIMIT - (nowMs / 1000 - G.t0);
   if (!G.over && nowMs - tmSent > 1000) { tmSent = nowMs; broadcast({ t: "tm", l: Math.max(0, Math.round(left)), rv: left <= REVEAL_AT ? 1 : 0 }); }
@@ -1421,7 +1575,7 @@ if (PARTY) {
   if (PARTY.role === "host") startHost(); else joinRoom(PARTY.code);
 }
 try { if (window.IN_HUB && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
-window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; }, get STAGE() { return STAGE; }, pickTarget, groundAt };
+window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; }, get STAGE() { return STAGE; }, pickTarget, groundAt, avatars, itemObjs, photos, get shots() { return shots; }, get selId() { return selId; } };
 </script>
 </body>
 </html>
