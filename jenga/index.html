@@ -61,7 +61,7 @@
   .diffnote { font-size:12px; color:var(--sub); margin-top:6px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=2"></script>
+<script src="../party-beacon.js?v=5"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 </head>
 <body>
@@ -86,7 +86,7 @@ const ROT_SPEED = 50 * Math.PI / 180;   // 置くときの回転ボタンを押�
 const FINGER_VMAX = 25;             // 指についていく速さの上限（1秒あたり）。ふつうに動かすぶんには指とぴったり同じに動く
 let JITTER = 0.08;                 // 最初に積むときのずれ（長さ方向）。きっちりそろっていないぶん崩れやすい
 const FALL_DROP = 0.75 * BH;       // ターン開始時からこれ以上下がったブロックがあれば「崩れた」
-const SNAP_MS = 33;                // 動きを送る間隔（2026-11-06 に 80 → 50、2026-11-07 に 33。落としてよい通り道で送るので増やしても詰まらない）
+const SNAP_MS = 16;                // 動きを送る間隔（2026-11-06 に 80 → 50、2026-11-07 に 16 = 60 回/秒。落としてよい通り道で送るので増やしても詰まらない）
 const PREFIX = "jenga-online-room-";
 // パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
 // ホストはパーティの番号（1けた）で部屋を作り、ゲストはその部屋が開くまで探し続ける。ホストがいなくなったら、ゲストもゲーム一覧へ戻る。
@@ -628,7 +628,6 @@ function hostStart() {
 }
 function hostHandle(from, m) {
   if (m.t === "hello") return;
-  if (m.t === "rename") { const c = host.conns.get(from); if (c && !host.playing) { c.pname = String(m.name || "ゲスト").slice(0, 12); hostLobby(); } return; }
   if (host.conns.get(from)?.spec) return;   // 観戦の人からの操作は受けない
   if (!host.playing) return;
   if (m.t === "look") { bcast({ t: "look", id: from, yaw: m.yaw }, from); return; }
@@ -787,9 +786,46 @@ function diffSeg(canEdit) {
   return `<div class="seg">${Object.entries(DIFFS).map(([k, d]) => `<button class="${k === diff ? "on" : ""}" ${canEdit ? `data-a="diff-${k}"` : "disabled"}>${d.label}</button>`).join("")}</div>
     <div class="diffnote">${esc(DIFFS[diff].note)}</div>`;
 }
+// パーティ: 始まる前の画面は、全部のゲームで同じ構図の待ち合わせ画面（party-beacon.js の ykgLobby）を使う（2026-11-07）
+// 名前の変更はゲーム一覧（パーティの画面）だけでできる
+let lobbySetEl = null;
+function partyLobby() {
+  if (!PARTY || !window.ykgLobby) return;
+  if (screen === "game") { if (ykgLobby.active) ykgLobby.close(); return; }
+  const rules = "ブロックを 1 本抜いて、いちばん上に積む。タワーを崩した人の負け。\n順番は始まるときにランダムで決まります。";
+  let o;
+  if (screen === "lobby") {
+    const members = [
+      ...lobby.map(p => ({ name: p.name, tag: p.id === 0 ? "ホスト" : "", me: !spectating && p.id === myId })),
+      ...lobbySpecs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })),
+    ];
+    let settings;
+    if (mode === "host") {
+      if (!lobbySetEl) {
+        lobbySetEl = document.createElement("div");
+        lobbySetEl.addEventListener("click", e => {
+          const k = e.target.closest("[data-d]")?.dataset.d; if (!k) return;
+          diff = k; store.set("jenga-diff", diff); hostLobby();
+        });
+      }
+      lobbySetEl.innerHTML = `<div class="yl-row">${Object.entries(DIFFS).map(([k, d]) => `<button class="${k === diff ? "on" : ""}" data-d="${k}">${esc(d.label)}</button>`).join("")}</div>
+        <div class="yl-sub">倒れやすさ: ${esc(DIFFS[diff].note)}</div>`;
+      settings = lobbySetEl;
+    } else settings = `倒れやすさ: <b>${esc(DIFFS[diff].label)}</b><div class="yl-sub">${esc(DIFFS[diff].note)}（ホストが決めます）</div>`;
+    o = { rules, members, settings,
+      button: mode === "host" ? (lobby.length < 2 ? { label: "参加者を待っています…", disabled: true } : { label: `${lobby.length}人でスタート`, onClick: hostStart }) : null,
+      wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…",
+      status: errMsg || "" };
+  } else {   // つないでいるところ・つながらなかったとき
+    o = { rules, settings: null, members: [{ name: myName(), tag: PARTY.role === "host" ? "ホスト" : "", me: true }], button: null,
+      wait: screen === "menu" ? (errMsg || "つながりませんでした") : mode === "host" ? "部屋を準備しています…" : "ホストにつないでいます…", status: "" };
+  }
+  if (ykgLobby.active) ykgLobby.update(o); else ykgLobby.open(o);
+}
 function renderUI() {
   let h = "";
-  if (screen === "menu") {
+  if (PARTY && screen !== "game") {   // パーティ: 自分の画面は出さず、共通の待ち合わせ画面だけ
+  } else if (screen === "menu") {
     h = `<div class="screen"><div class="card">
       <h1>ジェンガ</h1><p class="lead">崩したら負け。2〜4人でオンライン対戦</p>
       <label>なまえ</label><input id="name" maxlength="12" value="${esc(store.get("jenga-name") || "")}" placeholder="ゲスト">
@@ -813,7 +849,6 @@ function renderUI() {
       ${PARTY ? "" : `<button class="blue" data-a="share">招待リンクを送る</button>`}
       <ul class="players">${lobby.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（あなた）" : ""}</span><span style="color:var(--sub)">${p.id === 0 ? "ホスト" : ""}</span></li>`).join("")}</ul>
       ${lobbySpecs.length ? `<p class="lead" style="margin:4px 0 0">観戦: ${lobbySpecs.map(esc).join("、")}${spectating ? "（あなたは観戦します）" : ""}</p>` : ""}
-      <div class="row" style="margin-top:8px"><input id="rename" maxlength="12" value="${esc(myName())}"><button data-a="rename" style="margin-top:0;flex:0 0 auto">名前を変える</button></div>
       <label>倒れやすさ${mode === "host" ? "" : "（ホストが決めます）"}</label>${diffSeg(mode === "host")}
       ${mode === "host" ? `<button class="main" data-a="start" ${lobby.length < 2 ? "disabled" : ""}>${lobby.length < 2 ? "参加者を待っています…" : `${lobby.length}人で始める`}</button>`
         : `<p class="lead" style="margin-top:12px">ホストが始めるのを待っています…</p>`}
@@ -856,6 +891,7 @@ function renderUI() {
   if (toastMsg && performance.now() < toastT) h += `<div class="toast">${esc(toastMsg)}</div>`;
   ui.innerHTML = h;
   const nm = document.getElementById("name"); if (nm) nm.oninput = () => store.set("jenga-name", nm.value);
+  partyLobby();
 }
 ui.addEventListener("click", e => {
   const a = e.target.closest("[data-a]")?.dataset.a; if (!a) return;
@@ -874,12 +910,6 @@ ui.addEventListener("click", e => {
   else if (a === "left") moveSlot(-1);
   else if (a === "right") moveSlot(1);
   else if (a === "drop") dropHeld();
-  else if (a === "rename") {   // 部屋に入ったあとでも名前を変えられる（ゲームが始まる前）
-    const n = (document.getElementById("rename")?.value || "").trim().slice(0, 12) || "ゲスト";
-    meName = n; store.set("jenga-name", n);
-    if (mode === "host") hostLobby(); else send({ t: "rename", name: n });
-    toast("名前を変えました");
-  }
   else if (a === "quit") { if (confirm("ゲームをやめてメニューに戻りますか？")) backToMenu(); }
   else if (a === "back") backToMenu();
   else if (a === "games") ykgToGames();   // ミニゲーム集のゲーム一覧へ

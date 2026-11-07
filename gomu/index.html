@@ -62,7 +62,6 @@
       <div class="card">
         <h2>参加者 (<span id="player-count">1</span> / 4)</h2>
         <ul id="player-list" class="player-list"></ul>
-        <div class="join-row" style="margin-bottom:10px"><input id="input-rename" maxlength="10" placeholder="名前" autocomplete="off" /><button id="btn-rename" class="btn">名前を変える</button></div>
         <p id="host-only-note" class="hint hidden">人数がそろったらゲームを開始してください（2〜4人。5人目以降と観戦の人は見るだけ）。2人なら長方形、3人なら六角形、4人なら八角形の盤面になります。制限時間は2人 90秒、3〜4人 120秒。半分を過ぎると真ん中の仕切りが消えます。</p>
         <button id="btn-start-game" class="btn btn-primary hidden">ゲームを開始する</button>
         <p id="guest-wait-note" class="hint">ホストがゲームを開始するのを待っています…</p>
@@ -99,7 +98,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=2"></script>
+<script src="../party-beacon.js?v=5"></script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

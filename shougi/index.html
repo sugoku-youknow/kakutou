@@ -402,6 +402,7 @@
   }
   body.ykg-spec #board, body.ykg-spec .hand, body.ykg-spec #readyRow{pointer-events:none}
   body.ykg-spec #readyRow{display:none !important}
+  body.ykg-party #readyRow{display:none !important}   /* パーティ: 「準備完了」は待ち合わせ画面で押す */
   #ykgSpecBar{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;background:rgba(122,75,38,.92);color:#fff}
   #ykgBack{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:50;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;padding:7px 12px;border-radius:99px;border:1px solid #C79E64;background:rgba(246,239,227,.95);color:#2A2320}
 </style>
@@ -478,7 +479,7 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=2"></script>
+<script src="../party-beacon.js?v=5"></script>
 <script>
 (function(){
   const ROWS=9, COLS=9;
@@ -1079,6 +1080,40 @@
     if(!PARTY || PARTY.role !== 'host') return;
     try { const a = JSON.parse(sessionStorage.getItem('ykg-results') || '[]'); a.push({ game:'shougi', w, l }); sessionStorage.setItem('ykg-results', JSON.stringify(a)); } catch(e){}
   }
+  // ===== パーティの待ち合わせ画面（全部のゲームで同じ構図。party-beacon.js の ykgLobby）=====
+  // 先手 = ホスト、後手 = ゲスト。両方が「準備完了」を押すと 3 秒数えて始まる。始まったら閉じる
+  let remoteLobby = null;
+  function lobbyMembers(){
+    const list = [{name: PARTY.name, tag: '先手（ホスト）'}];
+    if(conn && conn.open) list.push({name: guestName, tag: '後手'});
+    for(const c of spectators) list.push({name: String((c.metadata && c.metadata.name) || 'ゲスト').slice(0, 12), tag: '観戦'});
+    return list;
+  }
+  function syncLobby(){
+    if(!PARTY || !window.ykgLobby) return;
+    if(matchStarted || countdownUntil > 0){ if(ykgLobby.active) ykgLobby.close(); return; }
+    const raw = isHost ? lobbyMembers() : remoteLobby;
+    const members = raw ? raw.map(m => ({...m, me: isHost ? m.tag === '先手（ホスト）' : (spectating ? (m.tag === '観戦' && m.name === PARTY.name) : m.tag === '後手')})) : undefined;
+    const opts = {
+      title: 'フリータイム将棋',
+      rules: '手番なし。駒ごとに少し待つ時間があり、待ち終わった駒はいつでも動かせます。相手の玉を取ったら勝ち。\n先手 = ホスト、後手 = ゲスト（2人用。3人目からは観戦）',
+      settings: null,
+      members,
+      status: ''
+    };
+    if(spectating){ opts.button = null; opts.wait = '観戦: 対局が始まるのを待っています…'; }
+    else {
+      const opponentHere = colorAssigned && (isHost ? !!(conn && conn.open) : !!(conn && conn.open));
+      const already = colorAssigned && myColor && readyState[myColor];
+      opts.button = {
+        label: already ? '準備完了（相手を待っています）' : '準備完了',
+        disabled: !opponentHere || already,
+        onClick: doReady
+      };
+      opts.status = !colorAssigned ? 'ホストの部屋に入っています…' : !opponentHere ? '相手を待っています' : already ? '' : '準備ができたら「準備完了」を押してください';
+    }
+    if(ykgLobby.active) ykgLobby.update(opts); else ykgLobby.open(opts);
+  }
   function enterSpectate(){
     spectating = true;
     document.body.classList.add('ykg-spec');
@@ -1168,7 +1203,8 @@
       promoOffer: lastMovedForPromotionOffer ? {r:lastMovedForPromotionOffer.r, c:lastMovedForPromotionOffer.c} : null,
       matchStarted,
       readyState: {sente:readyState.sente, gote:readyState.gote},
-      countdownRemain: countdownUntil>0 ? Math.max(0, countdownUntil-now()) : 0
+      countdownRemain: countdownUntil>0 ? Math.max(0, countdownUntil-now()) : 0,
+      lobby: PARTY && isHost ? lobbyMembers() : null
     };
   }
 
@@ -1188,6 +1224,7 @@
     if(typeof state.matchStarted==='boolean') matchStarted = state.matchStarted;
     if(state.readyState) readyState = {sente:!!state.readyState.sente, gote:!!state.readyState.gote};
     countdownUntil = state.countdownRemain>0 ? now()+state.countdownRemain : 0;
+    if(state.lobby) remoteLobby = state.lobby;
     
     if(!wasMatchStarted && matchStarted){
       buildBoardDom();
@@ -1244,6 +1281,7 @@
   }
 
   function updateNetStatus(count){
+    syncLobby();
     if(!colorAssigned){
       setBattleStatus(count>0
         ? '接続中…'
@@ -1277,6 +1315,7 @@
   }
 
   function updateReadyUI(){
+    syncLobby();
     if(!colorAssigned || matchStarted || countdownUntil>0){
       readyRow.classList.remove('visible');
       requestAnimationFrame(fitBoard);   // 始まったら「準備完了」の行を隠して盤を大きくする
@@ -1339,24 +1378,33 @@
         c.on('open', ()=>{ try { c.send({kind:'party-full'}); } catch(e){} setTimeout(()=>{ try { c.close(); } catch(e){} }, 500); });
         return;
       }
-      if(PARTY && ((c.metadata && c.metadata.spec) || (conn && conn.open))){   // 観戦を選んだ人・3 人目以降は観戦
+      // パーティ: つなぎ直してきた同じ人（同じタブ）は相手の席のまま。2026-11-07: 前は、最初のつなぎがおそくてつなぎ直したゲストが
+      // 「3 人目」として観戦にされ、「準備完了」が出なかった。観戦を選んだ人と、相手がいるときの別の人だけ観戦にする
+      const meta = c.metadata || {};
+      const sameTab = !!(PARTY && conn && meta.tab && conn.metadata && conn.metadata.tab === meta.tab);
+      if(PARTY && (meta.spec || (conn && conn.open && !sameTab))){   // 観戦を選んだ人・3 人目以降は観戦
         c.on('open', ()=>{
           spectators.push(c);
+          syncLobby(); if(netActive) broadcastSync();
           try { c.send({kind:'spectate'}); const st = serializeState(); st.seq = syncSeq; c.send({kind:'sync', state: st}); } catch(e){}
         });
-        c.on('close', ()=>{ spectators = spectators.filter(x => x !== c); });
+        c.on('close', ()=>{ spectators = spectators.filter(x => x !== c); syncLobby(); });
         return;
       }
+      if(PARTY && conn && conn !== c){ const old = conn; old.__replaced = true; try { old.close(); } catch(e){} }   // 前のつなぎは静かに閉じる
       conn = c;
+      if(PARTY && meta.name) guestName = String(meta.name).slice(0, 12);
       conn.on('open', ()=>{
-        peerCount++;
+        if(conn !== c) return;
+        peerCount = 1;
         requestAnimationFrame(fitBoard);   // 相手が来たら部屋番号の箱を隠して盤を大きくする
         broadcastSync();
         updateNetStatus(peerCount);
       });
-      conn.on('data', (data)=>{ handleRemote(data); });
+      conn.on('data', (data)=>{ if(conn === c) handleRemote(data); });
       conn.on('close', ()=>{
-        peerCount = Math.max(0, peerCount-1);
+        if(c.__replaced || conn !== c) return;
+        peerCount = 0;
         updateNetStatus(peerCount);
       });
     });
@@ -1400,7 +1448,7 @@
     peer = new Peer();
 
     peer.on('open', ()=>{
-      const c = conn = peer.connect(netId(code), {reliable:true, metadata: {spec: !!(PARTY && PARTY.spec)}});
+      const c = conn = peer.connect(netId(code), {reliable:true, metadata: {spec: !!(PARTY && PARTY.spec), tab: window.ykgTabId, name: PARTY ? PARTY.name : ''}});
       netSend = netSendFn;
       // パーティ: ホストの部屋がまだ開いていないとき。PeerJS は 2 回目以降の「見つからない」を知らせないことがあるので、
       // 2.5 秒たってもつながらなければ peer から作り直してつなぎ直す
@@ -1426,7 +1474,7 @@
         else if(PARTY) c.send({kind:'party-name', name: PARTY.name});   // 成績に使う名前をホストへ
       });
       conn.on('data', (data)=>{
-        if(data && data.kind === 'spectate'){ enterSpectate(); setBattleStatus('観戦中です'); }
+        if(data && data.kind === 'spectate'){ enterSpectate(); setBattleStatus('観戦中です'); syncLobby(); }
         if(data && data.kind === 'party-full'){ setBattleStatus('2人用のゲームです。いまは遊べません（ゲーム一覧へ戻ります）'); setTimeout(toGames, 3500); return; }
         handleRemote(data);
       });
@@ -1472,8 +1520,9 @@
   createRoomBtn.addEventListener('click', ()=>{ roomCreator=true; createRoom(); });
   connectBtn.addEventListener('click', ()=>{ roomCreator=false; connectRoom(); });
   offlineBtn.addEventListener('click', startOffline);
-  readyBtn.addEventListener('click', ()=>{
-    if(!colorAssigned || matchStarted) return;
+  readyBtn.addEventListener('click', doReady);
+  function doReady(){
+    if(!colorAssigned || matchStarted || spectating) return;
     if(readyState[myColor]) return;
     if(isHost){
       readyState.sente = true;
@@ -1486,7 +1535,7 @@
       netSend({kind:'ready-request'});
       updateReadyUI();
     }
-  });
+  }
 
   const urlParams = new URLSearchParams(location.search);
   const initialRoom = urlParams.get('room');
@@ -1505,6 +1554,8 @@
     back.id = 'ykgBack'; back.textContent = '← 一覧';
     back.addEventListener('click', ()=>{ if(confirm('ゲーム一覧へ戻りますか？' + (isHost ? '（相手も一覧へ戻ります）' : ''))) toGames(); });
     document.body.appendChild(back);
+    document.body.classList.add('ykg-party');
+    syncLobby();   // つながる前から待ち合わせ画面を出しておく
     if(PARTY.role === 'host'){ roomCreator = true; createRoom(); }
     else { roomCreator = false; roomInput.value = PARTY.code; connectRoom(); }
   } else if(initialRoom){

@@ -317,7 +317,7 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=2"></script>
+<script src="../party-beacon.js?v=5"></script>
 <script>
 "use strict";
 // LINE の中のブラウザ（アプリ内ブラウザ）は、全画面にも横画面にもできない。LINE は URL に openExternalBrowser=1 が付いていると、
@@ -4524,6 +4524,12 @@ paintFs();
 try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
 // パーティから開いたときは、タイトル画面を飛ばして自動で部屋を作る・入る
 if (PARTY) { if (PARTY.role === "host") startHost(); else startClient(PARTY.code); }
+// パーティの待ち合わせ画面（全部のゲームで同じ構図。party-beacon.js）。ホストがスタートを押すと、みんなキャラ選びへ進む（2026-11-07）
+if (PARTY && window.ykgLobby) {
+  const rules = "盾が外れた隙を突いて、相手をステージから落とす対戦ゲーム。\nスタートのあと、それぞれキャラを選びます。";
+  if (PARTY.role === "host") ykgLobby.open({ title: "シールドファイト", rules, button: { label: "スタート", onClick: () => ykgLobby.closeAll() } });
+  else ykgLobby.open({ title: "シールドファイト", rules, wait: PARTY.spec ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" });
+}
 // Chrome がインストールできると判断したら、タイトル画面に「アプリとして入れる」ボタンを出す（押すと Chrome の確認が出る）
 let installEvt = null;
 addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; if (uiKey === "title") { uiKey = ""; renderUI(); } });

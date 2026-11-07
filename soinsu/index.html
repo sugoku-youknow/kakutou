@@ -148,7 +148,7 @@ table.res td:last-child{text-align:right}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=2"></script>
+<script src="../party-beacon.js?v=5"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 <script type="module">
 import * as THREE from "three";
@@ -416,7 +416,7 @@ const feed = [];
 function broadcast(m) {
   const fast = m.t === "st" ? JSON.stringify(m) : null;   // 位置は落としてよい通り道で
   for (const c of [...host.conns.values(), ...host.specs.values()]) {
-    try { if (fast && uchOpen(c.uch)) c.uch.send(fast); else c.send(m); } catch (e) {}
+    try { if (fast && uchOpen(c.uch)) { if (c.uch.bufferedAmount < 32000) c.uch.send(fast); } else c.send(m); } catch (e) {}   // 詰まっている間はその回の位置を送らない（60 回/秒なので次がすぐ来る）
   }
   onMsg(m);
 }
@@ -738,11 +738,6 @@ function startHost() {
         if (lobbyPs.length >= MAX_PLAYERS) { conn.send({ t: "reject", why: `満員です（${MAX_PLAYERS}人まで）` }); setTimeout(() => conn.close(), 500); return; }
         const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12);
         host.conns.set(id, conn); conn.send({ t: "welcome", you: id }); hostLobby(); return;
-      }
-      if (m && m.t === "rename" && conn.pid && !host.playing) {
-        conn.pname = String(m.name || "ゲスト").slice(0, 12);
-        if (conn.spec) host.specs.set(conn.pid, conn);
-        hostLobby(); return;
       }
       if (conn.pid && !conn.spec) hostHandle(conn.pid, m);
     });
@@ -1391,6 +1386,30 @@ const RULES = `<div class="rules">
 ・足音で近くの相手に気づける（イヤホン推奨）<br>
 ・最後の1人になったら勝ち</div>`;
 
+// パーティの待ち合わせ画面の中身（ホストの設定: CPU の数）
+let partyBack = null, partySet = null;
+function partyLobbyOpts() {
+  const isHost = mode === "host";
+  const rules = "おでこの数字を素因数分解して打ち込み、相手を倒す。\n制限時間 3分（残り1分で物かげの向こうの数字も見える）。時間切れは数字がいちばん小さい人の勝ち。間違えると 2.5 秒打ち込めない。";
+  if (screen === "connecting") return { rules, button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
+  const members = lobbyPs.map(p => ({ name: p.name, tag: p.id === 0 ? "ホスト" : p.bot ? "CPU" : "", me: p.id === myId }))
+    .concat(lobbySpecs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })));
+  const status = `${lobbyPs.length} / ${MAX_PLAYERS}人` + (lobbyPs.length < 2 ? "（CPU を含めて 2人以上で始められます）" : "");
+  if (!isHost) return { rules, members, button: null, status, wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" };
+  if (!partySet) {
+    partySet = document.createElement("div");
+    partySet.innerHTML = `<div class="yl-row"><button data-b="+">CPU を追加</button><button data-b="-">CPU を減らす</button></div><div class="yl-sub"></div>`;
+    partySet.addEventListener("click", e => {
+      const b = e.target.closest("[data-b]"); if (!b || b.disabled || mode !== "host" || host.playing) return;
+      if (b.dataset.b === "+") { if (lobbyPs.length < MAX_PLAYERS) host.bots++; } else host.bots = Math.max(0, host.bots - 1);
+      hostLobby(); renderUI();
+    });
+  }
+  partySet.querySelector('[data-b="+"]').disabled = lobbyPs.length >= MAX_PLAYERS;
+  partySet.querySelector('[data-b="-"]').disabled = !host.bots;
+  partySet.querySelector(".yl-sub").textContent = `CPU ${host.bots}体`;
+  return { rules, members, settings: partySet, status, button: { label: "スタート", disabled: lobbyPs.length < 2, onClick: () => { hostStart(); renderUI(); } } };
+}
 function renderUI() {
   const s = $("screen");
   $("hud").classList.toggle("hidden", screen !== "game" && screen !== "layout");
@@ -1400,6 +1419,13 @@ function renderUI() {
   if (screen === "layout") s.classList.toggle("bottom", LAY[editSel].y < 0.45);
   else s.classList.remove("bottom", "dragging");
   checkRotate(); applyLayout();
+  // パーティ: 始まる前（つないでいる・部屋）は、全部のゲームで同じ待ち合わせ画面（party-beacon.js の ykgLobby）を使う（2026-11-07）
+  if (PARTY) {
+    const inLobby = screen === "connecting" || screen === "lobby";
+    if (partyBack) partyBack.style.display = inLobby ? "none" : "";
+    if (inLobby) { ykgLobby.open(partyLobbyOpts()); s.classList.add("hidden"); s.innerHTML = ""; return; }
+    ykgLobby.close();
+  }
   if (screen === "game" && !overInfo) { s.classList.add("hidden"); s.innerHTML = ""; return; }
   s.classList.remove("hidden");
   let h = "";
@@ -1428,7 +1454,6 @@ function renderUI() {
       <ul class="plist">${lobbyPs.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}</span><span>${p.id === 0 ? "ホスト" : p.bot ? "CPU" : ""}</span></li>`).join("")}</ul>
       ${lobbySpecs.length ? `<div class="note">観戦: ${lobbySpecs.map(esc).join("、")}${spectating ? "（あなたは観戦します）" : ""}</div>` : ""}
       <div class="note">制限時間 3分。残り1分で物かげの向こうの数字も見える。時間切れは数字がいちばん小さい人の勝ち</div>
-      <div class="row" style="margin-top:8px"><input id="rename" class="in" maxlength="12" value="${esc(myName())}"><button class="btn sub" style="width:40%;margin-top:0" data-a="rename">名前を変える</button></div>
       <div class="note">${lobbyPs.length} / ${MAX_PLAYERS}人</div>
       ${isHost ? `<div class="row"><button class="btn sub" style="margin-top:0" data-a="bot+" ${lobbyPs.length >= MAX_PLAYERS ? "disabled" : ""}>CPUを追加</button><button class="btn sub" style="margin-top:0" data-a="bot-" ${host.bots ? "" : "disabled"}>CPUを減らす</button></div>
         <button class="btn red" data-a="start" ${lobbyPs.length < 2 ? "disabled" : ""}>スタート</button>
@@ -1463,11 +1488,6 @@ $("screen").addEventListener("click", async e => {
   else if (a === "games") ykgToGames();   // ミニゲーム集のゲーム一覧へ
   else if (a.startsWith("pb-")) { const nm = $("name")?.value; practiceBots = Number(a.slice(3)); renderUI(); if (nm != null) $("name").value = nm; }
   else if (a === "leave") leave();
-  else if (a === "rename") {   // 部屋に入ったあとでも名前を変えられる（始まる前）
-    const n = ($("rename")?.value || "").trim().slice(0, 12) || "ゲスト";
-    meName = n; store.set("soinsu-name", n);
-    if (mode === "host") hostLobby(); else sendHost({ t: "rename", name: n });
-  }
   else if (a === "bot+") { host.bots++; hostLobby(); }
   else if (a === "bot-") { host.bots = Math.max(0, host.bots - 1); hostLobby(); }
   else if (a === "start") { hostStart(); renderUI(); }
@@ -1505,7 +1525,7 @@ function frame(nowMs) {
     updListener();
     const mine = view.get(myId); if (mine) { mine.x = me.x; mine.z = me.z; mine.y = me.y; }
     sendT += dt;
-    if (sendT > 0.033 && !spectating) {   // 2026-11-07: 20 → 30 回/秒   // 2026-11-06: 10 → 20 回/秒（落としてよい通り道で送る）
+    if (sendT > 0.0155 && !spectating) {   // 2026-11-07: 60 回/秒（落としてよい通り道で送る）
       sendT = 0;
       sendHost({ t: "pos", x: +me.x.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(3), y: +me.y.toFixed(2) });
     }
@@ -1581,7 +1601,7 @@ function frame(nowMs) {
   }
   renderer.render(scene, camera);
 }
-// ホストの計算（CPU・位置の配信・制限時間・応答のない相手）は、画面の描き直しとは別に 20 回/秒で回す
+// ホストの計算（CPU・位置の配信・制限時間・応答のない相手）は、画面の描き直しとは別に 60 回/秒で回す（2026-11-07 に 60 回/秒へ）
 // （画面の描き直しは、裏に回ると止まるため。2026-11-06 に描画のループから分けた）
 let hostLastT = performance.now(), tmSent = 0;
 setInterval(() => {
@@ -1595,7 +1615,7 @@ setInterval(() => {
   if (!G.over && left <= 0) checkOver(true);
   // 応答のない相手を切る（タブを閉じた・電波が切れた）
   if (mode === "host") for (const [id, c] of [...host.conns]) if (nowMs - (c.seen || nowMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
-}, 33);   // 2026-11-07: 20 → 30 回/秒
+}, 16);   // 2026-11-07: 60 回/秒（位置を 60 回/秒で配る）
 renderUI();
 requestAnimationFrame(frame);
 // パーティから開いたとき: メニューを飛ばして自動で部屋を作る・入る。左上に「← 一覧」
@@ -1606,6 +1626,7 @@ if (PARTY) {
   back.style.cssText = "position:fixed;left:8px;bottom:calc(env(safe-area-inset-bottom) + 8px);z-index:60;font:inherit;font-size:13px;font-weight:700;padding:9px 12px;border-radius:99px;border:1px solid #556;background:rgba(10,15,30,.85);color:#fff";
   back.addEventListener("click", () => { if (confirm("ゲーム一覧へ戻りますか？" + (PARTY.role === "host" ? "（みんなも一覧へ戻ります）" : ""))) toGames(); });
   document.body.appendChild(back);
+  partyBack = back;   // 待ち合わせ画面のあいだは隠す（待ち合わせ画面に自分の「← 一覧」がある）
   if (PARTY.role === "host") startHost(); else joinRoom(PARTY.code);
 }
 try { if (window.IN_HUB && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}

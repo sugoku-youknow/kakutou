@@ -27,6 +27,33 @@ const screens = {
 function showScreen(name) {
   Object.entries(screens).forEach(([key, el]) => el.classList.toggle('hidden', key !== name));
   document.body.dataset.screen = name;
+  // パーティ: 待機画面のかわりに、全部のゲームで同じ構図の待ち合わせ画面（party-beacon.js の ykgLobby）を出す
+  if (PARTY && window.ykgLobby) { if (name === 'waiting') partyLobby(); else ykgLobby.close(); }
+}
+let lobbyReady = false;   // パーティ: 部屋を作った・入った
+const LOBBY_RULES = '自分の陣地の玉をゴムで弾いて相手の陣地へ送る。先に陣地の玉を0個にした人の勝ち。\n制限時間は2人90秒・3〜4人120秒。時間切れは玉がいちばん少ない人の勝ち（3〜4人は半分を過ぎると真ん中が開く）。';
+function partyLobby() {
+  if (!PARTY || !window.ykgLobby || document.body.dataset.screen !== 'waiting') return;
+  const hostId = network.isHost ? network.selfId : network.prefix + network.roomCode;
+  const ids = lobbyReady ? [hostId, ...[...network.peers].filter((id) => id !== hostId)] : [];
+  if (lobbyReady && !network.isHost && !ids.includes(network.selfId)) ids.push(network.selfId);
+  const players = ids.filter((id) => !network.spectators.has(id));
+  const specs = ids.filter((id) => network.spectators.has(id));
+  const members = lobbyReady ? [
+    ...players.map((id, i) => ({ name: nameOf(id, i), tag: i === 0 ? 'ホスト' : i >= 4 ? '観戦' : '', me: id === network.selfId })),
+    ...specs.map((id) => ({ name: nameOf(id), tag: '観戦', me: id === network.selfId })),
+  ] : [{ name: playerName, tag: network.isHost || PARTY.role === 'host' ? 'ホスト' : '', me: true }];
+  const n = Math.min(players.length, 4);
+  const opts = { rules: LOBBY_RULES, members, settings: null };
+  if (PARTY.role === 'host') {
+    opts.button = { label: 'スタート', disabled: !lobbyReady || n < 2, onClick: () => { try { game.startAsHost(); } catch (e) { console.error(e); } } };
+    opts.status = !lobbyReady ? '部屋を準備しています…' : n < 2 ? 'あと1人必要です（2〜4人）' : `${n}人で遊びます`;
+  } else {
+    opts.button = null;
+    opts.wait = !lobbyReady ? 'ホストにつないでいます…' : PARTY.spec || network.spectators.has(network.selfId) ? '観戦: ホストがスタートするのを待っています…' : 'ホストがスタートするのを待っています…';
+    opts.status = '';
+  }
+  ykgLobby.open(opts);
 }
 
 // ---- ロビー ----------------------------------------------------------
@@ -37,12 +64,14 @@ let playerName = '';
 
 async function hostRoom(name, code) {
   const c = await network.createRoom(name, code);
+  lobbyReady = true;
   document.getElementById('room-code-display').textContent = c;
   setupWaitingScreen(true);
   showScreen('waiting');
 }
 async function joinRoom(name, code) {
   await network.joinRoom(code, name);
+  lobbyReady = true;
   document.getElementById('room-code-display').textContent = code;
   setupWaitingScreen(false);
   showScreen('waiting');
@@ -93,10 +122,10 @@ function renderPlayerList() {
   });
   const startBtn = document.getElementById('btn-start-game');
   if (network.isHost) startBtn.disabled = players.length < 2;
+  partyLobby();
 }
 
 function setupWaitingScreen(isHost) {
-  document.getElementById('input-rename').value = network.playerName || playerName || '';
   document.getElementById('host-only-note').classList.toggle('hidden', !isHost);
   document.getElementById('btn-start-game').classList.toggle('hidden', !isHost);
   document.getElementById('guest-wait-note').classList.toggle('hidden', isHost);
@@ -112,15 +141,6 @@ network.onHostLost = () => {
 };
 game.onResult = (w, l) => partyReport(w, l);
 
-// 部屋に入ったあとでも名前を変えられる（ゲームが始まる前）
-document.getElementById('btn-rename').addEventListener('click', () => {
-  const n = document.getElementById('input-rename').value.trim().slice(0, 10);
-  if (!n) return;
-  playerName = n;
-  try { localStorage.setItem('gomu-name', n); } catch (e) {}
-  network.rename(n);
-  renderPlayerList();
-});
 document.getElementById('btn-start-game').addEventListener('click', () => {
   try { game.startAsHost(); } catch (e) { console.error(e); }
 });

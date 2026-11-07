@@ -318,7 +318,7 @@
 <body>
 <div id="app"></div>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=2"></script>
+<script src="../party-beacon.js?v=5"></script>
 <script>
 (function(){
   "use strict";
@@ -360,6 +360,52 @@
         lastSentStatus = st.status;
       }
     };
+  }
+  // パーティの待ち合わせ画面（全部のゲームで同じ構図。party-beacon.js の ykgLobby）。2026-11-07
+  // ホスト: 相手がつながったら「スタート」で始める（前は相手が入ると自動で始まっていた）。モードは設定の欄で選ぶ。
+  var partyGuestName = null;   // ホスト: 入ってきた相手の名前（join を受けた。まだ始めていない）
+  var partyModeSeen = null;    // ゲスト: ホストが選んでいるモード
+  var PARTY_RULES = 'ためる・バリア・攻撃を同時に選ぶ 2 人の読み合い。チャージをためて攻撃し、相手の HP を 0 にしたら勝ち。\nバリアは 3 回続けると 3 回目は割れます。';
+  function modeLabel(m){ return m === 'custom' ? 'カスタマイズモード（HP・チャージ・選択時間などを変えられる）' : '通常モード（標準の設定）'; }
+  function sendPartyMode(){ if(role === 'host' && conn && conn.open){ try { conn.send({ type:'party-mode', mode: ui.selectedMode }); } catch(e){} } }
+  function partyLobby(){
+    if(!PARTY || !window.ykgLobby) return;
+    if(ui.screen === 'battle'){ ykgLobby.close(); return; }
+    var opts = { rules: PARTY_RULES };
+    if(role === 'host' || PARTY.role === 'host'){
+      var box = document.createElement('div');
+      box.innerHTML = '<div class="yl-row"><button data-m="normal">通常モード</button><button data-m="custom">カスタマイズ</button></div>' +
+        '<div class="yl-sub">' + (ui.selectedMode === 'custom' ? 'カスタマイズ: 始めたあとの準備の画面で、HP・チャージ上限・選択時間・表示を変えられます' : '通常: 標準の設定で遊びます') + '</div>';
+      Array.prototype.forEach.call(box.querySelectorAll('button'), function(b){
+        b.classList.toggle('on', b.getAttribute('data-m') === (ui.selectedMode || 'normal'));
+        b.addEventListener('click', function(){ ui.selectedMode = b.getAttribute('data-m'); sendPartyMode(); partyLobby(); });
+      });
+      opts.settings = box;
+      var ready = !!(partyGuestName && conn && conn.open);
+      opts.button = { label: 'スタート', disabled: !ready, onClick: startPartyBattle };
+      opts.status = ready ? '' : (ui.screen === 'creating' ? '部屋を準備しています…' : '相手を待っています');
+    } else {
+      opts.settings = partyModeSeen ? '<div class="yl-sub" style="margin-top:0;font-size:14px;color:#e5e7eb">' + esc(modeLabel(partyModeSeen)) + '</div>' : null;
+      opts.button = null;
+      opts.wait = spectating ? '観戦: ホストがスタートするのを待っています…' : 'ホストがスタートするのを待っています…';
+      opts.status = (conn && conn.open) ? '' : 'ホストの部屋に入っています…';
+    }
+    if(ykgLobby.active) ykgLobby.update(opts); else ykgLobby.open(opts);
+  }
+  // ホスト: 「スタート」。前に相手が入ったときにしていたのと同じように対戦を用意する（このあと準備の画面で両方が START）
+  function startPartyBattle(){
+    if(role !== 'host' || !partyGuestName || !conn || !conn.open) return;
+    state = freshState(ui.nameInput.trim() || 'Player 1', partyGuestName, ui.hostHp, ui.hostMaxCharge, ui.selectedMode, {
+      turnMs: ui.hostTurnMs,
+      showOppHp: ui.hostShowOppHp,
+      showOppCharge: ui.hostShowOppCharge,
+      showMyHp: ui.hostShowMyHp,
+      showMyCharge: ui.hostShowMyCharge
+    });
+    hostPending = { p1:null, p2:null };
+    ui.screen = 'battle';
+    render();
+    conn.send({ type:'state', state: state });
   }
   function enterSpectate(){
     spectating = true;
@@ -735,7 +781,9 @@
     });
 
     peer.on('connection', function(c){
-      if(PARTY && ((c.metadata && c.metadata.spec) || (conn && conn.open))){   // 観戦を選んだ人・3 人目以降は観戦
+      // 同じタブ（同じ人）からのつなぎ直し: 前のつながりと入れかえる（前は観戦にされて、準備完了などが押せなくなっていた）
+      var sameTab = !!(c.metadata && c.metadata.tab && conn && conn.metadata && conn.metadata.tab === c.metadata.tab);
+      if(PARTY && ((c.metadata && c.metadata.spec) || (conn && conn.open && !sameTab))){   // 観戦を選んだ人・3 人目以降は観戦
         c.on('open', function(){
           spectators.push(c);
           try { c.send({ type:'spectate' }); if(state){ c.send({ type:'state', state: state }); } } catch(e){}
@@ -743,11 +791,14 @@
         c.on('close', function(){ spectators = spectators.filter(function(x){ return x !== c; }); });
         return;
       }
+      if(conn && conn !== c){ conn.__replaced = true; try { conn.close(); } catch(e){} }
       conn = c;
       wrapSend(c);
       conn.on('open', function(){ /* wait for join message */ });
-      conn.on('data', function(msg){ handleHostData(msg); });
+      conn.on('data', function(msg){ if(conn === c) handleHostData(msg); });
       conn.on('close', function(){
+        if(c.__replaced || conn !== c) return;   // つなぎ直しで入れかえた古いつながり
+        if(PARTY && !state){ partyGuestName = null; render(); return; }   // パーティの待ち合わせ中: 相手が抜けただけ（始まっていない）
         // 相手が抜けた: ラウンドを止めて終わりにする（いつまでも自動バリアで続かないように）
         clearRoundTimer(); stopTimerBarAnimation();
         if(graceTimer){ clearTimeout(graceTimer); graceTimer = null; }
@@ -774,6 +825,13 @@
   function handleHostData(msg){
     if(msg.type === 'clock-sync') { handleClockSync(msg); return; }
     if(msg.type === 'join'){
+      if(PARTY){
+        // パーティ: すぐには始めない。待ち合わせ画面の「スタート」で始める。つなぎ直しのときは今の対戦をそのまま送る
+        partyGuestName = String(msg.name || 'Player 2').slice(0, 12);
+        if(state){ if(state.players && state.players.p2) state.players.p2.name = partyGuestName; conn.send({ type:'state', state: state }); }
+        else { sendPartyMode(); render(); }
+        return;
+      }
       state = freshState(ui.nameInput.trim() || 'Player 1', msg.name || 'Player 2', ui.hostHp, ui.hostMaxCharge, ui.selectedMode, {
         turnMs: ui.hostTurnMs,
         showOppHp: ui.hostShowOppHp,
@@ -930,11 +988,11 @@
     // ホストの部屋へつなぐ。パーティでホストの部屋がまだ開いていないときは、2.5 秒たってもつながらなければつなぎ直す
     // （PeerJS は 2 回目以降の「相手が見つからない」を知らせないことがあるので、エラーを待たずに時間で判断する）
     function connectHost(){
-      var c = conn = peer.connect(netId(code), { reliable:true, metadata: { spec: !!(PARTY && PARTY.spec) } });
+      var c = conn = peer.connect(netId(code), { reliable:true, metadata: { spec: !!(PARTY && PARTY.spec), tab: window.ykgTabId || '' } });
 
       c.on('open', function(){
         c.__opened = true;
-        if(PARTY && PARTY.spec){ enterSpectate(); return; }   // 観戦: 参加の知らせは送らない
+        if(PARTY && PARTY.spec){ enterSpectate(); render(); return; }   // 観戦: 参加の知らせは送らない
         c.send({ type:'join', name: ui.nameInput.trim() || 'Player 2' });
         setTimeout(startClockSync, 100);
       });
@@ -974,7 +1032,8 @@
 
   function handleGuestData(msg){
     if(msg.type === 'clock-sync-reply') { handleClockSync(msg); return; }
-    if(msg.type === 'spectate'){ enterSpectate(); return; }   // ホストが観戦にした（2人そろっていた）
+    if(msg.type === 'spectate'){ enterSpectate(); render(); return; }   // ホストが観戦にした（2人そろっていた）
+    if(msg.type === 'party-mode'){ partyModeSeen = msg.mode; render(); return; }   // パーティ: ホストが選んでいるモード
     if(msg.type === 'full'){ showToast('2人用のゲームです。いまは遊べません（ゲーム一覧へ戻ります）', 3500); setTimeout(toGames, 3500); return; }
     if(msg.type === 'reveal'){
       clearRoundTimer();
@@ -1272,6 +1331,7 @@
 
   // ---------- render ----------
   function render(){
+    if(PARTY) partyLobby();
     app.classList.remove('mode-duel');
     if(ui.screen === 'home'){
       app.innerHTML =
@@ -1620,14 +1680,15 @@
     return out;
   }
 
-  // パーティから開いたとき: ホストはモード選び、ゲストは自動で入る。どの画面でも左上に「← 一覧」を出す
+  // パーティから開いたとき: 最初はパーティの待ち合わせ画面（ykgLobby）。ホストはすぐ部屋を作り、モードを選んで「スタート」。ゲストは自動で入る。
+  // 対戦の画面では左上に「← 一覧」を出す
   if(PARTY){
     ui.nameInput = String(PARTY.name || ui.nameInput).slice(0, 12);
     var back = document.createElement('button');
     back.id = 'ykgBack'; back.textContent = '← 一覧';
     back.addEventListener('click', function(){ if(confirm('ゲーム一覧へ戻りますか？' + (role === 'host' ? '（相手も一覧へ戻ります）' : ''))) toGames(); });
     document.body.appendChild(back);
-    if(PARTY.role === 'host'){ ui.screen = 'mode-select'; render(); }
+    if(PARTY.role === 'host'){ ui.selectedMode = ui.selectedMode === 'custom' ? 'custom' : 'normal'; createRoom(); }
     else joinRoom();
   } else render();
   // アプリとして入れたときに使うサービスワーカー（ミニゲーム集で 1 つ。1 つ上のフォルダにある）

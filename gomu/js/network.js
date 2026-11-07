@@ -193,14 +193,6 @@ export class Network {
     if (this.hostConn && this.hostConn.open) { try { this.hostConn.send({ a: action, d: data }); } catch (e) {} }
   }
 
-  // 部屋に入ったあとで名前を変える（ホストは一覧を配り直す。ゲストはホストへ知らせる）
-  rename(name) {
-    this.playerName = name;
-    if (this.selfId) this.playerNames.set(this.selfId, name);
-    if (this.isHost) this._sendRoster();
-    else if (this.hostConn && this.hostConn.open) { try { this.hostConn.send({ a: 'name', d: { name } }); } catch (e) {} }
-  }
-
   leave() {
     try { this.peer?.destroy(); } catch (e) {}
     this.peer = null;
