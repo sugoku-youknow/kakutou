@@ -34,13 +34,31 @@
           autocomplete="off"
         />
       </div>
-      
-      <div class="card">
+
+      <!-- 2026-11-09: CPU と対戦（通信なし。オフラインでも遊べる） -->
+      <div class="card" id="cpu-card">
+        <h2>CPUと対戦</h2>
+        <p id="offline-note" class="hint offline-note hidden">オフラインなので、CPUと対戦だけ遊べます。</p>
+        <div class="opt-label">あいての数</div>
+        <div class="seg" id="cpu-count">
+          <button class="seg-btn on" data-v="1">1人</button><button class="seg-btn" data-v="2">2人</button><button class="seg-btn" data-v="3">3人</button>
+        </div>
+        <div class="opt-label">つよさ</div>
+        <div class="seg" id="cpu-level">
+          <button class="seg-btn" data-v="weak">よわい</button><button class="seg-btn on" data-v="normal">ふつう</button><button class="seg-btn" data-v="strong">つよい</button>
+        </div>
+        <div class="opt-label">玉の数（1人あたり）</div>
+        <div class="seg" id="cpu-balls"></div>
+        <label class="check-row" id="cpu-team-row"><input type="checkbox" id="cpu-team" /> チーム戦（あなた＋CPU 対 CPU2人）</label>
+        <button id="btn-cpu-start" class="btn btn-primary">CPUと対戦する</button>
+      </div>
+
+      <div class="card online-only">
         <h2>部屋を作る</h2>
         <p class="hint">部屋を作るとあなたがホストになります。合言葉(部屋コード)を対戦相手に伝えてください。</p>
         <button id="btn-create-room" class="btn btn-primary">部屋を作る</button>
       </div>
-      <div class="card">
+      <div class="card online-only">
         <h2>部屋に参加する</h2>
         <p class="hint">ホストから聞いた部屋コードを入力してください。</p>
         <div class="join-row">
@@ -63,6 +81,8 @@
         <h2>参加者 (<span id="player-count">1</span> / 4)</h2>
         <ul id="player-list" class="player-list"></ul>
         <p id="host-only-note" class="hint hidden">人数がそろったらゲームを開始してください（2〜4人。5人目以降と観戦の人は見るだけ）。2人なら長方形、3人なら六角形、4人なら八角形の盤面になります。制限時間は2人 90秒、3〜4人 120秒。半分を過ぎると真ん中の仕切りが消えます。</p>
+        <div id="host-settings-slot"></div>
+        <p id="start-note" class="hint"></p>
         <button id="btn-start-game" class="btn btn-primary hidden">ゲームを開始する</button>
         <p id="guest-wait-note" class="hint">ホストがゲームを開始するのを待っています…</p>
       </div>

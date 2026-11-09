@@ -4,6 +4,11 @@
 
 export const ZONE_COLORS = ['#e2793d', '#3f7fd1', '#4caf7d', '#a869d6'];
 
+// 2026-11-09: 1 人あたりの玉の数。ふつうは 2人 4こ / 3〜4人 3こ（前は 6 こ。試合が長すぎた）。ホストが 1〜8 こで変えられる
+export const BALLS_MIN = 1, BALLS_MAX = 8;
+export const defaultBallsPer = (n) => (n === 2 ? 4 : 3);
+export const clampBalls = (v) => Math.max(BALLS_MIN, Math.min(BALLS_MAX, Math.round(+v) || 1));
+
 const BALL_RADIUS = 18;
 const WALL_THICKNESS = 8;
 
@@ -44,14 +49,16 @@ function buildRectBoard() {
 
   const zoneOfPoint = (x, y) => (y < 0 ? 0 : 1);
 
-  const ballStartPositions = (zoneIndex) => {
-    const rowY = zoneIndex === 0 ? -height / 2 + 46 : height / 2 - 46;
+  // 2026-11-09: 数を変えられるようにした。6 こまでは 1 列（少ないときは真ん中に寄せる）、7〜8 こは 2 列
+  const ballStartPositions = (zoneIndex, count = 6) => {
+    const sign = zoneIndex === 0 ? -1 : 1;
+    const rows = count <= 6 ? [count] : [Math.ceil(count / 2), Math.floor(count / 2)];
     const positions = [];
-    const count = 6;
-    const spacing = (width - 60) / (count - 1);
-    for (let i = 0; i < count; i++) {
-      positions.push({ x: -width / 2 + 30 + spacing * i, y: rowY });
-    }
+    rows.forEach((m, k) => {
+      const y = sign * (height / 2 - 46 - 42 * k);   // 2 列目は 42 だけ真ん中寄り（玉の直径 36 より広く）
+      const span = Math.min(width - 60, (m - 1) * 50);
+      for (let i = 0; i < m; i++) positions.push({ x: m === 1 ? 0 : -span / 2 + (span / (m - 1)) * i, y });
+    });
     return positions;
   };
 
@@ -158,13 +165,14 @@ function buildPolygonBoard(playerCount) {
     return Math.floor(a / wedgeAngle) % playerCount;
   };
 
-  const ballStartPositions = (zoneIndex) => {
+  // 2026-11-09: 数を変えられるようにした（1 こなら真ん中）。8 こでも玉どうしは重ならない
+  const ballStartPositions = (zoneIndex, count = 6) => {
     const centerAngle = wedgeAngle * zoneIndex - Math.PI / 2;
     const positions = [];
-    const count = 6;
     const rStart = gapRadius + 30;
     const rEnd = outerRadius - 30;
     const spread = wedgeAngle * 0.32;
+    if (count === 1) return [{ x: Math.cos(centerAngle) * (rStart + rEnd) / 2, y: Math.sin(centerAngle) * (rStart + rEnd) / 2 }];
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
       const r = rStart + (rEnd - rStart) * t;

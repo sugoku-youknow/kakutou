@@ -47,9 +47,46 @@ export class Network {
     this.handlers = {};
     this.stateSeq = 0; this.lastStateSeq = 0;
     this.tries = 0;
+    // 2026-11-09: CPU とチーム戦。CPU はホストの中だけで動き、ゲストには名簿（roster）で「CPU の席」として伝える
+    this.cpus = new Map();          // ホスト: cpuId -> { name, level }
+    this.cpuIds = new Set();        // だれが CPU か（ゲストも名簿から知る）
+    this.cpuSeq = 0;
+    this.teamMode = false;          // チーム戦（4人のとき 2対2）
+    this.ballsPer = null;           // 1 人あたりの玉の数（null = 人数で決める。ホストが変えられる）
+    this.teams = new Map();         // peerId / cpuId -> 0（あか）| 1（あお）
+    this.local = false;             // CPU と対戦（通信なし。オフラインでも遊べる）
+    this._localId = null;
   }
 
-  get selfId() { return this.peer ? this.peer.id : null; }
+  get selfId() { return this.peer ? this.peer.id : this._localId; }
+  static get available() { return typeof Peer === 'function'; }   // PeerJS が読みこめたか（オフラインだと無いことがある）
+
+  // CPU と対戦: 通信せずに自分がホストになる（send はだれにも送らない）
+  startLocal(playerName) {
+    this.isHost = true; this.local = true;
+    this.playerName = playerName;
+    this._localId = 'local-me';
+    this.playerNames.set(this._localId, playerName);
+  }
+
+  // ---------- CPU の出し入れ（ホストだけ） ----------
+  addCpu(level) {
+    const id = `cpu-${++this.cpuSeq}`;
+    const lv = { weak: 'よわい', normal: 'ふつう', strong: 'つよい' }[level] || 'ふつう';
+    const name = `CPU${this.cpuSeq}・${lv}`;
+    this.cpus.set(id, { name, level });
+    this.cpuIds.add(id);
+    this.playerNames.set(id, name);
+    this._sendRoster();
+    return id;
+  }
+  removeCpu(id) {
+    this.cpus.delete(id); this.cpuIds.delete(id); this.teams.delete(id);
+    this._sendRoster();
+  }
+  setTeamMode(on) { this.teamMode = !!on; this._sendRoster(); }
+  setBallsPer(v) { this.ballsPer = v; this._sendRoster(); }
+  setTeam(id, t) { this.teams.set(id, t ? 1 : 0); this._sendRoster(); }
   get prefix() { return this.party ? PARTY_PREFIX : PREFIX; }
 
   on(action, cb) { this.handlers[action] = cb; }
@@ -61,6 +98,7 @@ export class Network {
     this.playerName = playerName;
     code = code ?? generateRoomCode();
     return new Promise((resolve, reject) => {
+      if (!Network.available) { reject(new Error('PeerJS not loaded')); return; }   // 2026-11-09: オフラインで PeerJS が無いとき
       const peer = this.peer = new Peer(this.prefix + code);
       peer.on('open', () => {
         this.roomCode = code;
@@ -109,8 +147,12 @@ export class Network {
 
   // 参加者の一覧（名前・観戦か）をみんなへ
   _sendRoster() {
-    const list = [[this.selfId, this.playerName, false], ...[...this.peers].map((id) => [id, this.playerNames.get(id) || '', this.spectators.has(id)])];
-    for (const { conn } of this.conns.values()) { try { conn.send({ a: 'roster', d: list }); } catch (e) {} }
+    // 2026-11-09: [id, 名前, 観戦か, チーム, CPU か]。CPU は人のあとに並べる。tm はチーム戦か
+    const ent = (id, name, spec) => [id, name, spec, this.teams.has(id) ? this.teams.get(id) : -1, this.cpuIds.has(id)];
+    const list = [ent(this.selfId, this.playerName, false), ...[...this.peers].map((id) => ent(id, this.playerNames.get(id) || '', this.spectators.has(id))),
+      ...[...this.cpus].map(([id, c]) => ent(id, c.name, false))];
+    for (const { conn } of this.conns.values()) { try { conn.send({ a: 'roster', d: list, tm: this.teamMode, bp: this.ballsPer }); } catch (e) {} }
+    this.onPlayerName();
   }
 
   // ---------- ゲスト ----------
@@ -120,6 +162,7 @@ export class Network {
     this.roomCode = roomCode;
     return new Promise((resolve, reject) => {
       let done = false, peer = null;
+      if (!Network.available) { reject(new Error('PeerJS not loaded')); return; }   // 2026-11-09: オフラインで PeerJS が無いとき
       // つながらないときは、ときどき peer から作り直す（PeerJS が止まったままになるのを避ける）
       const newPeer = () => {
         try { peer && peer.destroy(); } catch (e) {}
@@ -163,6 +206,11 @@ export class Network {
       this.peers = new Set(m.d.map(([id]) => id).filter((id) => id !== this.selfId));
       this.spectators = new Set(m.d.filter(([, , s]) => s).map(([id]) => id));
       m.d.forEach(([id, name]) => this.playerNames.set(id, name));
+      this.rosterOrder = m.d.map(([id]) => id);   // 名簿の順（人 → CPU）
+      this.cpuIds = new Set(m.d.filter((e) => e[4]).map(([id]) => id));
+      this.teams = new Map(m.d.filter((e) => e[3] === 0 || e[3] === 1).map((e) => [e[0], e[3]]));
+      this.teamMode = !!m.tm;
+      this.ballsPer = m.bp ?? null;
       this.onPlayerName(host, this.playerNames.get(host));
       return;
     }

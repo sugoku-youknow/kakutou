@@ -334,6 +334,15 @@
   var PARTY = (function(){
     try { if(!new URLSearchParams(location.search).has('party')) return null; var j = JSON.parse(sessionStorage.getItem('ykg-party') || 'null'); return (j && /^\d$/.test(j.code)) ? j : null; } catch(e){ return null; }
   })();
+  // 2026-11-09: オフライン（電波がない・?offline=1 で確認用）のときは、部屋・パーティ・観戦を出さず CPU 対戦だけにする
+  var FORCE_OFFLINE = /[?&]offline=1(&|$)/.test(location.search);
+  function isOffline(){ return FORCE_OFFLINE || navigator.onLine === false; }
+  if(PARTY && isOffline()) PARTY = null;   // パーティは通信が要るので、オフラインで開いたらふつうのホーム（CPU 対戦）にする
+  // 2026-11-09: CPU 対戦。CPU はいつも p2 の席で、ホストの端末の中で手を決める（ゲストと同じ扱いで state に入る）
+  var cpu = { on:false, level:1 };
+  var CPU_LEVELS = ['よわい', 'ふつう', 'つよい'];
+  var cpuHist = [];        // 人が出した手の記録（ふつう・つよいの CPU が読みに使う）
+  var cpuTimer = null;
   function netId(code){ return (PARTY ? 'cbs-party-' : ID_PREFIX) + code; }   // パーティは、ふつうの部屋と別の ID を使う
   function toGames(){ ykgToGames(); }   // ゲーム一覧へ
   var partyTries = 0;
@@ -347,15 +356,22 @@
   // ホスト: 相手への送信を、観戦の人にも配る。勝負がついた state を送るときに成績も記録する
   function wrapSend(c){
     var orig = c.send.bind(c);
+    c.__rawSend = orig;   // 2026-11-09: 観戦に回した人へ送るときは、配り直さない元の送信を使う（配り直しがくり返さないように）
     c.send = function(d){
       orig(d);
       if(!d || d.type === 'clock-sync' || d.type === 'clock-sync-reply') return;
-      spectators.forEach(function(sc){ if(sc.open){ try { sc.send(d); } catch(e){} } });
+      spectators.forEach(function(sc){ if(sc.open){ try { (sc.__rawSend || sc.send).call(sc, d); } catch(e){} } });
       if(d.type === 'state' && d.state){
         var st = d.state;
         if(st.status === 'finished' && lastSentStatus !== 'finished' && (st.winner === 'p1' || st.winner === 'p2')){
-          var w = st.players[st.winner].name, l = st.players[st.winner === 'p1' ? 'p2' : 'p1'].name;
-          partyReport([w], [l]);
+          if(st.cpuSeat){
+            // 2026-11-09: CPU は成績に入れない。人（ホスト）の勝ち負けだけを記録する
+            var hn = st.players.p1.name;
+            partyReport(st.winner === 'p1' ? [hn] : [], st.winner === 'p1' ? [] : [hn]);
+          } else {
+            var w = st.players[st.winner].name, l = st.players[st.winner === 'p1' ? 'p2' : 'p1'].name;
+            partyReport([w], [l]);
+          }
         }
         lastSentStatus = st.status;
       }
@@ -375,13 +391,26 @@
     if(role === 'host' || PARTY.role === 'host'){
       var box = document.createElement('div');
       box.innerHTML = '<div class="yl-row"><button data-m="normal">通常モード</button><button data-m="custom">カスタマイズ</button></div>' +
-        '<div class="yl-sub">' + (ui.selectedMode === 'custom' ? 'カスタマイズ: 始めたあとの準備の画面で、HP・チャージ上限・選択時間・表示を変えられます' : '通常: 標準の設定で遊びます') + '</div>';
-      Array.prototype.forEach.call(box.querySelectorAll('button'), function(b){
+        '<div class="yl-sub">' + (ui.selectedMode === 'custom' ? 'カスタマイズ: 始めたあとの準備の画面で、HP・チャージ上限・選択時間・表示を変えられます' : '通常: 標準の設定で遊びます') + '</div>' +
+        // 2026-11-09: 2 人用なので、ホストは相手の席に CPU を入れられる（ほかの人はみんな観戦になる）
+        '<div class="yl-sub" style="margin-top:12px">あいて</div>' +
+        '<div class="yl-row" style="margin-top:6px"><button data-o="human">人</button><button data-o="cpu">CPU</button></div>' +
+        (ui.partyCpu ? '<div class="yl-row" style="margin-top:8px">' + CPU_LEVELS.map(function(t, i){ return '<button data-l="' + i + '">' + t + '</button>'; }).join('') + '</div>' +
+          '<div class="yl-sub">CPU と対戦します。ほかの人は観戦になります</div>' : '');
+      Array.prototype.forEach.call(box.querySelectorAll('button[data-m]'), function(b){
         b.classList.toggle('on', b.getAttribute('data-m') === (ui.selectedMode || 'normal'));
         b.addEventListener('click', function(){ ui.selectedMode = b.getAttribute('data-m'); sendPartyMode(); partyLobby(); });
       });
+      Array.prototype.forEach.call(box.querySelectorAll('button[data-o]'), function(b){
+        b.classList.toggle('on', (b.getAttribute('data-o') === 'cpu') === !!ui.partyCpu);
+        b.addEventListener('click', function(){ ui.partyCpu = b.getAttribute('data-o') === 'cpu'; partyLobby(); });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll('button[data-l]'), function(b){
+        b.classList.toggle('on', +b.getAttribute('data-l') === ui.cpuLevel);
+        b.addEventListener('click', function(){ ui.cpuLevel = +b.getAttribute('data-l'); partyLobby(); });
+      });
       opts.settings = box;
-      var ready = !!(partyGuestName && conn && conn.open);
+      var ready = ui.partyCpu ? (role === 'host' && ui.screen !== 'creating') : !!(partyGuestName && conn && conn.open);
       opts.button = { label: 'スタート', disabled: !ready, onClick: startPartyBattle };
       opts.status = ready ? '' : (ui.screen === 'creating' ? '部屋を準備しています…' : '相手を待っています');
     } else {
@@ -394,6 +423,18 @@
   }
   // ホスト: 「スタート」。前に相手が入ったときにしていたのと同じように対戦を用意する（このあと準備の画面で両方が START）
   function startPartyBattle(){
+    if(role === 'host' && ui.partyCpu){
+      // 2026-11-09: CPU を相手にする。もう入っていた相手は観戦に回す
+      if(conn && conn.open && !conn.isCpu){
+        var g = conn; g.__replaced = true; conn = null;
+        spectators.push(g);
+        g.on('close', function(){ spectators = spectators.filter(function(x){ return x !== g; }); });
+        try { g.__rawSend({ type:'spectate' }); } catch(e){}
+      }
+      partyGuestName = null;
+      startCpuBattle(ui.cpuLevel);
+      return;
+    }
     if(role !== 'host' || !partyGuestName || !conn || !conn.open) return;
     state = freshState(ui.nameInput.trim() || 'Player 1', partyGuestName, ui.hostHp, ui.hostMaxCharge, ui.selectedMode, {
       turnMs: ui.hostTurnMs,
@@ -415,6 +456,117 @@
       var b = document.createElement('div'); b.id = 'ykgSpecBar'; b.textContent = '観戦中（ゲストの視点で表示しています。操作はできません）';
       document.body.appendChild(b);
     }
+  }
+  // 2026-11-09: CPU 対戦を観戦するときは、人（ホスト）の側から見せる
+  function specViewKey(){ return (spectating && state && state.cpuSeat === 'p2') ? 'p1' : 'p2'; }
+
+  // ---------- CPU ----------
+  // CPU の席（p2）用の「つながり」。送ると観戦の人に配られるだけ（wrapSend）。ホストのいつもの処理がそのまま使える
+  function makeCpuConn(){
+    var c = { open:true, isCpu:true, send:function(){}, close:function(){}, on:function(){} };
+    wrapSend(c);
+    return c;
+  }
+  function startCpuBattle(level){
+    cpu.on = true; cpu.level = Math.max(0, Math.min(2, level|0)); ui.cpuLevel = cpu.level;
+    role = 'host';
+    conn = makeCpuConn();
+    cpuHist = [];
+    if(cpuTimer){ clearTimeout(cpuTimer); cpuTimer = null; }
+    state = freshState(ui.nameInput.trim() || 'Player 1', 'CPU（' + CPU_LEVELS[cpu.level] + '）', ui.hostHp, ui.hostMaxCharge, PARTY ? ui.selectedMode : 'normal', {
+      turnMs: ui.hostTurnMs, showOppHp: ui.hostShowOppHp, showOppCharge: ui.hostShowOppCharge, showMyHp: ui.hostShowMyHp, showMyCharge: ui.hostShowMyCharge
+    });
+    cpuPrepState();
+    hostPending = { p1:null, p2:null }; reveal = null; myMove = null; roundClosed = false; hostLocalClosed = false;
+    ui.screen = 'battle';
+    render();
+    conn.send({ type:'state', state: state });
+  }
+  function cpuPrepState(){ state.cpuSeat = 'p2'; state.ready.p2 = true; cpuHist = []; }   // CPU はすぐ準備完了
+  // CPU 対戦をやめてホームへ（パーティではない、ひとりの CPU 対戦だけ）
+  function leaveCpu(){
+    if(cpuTimer){ clearTimeout(cpuTimer); cpuTimer = null; }
+    clearRoundTimer(); stopTimerBarAnimation();
+    if(graceTimer){ clearTimeout(graceTimer); graceTimer = null; }
+    if(resolveTimer){ clearTimeout(resolveTimer); resolveTimer = null; }
+    resetSpecialAnimation(); resetNormalResultAnimation();
+    cpu.on = false; conn = null; role = null; state = null; reveal = null; myMove = null;
+    hostPending = { p1:null, p2:null };
+    goHome();
+  }
+  // ラウンドが始まったら、CPU の手を決める予定を入れる（startRoundTimer から呼ぶ）
+  function scheduleCpu(){
+    if(cpuTimer){ clearTimeout(cpuTimer); cpuTimer = null; }
+    if(!cpu.on || role !== 'host' || !state || state.status !== 'playing') return;
+    var r = state.round, me = state.players.p2;
+    var lead = Math.max(0, (state.roundStartAt || Date.now()) - Date.now());
+    // 必殺技が使えるなら、ラウンドの始めに使う（よわいは ときどき見のがす）
+    if(me.charge >= me.maxCharge && (cpu.level > 0 || Math.random() < 0.6)){
+      cpuTimer = setTimeout(function(){
+        cpuTimer = null;
+        if(!state || state.status !== 'playing' || state.round !== r || roundClosed || specialAnimating) return;
+        clearRoundTimer(); stopTimerBarAnimation();
+        state.status = 'special'; state.winner = 'p2'; state.specialEndsAt = Date.now() + SPECIAL_TOTAL_MS;
+        startSpecialAnimation('p2', SPECIAL_TOTAL_MS);
+        if(conn) conn.send({ type:'state', state: state });
+      }, lead + 250);
+      return;
+    }
+    // 選ぶ時間の 20〜70% のどこかで決める（人と同じく締め切りまでに）
+    cpuTimer = setTimeout(function(){
+      cpuTimer = null;
+      if(!state || state.status !== 'playing' || state.round !== r || roundClosed || hostLocalClosed) return;
+      hostPending.p2 = cpuChooseMove();
+    }, lead + turnMsFor() * (0.2 + Math.random() * 0.5));
+  }
+  // CPU の考え方: 相手（人）のチャージ・バリアの連続回数・HP を見て、手ごとの重みを決めてから くじ引きで選ぶ。
+  // むずかしさ: よわい＝でたらめが多い／ふつう＝少し読む／つよい＝人のくせを強く読む。いつも同じ手にならないよう必ず くじ引きにする
+  function cpuChooseMove(){
+    var me = state.players.p2, op = state.players.p1, lv = cpu.level;
+    var mc = me.charge, oc = op.charge;
+    var myBrk = (me.bs || 0) >= 2, opBrk = (op.bs || 0) >= 2;   // 次のバリアは割れる
+    var need = Math.ceil(op.hp / BASE_DMG);                     // 相手を倒すのに要る攻撃の回数
+    var legal = mc > 0 ? ['charge', 'barrier', 'attack'] : ['charge', 'barrier'];
+    if(Math.random() < [0.6, 0.18, 0.06][lv]){
+      var ra = legal[Math.floor(Math.random() * legal.length)];
+      return moveForAction(ra, ra === 'attack' ? 1 + Math.floor(Math.random() * mc) : 1);
+    }
+    var w = { charge:1, barrier:1, attack: mc > 0 ? 1 : 0 };
+    if(oc === 0){
+      // 相手は攻撃できない: バリアはむだ。ためるか、ためる隙をねらう
+      w.barrier = myBrk ? 0 : 0.05; w.charge = 1.5;
+      if(mc > 0) w.attack = opBrk ? 3 : 1;
+    } else {
+      var lethalOnMe = oc * BASE_DMG >= me.hp;
+      w.barrier = myBrk ? 0 : (lethalOnMe ? 2.6 : 1.3);
+      w.charge = lethalOnMe ? 0.3 : 0.8;
+      if(mc > 0) w.attack = myBrk ? 2 : 1.1;   // 攻撃どうしは相殺するので、守りにもなる
+    }
+    if(mc > 0){
+      if(mc >= need) w.attack *= opBrk ? 3 : 1.8;     // 当たれば勝てる
+      if(opBrk) w.attack *= 1.6;                      // 相手のバリアは割れる
+      if(oc >= op.maxCharge - 1) w.attack *= 1.8;     // 相手が必殺技の手前: ためるところをたたく
+    }
+    if(mc >= me.maxCharge - 2) w.charge *= 1.4;       // 自分の必殺技が近い
+    if(lv >= 1 && cpuHist.length >= 3){
+      var h = cpuHist.slice(-6), f = { charge:0, barrier:0, attack:0 };
+      h.forEach(function(a){ if(f[a] != null) f[a]++; });
+      var k = lv === 2 ? 1.6 : 0.8;
+      w.attack *= 1 + k * f.charge / h.length;                    // よくためる人には攻撃
+      if(oc > 0) w.barrier *= 1 + k * f.attack / h.length;        // よく攻撃する人にはバリア
+      w.charge *= 1 + k * f.barrier / h.length;                   // よく守る人のときはためる
+    }
+    var tot = w.charge + w.barrier + w.attack, x = Math.random() * tot, act;
+    if((x -= w.charge) < 0) act = 'charge';
+    else if((x -= w.barrier) < 0) act = 'barrier';
+    else act = 'attack';
+    if(act !== 'attack') return moveForAction(act);
+    var n;
+    if(lv === 0) n = 1 + Math.floor(Math.random() * mc);
+    else if(mc >= need) n = need;                                      // ちょうど倒せる回数
+    else if(oc === 0 || opBrk) n = lv === 2 ? mc : Math.ceil(mc / 2);  // 当たりやすいときは多めに
+    else n = 1;                                                        // 相殺ねらいは 1 回でチャージを残す
+    return moveForAction('attack', Math.max(1, Math.min(mc, n)));
   }
   var TURN_MS_DEFAULT = 1000;
   var MIN_TURN_MS = 300;
@@ -449,7 +601,8 @@
     screen:'home', nameInput:'プレイヤー' + (Math.floor(Math.random()*90)+10), codeInput:'', toast:'',
     hostHp:START_HP, hostMaxCharge:START_MAX_CHARGE, selectedMode:'normal',
     hostTurnMs: TURN_MS_DEFAULT,
-    hostShowOppHp: true, hostShowOppCharge: true, hostShowMyHp: true, hostShowMyCharge: true
+    hostShowOppHp: true, hostShowOppCharge: true, hostShowMyHp: true, hostShowMyCharge: true,
+    cpuLevel: 1, partyCpu: false
   };
 
   var role = null;      // 'host' | 'guest'
@@ -503,6 +656,7 @@
     }, remaining);
 
     animateTimerBar();
+    if(role === 'host' && cpu.on) scheduleCpu();   // 2026-11-09: CPU もこのラウンドの手を決める
   }
 
   // 1秒が終わった瞬間にだけラウンドを確定する。
@@ -763,6 +917,7 @@
 
   // ---------- host ----------
   function createRoom(){
+    if(isOffline()){ showToast('オフラインです。CPU と対戦できます', 3000); ui.screen = 'home'; render(); return; }
     if(typeof Peer === 'undefined'){
       showToast('通信ライブラリの読み込みに失敗しました。回線を確認して再読み込みしてください', 4000);
       return;
@@ -783,7 +938,7 @@
     peer.on('connection', function(c){
       // 同じタブ（同じ人）からのつなぎ直し: 前のつながりと入れかえる（前は観戦にされて、準備完了などが押せなくなっていた）
       var sameTab = !!(c.metadata && c.metadata.tab && conn && conn.metadata && conn.metadata.tab === c.metadata.tab);
-      if(PARTY && ((c.metadata && c.metadata.spec) || (conn && conn.open && !sameTab))){   // 観戦を選んだ人・3 人目以降は観戦
+      if(PARTY && ((c.metadata && c.metadata.spec) || cpu.on || (conn && conn.open && !sameTab))){   // 観戦を選んだ人・3 人目以降・CPU と対戦中に来た人は観戦
         c.on('open', function(){
           spectators.push(c);
           try { c.send({ type:'spectate' }); if(state){ c.send({ type:'state', state: state }); } } catch(e){}
@@ -912,6 +1067,7 @@
   }
 
   function finishResolveHost(m1, m2){
+    if(cpu.on){ cpuHist.push(moveAction(m1)); if(cpuHist.length > 12) cpuHist.shift(); }   // CPU が人のくせを読むための記録
     var res = resolveRound(state.players.p1, state.players.p2, m1, m2);
     state.players.p1.hp = res.hp1; state.players.p1.charge = res.c1; state.players.p1.bs = res.bs1;
     state.players.p2.hp = res.hp2; state.players.p2.charge = res.c2; state.players.p2.bs = res.bs2;
@@ -957,6 +1113,7 @@
     if(graceTimer){ clearTimeout(graceTimer); graceTimer = null; }
     hostLocalClosed = false;
     state = freshState(hostName, guestName, hpSetting, maxChargeSetting, mode, custom);
+    if(cpu.on){ if(cpuTimer){ clearTimeout(cpuTimer); cpuTimer = null; } cpuPrepState(); }   // 2026-11-09: CPU はすぐ準備完了
     hostPending = { p1:null, p2:null };
     reveal = null;
     myMove = null;
@@ -969,6 +1126,7 @@
 
   // ---------- guest ----------
   function joinRoom(){
+    if(isOffline()){ showToast('オフラインです。CPU と対戦できます', 3000); ui.screen = 'home'; render(); return; }
     if(typeof Peer === 'undefined'){
       showToast('通信ライブラリの読み込みに失敗しました。回線を確認して再読み込みしてください', 4000);
       return;
@@ -1345,16 +1503,28 @@
             '<div class="label">プレイヤー名</div>' +
             '<input type="text" id="nameField" placeholder="名前を入力" maxlength="12" value="'+esc(ui.nameInput)+'" />' +
             '<div style="height:16px"></div>' +
-            '<div class="row">' +
-              '<button class="btn primary" id="btnCreate">部屋を作る</button>' +
-              '<button class="btn primary" id="btnJoin">部屋に入る</button>' +
-            '</div>' +
+            // 2026-11-09: CPU と対戦（オフラインでも遊べる）。むずかしさを選んでから始める
+            '<div class="label">CPUと対戦</div>' +
+            '<div class="row" id="cpuLv">' + CPU_LEVELS.map(function(t, i){ return '<button class="btn' + (ui.cpuLevel === i ? ' primary' : '') + '" data-l="' + i + '" style="' + (ui.cpuLevel === i ? 'border-color:var(--charge);color:var(--charge)' : '') + '">' + t + '</button>'; }).join('') + '</div>' +
+            '<div class="row" style="margin-top:10px"><button class="btn primary" id="btnCpu">CPUと対戦する</button></div>' +
+            (isOffline()
+              ? '<p class="muted center" style="margin:14px 0 0">オフラインです。いまは CPU と対戦できます</p>'
+              : '<div style="height:16px"></div>' +
+                '<div class="label">ともだちと対戦</div>' +
+                '<div class="row">' +
+                  '<button class="btn primary" id="btnCreate">部屋を作る</button>' +
+                  '<button class="btn primary" id="btnJoin">部屋に入る</button>' +
+                '</div>') +
           '</div>' +
           '<div class="footer-actions"><button class="link" id="btnGames">← ゲーム一覧へ（you know games）</button></div>' +
         '</div>';
       document.getElementById('nameField').addEventListener('input', function(e){ ui.nameInput = e.target.value; });
-      document.getElementById('btnCreate').addEventListener('click', goCreate);
-      document.getElementById('btnJoin').addEventListener('click', goJoin);
+      var bc = document.getElementById('btnCreate'); if(bc) bc.addEventListener('click', goCreate);
+      var bj = document.getElementById('btnJoin'); if(bj) bj.addEventListener('click', goJoin);
+      Array.prototype.forEach.call(app.querySelectorAll('#cpuLv button'), function(b){
+        b.addEventListener('click', function(){ ui.cpuLevel = +b.getAttribute('data-l'); render(); });
+      });
+      document.getElementById('btnCpu').addEventListener('click', function(){ startCpuBattle(ui.cpuLevel); });
       document.getElementById('btnGames').addEventListener('click', toGames);
       return;
     }
@@ -1434,8 +1604,8 @@
       return;
     }
 
-    var myKey = role === 'host' ? 'p1' : 'p2';
-    var oppKey = role === 'host' ? 'p2' : 'p1';
+    var myKey = role === 'host' ? 'p1' : specViewKey();
+    var oppKey = myKey === 'p1' ? 'p2' : 'p1';
     var me = state.players[myKey];
     var opp = state.players[oppKey];
     var lastLog = state.log[state.log.length-1];
@@ -1466,6 +1636,9 @@
     var timerPercent = showTimerBar ? getTimerPercent() : 0;
 
     var html = (ui.toast ? '<div class="toast">'+esc(ui.toast)+'</div>' : '');
+    // 2026-11-09: ひとりの CPU 対戦は、いつでもメニューへ戻れる
+    if(cpu.on && !PARTY) html += '<button id="btnCpuQuit" style="position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:70;font:inherit;font-size:13px;font-weight:700;padding:7px 12px;border-radius:99px;border:1px solid #232a38;background:rgba(18,22,31,.92);color:#e8ecf4">← やめる</button>';
+    if(spectating){ var sbar = document.getElementById('ykgSpecBar'); if(sbar) sbar.textContent = state.cpuSeat ? '観戦中（CPU と対戦している人の視点です。操作はできません）' : '観戦中（ゲストの視点で表示しています。操作はできません）'; }
 
     // スタートボタンはプレイヤー情報の通常レイアウトから切り離して固定。
     // ホスト・ゲストのどちらも、チャージ枠が何段になっても位置が押し下げられない。
@@ -1588,6 +1761,7 @@
       html += '<div class="card center">' +
         '<h2 style="margin:0 0 8px">' + title + '</h2>' +
         '<button class="btn primary" id="btnRestart" style="margin-top:8px">もう一度対戦する</button>' +
+        (cpu.on && !PARTY ? '<div class="footer-actions"><button class="link" id="btnLeaveCpu">メニューへ戻る</button></div>' : '') +
       '</div>';
     }
 
@@ -1658,6 +1832,10 @@
 
     var restartBtn = document.getElementById('btnRestart');
     if(restartBtn) restartBtn.addEventListener('click', requestRestart);
+    var leaveCpuBtn = document.getElementById('btnLeaveCpu');
+    if(leaveCpuBtn) leaveCpuBtn.addEventListener('click', leaveCpu);
+    var cpuQuitBtn = document.getElementById('btnCpuQuit');
+    if(cpuQuitBtn) cpuQuitBtn.addEventListener('click', leaveCpu);
 
     var specialBtn = document.getElementById('btnSpecial');
     if(specialBtn) specialBtn.addEventListener('click', useSpecialWin);
@@ -1691,6 +1869,26 @@
     if(PARTY.role === 'host'){ ui.selectedMode = ui.selectedMode === 'custom' ? 'custom' : 'normal'; createRoom(); }
     else joinRoom();
   } else render();
+  // 2026-11-09: 電波が切れた・戻ったら、通信の前の画面（ホーム・モード選び・部屋に入る・待ち）を作り直す。
+  // 部屋を作って待っている途中で切れたら、部屋をたたんでホームへ（CPU 対戦だけ出る）。対戦中・CPU 対戦中はさわらない
+  function onNetChange(){
+    if(PARTY) return;
+    var s = ui.screen;
+    if(isOffline() && !cpu.on && (s === 'mode-select' || s === 'join' || s === 'creating' || s === 'battle-wait' || s === 'joining')){
+      try { if(peer) peer.destroy(); } catch(e){}
+      peer = null; conn = null; role = null; state = null;
+      ui.screen = 'home';
+    }
+    if(ui.screen === 'home' || ui.screen === 'mode-select' || ui.screen === 'join') render();
+  }
+  window.addEventListener('online', onNetChange);
+  window.addEventListener('offline', onNetChange);
+  // 確認用（ブラウザから CPU 対戦を動かすため）
+  window.__dbg = {
+    get state(){ return state; }, get ui(){ return ui; }, get cpu(){ return cpu; }, get hostPending(){ return hostPending; },
+    startCpu: startCpuBattle, pressStart: pressStart, pick: pickMove, special: useSpecialWin, restart: requestRestart, leave: leaveCpu,
+    choose: cpuChooseMove, resolve: resolveRound
+  };
   // アプリとして入れたときに使うサービスワーカー（ミニゲーム集で 1 つ。1 つ上のフォルダにある）
   try { if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) navigator.serviceWorker.register('../sw.js').catch(function(){}); } catch(e){}
 })();

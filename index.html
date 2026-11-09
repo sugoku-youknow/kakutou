@@ -68,6 +68,7 @@
   a.game.locked { opacity:.55; }
   a.game .solo { font-size:11px; color:#f0b25a; }
   .toast { position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 24px); transform:translateX(-50%); background:rgba(10,12,18,.94); border:1px solid var(--line); padding:10px 16px; border-radius:12px; font-size:14px; }
+  body.offline .tags .online { display:none; }
   button.install { margin-top:20px; width:100%; padding:14px; border:0; border-radius:12px; font:inherit; font-weight:700; font-size:16px; background:var(--accent); color:#2a1a05; }
 </style>
 </head>
@@ -81,7 +82,7 @@
       <div class="icon"><img src="shieldfight/icon.png" alt=""></div>
       <div><div class="name">シールドファイト</div>
         <div class="desc">盾が外れた隙を突いて、相手をステージから落とす対戦ゲーム</div>
-        <div class="tags"><span>1〜4人</span><span>オンライン</span><span>CPU戦</span></div></div>
+        <div class="tags"><span>1〜4人</span><span class="online">オンライン</span><span>CPU戦</span><span>チーム戦</span><span>ステージ4種</span></div></div>
       <div class="go">›</div>
     </a>
     <a class="game" href="jenga/" data-party="1">
@@ -97,7 +98,7 @@
         </g></svg></div>
       <div><div class="name">ジェンガ</div>
         <div class="desc">ブロックを抜いて上に積む。崩した人の負け（3D・本物っぽい物理）</div>
-        <div class="tags"><span>1〜4人</span><span>オンライン</span><span>1台で交代</span></div></div>
+        <div class="tags"><span>1〜4人</span><span class="online">オンライン</span><span>CPU戦</span><span>チーム戦</span><span>1台で交代</span></div></div>
       <div class="go">›</div>
     </a>
     <a class="game" href="tameru/" data-party="1">
@@ -112,7 +113,7 @@
       </svg></div>
       <div><div class="name">ためる・バリア・攻撃</div>
         <div class="desc">ためて、守って、撃つ。同時に出して読み合う1対1の早押しバトル</div>
-        <div class="tags"><span>2人</span><span>オンライン</span></div></div>
+        <div class="tags"><span>2人</span><span class="online">オンライン</span><span>CPU戦</span></div></div>
       <div class="go">›</div>
     </a>
     <a class="game" href="shougi/" data-party="1">
@@ -124,7 +125,7 @@
       </svg></div>
       <div><div class="name">フリータイム将棋</div>
         <div class="desc">手番なし。駒ごとのクールダウンだけ待てば、いつでも指せる早指し将棋</div>
-        <div class="tags"><span>2人</span><span>オンライン</span><span>1台で2人</span></div></div>
+        <div class="tags"><span>2〜4人</span><span class="online">オンライン</span><span>CPU戦</span><span>チーム戦</span><span>1台で2人</span></div></div>
       <div class="go">›</div>
     </a>
     <a class="game" href="gomu/" data-party="1">
@@ -140,7 +141,7 @@
       </svg></div>
       <div><div class="name">ゴム弾き陣取りバトル</div>
         <div class="desc">自分の陣地の玉をゴムで弾いて相手の陣地へ。先に0個にした人の勝ち</div>
-        <div class="tags"><span>2〜4人</span><span>オンライン</span></div></div>
+        <div class="tags"><span>2〜4人</span><span class="online">オンライン</span><span>CPU戦</span><span>チーム戦</span></div></div>
       <div class="go">›</div>
     </a>
     <a class="game" href="soinsu/" data-party="1">
@@ -154,7 +155,23 @@
       </svg></div>
       <div><div class="name">素因数バトル</div>
         <div class="desc">頭の数字を素因数分解して打ち込む。間違えると自分が弱くなる</div>
-        <div class="tags"><span>1〜8人</span><span>オンライン</span><span>CPU戦</span></div></div>
+        <div class="tags"><span>1〜8人</span><span class="online">オンライン</span><span>CPU戦</span><span>チーム戦</span><span>ステージ4種</span></div></div>
+      <div class="go">›</div>
+    </a>
+    <a class="game" href="kaitaku/" data-party="1">
+      <div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
+        <rect width="72" height="72" fill="#3a8fd6"/>
+        <g stroke="#f3e3b0" stroke-width="2">
+          <polygon points="36,10 47,16 47,29 36,35 25,29 25,16" fill="#3f9d4a"/>
+          <polygon points="24,30 35,36 35,49 24,55 13,49 13,36" fill="#9aa0a8"/>
+          <polygon points="48,30 59,36 59,49 48,55 37,49 37,36" fill="#e8b23a"/>
+        </g>
+        <path d="M30 42 L36 36 L42 42 V48 H30 Z" fill="#e0533b" stroke="#3a2010" stroke-width="1.2"/>
+        <path d="M18 18 q4 -4 8 0 q-4 -1 -8 0 Z M14 20 l4 -2" stroke="#1b1b1b" stroke-width="2" fill="#1b1b1b"/>
+      </svg></div>
+      <div><div class="name">カイタク島</div>
+        <div class="desc">サイコロで資源をあつめて、道と村をのばす島づくりゲーム</div>
+        <div class="tags"><span>2〜4人</span><span class="online">オンライン</span><span>CPU戦</span></div></div>
       <div class="go">›</div>
     </a>
   </div>
@@ -212,8 +229,18 @@ function statsHtml() {
     <div class="note">パーティでオンライン対戦したゲームの勝ち負けを数えます（観戦・ひとり用・CPU戦・この端末で交代は数えません）。順位は勝ち数の多い順です。</div></div>`;
 }
 
+// 2026-11-09: オフライン（ネットにつながっていない、または ?offline=1 で試すとき）は、パーティ（オンライン）を出さない。
+// ゲームはそれぞれ、オフラインのときは CPU 戦・練習だけを出す
+const FORCE_OFF = /[?&]offline=1/.test(location.search);
+const OFFLINE = () => FORCE_OFF || !navigator.onLine;
 function render() {
   const el = document.getElementById("party");
+  document.body.classList.toggle("offline", OFFLINE());
+  if (OFFLINE()) {
+    el.innerHTML = `<h2>オフライン</h2><div class="note">ネットにつながっていないので、みんなで遊ぶ（パーティ・オンライン対戦）は使えません。下のゲームの CPU 戦・練習で遊べます。</div>`;
+    for (const a of document.querySelectorAll("a.game")) a.classList.remove("locked");
+    return;
+  }
   if (!party) {
     el.innerHTML = `<h2>みんなで遊ぶ</h2>
       <input id="pname" maxlength="12" placeholder="なまえ" value="${esc(store.get("ykg-name") || "")}">
@@ -273,6 +300,7 @@ function takeResults() {
 // ホスト: 部屋を作る（ゲームから戻ってきたときは同じ番号で作り直す。前の接続が残っていると少し待つ）
 let goingTo = null;   // ホストが選んだゲーム（移る途中）
 function hostParty(code, again) {
+  if (typeof Peer !== "function") { errMsg = "通信の部品を読み込めませんでした（ネットを確かめて開き直してください）"; party = null; partyStore.set(null); render(); return; }
   const name = party ? party.name : myName();
   code = code ?? String(Math.floor(Math.random() * 10));
   peer = new Peer(PP + code);
@@ -323,6 +351,7 @@ function sendMembers() {
 // ---------- ゲスト ----------
 // 番号で入る。ホストが見つからないあいだ（ホストがゲームから戻る途中など）は、少しずつ探し続ける
 function joinParty(code) {
+  if (typeof Peer !== "function") { errMsg = "通信の部品を読み込めませんでした（ネットを確かめて開き直してください）"; party = null; partyStore.set(null); render(); return; }
   party = { role: "guest", code, name: party ? party.name : myName(), spec: !!(party && party.spec) }; saveParty();
   store.set("ykg-last", code);
   status = "looking"; render();
@@ -387,7 +416,9 @@ document.getElementById("party").addEventListener("click", e => {
 });
 // ゲームを選んだとき: パーティのホストなら、みんなにも同じゲームへ移ってもらう
 document.querySelector(".games").addEventListener("click", e => {
-  const a = e.target.closest("a.game"); if (!a || !party) return;
+  const a = e.target.closest("a.game"); if (!a) return;
+  if (OFFLINE()) { if (FORCE_OFF) { e.preventDefault(); location.href = a.getAttribute("href") + "?offline=1"; } return; }
+  if (!party) return;
   e.preventDefault();
   if (party.role === "guest") { toast("ゲームはホストが選びます"); return; }
   if (party.code === "…") return;
@@ -400,9 +431,12 @@ document.querySelector(".games").addEventListener("click", e => {
 
 // 戻る・進むでページが凍ったまま戻ってきたら読み込み直す（古い接続のままだと、次のゲーム選びがみんなに届かない）
 addEventListener("pageshow", e => { if (e.persisted) location.reload(); });
-if (party && party.role === "host") { stats = sjson.get("ykg-stats", {}); takeResults(); hostParty(party.code, true); }
+if (OFFLINE()) { if (party && party.role === "host") { stats = sjson.get("ykg-stats", {}); takeResults(); } }   // つながったら読み込み直してパーティを続ける
+else if (party && party.role === "host") { stats = sjson.get("ykg-stats", {}); takeResults(); hostParty(party.code, true); }
 else if (party && party.role === "guest") joinParty(party.code);
 render();
+addEventListener("online", () => { if (!FORCE_OFF) location.reload(); });
+addEventListener("offline", render);
 
 try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) {}
 </script>

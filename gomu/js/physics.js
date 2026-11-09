@@ -2,7 +2,9 @@
 // Matter.js (グローバルの `Matter` を利用。index.html でCDN読み込み済み)
 import { BALL_RADIUS_PX } from './board.js';
 
-const { Engine, World, Bodies, Body, Composite } = Matter;
+// 2026-11-09: Matter.js が読みこめなかったとき（オフラインで CDN に届かない等）も、ページ全体が止まらないように、使うときに取り出す
+const M = () => window.Matter;
+export const hasPhysics = () => !!(window.Matter && window.Matter.Engine);
 
 const BALL_FRICTION_AIR = 0.028; // ゴム弾き後、自然に減速して止まる
 const BALL_RESTITUTION = 0.55;
@@ -11,15 +13,18 @@ const WALL_RESTITUTION = 0.7;
 // 引っ張り距離→初速への変換。物理的なゴムの手応えを再現するための調整値。
 export const MAX_PULL_DISTANCE = 90;
 export const LAUNCH_POWER_SCALE = 0.11;
+// 初速 1 あたり、止まるまでに転がる長さ（frictionAir 0.028 で (1-0.028)/0.028 ≈ 34.7。2026-11-09 に実測。CPU のねらいに使う）
+export const TRAVEL_PER_SPEED = (1 - BALL_FRICTION_AIR) / BALL_FRICTION_AIR;
 
 export function createWorld() {
-  const engine = Engine.create();
+  const engine = M().Engine.create();
   engine.gravity.y = 0;
   engine.gravity.x = 0;
   return engine;
 }
 
 export function buildBoardBodies(engine, config) {
+  const { Bodies, Composite } = M();
   const bodies = [];
   const makeWall = (seg) => {
     const body = Bodies.rectangle(seg.x, seg.y, seg.w, seg.h, {
@@ -41,10 +46,10 @@ export function buildBoardBodies(engine, config) {
 
 // ballDefs: [{id, zone, x, y}, ...] — ホストとゲストが同じ手順で独立生成し、
 // 同じ配列になることを前提にした決定的なボール一覧(ネットワーク越しに共有する)。
-export function buildBallDefs(config, zoneCount) {
+export function buildBallDefs(config, zoneCount, perZone = 6) {
   const defs = [];
   for (let zone = 0; zone < zoneCount; zone++) {
-    const positions = config.ballStartPositions(zone);
+    const positions = config.ballStartPositions(zone, perZone);   // 2026-11-09: 1 人あたりの数を指定できる
     positions.forEach((pos, i) => {
       defs.push({ id: `b${zone}_${i}`, zone, x: pos.x, y: pos.y });
     });
@@ -53,6 +58,7 @@ export function buildBallDefs(config, zoneCount) {
 }
 
 export function spawnBalls(engine, ballDefs) {
+  const { Bodies, Composite } = M();
   const balls = ballDefs.map((def) => {
     const body = Bodies.circle(def.x, def.y, BALL_RADIUS_PX, {
       restitution: BALL_RESTITUTION,
@@ -79,21 +85,22 @@ export function launchBall(body, pull) {
   const ux = pull.x / rawDist;
   const uy = pull.y / rawDist;
   const speed = dist * LAUNCH_POWER_SCALE;
-  Body.setVelocity(body, { x: ux * speed, y: uy * speed });
+  M().Body.setVelocity(body, { x: ux * speed, y: uy * speed });
   return true;
 }
 
 // 中心側の仕切りを消す（真ん中を開ける）
 export function removeInnerWalls(engine) {
+  const { Composite } = M();
   const inner = Composite.allBodies(engine.world).filter((b) => b.isInner);
   Composite.remove(engine.world, inner);
   return inner.length;
 }
 
 export function stepWorld(engine, deltaMs) {
-  Engine.update(engine, deltaMs);
+  M().Engine.update(engine, deltaMs);
 }
 
 export function isSettled(body) {
-  return Body.getSpeed(body) < 0.05;
+  return M().Body.getSpeed(body) < 0.05;
 }

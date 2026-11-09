@@ -404,6 +404,19 @@
   body.ykg-spec #readyRow{display:none !important}
   body.ykg-party #readyRow{display:none !important}   /* パーティ: 「準備完了」は待ち合わせ画面で押す */
   #ykgSpecBar{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;background:rgba(122,75,38,.92);color:#fff}
+  /* 2026-11-09: CPU 対戦の選びボタンと、ホストが席・CPU を決める板 */
+  .cpu-box{width:100%;max-width:400px;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;padding:8px 10px;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;}
+  .cpu-box .lbl{font-size:.7rem;color:#7A6A55;}
+  .seg{display:flex;gap:4px;}
+  .seg button, #seatPanel button{flex:1;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;font-size:.75rem;padding:7px 6px;border-radius:7px;border:1px solid var(--panel-border);background:#fff;color:var(--ink);cursor:pointer;}
+  .seg button.on, #seatPanel button.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  #seatPanel button:disabled{opacity:.45;}
+  .seat-panel{display:flex;flex-direction:column;gap:6px;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;font-size:.75rem;}
+  #seatPanel{order:-10;width:100%;max-width:400px;background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;padding:8px 10px;}
+  .seat-panel .sp-row, .seat-panel .sp-item{display:flex;gap:6px;align-items:center;}
+  .seat-panel .sp-name{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .seat-panel .sp-item button{flex:0 0 auto;}
+  .seat-panel .sp-sub{font-size:.68rem;opacity:.75;line-height:1.4;}
   #ykgBack{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:50;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;padding:7px 12px;border-radius:99px;border:1px solid #C79E64;background:rgba(246,239,227,.95);color:#2A2320}
 </style>
 </head>
@@ -418,6 +431,14 @@
       <label for="roomInput">部屋番号</label>
       <input type="text" id="roomInput" inputmode="numeric" autocomplete="off" maxlength="1" placeholder="1桁" style="width:52px;flex:none;text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:.9rem;padding:6px 8px;border-radius:6px;border:1px solid var(--panel-border);">
       <button class="action" id="connectBtn" style="flex:none;padding:8px 12px;">入室</button>
+    </div>
+    <!-- 2026-11-09: CPU と対戦（オフラインでも遊べる） -->
+    <div class="cpu-box" id="cpuBox">
+      <div class="lbl">CPUの強さ</div>
+      <div class="seg" id="cpuLevelSeg"><button data-v="0">よわい</button><button data-v="1" class="on">ふつう</button><button data-v="2">つよい</button></div>
+      <div class="lbl">人数</div>
+      <div class="seg" id="cpuModeSeg"><button data-v="1" class="on">1対1</button><button data-v="2">2対2（味方CPUつき）</button></div>
+      <button class="action" id="cpuBtn" style="background:var(--accent);color:#fff;border-color:var(--accent);">CPUと対戦する</button>
     </div>
     <div class="btnrow">
       <button class="action" id="offlineBtn">この端末だけで2人プレイする</button>
@@ -457,6 +478,7 @@
 
     <div class="btnrow" id="restartRow">
       <button class="action" id="restartBtn">最初から</button>
+      <button class="action" id="menuBtn">メニューへ</button>
     </div>
     <div class="status" id="status"></div>
   </div>
@@ -526,6 +548,7 @@
   let netRoom=null, netSend=null, myColor=null, colorAssigned=false, netActive=false, isHost=false, roomCreator=false;
   let syncSeq=0, lastAppliedSeq=-1;
   let matchStarted = true;
+  const lostSeats = [];   // 対局中に抜けた人の席（つなぎ直してきた人に返す）
   let readyState = {sente:false, gote:false};
   let countdownUntil = 0;
 
@@ -558,6 +581,7 @@
     overlayEl.classList.remove('show');
     dropHint.classList.remove('show');
     statusEl.textContent='';
+    cpuResetTimers();   // 2026-11-09: 始め直したら CPU も少し待ってから指す
     buildBoardDom();
     renderAll();
   }
@@ -592,17 +616,18 @@
   function lastRow(owner){ return owner==='sente' ? 0 : 8; }
   function lastTwoRows(owner){ return owner==='sente' ? [0,1] : [7,8]; }
 
-  function slideMoves(r,c,owner,board){
+  function slideMoves(r,c,owner,board,cover){
     const moves=[];
     const p=board[r][c];
-    const directions = (p.type==='B'||p.promoted&&p.type==='B') ? [[1,1],[1,-1],[-1,1],[-1,-1]] : [[1,0],[-1,0],[0,1],[0,-1]];
+    // 香は前にだけまっすぐ進む（2026-11-09: 前は飛車と同じく 4 方向に動けてしまっていた）
+    const directions = p.type==='L' ? [[dir(owner),0]] : (p.type==='B'||p.promoted&&p.type==='B') ? [[1,1],[1,-1],[-1,1],[-1,-1]] : [[1,0],[-1,0],[0,1],[0,-1]];
     for(const [dr,dc] of directions){
       let nr=r+dr, nc=c+dc;
       while(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS){
         const occ=board[nr][nc];
         if(!occ){ moves.push({r:nr,c:nc,capture:false}); }
         else{
-          if(occ.owner!==owner) moves.push({r:nr,c:nc,capture:true});
+          if(cover || occ.owner!==owner) moves.push({r:nr,c:nc,capture:occ.owner!==owner});   // cover: 味方の駒のマスも「利き」として数える（CPU 用、2026-11-09）
           break;
         }
         nr+=dr; nc+=dc;
@@ -610,39 +635,39 @@
     }
     return moves;
   }
-  function stepMoves(r,c,owner,deltas,board){
+  function stepMoves(r,c,owner,deltas,board,cover){
     const moves=[];
     for(const [dr,dc] of deltas){
       const nr=r+dr, nc=c+dc;
       if(nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
       const occ=board[nr][nc];
       if(!occ) moves.push({r:nr,c:nc,capture:false});
-      else if(occ.owner!==owner) moves.push({r:nr,c:nc,capture:true});
+      else if(cover || occ.owner!==owner) moves.push({r:nr,c:nc,capture:occ.owner!==owner});
     }
     return moves;
   }
 
   function goldDeltas(d){ return [[d,-1],[d,0],[d,1],[0,-1],[0,1],[-d,0]]; }
 
-  function legalMovesFor(r,c,board){
+  function legalMovesFor(r,c,board,cover){
     const p=board[r][c];
     if(!p) return [];
     const d=dir(p.owner);
     const key = p.promoted ? '+'+p.type : p.type;
     switch(key){
-      case 'P': return stepMoves(r,c,p.owner,[[d,0]],board);
-      case 'L': return slideMoves(r,c,p.owner,board);
-      case 'N': return stepMoves(r,c,p.owner,[[2*d,-1],[2*d,1]],board);
-      case 'S': return stepMoves(r,c,p.owner,[[d,-1],[d,0],[d,1],[-d,-1],[-d,1]],board);
+      case 'P': return stepMoves(r,c,p.owner,[[d,0]],board,cover);
+      case 'L': return slideMoves(r,c,p.owner,board,cover);
+      case 'N': return stepMoves(r,c,p.owner,[[2*d,-1],[2*d,1]],board,cover);
+      case 'S': return stepMoves(r,c,p.owner,[[d,-1],[d,0],[d,1],[-d,-1],[-d,1]],board,cover);
       case 'G': case '+P': case '+L': case '+N': case '+S':
-        return stepMoves(r,c,p.owner,goldDeltas(d),board);
-      case 'B': return slideMoves(r,c,p.owner,board);
-      case 'R': return slideMoves(r,c,p.owner,board);
-      case '+B': return slideMoves(r,c,p.owner,board)
-                  .concat(stepMoves(r,c,p.owner,[[1,0],[-1,0],[0,1],[0,-1]],board));
-      case '+R': return slideMoves(r,c,p.owner,board)
-                  .concat(stepMoves(r,c,p.owner,[[1,1],[1,-1],[-1,1],[-1,-1]],board));
-      case 'K': return stepMoves(r,c,p.owner,[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]],board);
+        return stepMoves(r,c,p.owner,goldDeltas(d),board,cover);
+      case 'B': return slideMoves(r,c,p.owner,board,cover);
+      case 'R': return slideMoves(r,c,p.owner,board,cover);
+      case '+B': return slideMoves(r,c,p.owner,board,cover)
+                  .concat(stepMoves(r,c,p.owner,[[1,0],[-1,0],[0,1],[0,-1]],board,cover));
+      case '+R': return slideMoves(r,c,p.owner,board,cover)
+                  .concat(stepMoves(r,c,p.owner,[[1,1],[1,-1],[-1,1],[-1,-1]],board,cover));
+      case 'K': return stepMoves(r,c,p.owner,[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]],board,cover);
     }
     return [];
   }
@@ -779,21 +804,30 @@
 
   function endGame(winner){
     if(!gameOver && isHost && netActive && PARTY){   // 先手 = ホスト、後手 = ゲスト
-      const w = winner === 'sente' ? PARTY.name : guestName, l = winner === 'sente' ? guestName : PARTY.name;
-      partyReport([w], [l]);
+      // 2026-11-09: チーム戦になったので、その側に座っている人の名前を全部入れる。CPU は成績に入れない
+      const side = col => (col==='sente' ? [PARTY.name] : []).concat(allRemotes().filter(c=>c.__seat===col).map(remoteName));
+      partyReport(side(winner), side(otherColor(winner)));
     }
     gameOver=true;
     winnerColor=winner;
-    winText.textContent = (winner==='sente' ? '先手の勝ち！' : '後手の勝ち！');
+    winText.textContent = winLabel(winner);
     overlayEl.classList.add('show');
   }
 
-  function dropIsLegal(owner,type,r,c){
-    if(board[r][c]) return false;
+  // 2026-11-09: 自分が先手・後手のどちらかに座っているときは「あなたの勝ち／負け」も出す
+  function winLabel(w){
+    const base = w==='sente' ? '先手の勝ち！' : '後手の勝ち！';
+    if(!myColor || spectating || !(colorAssigned || cpus.length)) return base;
+    return base + (w===myColor ? '（あなたの勝ち）' : '（あなたの負け）');
+  }
+
+  function dropIsLegal(owner,type,r,c,b){
+    b = b || board;   // 2026-11-09: CPU が写しの盤でも調べられるように
+    if(b[r][c]) return false;
     if(type==='P'){
       if(r===lastRow(owner)) return false;
       for(let rr=0;rr<ROWS;rr++){
-        const q=board[rr][c];
+        const q=b[rr][c];
         if(q && q.owner===owner && q.type==='P' && !q.promoted) return false;
       }
       return true;
@@ -959,6 +993,157 @@
     }
   }
 
+  // ===== CPU 対戦（2026-11-09 追加）=====
+  // 手番がないので、CPU は強さごとの「考える時間」を待ってから、冷却の終わった駒で 1 手だけ指す（人がスマホで指す速さに合わせる）。
+  // 読みは浅い（スマホでも軽く）: 自分の手を全部ためし、相手がいちばん得する駒取り（取り返せるなら差し引き）を引き、
+  // 駒の損得・玉のまわりの利き・王手・タダで取れそうな駒に点をつける。玉が取れるときは必ず取る。
+  // よわい: ゆっくり・点に大きなゆらぎ・ときどき相手の駒取りを見落とす / つよい: 速い・ゆらぎ少し・玉が狙われたら早めに動く
+  const CPU_LV = [
+    {name:'よわい', wait:[2300,3600], react:0,   noise:2.0, blunder:0.3},
+    {name:'ふつう', wait:[1300,2100], react:350, noise:0.7, blunder:0.04},
+    {name:'つよい', wait:[700,1150],  react:700, noise:0.2, blunder:0}
+  ];
+  const PV   = {P:1,  L:3,  N:3.5, S:5,   G:5.5, B:8,   R:10,   K:0};   // 盤の上の駒の値打ち
+  const PPV  = {P:5,  L:5,  N:5,   S:5.5, G:5.5, B:11,  R:13,   K:0};   // 成った駒
+  const HANDV= {P:1.1,L:3.2,N:3.6, S:5.3, G:5.8, B:8.5, R:10.5, K:0};   // 持ち駒（どこにでも打てるので少し高い）
+  const KING_V = 5000;
+  function pval(p){ return p.type==='K' ? KING_V : (p.promoted ? PPV[p.type] : PV[p.type]); }
+  function otherColor(c){ return c==='sente' ? 'gote' : 'sente'; }
+  let cpus = [];                    // {color, level, nextAt}。オフラインはこの端末、オンラインはホストが動かして盤面を送る
+  let cpuLevel = 1, cpuMode = 1;    // ロビーで選ぶ強さ・人数（1 = 1対1、2 = 2対2）
+  function addCpu(color, level){ cpus.push({color, level, nextAt: now()+1500+Math.random()*900}); }
+  function cpuResetTimers(){ for(const x of cpus) x.nextAt = now()+1200+Math.random()*900; }
+
+  function cpuClone(){ return board.map(row=>row.map(p=>p ? {type:p.type, owner:p.owner, promoted:p.promoted, cooldownUntil:p.cooldownUntil} : null)); }
+  function findKing(b,color){
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ const p=b[r][c]; if(p&&p.type==='K'&&p.owner===color) return {r,c}; }
+    return null;
+  }
+  // color の駒の利き（味方の駒がいるマスも数える）と、defMap があれば「相手の駒を取る手のうちいちばん得な値」
+  function scanSide(color,b,defMap){
+    const map=new Int8Array(81); let bestCap=0;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const p=b[r][c]; if(!p||p.owner!==color) continue;
+      for(const m of legalMovesFor(r,c,b,true)){
+        map[m.r*9+m.c]++;
+        if(!m.capture || !defMap) continue;
+        const t=b[m.r][m.c];
+        let g = t.type==='K' ? KING_V : pval(t)+HANDV[t.type];
+        if(t.type!=='K' && defMap[m.r*9+m.c]>0) g -= pval(p);   // 取り返される
+        if(g>bestCap) bestCap=g;
+      }
+    }
+    return {map,bestCap};
+  }
+  function cpuEval(b,color,base,ignoreReply){
+    const opp=otherColor(color);
+    const me=scanSide(color,b,null);
+    const op=scanSide(opp,b,me.map);
+    let s=base;
+    if(!ignoreReply) s -= op.bestCap*0.9;   // 相手のいちばん得な駒取り（相手が気づかないこともあるので少し割り引く）
+    let threat=0;   // 相手のタダの駒（こちらが利いていて、相手が守っていない）
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const p=b[r][c];
+      if(p && p.owner===opp && p.type!=='K'){ const i=r*9+c; if(me.map[i]>0 && op.map[i]===0 && pval(p)>threat) threat=pval(p); }
+    }
+    s += threat*0.3;
+    const mk=findKing(b,color), ek=findKing(b,opp);
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+      if(mk){ const r=mk.r+dr, c=mk.c+dc; if(r>=0&&r<ROWS&&c>=0&&c<COLS){ const i=r*9+c; s -= 0.35*op.map[i]; s += 0.1*Math.min(me.map[i],2); } }
+      if(ek){ const r=ek.r+dr, c=ek.c+dc; if(r>=0&&r<ROWS&&c>=0&&c<COLS){ s += 0.2*Math.min(me.map[r*9+c],2); } }
+    }
+    if(ek && me.map[ek.r*9+ek.c]>0) s += 1.2;   // 王手（相手は急いで受けないといけない）
+    return s;
+  }
+  function cpuChooseAction(color,L){
+    const t=now(), b=cpuClone(), opp=otherColor(color);
+    const acts=[];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const p=b[r][c];
+      if(!p || p.owner!==color || p.cooldownUntil>t) continue;
+      for(const m of legalMovesFor(r,c,b)){
+        if(m.capture && b[m.r][m.c].type==='K') return {kind:'move',owner:color,sr:r,sc:c,dr:m.r,dc:m.c};   // 玉が取れるならすぐ取る
+        acts.push({kind:'move',owner:color,sr:r,sc:c,dr:m.r,dc:m.c});
+      }
+    }
+    // 持ち駒は、相手の玉の 2 マス以内と自分の玉のとなりにだけ打つことを考える（候補を減らして軽くする）
+    const types=Object.keys(hands[color]).filter(k=>hands[color][k]>0);
+    if(types.length){
+      const ek=findKing(b,opp), mk=findKing(b,color);
+      const near=(k,r,c,d)=>k && Math.abs(k.r-r)<=d && Math.abs(k.c-c)<=d;
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+        if(b[r][c] || !(near(ek,r,c,2) || near(mk,r,c,1))) continue;
+        for(const ty of types) if(dropIsLegal(color,ty,r,c,b)) acts.push({kind:'drop',owner:color,type:ty,r,c});
+      }
+    }
+    const ignore = Math.random() < L.blunder;
+    let best=null, bestS=cpuEval(b,color,-0.4,ignore) + (Math.random()*2-1)*L.noise*0.5;   // 指さずに待つときの点
+    for(const a of acts){
+      let base=0, s;
+      if(a.kind==='move'){
+        const p=b[a.sr][a.sc], cap=b[a.dr][a.dc];
+        if(cap) base += pval(cap)+HANDV[cap.type];
+        const promo = !p.promoted && canPromote(p.type) && (inZone(color,a.dr)||inZone(color,a.sr));   // CPU は成れるときは成る
+        if(promo) base += PPV[p.type]-PV[p.type];
+        if(p.type==='K') base -= 0.3;   // 用もなく玉を動かさない
+        else if(!p.promoted && 'PSN'.includes(p.type)) base += 0.06*(color==='sente' ? a.sr-a.dr : a.dr-a.sr);   // 前へ
+        b[a.sr][a.sc]=null;
+        b[a.dr][a.dc]={type:p.type, owner:color, promoted:p.promoted||promo, cooldownUntil:t+cooldownFor(p.type)};
+        s=cpuEval(b,color,base,ignore);
+        b[a.sr][a.sc]=p; b[a.dr][a.dc]=cap;
+      } else {
+        base += PV[a.type]-HANDV[a.type];
+        b[a.r][a.c]={type:a.type, owner:color, promoted:false, cooldownUntil:t+cooldownFor(a.type)};
+        s=cpuEval(b,color,base,ignore);
+        b[a.r][a.c]=null;
+      }
+      s += (Math.random()*2-1)*L.noise;
+      if(s>bestS){ bestS=s; best=a; }
+    }
+    return best;
+  }
+  // 自分の玉が、もうすぐ動ける相手の駒に取られそうか
+  function kingThreatened(color){
+    const k=findKing(board,color); if(!k) return false;
+    const t=now()+400;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const p=board[r][c];
+      if(!p || p.owner===color || p.cooldownUntil>t) continue;
+      if(legalMovesFor(r,c,board).some(m=>m.r===k.r&&m.c===k.c)) return true;
+    }
+    return false;
+  }
+  function cpuApply(color,a){
+    const prevOffer = lastMovedForPromotionOffer;
+    if(!applyActionAsHost(a, color)) return false;
+    if(a.kind==='move'){
+      const p=board[a.dr] && board[a.dr][a.dc];
+      if(p && p.owner===color && !p.promoted && lastMovedForPromotionOffer && lastMovedForPromotionOffer.r===a.dr && lastMovedForPromotionOffer.c===a.dc) p.promoted=true;
+      // 人の「成る？」の表示は消さない（CPU の手で上書きされないように）
+      lastMovedForPromotionOffer = (prevOffer && !(prevOffer.r===a.dr && prevOffer.c===a.dc) && board[prevOffer.r][prevOffer.c]) ? prevOffer : null;
+      renderAll();
+    }
+    if(netActive && isHost) broadcastSync();
+    return true;
+  }
+  function cpuLoop(){
+    if(!cpus.length || gameOver) return;
+    if(netActive ? !(isHost && matchStarted) : !battleScreen.classList.contains('active')) return;
+    const t=now();
+    for(const x of cpus){
+      const L=CPU_LV[x.level] || CPU_LV[1];
+      if(t < x.nextAt){
+        // ふつう・つよいは、玉が狙われたら考える時間を短くする
+        if(!(L.react && t >= x.nextAt-L.react && kingThreatened(x.color))) continue;
+      }
+      const a=cpuChooseAction(x.color, L);
+      if(!a || !cpuApply(x.color, a)){ x.nextAt = t+450; continue; }   // 指す手がない（待つほうがよい）ときは少ししてから考え直す
+      x.nextAt = t + L.wait[0] + Math.random()*(L.wait[1]-L.wait[0]);
+      if(gameOver) break;
+    }
+  }
+  setInterval(cpuLoop, 120);   // requestAnimationFrame は画面が隠れると止まるので、タイマーで動かす
+
   function localRestart(){
     if(netActive && !gameOver){ setBattleStatus('対局中は「最初から」はできません（決着がついてから）'); return; }   // 2026-11-06: 押し間違いで対局が消えないように
     attemptAction({kind:'restart'});
@@ -1015,7 +1200,9 @@
   const lobbyScreen = document.getElementById('lobbyScreen');
   const battleScreen = document.getElementById('battleScreen');
 
+  let onlineMode = false;   // 2026-11-09: 部屋を作る・入るを始めたら true（「メニューへ」を隠す）
   function showScreen(name){
+    const mb = document.getElementById('menuBtn'); if(mb) mb.style.display = onlineMode ? 'none' : '';
     lobbyScreen.classList.toggle('active', name==='lobby');
     battleScreen.classList.toggle('active', name==='battle');
     if(name==='battle'){
@@ -1026,7 +1213,7 @@
   function fitBoard(){
     if(!battleScreen.classList.contains('active')) return;
     // 2026-11-06: 盤を大きくするため、相手が来たら部屋番号の箱を、始まったら「準備完了」の行を隠す
-    if(roomCodeBox && (peerCount > 0 || PARTY)) roomCodeBox.style.display = 'none';
+    if(roomCodeBox && (peerCount > 0 || PARTY || (netActive && matchStarted))) roomCodeBox.style.display = 'none';   // 2026-11-09: CPU とだけ始めたときも隠す
     if(readyRow) readyRow.style.display = matchStarted ? 'none' : '';
     boardEl.style.width = '';
     boardEl.style.height = '';
@@ -1062,7 +1249,7 @@
   window.addEventListener('orientationchange', ()=>{ setTimeout(fitBoard, 100); });
 
   function setLobbyStatus(text){ netStatusEl.textContent = text; }
-  function setBattleStatus(text){ battleStatusEl.textContent = spectating ? '観戦中（先手 = ホスト / 後手 = ゲスト）' : text; }   // 観戦の人には手番の案内を出さない
+  function setBattleStatus(text){ battleStatusEl.textContent = spectating ? '観戦中（先手 = ホストの側）' : text; }   // 2026-11-09: 後手は CPU やチームのこともある   // 観戦の人には手番の案内を出さない
 
   const ID_PREFIX = 'jp-freetime-shogi-';
   // パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
@@ -1071,7 +1258,7 @@
     try { if(!new URLSearchParams(location.search).has('party')) return null; const j = JSON.parse(sessionStorage.getItem('ykg-party') || 'null'); return (j && /^\d$/.test(j.code)) ? j : null; } catch(e){ return null; }
   })();
   const netId = code => (PARTY ? 'jp-shogi-party-' : ID_PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
-  const toGames = () => { ykgToGames(); };   // ゲーム一覧へ
+  const toGames = () => { if(window.ykgToGames) ykgToGames(); else location.href = '../'; };   // ゲーム一覧へ（2026-11-09: party-beacon.js が読めなかったときも戻れるように）
   let partyTries = 0;
   // 観戦: 観戦を選んだ人と、2人そろったあとに来た人は観戦になる。ホストが相手に送る盤面を観戦の人にも送る（操作はできない）
   let spectators = [], spectating = false, guestName = 'ゲスト';
@@ -1083,34 +1270,36 @@
   // ===== パーティの待ち合わせ画面（全部のゲームで同じ構図。party-beacon.js の ykgLobby）=====
   // 先手 = ホスト、後手 = ゲスト。両方が「準備完了」を押すと 3 秒数えて始まる。始まったら閉じる
   let remoteLobby = null;
+  // 2026-11-09: 席（先手・後手・観戦）は人ごとにホストが決める。CPU も並べる。id で「自分」を見分ける
   function lobbyMembers(){
-    const list = [{name: PARTY.name, tag: '先手（ホスト）'}];
-    if(conn && conn.open) list.push({name: guestName, tag: '後手'});
-    for(const c of spectators) list.push({name: String((c.metadata && c.metadata.name) || 'ゲスト').slice(0, 12), tag: '観戦'});
+    const list = [{name: PARTY.name, tag: '先手（ホスト）', id: 'host'}];
+    for(const c of allRemotes()) list.push({name: remoteName(c), tag: seatLabel(c.__seat), id: c.peer});
+    for(const x of cpus) list.push({name: 'CPU（' + CPU_LV[x.level].name + '）', tag: seatLabel(x.color), id: 'cpu'});
     return list;
   }
   function syncLobby(){
     if(!PARTY || !window.ykgLobby) return;
     if(matchStarted || countdownUntil > 0){ if(ykgLobby.active) ykgLobby.close(); return; }
     const raw = isHost ? lobbyMembers() : remoteLobby;
-    const members = raw ? raw.map(m => ({...m, me: isHost ? m.tag === '先手（ホスト）' : (spectating ? (m.tag === '観戦' && m.name === PARTY.name) : m.tag === '後手')})) : undefined;
+    const members = raw ? raw.map(m => ({...m, me: isHost ? m.id === 'host' : m.id === myId()})) : undefined;
+    if(isHost) renderSeatPanel();
     const opts = {
       title: 'フリータイム将棋',
-      rules: '手番なし。駒ごとに少し待つ時間があり、待ち終わった駒はいつでも動かせます。相手の玉を取ったら勝ち。\n先手 = ホスト、後手 = ゲスト（2人用。3人目からは観戦）',
-      settings: null,
+      rules: '手番なし。駒ごとに少し待つ時間があり、待ち終わった駒はいつでも動かせます。相手の玉を取ったら勝ち。\n先手 = ホスト。ホストが人やCPUを先手・後手に分けられます（同じ側は同じ駒を動かすチーム戦）。',
+      settings: isHost ? seatPanelEl : null,
       members,
       status: ''
     };
     if(spectating){ opts.button = null; opts.wait = '観戦: 対局が始まるのを待っています…'; }
     else {
-      const opponentHere = colorAssigned && (isHost ? !!(conn && conn.open) : !!(conn && conn.open));
-      const already = colorAssigned && myColor && readyState[myColor];
+      const opponentHere = colorAssigned && (isHost ? sideHasPlayer('gote') : !!(conn && conn.open));
+      const already = colorAssigned && myColor && amReady();
       opts.button = {
         label: already ? '準備完了（相手を待っています）' : '準備完了',
         disabled: !opponentHere || already,
         onClick: doReady
       };
-      opts.status = !colorAssigned ? 'ホストの部屋に入っています…' : !opponentHere ? '相手を待っています' : already ? '' : '準備ができたら「準備完了」を押してください';
+      opts.status = !colorAssigned ? 'ホストの部屋に入っています…' : !opponentHere ? (isHost ? '相手を待っています（CPUも入れられます）' : '相手を待っています') : already ? '' : '準備ができたら「準備完了」を押してください';
     }
     if(ykgLobby.active) ykgLobby.update(opts); else ykgLobby.open(opts);
   }
@@ -1123,6 +1312,84 @@
     }
   }
   let peer=null, conn=null, peerCount=0;
+
+  // ===== オンライン: 席と CPU（2026-11-09 追加）=====
+  // ホストは対局が始まる前に、来た人を先手・後手・観戦に分け、CPU を先手（味方）・後手に入れられる（CPU はホストの端末で動く）。
+  // 同じ側に何人いてもよい（チーム戦）。手番がないので、同じ側の人は同じ駒を自由に動かせる。後手が CPU だけでも始められる。
+  // 「準備完了」は、ホストと、先手・後手に座っている人全員が押すと始まる（id = 相手の PeerJS の id）。
+  let readyIds = new Set(), remoteReadyIds = [], localReady = false;
+  const seatPanelEl = document.createElement('div'); seatPanelEl.className = 'seat-panel';
+  const escHtml = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  function myId(){ return peer && peer.id; }
+  function allRemotes(){ return [conn, ...spectators].filter(c => c && c.open); }
+  function remoteName(c){
+    if(c === conn) return guestName;
+    const n = String((c.metadata && c.metadata.name) || '').slice(0, 12);
+    return n || ('ゲスト' + (spectators.indexOf(c) + 2));
+  }
+  function seatLabel(col){ return col === 'sente' ? '先手' : col === 'gote' ? '後手' : '観戦'; }
+  function sideHasPlayer(col){ return col === 'sente' || cpus.some(x => x.color === col) || allRemotes().some(c => c.__seat === col); }
+  function amReady(){ return isHost ? readyIds.has('host') : (localReady || remoteReadyIds.includes(myId())); }
+  function allReady(){
+    if(!readyIds.has('host') || !sideHasPlayer('gote')) return false;
+    return allRemotes().every(c => !c.__seat || readyIds.has(c.peer));
+  }
+  function seatsChanged(){
+    if(!isHost) return;
+    readyState = {sente: readyIds.has('host'), gote: allReady()};
+    checkMatchStart();
+    if(netActive) broadcastSync();
+    updateReadyUI();
+    updateNetStatus(peerCount);
+  }
+  function renderSeatPanel(){
+    const show = isHost && netActive && !matchStarted && countdownUntil <= 0;
+    if(!PARTY) seatPanelEl.style.display = show ? '' : 'none';
+    if(!show){ seatPanelEl.innerHTML = ''; return; }
+    const nCpu = col => cpus.filter(x => x.color === col).length;
+    let h = '<div class="sp-row"><span class="sp-name">CPUの強さ</span></div><div class="sp-row">'
+      + CPU_LV.map((L, i) => `<button data-sp="lv" data-v="${i}" class="${i === cpuLevel ? 'on' : ''}">${L.name}</button>`).join('') + '</div>';
+    h += `<div class="sp-row"><button data-sp="add" data-v="gote"${nCpu('gote') >= 2 ? ' disabled' : ''}>＋後手にCPU</button>`
+      + `<button data-sp="add" data-v="sente"${nCpu('sente') >= 2 ? ' disabled' : ''}>＋先手にCPU（味方）</button></div>`;
+    cpus.forEach((x, i) => {
+      h += `<div class="sp-item"><span class="sp-name">CPU（${CPU_LV[x.level].name}）・${seatLabel(x.color)}</span><button data-sp="rm" data-v="${i}">外す</button></div>`;
+    });
+    for(const c of allRemotes()){
+      h += `<div class="sp-item"><span class="sp-name">${escHtml(remoteName(c))}</span>`
+        + ['sente', 'gote', ''].map(s => `<button data-sp="seat" data-v="${escHtml(c.peer)}" data-s="${s}" class="${(c.__seat || '') === s ? 'on' : ''}">${seatLabel(s || null)}</button>`).join('')
+        + '</div>';
+    }
+    h += '<div class="sp-sub">同じ側に何人いてもOK（チーム戦）。同じ側の人は同じ駒を動かせます。CPUだけが相手でも始められます</div>';
+    seatPanelEl.innerHTML = h;
+  }
+  seatPanelEl.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-sp]');
+    if(!btn || !isHost || matchStarted || countdownUntil > 0) return;
+    const k = btn.dataset.sp, v = btn.dataset.v;
+    if(k === 'lv'){ cpuLevel = +v; renderSeatPanel(); return; }
+    if(k === 'add' && cpus.filter(x => x.color === v).length < 2) addCpu(v, cpuLevel);
+    if(k === 'rm') cpus.splice(+v, 1);
+    if(k === 'seat'){
+      const c = allRemotes().find(x => x.peer === v);
+      if(c){ c.__seat = btn.dataset.s || null; try { c.send({kind:'seat', color: c.__seat}); } catch(err){} }
+    }
+    seatsChanged();
+  });
+  // ゲスト側: ホストが自分の席を決めた
+  function setMySeat(color){
+    if(color === 'sente' || color === 'gote'){
+      spectating = false;
+      document.body.classList.remove('ykg-spec');
+      const bar = document.getElementById('ykgSpecBar'); if(bar) bar.remove();
+      myColor = color; colorAssigned = true;
+      buildBoardDom();
+    } else {
+      enterSpectate();
+    }
+    renderAll();
+    updateReadyUI();
+    updateNetStatus(1);
+  }
 
   function applyActionAsHost(action, actorColor){
     const requireActor = actorColor !== undefined;
@@ -1203,6 +1470,7 @@
       promoOffer: lastMovedForPromotionOffer ? {r:lastMovedForPromotionOffer.r, c:lastMovedForPromotionOffer.c} : null,
       matchStarted,
       readyState: {sente:readyState.sente, gote:readyState.gote},
+      readyIds: [...readyIds],
       countdownRemain: countdownUntil>0 ? Math.max(0, countdownUntil-now()) : 0,
       lobby: PARTY && isHost ? lobbyMembers() : null
     };
@@ -1225,6 +1493,7 @@
     if(state.readyState) readyState = {sente:!!state.readyState.sente, gote:!!state.readyState.gote};
     countdownUntil = state.countdownRemain>0 ? now()+state.countdownRemain : 0;
     if(state.lobby) remoteLobby = state.lobby;
+    if(Array.isArray(state.readyIds)) remoteReadyIds = state.readyIds;
     
     if(!wasMatchStarted && matchStarted){
       buildBoardDom();
@@ -1234,7 +1503,7 @@
     updateNetStatus(1);
     renderAll();
     if(gameOver){
-      winText.textContent = (winnerColor==='sente' ? '先手の勝ち！' : '後手の勝ち！');
+      winText.textContent = winLabel(winnerColor);
       overlayEl.classList.add('show');
     } else {
       overlayEl.classList.remove('show');
@@ -1251,23 +1520,23 @@
     if(netActive && netSend) netSend(action);
   }
 
-  function handleRemote(data){
+  function handleRemote(data, from){   // from: ホストのとき、どのゲストから来たか（2026-11-09: 人ごとの席で動かす）
     if(!data || !data.kind) return;
-    if(data.kind==='party-name'){ if(isHost) guestName = String(data.name || 'ゲスト').slice(0, 12); return; }
+    if(data.kind==='party-name'){ if(isHost && (!from || from === conn)) guestName = String(data.name || 'ゲスト').slice(0, 12); return; }
     if(data.kind==='spectate') return;
     if(data.kind==='request'){
       if(isHost){
-        const applied = applyActionAsHost(data.action, 'gote');
+        const seat = from ? from.__seat : 'gote';
+        if(!seat) return;   // 観戦の人は動かせない
+        const applied = applyActionAsHost(data.action, seat);
         if(applied) broadcastSync();
       }
       return;
     }
     if(data.kind==='ready-request'){
-      if(isHost){
-        readyState.gote = true;
-        checkMatchStart();
-        broadcastSync();
-        updateReadyUI();
+      if(isHost && from && from.__seat){
+        readyIds.add(from.peer);
+        seatsChanged();
       }
       return;
     }
@@ -1290,21 +1559,25 @@
     }
     const label = myColor==='sente' ? '先手' : '後手';
     if(!matchStarted){
+      if(isHost && !sideHasPlayer('gote')){ setBattleStatus('相手を待っています（部屋番号を共有するか、下でCPUを入れてください）'); return; }
       setBattleStatus('あなたは'+label+'です。接続完了。準備ができたら「準備完了」を押してください');
       return;
     }
+    if(isHost && cpus.length && !count){ setBattleStatus('あなたは先手です。CPUと対局中'); return; }
     setBattleStatus(count>0
       ? ('あなたは'+label+'です。オンライン対局中（'+count+'人接続）')
       : ('あなたは'+label+'です。相手の再接続を待っています…'));
   }
 
   function checkMatchStart(){
-    if(readyState.sente && readyState.gote && !matchStarted && countdownUntil<=0){
+    if(isHost && allReady() && !matchStarted && countdownUntil<=0){   // 2026-11-09: 座っている人全員＋後手に誰か（CPU でもよい）
       countdownUntil = now()+3000;
       setTimeout(()=>{
         if(!matchStarted){
           matchStarted = true;
           countdownUntil = 0;
+          cpuResetTimers();
+          updateNetStatus(peerCount);   // 2026-11-09: ホストの案内を「対局中」に変える
           buildBoardDom();
           broadcastSync();
           updateReadyUI();
@@ -1316,15 +1589,17 @@
 
   function updateReadyUI(){
     syncLobby();
-    if(!colorAssigned || matchStarted || countdownUntil>0){
+    renderSeatPanel();
+    if(!colorAssigned || matchStarted || countdownUntil>0 || spectating){
       readyRow.classList.remove('visible');
       requestAnimationFrame(fitBoard);   // 始まったら「準備完了」の行を隠して盤を大きくする
       return;
     }
     readyRow.classList.add('visible');
-    const already = readyState[myColor];
+    const already = amReady();
     readyBtn.disabled = already;
     readyBtn.textContent = already ? '準備完了（相手を待っています）' : '準備完了';
+    requestAnimationFrame(fitBoard);   // 2026-11-09: 席と CPU の板の高さが変わるので盤を合わせ直す
   }
 
   function generateRoomNumber(){
@@ -1339,11 +1614,14 @@
 
   function createRoom(){
     if(netActive) return;
-    if(typeof Peer === 'undefined'){
+    if(typeof Peer === 'undefined' || isOffline()){
+      if(window.ykgLobby && ykgLobby.active) ykgLobby.close();   // 2026-11-09: 待ち合わせ画面に閉じこめられないように
+      onlineMode = false;
       setLobbyStatus('通信ライブラリの読み込みに失敗しました。回線を確認して再読み込みしてください');
       showScreen('lobby');
       return;
     }
+    onlineMode = true;
     roomCreator = true;
     isHost = true;
     myColor = 'sente';
@@ -1374,23 +1652,32 @@
     });
 
     peer.on('connection', (c)=>{
-      if(!PARTY && conn && conn.open){   // 2026-11-06: 2 人目のあとに来た人は断る（ゲストの席を取られないように）
-        c.on('open', ()=>{ try { c.send({kind:'party-full'}); } catch(e){} setTimeout(()=>{ try { c.close(); } catch(e){} }, 500); });
-        return;
-      }
+      if(!matchStarted) lostSeats.length = 0;
       // パーティ: つなぎ直してきた同じ人（同じタブ）は相手の席のまま。2026-11-07: 前は、最初のつなぎがおそくてつなぎ直したゲストが
       // 「3 人目」として観戦にされ、「準備完了」が出なかった。観戦を選んだ人と、相手がいるときの別の人だけ観戦にする
       const meta = c.metadata || {};
       const sameTab = !!(PARTY && conn && meta.tab && conn.metadata && conn.metadata.tab === meta.tab);
-      if(PARTY && (meta.spec || (conn && conn.open && !sameTab))){   // 観戦を選んだ人・3 人目以降は観戦
+      // 2026-11-09: パーティでなくても、2 人目より後に来た人は（断らずに）観戦にする。ホストが席を決めればチームに入れる
+      // 2026-11-09: 対局中に席の人が抜けていたら、つなぎ直してきた人（観戦でない人）にその席を返す（前は観戦にされて二度と指せなかった）
+      const reseat = (!meta.spec && !sameTab && matchStarted && lostSeats.length) ? lostSeats.shift() : null;
+      if(meta.spec || reseat || (conn && conn.open && !sameTab)){   // 観戦を選んだ人・3 人目以降は観戦
+        c.__seat = reseat;
         c.on('open', ()=>{
           spectators.push(c);
-          syncLobby(); if(netActive) broadcastSync();
-          try { c.send({kind:'spectate'}); const st = serializeState(); st.seq = syncSeq; c.send({kind:'sync', state: st}); } catch(e){}
+          syncLobby(); renderSeatPanel(); if(netActive) broadcastSync();
+          try { c.send(reseat ? {kind:'seat', color: reseat} : {kind:'spectate'}); const st = serializeState(); st.seq = syncSeq; c.send({kind:'sync', state: st}); } catch(e){}
         });
-        c.on('close', ()=>{ spectators = spectators.filter(x => x !== c); syncLobby(); });
+        c.on('data', (data)=>{ handleRemote(data, c); });
+        c.on('close', ()=>{
+          spectators = spectators.filter(x => x !== c); readyIds.delete(c.peer);
+          if(c.__seat && matchStarted) lostSeats.push(c.__seat);
+          if(c.__seat && !matchStarted) seatsChanged(); else { syncLobby(); renderSeatPanel(); }
+        });
         return;
       }
+      // 2026-11-09: つなぎ直した同じ人は前の席のまま。対局が始まってから来た人は観戦
+      c.__seat = (sameTab && conn) ? conn.__seat : (matchStarted ? null : 'gote');
+      if(sameTab && conn && readyIds.has(conn.peer)) readyIds.add(c.peer);
       if(PARTY && conn && conn !== c){ const old = conn; old.__replaced = true; try { old.close(); } catch(e){} }   // 前のつなぎは静かに閉じる
       conn = c;
       if(PARTY && meta.name) guestName = String(meta.name).slice(0, 12);
@@ -1398,13 +1685,18 @@
         if(conn !== c) return;
         peerCount = 1;
         requestAnimationFrame(fitBoard);   // 相手が来たら部屋番号の箱を隠して盤を大きくする
+        try { c.send({kind:'seat', color: c.__seat}); } catch(e){}   // 2026-11-09: 席を知らせる（ふつうは後手）
+        renderSeatPanel();
         broadcastSync();
         updateNetStatus(peerCount);
       });
-      conn.on('data', (data)=>{ if(conn === c) handleRemote(data); });
+      conn.on('data', (data)=>{ if(conn === c) handleRemote(data, c); });
       conn.on('close', ()=>{
         if(c.__replaced || conn !== c) return;
+        if(c.__seat && matchStarted) lostSeats.push(c.__seat);
         peerCount = 0;
+        readyIds.delete(c.peer);
+        if(!matchStarted) seatsChanged();
         updateNetStatus(peerCount);
       });
     });
@@ -1423,6 +1715,7 @@
       isHost = false;
       netActive = false;
       colorAssigned = false;
+      onlineMode = false;
       setLobbyStatus('接続に失敗しました。通信環境を確認してもう一度お試しください。');
       showScreen('lobby');
     });
@@ -1434,10 +1727,15 @@
       setLobbyStatus('部屋番号は1桁の数字で入力してください');
       return;
     }
-    if(typeof Peer === 'undefined'){
+    if(typeof Peer === 'undefined' || isOffline()){
+      if(window.ykgLobby && ykgLobby.active) ykgLobby.close();
+      onlineMode = false;
       setLobbyStatus('通信ライブラリの読み込みに失敗しました。回線を確認して再読み込みしてください');
+      showScreen('lobby');
       return;
     }
+    onlineMode = true;
+    localReady = false;
     connectBtn.disabled = true;
     createRoomBtn.disabled = true;
     showScreen('battle');
@@ -1475,6 +1773,7 @@
       });
       conn.on('data', (data)=>{
         if(data && data.kind === 'spectate'){ enterSpectate(); setBattleStatus('観戦中です'); syncLobby(); }
+        if(data && data.kind === 'seat'){ setMySeat(data.color); return; }   // 2026-11-09: ホストが席を決めた
         if(data && data.kind === 'party-full'){ setBattleStatus('2人用のゲームです。いまは遊べません（ゲーム一覧へ戻ります）'); setTimeout(toGames, 3500); return; }
         handleRemote(data);
       });
@@ -1506,6 +1805,8 @@
   }
 
   function startOffline(){
+    cpus = [];   // 2026-11-09: CPU なしの 2 人プレイ
+    onlineMode = false;
     roomCreator = false;
     isHost = false;
     myColor = null;
@@ -1516,6 +1817,50 @@
     setBattleStatus('この端末だけで2人プレイ中（手番なし）');
     showScreen('battle');
   }
+  // 2026-11-09: CPU と対戦（この端末だけで動く。ネットがなくても遊べる）。あなたは先手。2対2 は味方 CPU 1 体＋相手 CPU 2 体
+  function startCpuGame(){
+    onlineMode = false;
+    roomCreator = false; isHost = false; colorAssigned = false; netActive = false;
+    myColor = 'sente';
+    cpus = [];
+    addCpu('gote', cpuLevel);
+    if(cpuMode === 2){ addCpu('gote', cpuLevel); addCpu('sente', cpuLevel); }
+    init();
+    setBattleStatus('CPU（' + CPU_LV[cpuLevel].name + '）と対戦中' + (cpuMode === 2 ? '・2対2' : '') + '（あなたは先手・手番なし）');
+    showScreen('battle');
+  }
+  function backToMenu(){
+    if(onlineMode) return;
+    cpus = [];
+    myColor = null;
+    init();
+    showScreen('lobby');
+    applyOfflineUI();
+  }
+  // ===== オフライン（2026-11-09）: ネットがないときは部屋・入室を隠して、CPU 対戦と 2 人プレイだけにする。?offline=1 で試せる
+  const OFFLINE_FORCED = new URLSearchParams(location.search).get('offline') === '1';
+  function isOffline(){ return OFFLINE_FORCED || !navigator.onLine; }
+  const LOBBY_MSG = '部屋を作る、または部屋番号を入力して入室してください';
+  function applyOfflineUI(){
+    const off = isOffline();
+    document.getElementById('netPanel').style.display = off ? 'none' : '';
+    if(off) setLobbyStatus('オフラインです。CPUと対戦か、この端末だけの2人プレイで遊べます');
+    else if(netStatusEl.textContent.indexOf('オフライン') === 0) setLobbyStatus(LOBBY_MSG);
+  }
+  window.addEventListener('online', applyOfflineUI);
+  window.addEventListener('offline', applyOfflineUI);
+  function bindSeg(id, set){
+    const el = document.getElementById(id);
+    el.addEventListener('click', e => {
+      const b = e.target.closest('button[data-v]'); if(!b) return;
+      set(+b.dataset.v);
+      el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    });
+  }
+  bindSeg('cpuLevelSeg', v => { cpuLevel = v; });
+  bindSeg('cpuModeSeg', v => { cpuMode = v; });
+  document.getElementById('cpuBtn').addEventListener('click', startCpuGame);
+  document.getElementById('menuBtn').addEventListener('click', backToMenu);
 
   createRoomBtn.addEventListener('click', ()=>{ roomCreator=true; createRoom(); });
   connectBtn.addEventListener('click', ()=>{ roomCreator=false; connectRoom(); });
@@ -1523,15 +1868,12 @@
   readyBtn.addEventListener('click', doReady);
   function doReady(){
     if(!colorAssigned || matchStarted || spectating) return;
-    if(readyState[myColor]) return;
+    if(amReady()) return;
     if(isHost){
-      readyState.sente = true;
-      checkMatchStart();
-      broadcastSync();
-      updateReadyUI();
-      updateNetStatus(peerCount);
+      readyIds.add('host');
+      seatsChanged();
     } else {
-      readyState.gote = true;
+      localReady = true;
       netSend({kind:'ready-request'});
       updateReadyUI();
     }
@@ -1544,11 +1886,16 @@
     roomInput.value = initialRoom;
   }
 
+  if(!PARTY){ seatPanelEl.id = 'seatPanel'; seatPanelEl.style.display = 'none'; readyRow.after(seatPanelEl); }   // 2026-11-09: パーティでないときは盤の上に出す
   init();
   requestAnimationFrame(tick);
+  applyOfflineUI();
+  window.__dbg = { get board(){ return board; }, get hands(){ return hands; }, get cpus(){ return cpus; }, get gameOver(){ return gameOver; }, get winner(){ return winnerColor; },
+    cpuChooseAction: (color, lv) => cpuChooseAction(color, CPU_LV[lv == null ? 1 : lv]), startCpuGame, isOffline, cpuApply,
+    seats: () => ({ readyIds: [...readyIds], remotes: allRemotes().map(c => ({peer: c.peer, seat: c.__seat})), matchStarted, countdownUntil }) };   // テスト用
 
   document.getElementById('ykgGames').addEventListener('click', toGames);
-  if(PARTY){
+  if(PARTY && !isOffline()){   // 2026-11-09: オフラインのときはパーティでも自動でつながず、CPU 対戦だけにする
     // パーティから開いたとき: ホストは部屋を作り、ゲストは自動で入る。どの画面でも左上に「← 一覧」を出す
     const back = document.createElement('button');
     back.id = 'ykgBack'; back.textContent = '← 一覧';
@@ -1558,7 +1905,7 @@
     syncLobby();   // つながる前から待ち合わせ画面を出しておく
     if(PARTY.role === 'host'){ roomCreator = true; createRoom(); }
     else { roomCreator = false; roomInput.value = PARTY.code; connectRoom(); }
-  } else if(initialRoom){
+  } else if(initialRoom && !isOffline()){
     connectRoom();
   }
   // アプリとして入れたときに使うサービスワーカー（ミニゲーム集で 1 つ。1 つ上のフォルダにある）

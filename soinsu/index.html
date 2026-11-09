@@ -117,6 +117,8 @@ label{font-size:12px;opacity:.7}
 table.res{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}
 table.res td{padding:6px 4px;border-bottom:1px solid #263050}
 table.res td:last-child{text-align:right}
+.tmb{border:none;border-radius:8px;padding:2px 10px;font-weight:800;margin-left:6px;min-width:2.6em}
+.tmb:disabled{opacity:1;cursor:default}
 </style>
 </head>
 <body>
@@ -161,7 +163,7 @@ const PARTY = (() => {
   try { if (!new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
 })();
 const netId = code => (PARTY ? "soinsu-party-" : PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
-const toGames = () => { ykgToGames(); };
+const toGames = () => { if (typeof ykgToGames === "function") ykgToGames(); else location.href = "../"; };   // party-beacon.js が読めなかったときも戻れるように
 let partyTries = 0, spectating = false, lobbySpecs = [];
 // パーティの成績: 勝ち負けが決まったら、ゲーム一覧で集計するために置いておく（ホストだけ。CPU は数えない）
 function partyReport(w, l) {
@@ -347,6 +349,238 @@ function genStage(seed, nPlayers = 8) {
   return { S, free: freeCells };
 }
 function pick2(R, a) { return a[Math.floor(R() * a.length)]; }
+
+// ================= 決まった形のステージ（2026-11-09 追加） =================
+// FPS のマップのように、大まかな形は前もって決めておき、木箱の位置などだけシードで少し変える。
+// ホストがロビーで選び、start のメッセージで全員に知らせる（全員が同じ形を作る）
+const STAGES = { random: "ランダム", bldg: "ビル", long: "縦長", city: "市街地" };
+const STAGE_NOTE = { random: "毎回ちがう形", bldg: "3階建てのビル。坂で上の階・屋上へ", long: "細長い通り。両がわに高い通路", city: "ビルの街。路地と、上れる屋上" };
+// 箱を置く道具。tf で向きを変えられる（市街地のブロックを左右・前後に反転して使う）
+function stageKit(S, tf = { ox: 0, sx: 1, oz: 0, sz: 1 }) {
+  const X = v => tf.ox + tf.sx * v, Z = v => tf.oz + tf.sz * v;
+  const rect = (x0, x1, z0, z1) => { const a = X(x0), b = X(x1), c = Z(z0), d = Z(z1); return [Math.min(a, b), Math.max(a, b), Math.min(c, d), Math.max(c, d)]; };
+  const K = {
+    box(x0, x1, z0, z1, y0, h, kind) {
+      const [a, b, c, d] = rect(x0, x1, z0, z1);
+      if (b - a < 0.01 || d - c < 0.01 || h - y0 < 0.01) return;
+      S.push({ x: (a + b) / 2, z: (c + d) / 2, w: b - a, d: d - c, h, y0, kind });
+    },
+    // 坂: 高さ lo の床から hi まで。dir = +1 なら axis の座標が大きいほうが高い
+    ramp(x0, x1, z0, z1, lo, hi, axis, dir) {
+      const [a, b, c, d] = rect(x0, x1, z0, z1);
+      S.push({ x: (a + b) / 2, z: (c + d) / 2, w: b - a, d: d - c, h: hi, base: lo, y0: lo, ramp: { axis, dir: dir * (axis === "x" ? tf.sx : tf.sz) }, kind: "ramp" });
+    },
+    // 階段: 1 段は 0.45m 以下（STEP より低いので歩いて上れる）
+    stairs(x0, x1, z0, z1, lo, hi, axis, dir) {
+      const n = Math.ceil((hi - lo) / 0.45 - 1e-6), L = (axis === "x" ? x1 - x0 : z1 - z0) / n;
+      for (let k = 0; k < n; k++) {
+        const top = lo + (k + 1) * (hi - lo) / n, a0 = dir > 0 ? (axis === "x" ? x0 : z0) + k * L : (axis === "x" ? x1 : z1) - (k + 1) * L;
+        if (axis === "x") K.box(a0, a0 + L, z0, z1, lo, top, "stair"); else K.box(x0, x1, a0, a0 + L, lo, top, "stair");
+      }
+    },
+    // 壁: axis = "x" なら z = c の位置で x の向きにのびる。ops = [[始め, 終わり, "door" | "win"]] の開口部
+    //   入口は下から 2.3m まで、窓は 1.0〜2.2m（窓からは数字が見えるが、通りぬけはできない）
+    wall(axis, c, a0, a1, fy, H, ops = [], kind = "wall2", t = 0.4) {
+      const seg = (s0, s1, y0, y1) => axis === "x" ? K.box(s0, s1, c - t / 2, c + t / 2, y0, y1, kind) : K.box(c - t / 2, c + t / 2, s0, s1, y0, y1, kind);
+      let a = a0;
+      for (const [o0, o1, ty] of ops.slice().sort((p, q) => p[0] - q[0])) {
+        seg(a, o0, fy, fy + H);
+        if (ty === "win") { seg(o0, o1, fy, fy + 1.0); seg(o0, o1, fy + 2.2, fy + H); }
+        else seg(o0, o1, fy + 2.3, fy + H);
+        a = o1;
+      }
+      seg(a, a1, fy, fy + H);
+    },
+    // 床（上の面が y、厚さ th）。holes = [[x0, x1, z0, z1]] は穴（坂が通るところ）
+    slab(x0, x1, z0, z1, y, holes = [], kind = "floor", th = 0.3) {
+      const cut = (lo, hi, k) => [...new Set([lo, hi, ...holes.flatMap(h => [h[k], h[k + 1]])])].filter(v => v >= lo && v <= hi).sort((p, q) => p - q);
+      const xs = cut(x0, x1, 0), zs = cut(z0, z1, 2);
+      for (let j = 0; j < zs.length - 1; j++) {
+        let run = null;
+        for (let i = 0; i < xs.length - 1; i++) {
+          const mx = (xs[i] + xs[i + 1]) / 2, mz = (zs[j] + zs[j + 1]) / 2;
+          const hole = holes.some(h => mx > h[0] && mx < h[1] && mz > h[2] && mz < h[3]);
+          if (!hole && run === null) run = xs[i];
+          if ((hole || i === xs.length - 2) && run !== null) { K.box(run, hole ? xs[i] : xs[i + 1], zs[j], zs[j + 1], y - th, y, kind); run = null; }
+        }
+      }
+    },
+  };
+  return K;
+}
+// 中に入れる低い建物（店）。屋上（高さ 3.3）にはへり（0.7m）があり、gaps の場所だけあいている（階段・橋をつなぐ）
+function shop(K, x0, x1, z0, z1, ops = {}, gaps = {}) {
+  const H = 3.0, t = 0.3, RF = 3.3, g = k => (gaps[k] || []).map(a => [a[0], a[1], "door"]);
+  K.wall("x", z0 + t / 2, x0, x1, 0, H, ops.z0 || [], "house", t);
+  K.wall("x", z1 - t / 2, x0, x1, 0, H, ops.z1 || [], "house", t);
+  K.wall("z", x0 + t / 2, z0 + t, z1 - t, 0, H, ops.x0 || [], "house", t);
+  K.wall("z", x1 - t / 2, z0 + t, z1 - t, 0, H, ops.x1 || [], "house", t);
+  K.slab(x0, x1, z0, z1, RF, [], "roof2");
+  K.wall("x", z0 + 0.1, x0, x1, RF, 0.7, g("z0"), "parapet", 0.2);
+  K.wall("x", z1 - 0.1, x0, x1, RF, 0.7, g("z1"), "parapet", 0.2);
+  K.wall("z", x0 + 0.1, z0 + 0.2, z1 - 0.2, RF, 0.7, g("x0"), "parapet", 0.2);
+  K.wall("z", x1 - 0.1, z0 + 0.2, z1 - 0.2, RF, 0.7, g("x1"), "parapet", 0.2);
+}
+const crate = (K, x, z, s = 0.7, h = 1.0, y = 0) => K.box(x - s, x + s, z - s, z + s, y, y + h, "crate");
+// ---- ビル: 3 階建て＋屋上。坂（階段）で上の階へ。窓から外や下の階が見える。まわりに 3m の庭
+function stBuilding(R, n) {
+  AX = 13; AZ = 15;
+  const S = [], K = stageKit(S), FL = [0, 3.5, 7, 10.5], WH = 3.2, j = () => (R() - 0.5) * 0.8;
+  const st1 = [7, 9.4, -6, 1], st2 = [-9.4, -7, -1, 6], st3 = [7, 9.4, -8, -1];   // 坂の場所（上の階の床は穴あき）
+  K.slab(-10, 10, -12, 12, FL[1], [st1]);
+  K.slab(-10, 10, -12, 12, FL[2], [st2]);
+  K.slab(-10, 10, -12, 12, FL[3], [st3], "roof2");
+  K.ramp(...st1, 0, FL[1], "z", 1);       // 1階 → 2階（z が大きいほうが上）
+  K.ramp(...st2, FL[1], FL[2], "z", -1);  // 2階 → 3階
+  K.ramp(...st3, FL[2], FL[3], "z", -1);  // 3階 → 屋上
+  // 坂の穴のまわりの手すり（上り口の側はあけておく）
+  K.box(6.75, 6.95, -6, 1, FL[1], FL[1] + 1, "rail"); K.box(7, 9.4, -6.2, -6, FL[1], FL[1] + 1, "rail");
+  K.box(-6.95, -6.75, -1, 6, FL[2], FL[2] + 1, "rail"); K.box(-9.4, -7, 6, 6.2, FL[2], FL[2] + 1, "rail");
+  K.box(6.75, 6.95, -8, -1, FL[3], FL[3] + 1, "rail"); K.box(7, 9.4, -1, -0.8, FL[3], FL[3] + 1, "rail");
+  // 外の壁（1階は入口、上は窓）
+  const outer = (fy, H, zA, zB, xA, xB) => {
+    K.wall("x", -11.8, -10, 10, fy, H, zA); K.wall("x", 11.8, -10, 10, fy, H, zB);
+    K.wall("z", -9.8, -11.6, 11.6, fy, H, xA); K.wall("z", 9.8, -11.6, 11.6, fy, H, xB);
+  };
+  const W = a => a.map(([p, q]) => [p, q, "win"]);
+  outer(0, WH, [[-8, -5, "win"], [-1.2, 1.2, "door"], [4, 6, "win"]], [[-7, -5, "win"], [-1.2, 1.2, "door"], [3, 5.5, "win"]],
+    [[-8, -5, "win"], [5, 7, "door"]], [[-10, -8, "win"], [3.5, 5.5, "door"], [8, 10, "win"]]);
+  outer(FL[1], WH, W([[-8, -5], [-2, 2], [4, 7]]), W([[-8, -5], [-2, 2], [4, 7]]), W([[-10, -7], [-4, -2], [8, 10]]), W([[-11, -8], [3, 6], [8, 11]]));
+  outer(FL[2], WH, W([[-9, -6], [-3, 3], [6, 9]]), W([[-9, -6], [-3, 3], [6, 9]]), W([[-10, -6], [-2, 2], [7, 10]]), W([[-11, -9], [2, 6], [8, 11]]));
+  outer(FL[3], 1.0, [], [], [], []);   // 屋上のへり
+  // 1階: 左に部屋が 2 つ、右は広間（柱）
+  K.wall("z", -3, -11.6, 11.6, 0, WH, [[-8.5, -6, "door"], [0, 2, "win"], [5, 7.5, "door"]]);
+  K.wall("x", 0, -9.6, -3.2, 0, WH, [[-7.5, -5.5, "door"]]);
+  K.box(1.6, 2.4, -6.4, -5.6, 0, WH, "column"); K.box(1.6, 2.4, 5.6, 6.4, 0, WH, "column");
+  for (const [x, z] of [[-7, -9.5], [-6.5, 9.5], [4, -9.5], [5, 9.5], [0.5, 2.5]]) crate(K, x + j(), z + j());
+  // 2階: 廊下と部屋（部屋の間にも窓）
+  K.wall("x", -4, -9.6, 6.75, FL[1], WH, [[-7, -5, "door"], [-1, 1, "win"], [3, 5, "door"]]);
+  K.wall("z", 2, -3.8, 11.6, FL[1], WH, [[3, 5, "door"], [8, 10, "win"]]);
+  for (const [x, z] of [[-5, -9], [4, -8.5], [-1, 8], [6, 9]]) crate(K, x + j(), z + j(), 0.7, 0.9, FL[1]);
+  // 3階: 広いフロア。低い仕切り（ジャンプで越えられる）と柱
+  K.box(-4, 0, 3.8, 4.2, FL[2], FL[2] + 1.2, "wall2"); K.box(1.5, 5.5, -4.2, -3.8, FL[2], FL[2] + 1.2, "wall2");
+  K.box(-3.4, -2.6, -6.4, -5.6, FL[2], FL[2] + WH, "column"); K.box(2.6, 3.4, 5.6, 6.4, FL[2], FL[2] + WH, "column");
+  for (const [x, z] of [[-6, -8], [0, -9], [-2, 9], [5, 1]]) crate(K, x + j(), z + j(), 0.7, 0.9, FL[2]);
+  // 屋上: 給水タンク・換気口
+  K.box(-6.5, -3.5, 6, 9, FL[3], FL[3] + 2.5, "tank");
+  crate(K, 2, 5, 0.6, 1.0, FL[3]); crate(K, -4, -6, 0.6, 1.0, FL[3]);
+  // 庭の木箱
+  for (const [x, z] of [[11.5, -4], [-11.5, 2], [-4, -13.5], [5, 13.5]]) crate(K, x, z + j(), 0.6, 1.1);
+  const free = [[-11.5, -13.5], [11.5, 13.5], [-11.5, 13.5], [11.5, -13.5], [-6, -6], [-6, 6], [5, 8], [0, -8],
+    [-6, -8, FL[1]], [5, 8, FL[1]], [-6, 8, FL[1]], [5, -8, FL[1]], [0, -8, FL[2]], [-4, 8, FL[2]], [4, 4, FL[2]], [-2, -5, FL[3]], [3, 7, FL[3]]];
+  return { S, free };
+}
+// ---- 縦長: 幅 12m の細長い通り。両がわに高い通路（下もくぐれる）、ところどころに橋とコンテナ
+function stLong(R, n) {
+  AX = 6; AZ = Math.round((27 + 18 * clamp((n - 2) / 6, 0, 1)) / 3) * 3;   // 2人で 54m、8人で 90m
+  const S = [], K = stageKit(S), CW = 2.6, e = AZ - 9, zc = Math.round(AZ / 3), j = () => (R() - 0.5);
+  for (const s of [-1, 1]) {
+    const xa = s < 0 ? -6 : 3.6, xb = s < 0 ? -3.6 : 6;
+    K.ramp(xa, xb, -e - 5, -e, 0, CW, "z", 1);
+    K.box(xa, xb, -e, e, CW - 0.3, CW, "catwalk");
+    K.ramp(xa, xb, e, e + 5, 0, CW, "z", -1);
+    for (let z = -e + 3; z < e; z += 6) K.box(s < 0 ? -4.0 : 3.6, s < 0 ? -3.6 : 4.0, z - 0.2, z + 0.2, 0, CW - 0.3, "column");
+    crate(K, s * 4.8, s * (e * 0.45), 0.5, 0.9, CW);   // 通路の上の木箱（かくれる所）
+    // 通りのまん中から通路へ上る坂（左右で前後をずらす）
+    const z = s * zc;
+    if (s < 0) K.ramp(-3.6, 1.4, z - 1.1, z + 1.1, 0, CW, "x", -1); else K.ramp(-1.4, 3.6, z - 1.1, z + 1.1, 0, CW, "x", 1);
+  }
+  // 左右の通路をつなぐ橋（下はくぐれる）
+  for (const z of AZ >= 36 ? [0, -Math.round(AZ * 0.62), Math.round(AZ * 0.62)] : [0]) K.box(-3.6, 3.6, z - 1.2, z + 1.2, CW - 0.3, CW, "bridge");
+  // 通りの物かげ: コンテナ（越えられない）・低い壁（ジャンプで越えられる）・木箱 を順に
+  let k = 0;
+  for (let z = -AZ + 10; z <= AZ - 10; z += 5, k++) {
+    if (Math.abs(Math.abs(z) - zc) < 3.5) continue;
+    const side = k % 2 ? 1 : -1, jx = j() * 0.8, jz = j() * 1.2;
+    if (Math.abs(z) < 3) { crate(K, -1.5 + jx, z + jz); crate(K, 1.8 + jx, z - jz, 0.6, 1.2); continue; }
+    if (k % 3 === 0) K.box(side * 0.6 - 1.2 + jx, side * 0.6 + 1.2 + jx, z - 2.4 + jz, z + 2.4 + jz, 0, 2.4, "container");
+    else if (k % 3 === 1) K.box(side * 1.6 - 1.6 + jx, side * 1.6 + 1.6 + jx, z - 0.3, z + 0.3, 0, 1.2, "wall");
+    else { crate(K, side * 1.8 + jx, z + jz); crate(K, -side * 0.6 + jx, z - 1 + jz, 0.6, 1.3); }
+  }
+  // 両はしの陣地: 低い壁
+  for (const s of [-1, 1]) K.box(-2, 2, s * (AZ - 6) - 0.3, s * (AZ - 6) + 0.3, 0, 1.3, "wall");
+  const free = [];
+  for (let z = -AZ + 2.5; z <= AZ - 2.5; z += (2 * AZ - 5) / 13) for (const x of [-2, 2]) free.push([x + (free.length % 3 - 1) * 0.5, +z.toFixed(2)]);
+  for (const s of [-1, 1]) for (const f of [-0.6, 0.2, 0.7]) free.push([s * 4.8, +(f * e).toFixed(2), CW]);
+  return { S, free };
+}
+// ---- 市街地: まん中に大通り（幅 6m）、横の通り（4m）、ブロックごとに 高いビル・店（屋上に上れる）・公園・工事現場
+const BLOCKS = {
+  A(K, R) {   // 高いビル 2 つと、店（外の階段で屋上へ）。ビルの間は路地
+    K.box(0, 5, 0, 4.5, 0, 8 + Math.floor(R() * 3) * 1.5, "bldg");
+    K.box(0, 4, 6, 10, 0, 6 + Math.floor(R() * 3), "bldg2");
+    shop(K, 6.2, 9.6, 0.4, 6.0, { x1: [[2, 4, "door"]], z0: [[6.8, 8.8, "win"]], x0: [[3.5, 5, "win"]] }, { z1: [[7.6, 9.6]] });
+    K.stairs(7.6, 9.6, 6.0, 9.6, 0, 3.3, "z", -1);
+    crate(K, 5.2 + (R() - 0.5), 8.2, 0.6);
+  },
+  B(K, R) {   // 公園: 噴水・木・ベンチ・低い舞台
+    K.box(3.5, 6.5, 3.5, 3.8, 0, 0.6, "stone"); K.box(3.5, 6.5, 6.2, 6.5, 0, 0.6, "stone");
+    K.box(3.5, 3.8, 3.8, 6.2, 0, 0.6, "stone"); K.box(6.2, 6.5, 3.8, 6.2, 0, 0.6, "stone");
+    K.box(4.7, 5.3, 4.7, 5.3, 0, 1.6, "stone");
+    for (const [x, z] of [[1.5, 1.5], [8.5, 1.5], [1.5, 8.5], [8.5, 8.5]]) { K.box(x - 0.25, x + 0.25, z - 0.25, z + 0.25, 0, 2.4, "trunk"); K.box(x - 1.3, x + 1.3, z - 1.3, z + 1.3, 2.4, 4.0, "leaf"); }
+    K.box(0.8, 2.6, 4.6, 5.4, 0, 0.5, "bench"); K.box(7.4, 9.2, 4.6, 5.4, 0, 0.5, "bench");
+    K.box(3.6, 6.4, 8.4, 9.8, 0, 1.0, "plat");
+    crate(K, 5 + (R() - 0.5) * 2, 1.2, 0.5, 0.9);
+  },
+  C(K, R) {   // 店 2 つ。屋上どうしを橋でつなぐ（下は路地）
+    shop(K, 0.4, 4.4, 0.4, 9.6, { x1: [[6, 8, "door"]], z0: [[1.4, 3.4, "door"]], x0: [[3, 5, "win"]] }, { x1: [[2, 3.6]] });
+    shop(K, 6.0, 9.6, 0.4, 5.6, { x1: [[1.5, 3.5, "door"]], z1: [[6.5, 7.5, "win"]] }, { x0: [[2, 3.6]], z1: [[7.6, 9.6]] });
+    K.box(4.4, 6.0, 2.0, 3.6, 3.0, 3.3, "plank");
+    K.stairs(7.6, 9.6, 5.6, 9.4, 0, 3.3, "z", -1);
+    crate(K, 5.6 + (R() - 0.5), 8.4, 0.6);
+  },
+  D(K, R) {   // 工事現場: 足場（2.6m・5m）と階段。上の階段の下はくぐれる
+    K.box(0.5, 4.5, 0.5, 4.5, 0, 2.6, "plat");
+    K.stairs(4.5, 6.9, 0.5, 2.5, 0, 2.6, "x", -1);
+    K.box(0.5, 4.5, 6.5, 9.5, 0, 5.0, "plat2");
+    K.stairs(1.5, 3.5, 4.5, 6.5, 2.6, 5.0, "z", 1);
+    K.box(6.5, 9.5, 6.2, 7.4, 0, 1.2, "pipe");
+    crate(K, 8, 3.5 + (R() - 0.5), 0.6); crate(K, 7.6, 9, 0.5, 0.9);
+  },
+};
+function stCity(R, n) {
+  const rows = n <= 4 ? 2 : 3;
+  AX = 15; AZ = rows === 2 ? 14 : 21;
+  const S = [], zr = rows === 2 ? [[-12, -2], [2, 12]] : [[-19, -9], [-5, 5], [9, 19]];
+  const T = rows === 2 ? ["A", "C", "B", "A"] : ["A", "C", "B", "D", "C", "A"];
+  let bi = 0;
+  for (const [z0, z1] of zr) for (const side of [-1, 1]) {
+    const flip = R() < 0.5;   // 前後の反転だけランダム（ブロックの形は決まっている）
+    BLOCKS[T[bi++]](stageKit(S, { ox: side < 0 ? -13 : 13, sx: side < 0 ? 1 : -1, oz: flip ? z1 : z0, sz: flip ? -1 : 1 }), R);
+  }
+  const K = stageKit(S);
+  // 車（ジャンプで越えられる）
+  const cars = [];
+  for (let t = 0; t < 60 && cars.length < rows * 2; t++) {
+    const x = (R() < 0.5 ? -1 : 1) * 1.5, z = (R() * 2 - 1) * (AZ - 4);
+    if (cars.some(c => c[0] === x && Math.abs(c[1] - z) < 6)) continue;
+    cars.push([x, z]); K.box(x - 0.9, x + 0.9, z - 2, z + 2, 0, 1.4, "car");
+  }
+  for (let r = 0; r < rows - 1; r++) { const z = (zr[r][1] + zr[r + 1][0]) / 2, x = (R() < 0.5 ? -1 : 1) * (6 + R() * 4); K.box(x - 2, x + 2, z - 0.9, z + 0.9, 0, 1.4, "car"); }
+  const free = [];
+  for (let z = -AZ + 2; z <= AZ - 2; z += 3) { free.push([0, z]); free.push([z % 2 ? 14 : -14, z]); }
+  return { S, free };
+}
+// ステージを作る（kind が決まった形でなければランダム）。出てくる場所は、壁の中などにならないものだけ残す
+function makeStage(kind, seed, n) {
+  const f = { bldg: stBuilding, long: stLong, city: stCity }[kind];
+  if (!f) { const s = genStage(seed, n); s.kind = "random"; return s; }
+  const s = f(mulberry(seed), n); s.kind = kind;
+  s.free = s.free.filter(([x, z, y]) => spotOk(s.S, x, z, y || 0));
+  return s;
+}
+// (x, z) の高さ y に人が立てるか（足もとがちょうど y で、体がどこにもめりこまない）
+function spotOk(S, x, z, y) {
+  if (Math.abs(x) > AX - 0.6 || Math.abs(z) > AZ - 0.6) return false;
+  let g = 0;
+  for (const o of S) if (inside(o, x, z)) { const t = topAt(o, x, z); if (t > g && t <= y + STEP) g = t; }
+  if (Math.abs(g - y) > 0.06) return false;
+  for (const o of S) {
+    if ((o.y0 || 0) >= y + BODY || Math.abs(x - o.x) > o.w / 2 + RADIUS || Math.abs(z - o.z) > o.d / 2 + RADIUS) continue;
+    if (topAt(o, clamp(x, o.x - o.w / 2, o.x + o.w / 2), clamp(z, o.z - o.d / 2, o.z + o.d / 2)) > y + STEP) return false;
+  }
+  return true;
+}
 let STAGE = genStage(12345, 8);
 function topAt(o, x, z) {
   if (!o.ramp) return o.h;
@@ -403,13 +637,25 @@ function jump(p) { if (!p.air && (p.vy || 0) <= 0) { p.vy = JUMP_V; p.air = true
 let mode = "none";        // local / host / client
 let screen = "menu";      // menu / connecting / lobby / game / layout
 let peer = null, hostConn = null, hostSeen = 0;
-const host = { code: "", conns: new Map(), specs: new Map(), nextId: 1, playing: false, bots: 0 };   // specs: 観戦の人
+const host = { code: "", conns: new Map(), specs: new Map(), nextId: 1, playing: false, bots: 0, stage: "random", team: false, tm: new Map() };   // specs: 観戦の人。stage / team / tm（id → チーム）は 2026-11-09
+// ホストの時計（秒）。テスト（__dbg.fast）で時間を早送りできるように、ホストの計算はこれを使う
+let clockOff = 0;
+const nowS = () => performance.now() / 1000 + clockOff;
+// オフライン（2026-11-09）: 電波がない、または ?offline=1 のときは、部屋をつくる・入るなどを出さず、CPU との練習だけにする
+const FORCE_OFF = new URLSearchParams(location.search).has("offline");
+const isOffline = () => FORCE_OFF || !navigator.onLine || typeof Peer === "undefined";
 let myId = 0, errMsg = "";
 let lobbyPs = [];
 let G = null;             // ホストだけが持つ正式な状態
 const view = new Map();   // 画面に出す全員の状態
 const me = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, pitch: 0 };
 let selId = null, inp = [], kbuf = "", lastAtk = -99, overInfo = null, practiceBots = 3;
+let teamMode = false;   // いまの試合がチーム戦か（start のメッセージで決まる）
+// CPU 練習の設定（2026-11-09）: ステージとチーム戦。覚えておく
+let practiceStage = "random", practiceTeam = false;
+try { const s = localStorage.getItem("soinsu-stage"); if (s && s in { random: 1, bldg: 1, long: 1, city: 1 }) practiceStage = s; practiceTeam = localStorage.getItem("soinsu-team") === "1"; } catch (e) {}
+const myTeam = () => { const v = view.get(myId); return teamMode && v ? v.tm : null; };
+const isMate = v => teamMode && v.id !== myId && myTeam() != null && v.tm === myTeam();   // 自分の味方
 const feed = [];
 
 // ================= 通信 =================
@@ -436,11 +682,39 @@ function hostLobby() {
   lobbyPs = [{ id: 0, name: myName() }];
   for (const [id, c] of host.conns) lobbyPs.push({ id, name: c.pname });
   for (let i = 0; i < host.bots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABCDEFGH"[i], bot: true });
+  assignTeams(lobbyPs);
   lobbySpecs = [...host.specs.values()].map(c => c.pname);
-  broadcast({ t: "lobby", ps: lobbyPs, code: host.code, specs: lobbySpecs });
+  broadcast({ t: "lobby", ps: lobbyPs, code: host.code, specs: lobbySpecs, stage: host.stage, team: host.team });
 }
-function pickSpawns(n) {
-  const pool = STAGE.free.slice().sort(() => Math.random() - 0.5), out = [];
+// チーム（2026-11-09）: 0 = 赤、1 = 青。まだ決まっていない人（来たばかりの人・追加した CPU）は人数の少ないほうへ
+const TEAM_NAME = ["赤", "青"], TEAM_COL = [0xe23b3b, 0x2f74e8], TEAM_CSS = ["#ff5a5a", "#4a9bff"];
+function assignTeams(list) {
+  for (const id of [...host.tm.keys()]) if (!list.some(p => p.id === id)) host.tm.delete(id);
+  for (const p of list) {
+    if (!host.tm.has(p.id)) { const n0 = list.filter(q => host.tm.get(q.id) === 0).length, n1 = list.filter(q => host.tm.get(q.id) === 1).length; host.tm.set(p.id, n0 <= n1 ? 0 : 1); }
+    p.tm = host.tm.get(p.id);
+  }
+}
+function swapTeam(id) { if (!host.tm.has(id)) return; host.tm.set(id, 1 - host.tm.get(id)); hostLobby(); }
+const teamsReady = () => !host.team || (lobbyPs.some(p => p.tm === 0) && lobbyPs.some(p => p.tm === 1));
+function pickSpawns(n, list) {
+  // チーム戦: 赤は z がマイナスのがわ、青はプラスのがわ（縦長のステージでは両はしの陣地）から出る
+  if (list && host.team) {
+    const out = new Array(n), half = [0, 1].map(k => STAGE.free.filter(f => k ? f[1] > 0 : f[1] <= 0));
+    // 人数の多いチームから決め、使った場所はもう一方のチームでは使わない（2026-11-09: 片方の陣地が足りないとき、同じ場所から 2 人出ることがあった）
+    const used = new Set();
+    const ks = [0, 1].map(k => ({ k, idx: list.map((p, i) => p.tm === k ? i : -1).filter(i => i >= 0) })).sort((a, b) => b.idx.length - a.idx.length);
+    for (const { k, idx } of ks) {
+      const own = half[k].filter(f => !used.has(f)), all = STAGE.free.filter(f => !used.has(f));
+      const sp = pickFrom(own.length >= idx.length ? own : all, idx.length);
+      idx.forEach((i, m) => { out[i] = sp[m]; used.add(sp[m]); });
+    }
+    return out;
+  }
+  return pickFrom(STAGE.free, n);
+}
+function pickFrom(free, n) {
+  const pool = free.slice().sort(() => Math.random() - 0.5), out = [];
   if (pool.length) out.push(pool.pop());
   while (out.length < n && pool.length) {
     let best = 0, bd = -1;
@@ -456,21 +730,26 @@ function pickSpawns(n) {
 function hostStart() {
   const list = lobbyPs.slice();
   const seed = Math.floor(Math.random() * 2 ** 31);
-  STAGE = genStage(seed, list.length);
-  const sp = pickSpawns(list.length);
-  G = { players: new Map(), over: false, seed, t0: performance.now() / 1000, items: new Map(), nextItem: 1, itemT: performance.now() / 1000 - 4, itemSent: 0 };
+  if (!STAGES[host.stage]) host.stage = "random";
+  if (host.team) assignTeams(list);
+  STAGE = makeStage(host.stage, seed, list.length);   // 2026-11-09: 選んだステージ
+  NAV = buildNav();   // CPU の道さがし用（ホストだけ）
+  const sp = pickSpawns(list.length, list);
+  const t0 = nowS();
+  G = { players: new Map(), over: false, seed, stage: STAGE.kind, team: !!host.team, t0, items: new Map(), nextItem: 1, itemT: t0 - 4, itemSent: 0 };
   list.forEach((p, i) => {
-    const q = { id: p.id, name: p.name, bot: !!p.bot, color: COLORS[i % COLORS.length], x: sp[i][0], z: sp[i][1], y: 0, vy: 0, yaw: 0, f: genFactors(), alive: true, kills: 0, cd: 0 };
-    collide(q); q.y = groundAt(q.x, q.z); q.yaw = Math.atan2(q.x, q.z); q.max = q.f.length;
+    const tm = host.team ? p.tm : undefined;
+    const q = { id: p.id, name: p.name, bot: !!p.bot, tm, color: host.team ? TEAM_COL[tm] : COLORS[i % COLORS.length], x: sp[i][0], z: sp[i][1], y: sp[i][2] || 0, vy: 0, yaw: 0, f: genFactors(), alive: true, kills: 0, cd: 0 };
+    collide(q); q.y = groundAt(q.x, q.z, q.y); q.yaw = Math.atan2(q.x, q.z); q.max = q.f.length;
     G.players.set(q.id, q);
   });
   host.playing = true;
   for (const c of host.conns.values()) c.seen = performance.now();
-  broadcast({ t: "start", seed, ps: [...G.players.values()].map(p => ({ id: p.id, name: p.name, bot: p.bot, color: p.color, x: p.x, z: p.z, yaw: p.yaw, f: p.f, max: p.max })) });
+  broadcast(startMsg());
 }
-// 途中から来た観戦の人へ: 今の数字・位置・生きているか
+// スタートの知らせ（途中から来た観戦の人へも: 今の数字・位置・生きているか）。ステージの種類とチーム戦かどうかも送る
 function startMsg() {
-  return { t: "start", seed: G.seed, ps: [...G.players.values()].map(p => ({ id: p.id, name: p.name, bot: p.bot, color: p.color, x: p.x, z: p.z, yaw: p.yaw, f: p.f, max: p.max, alive: p.alive })) };
+  return { t: "start", seed: G.seed, stage: G.stage, team: G.team, ps: [...G.players.values()].map(p => ({ id: p.id, name: p.name, bot: p.bot, tm: p.tm, color: p.color, x: p.x, z: p.z, y: +(p.y || 0).toFixed(2), yaw: p.yaw, f: p.f, max: p.max, alive: p.alive })) };
 }
 function hostHandle(id, m) {
   if (!G || !m) return;
@@ -481,13 +760,14 @@ function hostHandle(id, m) {
     p.x = clamp(m.x, -AX, AX); p.z = clamp(m.z, -AZ, AZ); p.yaw = m.yaw;
     p.y = Number.isFinite(m.y) ? clamp(m.y, 0, 12) : groundAt(p.x, p.z);   // ジャンプ中・橋の上などの高さも受け取る
   } else if (m.t === "atk") doAttack(id, m.to, m.p);
-  else if (m.t === "use") useItem(p, performance.now() / 1000);
+  else if (m.t === "use") useItem(p, nowS());
 }
 function doAttack(aid, tid, primes) {
   const a = G.players.get(aid), t = G.players.get(tid);
   if (!a || !t || G.over || !a.alive || !t.alive || aid === tid) return;
+  if (!foe(a, t)) return;   // チーム戦: 味方には打ち込めない（2026-11-09）
   if (!Array.isArray(primes) || !primes.length || primes.length > 20 || !primes.every(isPrime)) return;
-  const now = performance.now() / 1000;
+  const now = nowS();
   if (now < a.cd) return;
   a.cd = now + COOLDOWN * 0.8;
   const abefore = prod(a.f);
@@ -518,21 +798,36 @@ function doAttack(aid, tid, primes) {
 }
 function checkOver(timeUp) {
   if (!G || G.over) return;
-  let alive = [...G.players.values()].filter(p => p.alive);
-  if (alive.length > 1 && !timeUp) return;
-  if (timeUp && alive.length > 1) {   // 時間切れ: 数字がいちばん小さい人の勝ち
-    const min = Math.min(...alive.map(p => prod(p.f)));
-    alive = alive.filter(p => prod(p.f) === min);
+  let alive = [...G.players.values()].filter(p => p.alive), wteam = null;
+  const human = p => !p.bot;
+  if (G.team) {
+    // チーム戦（2026-11-09）: 相手チームが全員やられたら勝ち。
+    // 時間切れ: 生き残りが多いチームの勝ち → 同じなら、生き残りの数字の合計が小さいチームの勝ち → それも同じなら引き分け
+    const al = [0, 1].map(k => alive.filter(p => p.tm === k));
+    if (!timeUp && al[0].length && al[1].length) return;
+    if (!al[0].length && !al[1].length) wteam = -1;
+    else if (!al[1].length) wteam = 0;
+    else if (!al[0].length) wteam = 1;
+    else if (al[0].length !== al[1].length) wteam = al[0].length > al[1].length ? 0 : 1;
+    else { const s = al.map(a => a.reduce((x, p) => x + prod(p.f), 0)); wteam = s[0] === s[1] ? -1 : s[0] < s[1] ? 0 : 1; }
+    alive = wteam < 0 ? [] : [...G.players.values()].filter(p => p.tm === wteam);   // 勝ったチームは、やられた人も勝ち
+  } else {
+    if (alive.length > 1 && !timeUp) return;
+    if (timeUp && alive.length > 1) {   // 時間切れ: 数字がいちばん小さい人の勝ち
+      const min = Math.min(...alive.map(p => prod(p.f)));
+      alive = alive.filter(p => prod(p.f) === min);
+    }
   }
   G.over = true;
   const g = G, wins = alive.map(p => p.id);
-  const human = p => !p.bot;
-  partyReport(alive.filter(human).map(p => p.name), [...g.players.values()].filter(p => human(p) && !wins.includes(p.id)).map(p => p.name));
+  // パーティの成績: チーム戦の引き分けは数えない（wins が空 → 勝ちも負けも空）
+  if (!(G.team && wteam < 0)) partyReport(alive.filter(human).map(p => p.name), [...g.players.values()].filter(p => human(p) && !wins.includes(p.id)).map(p => p.name));
   setTimeout(() => {
     if (G !== g) return;
-    const ps = [...g.players.values()].map(p => ({ id: p.id, name: p.name, kills: p.kills, alive: p.alive, n: prod(p.f) }))
+    const ps = [...g.players.values()].map(p => ({ id: p.id, name: p.name, kills: p.kills, alive: p.alive, n: prod(p.f), tm: p.tm }))
       .sort((x, y) => (wins.includes(y.id) - wins.includes(x.id)) || (y.alive - x.alive) || (y.kills - x.kills) || (x.n - y.n));
-    broadcast({ t: "over", win: wins.length === 1 ? wins[0] : null, wins, timeUp: !!timeUp, ps });
+    const sums = g.team ? [0, 1].map(k => g.players.size && [...g.players.values()].filter(p => p.tm === k && p.alive).reduce((x, p) => x + prod(p.f), 0)) : null;
+    broadcast({ t: "over", win: !g.team && wins.length === 1 ? wins[0] : null, wins, timeUp: !!timeUp, ps, team: g.team ? wteam : undefined, sums });
   }, timeUp ? 300 : 1500);
 }
 function hostDrop(id) {
@@ -543,13 +838,26 @@ function hostDrop(id) {
 }
 
 // ---------- アイテム（ホスト） ----------
-const ITEM_OK = ["plat", "plat2", "bridge", "roof", "crate", "pillar", "step", "ramp"];
-function surfaceAt(x, z) { let g = 0, k = null; for (const o of STAGE.S) if (inside(o, x, z)) { const t = topAt(o, x, z); if (t > g) { g = t; k = o.kind; } } return [g, k]; }
+const ITEM_OK = ["plat", "plat2", "bridge", "roof", "crate", "pillar", "step", "ramp", "floor", "roof2", "catwalk", "stair", "plank"];
+// 2026-11-09: 何階もあるステージのため、(x, z) で立てる面（地面・床・屋上…）を全部さがし、その中から選ぶ。
+// 上に物がかぶさっている面（壁の中・タンクの下など）には置かない
+function itemLevels(x, z) {
+  const tops = [0];
+  for (const o of STAGE.S) if (inside(o, x, z) && ITEM_OK.includes(o.kind)) tops.push(topAt(o, x, z));
+  return [...new Set(tops)].filter(t => {
+    if (Math.abs(groundAt(x, z, t) - t) > 0.02) return false;
+    for (const o of STAGE.S) {
+      if ((o.y0 || 0) >= t + 1.6 || Math.abs(x - o.x) > o.w / 2 + 0.3 || Math.abs(z - o.z) > o.d / 2 + 0.3) continue;
+      if (topAt(o, clamp(x, o.x - o.w / 2, o.x + o.w / 2), clamp(z, o.z - o.d / 2, o.z + o.d / 2)) > t + 0.05) return false;
+    }
+    return true;
+  });
+}
 function spawnItem() {
-  for (let t = 0; t < 30; t++) {
+  for (let t = 0; t < 40; t++) {
     const x = (Math.random() * 2 - 1) * (AX - 1.2), z = (Math.random() * 2 - 1) * (AZ - 1.2);
-    const [y, k] = surfaceAt(x, z);
-    if (k && !ITEM_OK.includes(k)) continue;
+    const lv = itemLevels(x, z); if (!lv.length) continue;
+    const y = pick(lv);
     if ([...G.items.values()].some(it => Math.hypot(it.x - x, it.z - z) < 4)) continue;
     let r = Math.random() * Object.values(ITEM).reduce((a, b) => a + b.w, 0), kind = "num";
     for (const [kk, v] of Object.entries(ITEM)) { r -= v.w; if (r < 0) { kind = kk; break; } }
@@ -591,26 +899,141 @@ function useItem(p, nowS) {
   broadcast(m);
 }
 
+// ---------- CPU の道さがし（2026-11-09） ----------
+// 何階もあるステージで CPU が上の階の相手の真下でうろうろしないよう、ステージから「歩ける点」の網を作る（ホストだけ）。
+// 0.75m ごとの点の、立てる高さ（地面・床・坂の上…）を点にし、となりへ歩いて行ける（段差・坂・飛び降り・低い物へのジャンプ）ものを線でつなぐ
+const NAV_C = 0.75;
+let NAV = null;
+function buildNav() {
+  const B = 2, bx = Math.ceil(AX * 2 / B), bz = Math.ceil(AZ * 2 / B), bk = [...Array(bx * bz)].map(() => []);
+  const bi = (x, z) => clamp(Math.floor((x + AX) / B), 0, bx - 1) * bz + clamp(Math.floor((z + AZ) / B), 0, bz - 1);
+  for (const o of STAGE.S) {   // 物を 2m のマスに分けておく（調べる数をへらす）
+    const i0 = clamp(Math.floor((o.x - o.w / 2 - 0.6 + AX) / B), 0, bx - 1), i1 = clamp(Math.floor((o.x + o.w / 2 + 0.6 + AX) / B), 0, bx - 1);
+    const j0 = clamp(Math.floor((o.z - o.d / 2 - 0.6 + AZ) / B), 0, bz - 1), j1 = clamp(Math.floor((o.z + o.d / 2 + 0.6 + AZ) / B), 0, bz - 1);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) bk[i * bz + j].push(o);
+  }
+  const gAt = (x, z, y) => { let g = 0; for (const o of bk[bi(x, z)]) if (inside(o, x, z)) { const t = topAt(o, x, z); if (t > g && t <= y + STEP) g = t; } return g; };
+  const blocked = (x, z, y, m) => {
+    for (const o of bk[bi(x, z)]) {
+      if ((o.y0 || 0) >= y + BODY || Math.abs(x - o.x) > o.w / 2 + m || Math.abs(z - o.z) > o.d / 2 + m) continue;
+      if (topAt(o, clamp(x, o.x - o.w / 2, o.x + o.w / 2), clamp(z, o.z - o.d / 2, o.z + o.d / 2)) > y + STEP) return true;
+    }
+    return false;
+  };
+  const ceil = (x, z, y) => { let c = Infinity; for (const o of bk[bi(x, z)]) if (o.y0 > y + STEP && o.y0 < c && inside(o, x, z)) c = o.y0; return c; };
+  const NI = Math.floor((AX * 2 - 1) / NAV_C), NJ = Math.floor((AZ * 2 - 1) / NAV_C);
+  const px = i => -AX + 0.5 + NAV_C * (i + 0.5), pz = j => -AZ + 0.5 + NAV_C * (j + 0.5);
+  const nx = [], ny = [], nz = [], cell = new Array(NI * NJ);
+  for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) {
+    const x = px(i), z = pz(j), lv = [0], ids = [];
+    for (const o of bk[bi(x, z)]) if (inside(o, x, z)) lv.push(topAt(o, x, z));
+    lv.sort((a, b) => a - b);
+    for (let k = 0; k < lv.length; k++) {
+      const t = lv[k];
+      if (k && t - lv[k - 1] < 0.02) continue;
+      if (Math.abs(gAt(x, z, t) - t) > 0.02 || blocked(x, z, t, 0.3)) continue;
+      ids.push(nx.length); nx.push(x); ny.push(t); nz.push(z);
+    }
+    cell[i * NJ + j] = ids;
+  }
+  const adj = nx.map(() => []);
+  const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) for (const a of cell[i * NJ + j]) for (const [di, dj] of D8) {
+    const i2 = i + di, j2 = j + dj; if (i2 < 0 || j2 < 0 || i2 >= NI || j2 >= NJ) continue;
+    let y = ny[a], jumped = false, ok = true, js = -9;
+    for (let s = 1; s <= 4 && ok; s++) {
+      const x = nx[a] + di * NAV_C * s / 4, z = nz[a] + dj * NAV_C * s / 4;
+      const g = gAt(x, z, y); y = jumped && s === js + 1 ? Math.max(g, y) : g;   // 段・坂は上る。下りは飛び降りてよい（ジャンプ直後は空中）
+      if (blocked(x, z, y, 0.25)) {
+        // 低い物（1.4m まで）にはジャンプで乗れる（少し先の高さを見る）
+        const l = Math.hypot(di, dj), x2 = x + di / l * 0.35, z2 = z + dj / l * 0.35, g2 = gAt(x2, z2, y + 0.85);
+        if (!jumped && g2 > y + STEP && !blocked(x2, z2, g2, 0.2) && ceil(nx[a], nz[a], y) > g2 + BODY && ceil(x2, z2, g2) > g2 + BODY) { y = g2; jumped = true; js = s; }
+        else ok = false;
+      }
+    }
+    if (!ok) continue;
+    for (const b of cell[i2 * NJ + j2]) if (Math.abs(ny[b] - y) < 0.05) { adj[a].push(jumped ? -b - 1 : b); break; }   // ジャンプがいる線は負の数で
+  }
+  return { nx, ny, nz, adj, cell, NI, NJ };
+}
+// (x, z, 高さ y) にいちばん近い網の点
+function navNode(x, z, y) {
+  const N = NAV, i0 = Math.floor((x + AX - 0.5) / NAV_C), j0 = Math.floor((z + AZ - 0.5) / NAV_C);
+  let best = -1, bd = Infinity;
+  for (let r = 0; r <= 3 && best < 0; r++) for (let i = i0 - r; i <= i0 + r; i++) for (let j = j0 - r; j <= j0 + r; j++) {
+    if (i < 0 || j < 0 || i >= N.NI || j >= N.NJ) continue;
+    for (const a of N.cell[i * N.NJ + j]) {
+      if (N.ny[a] > y + STEP + 0.1) continue;
+      const d = Math.hypot(N.nx[a] - x, N.nz[a] - z) + (y - N.ny[a]) * 2;
+      if (d < bd) { bd = d; best = a; }
+    }
+  }
+  return best;
+}
+// 網の上で、goal へ行く道（点の並び。ジャンプのいる点は j: true）。行けなければ、いちばん近づける点まで
+function navPath(p, gx, gz, gy) {
+  const N = NAV, s = navNode(p.x, p.z, p.y || 0), g = navNode(gx, gz, gy);
+  if (s < 0) return null;
+  const prev = new Int32Array(N.nx.length).fill(-2), jmp = new Uint8Array(N.nx.length), q = [s];
+  prev[s] = -1;
+  let best = s, bd = Infinity;
+  for (let h = 0; h < q.length; h++) {
+    const a = q[h];
+    const d = Math.hypot(N.nx[a] - gx, N.nz[a] - gz) + Math.abs(N.ny[a] - gy) * 3;
+    if (d < bd) { bd = d; best = a; }
+    if (a === g) { best = a; break; }
+    for (const e of N.adj[a]) { const b = e < 0 ? -e - 1 : e; if (prev[b] !== -2) continue; prev[b] = a; jmp[b] = e < 0 ? 1 : 0; q.push(b); }
+  }
+  const path = [];
+  for (let a = best; a >= 0 && a !== s; a = prev[a]) path.push({ x: N.nx[a], z: N.nz[a], y: N.ny[a], j: !!jmp[a] });
+  return path.reverse();
+}
+// 道にそって進む向き。道がなければまっすぐ goal へ
+function navStep(p, b, gx, gz, gy, now) {
+  if (NAV && (!b.path || now > b.pathT || b.pk >= b.path.length)) { b.path = navPath(p, gx, gz, gy); b.pk = 0; b.pathT = now + 0.9 + Math.random() * 0.4; }
+  const P = b.path;
+  while (P && b.pk < P.length) {
+    const n = P[b.pk];
+    if (Math.hypot(n.x - p.x, n.z - p.z) < 0.45 && Math.abs(n.y - (p.y || 0)) < 0.7) b.pk++; else break;
+  }
+  let tx = gx, tz = gz;
+  if (P && b.pk < P.length) {
+    // 先の点がまっすぐ同じ高さで続くなら、少し先をめざす（カクカク歩かない）
+    let k = b.pk;
+    while (k + 1 < P.length && k < b.pk + 2 && !P[k + 1].j && Math.abs(P[k + 1].y - P[b.pk].y) < 0.3 && Math.abs(P[b.pk].y - (p.y || 0)) < 0.3) k++;
+    const n = P[b.pk]; tx = P[k].x; tz = P[k].z;
+    if (n.j && Math.hypot(n.x - p.x, n.z - p.z) < 1.3) jump(p);
+  }
+  const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+  return d < 0.05 ? [0, 0] : [dx / d, dz / d];
+}
+const foe = (a, b) => !G.team || a.tm !== b.tm;   // チーム戦では味方をねらわない
+
 // ---------- CPU ----------
 function botUpdate(p, dt, now) {
   if (!p.alive) return;
-  const b = p.bs || (p.bs = { tgt: null, next: now + 2 + Math.random() * 2, re: 0, dir: Math.random() < 0.5 ? 1 : -1, wander: Math.random() * 6.28, stuck: 0, lx: p.x, lz: p.z, unstick: 0 });
+  const b = p.bs || (p.bs = { tgt: null, next: now + 2 + Math.random() * 2, re: 0, dir: Math.random() < 0.5 ? 1 : -1, wander: Math.random() * 6.28, stuck: 0, lx: p.x, lz: p.z, ly: p.y || 0, unstick: 0, los: false, losT: 0, path: null, pk: 0, pathT: 0, wp: null, wpT: 0 });
   if (now > b.re) {
-    const others = [...G.players.values()].filter(o => o.alive && o.id !== p.id).sort((x, y) => dist(p, x) - dist(p, y));
+    const others = [...G.players.values()].filter(o => o.alive && o.id !== p.id && foe(p, o)).sort((x, y) => dist(p, x) - dist(p, y));
+    const old = b.tgt;
     b.tgt = others.length ? (Math.random() < 0.7 ? others[0] : pick(others)).id : null;
+    if (b.tgt !== old) b.pathT = 0;
     b.re = now + 4 + Math.random() * 4; b.dir = Math.random() < 0.5 ? 1 : -1;
   }
   const t = G.players.get(b.tgt);
   let mx = 0, mz = 0;
   if (now < b.unstick) { mx = Math.cos(b.wander); mz = Math.sin(b.wander); }
   else if (t && t.alive) {
-    const dx = t.x - p.x, dz = t.z - p.z, d = Math.hypot(dx, dz) || 1;
-    if (d > BOT_RANGE * 0.6) { mx = dx / d; mz = dz / d; }
-    else { mx = -dz / d * b.dir * 0.6; mz = dx / d * b.dir * 0.6; }
+    const dx = t.x - p.x, dz = t.z - p.z, d = Math.hypot(dx, dz) || 1, dy = (t.y || 0) - (p.y || 0);
+    if (now > b.losT) { b.losT = now + 0.3; b.los = d < BOT_RANGE * 1.3 && losClear(p, t); }
+    // 見えていて近い: まわりこむ。見えていて同じ高さ: まっすぐ近づく。見えない・ちがう階: 道をさがして行く
+    if (b.los && d <= BOT_RANGE * 0.6) { mx = -dz / d * b.dir * 0.6; mz = dx / d * b.dir * 0.6; }
+    else if (b.los && Math.abs(dy) < 0.6) { mx = dx / d; mz = dz / d; }
+    else [mx, mz] = navStep(p, b, t.x, t.z, t.y || 0, now);
     p.yaw = Math.atan2(-dx, -dz);
     if (d < BOT_RANGE && now > b.next) {
       b.next = now + 0.8;
-      if (losClear(p, t)) {
+      if (b.los) {
         b.next = now + 2.5 + Math.random() * 3;
         let primes;
         const hidden = (t.hideUntil || 0) > now;   // はちまき中の相手は数字が見えないので、ほぼ当てずっぽう
@@ -625,14 +1048,18 @@ function botUpdate(p, dt, now) {
         doAttack(p.id, t.id, primes);
       }
     }
+  } else if (NAV && NAV.nx.length) {   // 相手がいない（見つからない）ときは、ステージのどこかへ歩いて行く
+    if (!b.wp || now > b.wpT || Math.hypot(b.wp.x - p.x, b.wp.z - p.z) < 1) { const a = Math.floor(Math.random() * NAV.nx.length); b.wp = { x: NAV.nx[a], z: NAV.nz[a], y: NAV.ny[a] }; b.wpT = now + 10; b.pathT = 0; }
+    [mx, mz] = navStep(p, b, b.wp.x, b.wp.z, b.wp.y, now);
   } else { mx = Math.cos(b.wander); mz = Math.sin(b.wander); if (Math.random() < dt * 0.5) b.wander = Math.random() * 6.28; }
   p.x += mx * SPEED * 0.7 * dt; p.z += mz * SPEED * 0.7 * dt;
   collide(p); updY(p, dt);
   if (now - b.stuck > 1) {
-    if ((mx || mz) && Math.hypot(p.x - b.lx, p.z - b.lz) < 0.8) {   // ひっかかったら、ジャンプして別の向きへ
-      if (!jump(p) || Math.random() < 0.5) { b.wander = Math.random() * 6.28; b.unstick = now + 1.2; }
+    if ((mx || mz) && Math.hypot(p.x - b.lx, p.z - b.lz) < 0.8 && Math.abs((p.y || 0) - b.ly) < 0.3) {   // ひっかかったら、ジャンプして別の向きへ
+      if (!jump(p) || Math.random() < 0.5) { b.wander = Math.random() * 6.28; b.unstick = now + 0.8; }
+      b.pathT = 0; b.stuckN = (b.stuckN || 0) + 1;
     }
-    b.stuck = now; b.lx = p.x; b.lz = p.z;
+    b.stuck = now; b.lx = p.x; b.lz = p.z; b.ly = p.y || 0;
   }
 }
 
@@ -642,8 +1069,12 @@ function onMsg(m) {
   switch (m.t) {
     case "welcome": myId = m.spec ? -1 : m.you; spectating = !!m.spec; return;
     case "reject": errMsg = m.why; cleanupNet(); screen = "menu"; break;
-    case "lobby": lobbyPs = m.ps; lobbySpecs = m.specs || []; host.code = m.code; screen = "lobby"; overInfo = null; clearGame(); break;
-    case "start": startView(m.seed, m.ps); break;
+    case "lobby":
+      lobbyPs = m.ps; lobbySpecs = m.specs || []; host.code = m.code; screen = "lobby"; overInfo = null; clearGame();
+      if (mode === "client") { host.stage = STAGES[m.stage] ? m.stage : "random"; host.team = !!m.team; }
+      previewStage(host.stage, lobbyPs.length);
+      break;
+    case "start": startView(m); break;
     case "tm": timeLeft = m.l; if (m.rv && !reveal) { reveal = true; setReveal(true); toast("残り1分！ 物かげの向こうの数字も見える"); } return;
     case "st":
       if (m.q) { if (m.q <= lastStQ) return; lastStQ = m.q; }   // 遅れて届いた古い位置は使わない
@@ -708,13 +1139,18 @@ function applyUse(m) {
 }
 
 // ---------- 接続 ----------
+// 2026-11-09: 通信の部品（PeerJS）が読みこめていない・オフラインのときは、つながずにメニューへ（落ちないように）
+function peerOk() { if (typeof Peer !== "undefined" && !isOffline()) return true; netFail(); return false; }
+function netFail() { errMsg = "オフラインのため通信できません。CPUと練習で遊べます"; cleanupNet(); mode = "none"; screen = "menu"; renderUI(); }
 function cleanupNet() { try { peer?.destroy(); } catch (e) {} peer = null; hostConn = null; host.conns.clear(); host.playing = false; G = null; }
 const randCode = () => String(Math.floor(1000 + Math.random() * 9000));
 let hostTries = 0;
 function startHost() {
+  if (!hostTries) { host.stage = practiceStage; host.team = false; host.tm.clear(); }
+  if (!peerOk()) return;
   mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; host.bots = 0; host.nextId = 1; renderUI();
   const code = PARTY ? PARTY.code : randCode();
-  peer = new Peer(netId(code));
+  try { peer = new Peer(netId(code)); } catch (e) { netFail(); return; }
   peer.on("open", () => { host.code = code; hostTries = 0; hostLobby(); });
   peer.on("error", e => {
     if (PARTY && e.type === "unavailable-id" && ++hostTries < 90) { peer.destroy(); setTimeout(startHost, 1000); return; }   // 前の部屋がまだ残っている
@@ -739,6 +1175,7 @@ function startHost() {
         const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12);
         host.conns.set(id, conn); conn.send({ t: "welcome", you: id }); hostLobby(); return;
       }
+      if (m && m.t === "team") { if (conn.pid && !conn.spec && host.team && !host.playing) { swapTeam(conn.pid); } return; }   // チームを変えたい（ロビー）
       if (conn.pid && !conn.spec) hostHandle(conn.pid, m);
     });
     conn.on("close", () => { if (conn.pid && (host.conns.get(conn.pid) === conn || host.specs.get(conn.pid) === conn)) hostDrop(conn.pid); });
@@ -747,8 +1184,9 @@ function startHost() {
 function joinRoom(code) {
   code = String(code).replace(/\D/g, "");
   if (code.length !== 4 && !PARTY) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
+  if (!peerOk()) return;
   mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; renderUI();
-  peer = new Peer();
+  try { peer = new Peer(); } catch (e) { netFail(); return; }
   peer.on("open", () => {
     const hc = hostConn = peer.connect(netId(code), { reliable: true });
     // パーティ: PeerJS は「相手が見つからない」を知らせないまま止まることがあるので、2.5 秒でつながらなければ peer から作り直す
@@ -772,8 +1210,10 @@ function joinRoom(code) {
 }
 function startPractice() {
   mode = "local"; myId = 0; host.bots = practiceBots; host.code = "";
+  host.stage = practiceStage; host.team = practiceTeam; host.tm.clear();
   lobbyPs = [{ id: 0, name: myName() }];
   for (let i = 0; i < practiceBots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABCDEFGH"[i], bot: true });
+  if (practiceTeam) lobbyPs.forEach((p, i) => host.tm.set(p.id, i % 2));   // 自分は赤。CPU は青・赤・青…の順
   hostStart();
 }
 function leave() { if (PARTY) { toGames(); return; } clearGame(); cleanupNet(); mode = "none"; screen = "menu"; overInfo = null; renderUI(); }
@@ -802,7 +1242,19 @@ const MATS = {
   pillar: new THREE.MeshLambertMaterial({ color: 0x8fa0b8 }),
   bridge: new THREE.MeshLambertMaterial({ color: 0x9c6b3e }), house: new THREE.MeshLambertMaterial({ color: 0xe8e1d0 }),
   roof: new THREE.MeshLambertMaterial({ color: 0xb5523b }),
+  // 2026-11-09: 決まった形のステージ用
+  floor: new THREE.MeshLambertMaterial({ color: 0xbfb5a3 }), wall2: new THREE.MeshLambertMaterial({ color: 0xd9d4c7 }),
+  rail: new THREE.MeshLambertMaterial({ color: 0x5d6675 }), roof2: new THREE.MeshLambertMaterial({ color: 0x8c8f96 }),
+  tank: new THREE.MeshLambertMaterial({ color: 0x6aa0c8 }), column: new THREE.MeshLambertMaterial({ color: 0xa3a9b4 }),
+  catwalk: new THREE.MeshLambertMaterial({ color: 0x7d858f }), container: new THREE.MeshLambertMaterial({ color: 0x2f7d6a }),
+  bldg: new THREE.MeshLambertMaterial({ color: 0x8796ad }), bldg2: new THREE.MeshLambertMaterial({ color: 0xc4a88a }),
+  parapet: new THREE.MeshLambertMaterial({ color: 0xa8a29a }), plank: new THREE.MeshLambertMaterial({ color: 0x9c6b3e }),
+  stair: new THREE.MeshLambertMaterial({ color: 0xc9bfae }), car: new THREE.MeshLambertMaterial({ color: 0xd04848 }),
+  stone: new THREE.MeshLambertMaterial({ color: 0xa0a4a8 }), trunk: new THREE.MeshLambertMaterial({ color: 0x7a5232 }),
+  leaf: new THREE.MeshLambertMaterial({ color: 0x3f8f3f }), bench: new THREE.MeshLambertMaterial({ color: 0xa07040 }),
+  pipe: new THREE.MeshLambertMaterial({ color: 0xd08a30 }),
 };
+const groundCol = { random: 0x6f9a5a, bldg: 0x8a8f7a, long: 0x9a8f78, city: 0x6d7078 };   // 地面の色（市街地はアスファルト）
 function addSolid(geo, mat, x, y, z) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); stageGroup.add(m); stageMeshes.push(m);
   const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), MATS.edge); e.position.copy(m.position); stageGroup.add(e);
@@ -810,6 +1262,7 @@ function addSolid(geo, mat, x, y, z) {
 function buildStage() {
   for (const c of [...stageGroup.children]) { stageGroup.remove(c); c.geometry?.dispose(); }
   stageMeshes.length = 0;
+  groundMat.color.setHex(groundCol[STAGE.kind] || groundCol.random);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(AX * 2, AZ * 2), groundMat); ground.rotation.x = -Math.PI / 2; stageGroup.add(ground);
   const grid = new THREE.GridHelper(AZ * 2, AZ * 2 / 2, 0x557744, 0x557744); grid.scale.x = AX / AZ; grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.35; stageGroup.add(grid);
   for (const [x, z, w, d] of [[0, -AZ, AX * 2, 0.6], [0, AZ, AX * 2, 0.6], [-AX, 0, 0.6, AZ * 2], [AX, 0, 0.6, AZ * 2]])
@@ -823,7 +1276,7 @@ function buildStage() {
         if (pos.getY(k) <= 0) continue;
         const a = o.ramp.axis === "x" ? pos.getX(k) / o.w + 0.5 : pos.getZ(k) / o.d + 0.5;
         const u = o.ramp.dir > 0 ? a : 1 - a;
-        pos.setY(k, -o.h / 2 + Math.max(0.03, b + u * (o.h - b)));
+        pos.setY(k, -hh / 2 + Math.max(0.03, b + u * (o.h - b) - (o.y0 || 0)));   // 2026-11-09: 床の上に置いた坂（y0 > 0）にも対応
       }
       g.computeVertexNormals();
     }
@@ -939,14 +1392,15 @@ let held = null, zoomed = false;   // held = 持っているアイテム（1 つ
 const photos = new Map();   // 相手の id → カメラで記録した数字（1 人分だけ。撮った時の数字のまま）
 function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 const hex = c => "#" + c.toString(16).padStart(6, "0");
-function drawPlate(av, v, sel, read, hid) {
-  const key = v.f.join(",") + "|" + sel + "|" + read + "|" + hid;
+function drawPlate(av, v, sel, read, hid, mate) {
+  const key = v.f.join(",") + "|" + sel + "|" + read + "|" + hid + "|" + mate;
   if (av.key === key) return; av.key = key;
   const c = av.ctx; c.setTransform(2, 0, 0, 2, 0, 0); c.clearRect(0, 0, 256, 128);   // 512×256 の札に 256×128 の大きさで描く
   rrect(c, 4, 4, 248, 120, 18); c.fillStyle = "rgba(255,255,255,0.95)"; c.fill();
-  c.lineWidth = sel ? 10 : 6; c.strokeStyle = sel ? "#ffd400" : hex(v.color); c.stroke();
+  // チーム戦（2026-11-09）: 札のふちはチームの色。味方は太いふちと「味方」の文字
+  c.lineWidth = sel ? 10 : mate || teamMode ? 9 : 6; c.strokeStyle = sel ? "#ffd400" : hex(v.color); c.stroke();
   c.textAlign = "center"; c.textBaseline = "middle";
-  c.fillStyle = "#555"; c.font = "bold 20px sans-serif"; c.fillText(v.name, 128, 24);
+  c.fillStyle = mate ? hex(v.color) : "#555"; c.font = "bold 20px sans-serif"; c.fillText(mate ? "味方 " + v.name : v.name, 128, 24);
   const s = hid ? "？？？" : read ? String(prod(v.f)) : "？？？";   // 遠い・はちまき中は読めない
   c.fillStyle = read && !hid ? "#111" : hid ? "#c22" : "#999";
   c.font = `900 ${Math.min(78, Math.floor(360 / (s.length + 0.5)))}px sans-serif`; c.fillText(s, 128, 76);
@@ -959,12 +1413,20 @@ function clearGame() {
   avatars.clear(); view.clear(); closePad(); feed.length = 0; $("feed").innerHTML = "";
   $("fx").innerHTML = ""; fxList.length = 0;
 }
-function startView(seed, ps) {
-  clearGame(); overInfo = null;
-  if (mode === "client") STAGE = genStage(seed, ps.length);
+// 待っている間の背景に、選んだステージを出しておく（同じ形・人数なら作り直さない）
+let previewKey = "";
+function previewStage(kind, n) {
+  const k = kind + "|" + Math.max(2, n); if (k === previewKey || screen === "game") return; previewKey = k;
+  STAGE = makeStage(kind, 7, Math.max(2, n)); buildStage();
+}
+function startView(m) {
+  const { seed, ps } = m;
+  clearGame(); overInfo = null; previewKey = "";
+  teamMode = !!m.team;
+  if (mode === "client") STAGE = makeStage(m.stage, seed, ps.length);   // 2026-11-09: ホストが選んだステージを同じシードで作る
   buildStage();
   for (const p of ps) {
-    const y = groundAt(p.x, p.z);
+    const y = groundAt(p.x, p.z, p.y || 0);
     const v = { ...p, y, tx: p.x, tz: p.z, tyaw: p.yaw, alive: p.alive !== false };
     view.set(p.id, v);
     if (p.id !== myId) avatars.set(p.id, makeAvatar(v));
@@ -1039,7 +1501,7 @@ function pickTarget() {
   if (spectating) { toast("観戦中は打ち込めません"); return; }
   const myV = view.get(myId);
   if (myV && !myV.alive) { toast("観戦中は打ち込めません"); return; }
-  const c = visibleTargets();
+  const c = visibleTargets().filter(o => !isMate(o.v));   // チーム戦: 味方はえらばない
   if (!c.length) { toast("見えている相手がいません"); return; }
   const i = c.findIndex(o => o.v.id === selId);
   selectTarget(c[i >= 0 ? (i + 1) % c.length : 0].v.id);
@@ -1047,6 +1509,7 @@ function pickTarget() {
 function tapSelect(x, y) {
   let best = null, bd = 70;
   for (const o of visibleTargets()) {
+    if (isMate(o.v)) continue;
     for (const h of [1.0, 1.95]) {
       tmpV.set(o.v.x, (o.v.y || 0) + h, o.v.z).project(camera);
       const d = Math.hypot((tmpV.x + 1) / 2 * VW - x, (1 - tmpV.y) / 2 * VH - y);
@@ -1059,6 +1522,7 @@ function selectTarget(id) {
   if (spectating) return;
   const myV = view.get(myId);
   if (myV && !myV.alive) { toast("観戦中は打ち込めません"); return; }
+  const tv = view.get(id); if (tv && isMate(tv)) { toast("味方には打ち込めません"); return; }
   if (selId !== id) { inp = []; kbuf = ""; }
   selId = id; $("pad").classList.remove("hidden"); applyLayout(); padKey = ""; updPad(true);
 }
@@ -1165,7 +1629,13 @@ function updHud(now) {
     const k = mine.f.join(",") + mine.alive;
     if (k !== lastMine) { lastMine = k; $("mynum").textContent = mine.alive ? prod(mine.f) : "1"; }
   }
-  $("alive").textContent = `のこり ${[...view.values()].filter(v => v.alive).length}人`;
+  if (teamMode) {   // チーム戦: チームごとの残り人数と、自分のチーム
+    const n = [0, 1].map(k => [...view.values()].filter(v => v.alive && v.tm === k).length);
+    const s = `<span style="color:${TEAM_CSS[0]}">赤 ${n[0]}</span> vs <span style="color:${TEAM_CSS[1]}">青 ${n[1]}</span>`;
+    if ($("alive").innerHTML !== s) $("alive").innerHTML = s;
+  } else $("alive").textContent = `のこり ${[...view.values()].filter(v => v.alive).length}人`;
+  const mt = myTeam(), lab = mt == null ? "自分の数字" : `自分の数字（${TEAM_NAME[mt]}チーム）`;
+  const le = $("me").firstElementChild; if (le.textContent !== lab) { le.textContent = lab; le.style.color = mt == null ? "" : TEAM_CSS[mt]; le.style.opacity = mt == null ? "" : 1; }
   const b = $("banner");
   const bannerTxt = spectating && !overInfo ? "観戦中（動き回って見られます）" : mine && !mine.alive && !overInfo ? "観戦中（移動はできます）" : "";
   const tm = $("timer"); if (tm) { const t = Math.max(0, Math.ceil(timeLeft)); tm.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; tm.classList.toggle("hot", t <= REVEAL_AT); }
@@ -1380,36 +1850,59 @@ const RULES = `<div class="rules">
 ・全部正しければ相手の数字が割られる。<b>1</b>になったら撃破<br>
 ・撃破すると<b>回復</b>: 自分の数字に素因数が2〜4個ふえる<br>
 ・おでこの数字は<b>近く（約11m）</b>でないと読めない<br>
-・アイテム: 🔢数字（回復） 🔭望遠鏡（ズームで遠くも読める） 📷カメラ（相手の数字を記録） 🎌はちまき（自分の数字をかくす）<br>
+・アイテム（1つだけ持てる。拾うと入れかわる。ボタンで使う）: 🔢数字（回復） 🔭望遠鏡（押している間ズーム） 📷カメラ（1人分だけ数字を記録） はちまき（10秒 自分の数字をかくす）<br>
 ・1つでも間違えると<b>自分の一番大きい素因数</b>が消えて弱くなる<br>
 ・射程はなし。数字を一瞬で覚えよう。坂の上の高台からは遠くまで見える<br>
 ・足音で近くの相手に気づける（イヤホン推奨）<br>
-・最後の1人になったら勝ち</div>`;
+・最後の1人になったら勝ち<br>
+・<b>チーム戦</b>: 赤と青に分かれる。味方には打ち込めない。相手チームを全員たおしたら勝ち</div>`;
 
+const TEAM_RULE = "チーム戦は相手チームを全員たおしたら勝ち。時間切れは生き残りが多いチーム、同じなら生き残りの数字の合計が小さいチームの勝ち";
+const stageSeg = (cur, pre) => `<div class="seg">${Object.entries(STAGES).map(([k, s]) => `<button class="${k === cur ? "on" : ""}" data-a="${pre}-${k}">${s}</button>`).join("")}</div><div class="note" style="margin-top:2px">${STAGE_NOTE[cur] || ""}</div>`;
 // パーティの待ち合わせ画面の中身（ホストの設定: CPU の数）
 let partyBack = null, partySet = null;
 function partyLobbyOpts() {
   const isHost = mode === "host";
   const rules = "おでこの数字を素因数分解して打ち込み、相手を倒す。\n制限時間 3分（残り1分で物かげの向こうの数字も見える）。時間切れは数字がいちばん小さい人の勝ち。間違えると 2.5 秒打ち込めない。";
   if (screen === "connecting") return { rules, button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
-  const members = lobbyPs.map(p => ({ name: p.name, tag: p.id === 0 ? "ホスト" : p.bot ? "CPU" : "", me: p.id === myId }))
+  const members = lobbyPs.map(p => ({ name: p.name, tag: [p.id === 0 ? "ホスト" : p.bot ? "CPU" : "", host.team ? TEAM_NAME[p.tm] + "チーム" : ""].filter(Boolean).join(" "), me: p.id === myId }))
     .concat(lobbySpecs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })));
-  const status = `${lobbyPs.length} / ${MAX_PLAYERS}人` + (lobbyPs.length < 2 ? "（CPU を含めて 2人以上で始められます）" : "");
-  if (!isHost) return { rules, members, button: null, status, wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" };
+  const status = `${lobbyPs.length} / ${MAX_PLAYERS}人` + (lobbyPs.length < 2 ? "（CPU を含めて 2人以上で始められます）" : !teamsReady() ? "（チーム戦は赤と青に1人以上ずつ）" : "");
+  const info = `ステージ: ${STAGES[host.stage]} ・ ${host.team ? "チーム戦" : "個人戦"}`;
+  if (!isHost) {
+    // ゲスト: チーム戦なら自分のチームを変えるボタン（2026-11-09）
+    if (!partyGuestSet) {
+      partyGuestSet = document.createElement("div");
+      partyGuestSet.addEventListener("click", e => { if (e.target.closest("[data-b=tm]") && !spectating) sendHost({ t: "team" }); });
+    }
+    const me2 = lobbyPs.find(p => p.id === myId);
+    partyGuestSet.innerHTML = `<div class="yl-sub">${esc(info)}</div>` + (host.team && me2 && !spectating ? `<div class="yl-row" style="margin-top:8px"><button data-b="tm" style="background:${TEAM_CSS[me2.tm]};color:#fff">あなたは${TEAM_NAME[me2.tm]}チーム（押すと変える）</button></div>` : "");
+    return { rules, members, settings: partyGuestSet, button: null, status, wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" };
+  }
   if (!partySet) {
     partySet = document.createElement("div");
-    partySet.innerHTML = `<div class="yl-row"><button data-b="+">CPU を追加</button><button data-b="-">CPU を減らす</button></div><div class="yl-sub"></div>`;
+    partySet.innerHTML = `<div class="yl-row"><button data-b="+">CPU を追加</button><button data-b="-">CPU を減らす</button></div><div class="yl-sub"></div>
+      <div class="yl-sub">ステージ</div><div class="yl-row" data-g="st"></div><div class="yl-sub">ルール</div><div class="yl-row" data-g="tm"></div><div class="yl-row" data-g="who" style="margin-top:8px"></div>`;
     partySet.addEventListener("click", e => {
       const b = e.target.closest("[data-b]"); if (!b || b.disabled || mode !== "host" || host.playing) return;
-      if (b.dataset.b === "+") { if (lobbyPs.length < MAX_PLAYERS) host.bots++; } else host.bots = Math.max(0, host.bots - 1);
+      const k = b.dataset.b;
+      if (k === "+") { if (lobbyPs.length < MAX_PLAYERS) host.bots++; } else if (k === "-") host.bots = Math.max(0, host.bots - 1);
+      else if (k.startsWith("st-")) host.stage = STAGES[k.slice(3)] ? k.slice(3) : "random";
+      else if (k.startsWith("tm-")) host.team = k === "tm-1";
+      else if (k.startsWith("sw-")) { swapTeam(Number(k.slice(3))); renderUI(); return; }
       hostLobby(); renderUI();
     });
   }
   partySet.querySelector('[data-b="+"]').disabled = lobbyPs.length >= MAX_PLAYERS;
   partySet.querySelector('[data-b="-"]').disabled = !host.bots;
   partySet.querySelector(".yl-sub").textContent = `CPU ${host.bots}体`;
-  return { rules, members, settings: partySet, status, button: { label: "スタート", disabled: lobbyPs.length < 2, onClick: () => { hostStart(); renderUI(); } } };
+  partySet.querySelector('[data-g="st"]').innerHTML = Object.entries(STAGES).map(([k, s]) => `<button data-b="st-${k}" class="${k === host.stage ? "on" : ""}">${s}</button>`).join("");
+  partySet.querySelector('[data-g="tm"]').innerHTML = ["個人戦", "チーム戦"].map((s, i) => `<button data-b="tm-${i}" class="${+host.team === i ? "on" : ""}">${s}</button>`).join("");
+  // チーム戦: 名前のボタンを押すと、その人のチームが変わる
+  partySet.querySelector('[data-g="who"]').innerHTML = host.team ? lobbyPs.map(p => `<button data-b="sw-${p.id}" style="background:${TEAM_CSS[p.tm]};color:#fff;flex:0 1 auto">${esc(p.name)}</button>`).join("") : "";
+  return { rules, members, settings: partySet, status, button: { label: "スタート", disabled: lobbyPs.length < 2 || !teamsReady(), onClick: () => { if (teamsReady()) { hostStart(); renderUI(); } } } };
 }
+let partyGuestSet = null;
 function renderUI() {
   const s = $("screen");
   $("hud").classList.toggle("hidden", screen !== "game" && screen !== "layout");
@@ -1430,12 +1923,17 @@ function renderUI() {
   s.classList.remove("hidden");
   let h = "";
   if (screen === "menu") {
+    const off = isOffline();   // オフライン: 部屋をつくる・入るは出さない（2026-11-09）
+    previewStage(practiceStage, practiceBots + 1);
     h = `<div class="card"><h1>素因数バトル<small>おでこの数字を素因数分解して打ち込め</small></h1>${RULES}
       <label>なまえ</label><input id="name" class="in" maxlength="12" value="${esc(store.get("soinsu-name") || "")}" placeholder="ゲスト">
-      <button class="btn" data-a="host">部屋をつくる</button>
-      <div class="row"><input id="code" class="in" inputmode="numeric" maxlength="4" placeholder="部屋番号（4けた）" value="${esc(urlRoom)}"><button class="btn sub" style="width:40%;margin-top:0" data-a="join">入る</button></div>
-      <div style="margin-top:14px"><label>ひとりで練習（CPUの数）</label>
+      ${off ? `<div class="note">📴 オフライン: CPUとの練習だけ遊べます</div>` : `<button class="btn" data-a="host">部屋をつくる</button>
+      <div class="row"><input id="code" class="in" inputmode="numeric" maxlength="4" placeholder="部屋番号（4けた）" value="${esc(urlRoom)}"><button class="btn sub" style="width:40%;margin-top:0" data-a="join">入る</button></div>`}
+      <div style="margin-top:14px"><label>${off ? "CPUと練習" : "ひとりで練習"}（CPUの数）</label>
       <div class="seg">${[1, 3, 5, 7].map(n => `<button class="${n === practiceBots ? "on" : ""}" data-a="pb-${n}">${n}体</button>`).join("")}</div>
+      <label>ステージ</label>${stageSeg(practiceStage, "ps")}
+      <div class="seg">${["個人戦", "チーム戦"].map((s, i) => `<button class="${+practiceTeam === i ? "on" : ""}" data-a="pt-${i}">${s}</button>`).join("")}</div>
+      ${practiceTeam ? `<div class="note">チーム戦: あなたは赤チーム。CPUは青・赤に分かれる</div>` : ""}
       <button class="btn sub" data-a="practice">CPUと練習する</button></div>
       <div class="row" style="margin-top:14px"><button class="btn sub" style="margin-top:0" data-a="layout">ボタン配置を変える</button><button class="btn sub" style="margin-top:0" data-a="sound">足音：${soundOn ? "ON" : "OFF"}</button></div>
       ${window.IN_HUB ? `<button class="btn sub" data-a="games">← ゲーム一覧へ（you know games）</button>` : ""}
@@ -1449,24 +1947,32 @@ function renderUI() {
     h = `<div class="card"><h2>接続中…</h2><button class="btn sub" data-a="leave">やめる</button></div>`;
   } else if (screen === "lobby") {
     const isHost = mode === "host";
+    // 2026-11-09: ステージとチーム戦。チーム戦では名前の右の「赤／青」を押すとチームが変わる（ホストは全員、ほかの人は自分だけ）
+    const badge = p => host.team ? `<button class="tmb" style="background:${TEAM_CSS[p.tm] || "#556"}" data-a="sw-${p.id}" ${isHost || p.id === myId ? "" : "disabled"}>${TEAM_NAME[p.tm] ?? "?"}</button>` : "";
     h = `<div class="card">${PARTY ? `<h2>パーティの部屋</h2>` : `<h2>部屋番号</h2><div class="code">${esc(host.code)}</div>`}
       ${isHost && !PARTY ? `<button class="btn sub" data-a="share">招待リンクを送る</button>` : ""}
-      <ul class="plist">${lobbyPs.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}</span><span>${p.id === 0 ? "ホスト" : p.bot ? "CPU" : ""}</span></li>`).join("")}</ul>
+      <ul class="plist">${lobbyPs.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}</span><span>${p.id === 0 ? "ホスト" : p.bot ? "CPU" : ""} ${badge(p)}</span></li>`).join("")}</ul>
       ${lobbySpecs.length ? `<div class="note">観戦: ${lobbySpecs.map(esc).join("、")}${spectating ? "（あなたは観戦します）" : ""}</div>` : ""}
-      <div class="note">制限時間 3分。残り1分で物かげの向こうの数字も見える。時間切れは数字がいちばん小さい人の勝ち</div>
+      ${isHost ? `<label>ステージ</label>${stageSeg(host.stage, "hs")}
+        <div class="seg">${["個人戦", "チーム戦"].map((s, i) => `<button class="${+host.team === i ? "on" : ""}" data-a="ht-${i}">${s}</button>`).join("")}</div>`
+        : `<div class="note">ステージ: <b>${STAGES[host.stage]}</b> ・ ${host.team ? "チーム戦（赤／青を押すとチームを変えられる）" : "個人戦"}</div>`}
+      <div class="note">制限時間 3分。残り1分で物かげの向こうの数字も見える。${host.team ? TEAM_RULE : "時間切れは数字がいちばん小さい人の勝ち"}</div>
       <div class="note">${lobbyPs.length} / ${MAX_PLAYERS}人</div>
       ${isHost ? `<div class="row"><button class="btn sub" style="margin-top:0" data-a="bot+" ${lobbyPs.length >= MAX_PLAYERS ? "disabled" : ""}>CPUを追加</button><button class="btn sub" style="margin-top:0" data-a="bot-" ${host.bots ? "" : "disabled"}>CPUを減らす</button></div>
-        <button class="btn red" data-a="start" ${lobbyPs.length < 2 ? "disabled" : ""}>スタート</button>
-        ${lobbyPs.length < 2 ? `<div class="note">2人以上（CPUを含む）で始められます</div>` : ""}`
+        <button class="btn red" data-a="start" ${lobbyPs.length < 2 || !teamsReady() ? "disabled" : ""}>スタート</button>
+        ${lobbyPs.length < 2 ? `<div class="note">2人以上（CPUを含む）で始められます</div>` : !teamsReady() ? `<div class="note">チーム戦は、赤と青に1人以上ずつ必要です</div>` : ""}`
         : `<div class="note">ホストがスタートするのを待っています…</div>`}
       <button class="btn sub" data-a="leave">退出</button></div>`;
   } else if (screen === "game" && overInfo) {
     const wins = overInfo.wins || (overInfo.win != null ? [overInfo.win] : []);
     const w = overInfo.ps.find(p => p.id === overInfo.win);
-    const iWon = wins.includes(myId);
-    const title = wins.length > 1 ? (iWon ? "🤝 引き分け（あなたも勝ち）" : "引き分け") : iWon ? "🏆 あなたの勝ち！" : w ? `${esc(w.name)} の勝ち` : "引き分け";
-    h = `<div class="card"><h2>${title}</h2>${overInfo.timeUp ? `<div class="note">時間切れ: 数字がいちばん小さい人の勝ち</div>` : ""}
-      <table class="res">${overInfo.ps.map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}${p.id === myId ? "（自分）" : ""}</td><td>撃破 ${p.kills}${overInfo.timeUp && p.alive ? ` ・ ${p.n}` : ""}</td></tr>`).join("")}</table>
+    const iWon = wins.includes(myId), wt = overInfo.team;
+    let title = wins.length > 1 ? (iWon ? "🤝 引き分け（あなたも勝ち）" : "引き分け") : iWon ? "🏆 あなたの勝ち！" : w ? `${esc(w.name)} の勝ち` : "引き分け";
+    if (wt != null) title = wt < 0 ? "引き分け" : `<span style="color:${TEAM_CSS[wt]}">${TEAM_NAME[wt]}チーム</span>の勝ち！${iWon ? " 🏆" : ""}`;
+    const dot = p => wt != null ? `<span style="color:${TEAM_CSS[p.tm]}">●</span> ` : "";
+    const note = !overInfo.timeUp ? "" : wt != null ? `時間切れ: 生き残りが多いチーム、同じなら数字の合計が小さいチームの勝ち${overInfo.sums ? `（数字の合計 赤 ${overInfo.sums[0]} ／ 青 ${overInfo.sums[1]}）` : ""}` : "時間切れ: 数字がいちばん小さい人の勝ち";
+    h = `<div class="card"><h2>${title}</h2>${note ? `<div class="note">${note}</div>` : ""}
+      <table class="res">${overInfo.ps.map((p, i) => `<tr><td>${i + 1}. ${dot(p)}${esc(p.name)}${p.id === myId ? "（自分）" : ""}</td><td>撃破 ${p.kills}${overInfo.timeUp && p.alive ? ` ・ ${p.n}` : ""}</td></tr>`).join("")}</table>
       ${mode === "local" ? `<button class="btn red" data-a="again">もう一度</button>`
         : mode === "host" ? `<button class="btn red" data-a="tolobby">部屋にもどる</button>` : `<div class="note">ホストが部屋にもどるのを待っています…</div>`}
       <button class="btn sub" data-a="leave">${PARTY ? "ゲーム一覧へ" : "メニューへ"}</button></div>`;
@@ -1485,8 +1991,17 @@ $("screen").addEventListener("click", async e => {
   else if (a === "layone") { LAY[editSel] = copyDef(editSel); saveLayout(); renderUI(); }
   else if (a === "layreset") { for (const k in LAY_DEF) LAY[k] = copyDef(k); saveLayout(); renderUI(); }
   else if (a === "sound") { fixName(); soundOn = !soundOn; store.set("soinsu-sound", soundOn ? "1" : "0"); renderUI(); }
-  else if (a === "games") ykgToGames();   // ミニゲーム集のゲーム一覧へ
-  else if (a.startsWith("pb-")) { const nm = $("name")?.value; practiceBots = Number(a.slice(3)); renderUI(); if (nm != null) $("name").value = nm; }
+  else if (a === "games") toGames();   // ミニゲーム集のゲーム一覧へ
+  else if (/^(pb|ps|pt)-/.test(a)) {   // 練習の設定（CPU の数・ステージ・チーム戦）。打ちかけの名前は消さない
+    const nm = $("name")?.value, v = a.slice(3);
+    if (a[1] === "b") practiceBots = Number(v);
+    else if (a[1] === "s") { practiceStage = STAGES[v] ? v : "random"; store.set("soinsu-stage", practiceStage); }
+    else { practiceTeam = v === "1"; store.set("soinsu-team", practiceTeam ? "1" : "0"); }
+    renderUI(); if (nm != null && $("name")) $("name").value = nm;
+  }
+  else if (a.startsWith("hs-") && mode === "host" && !host.playing) { host.stage = STAGES[a.slice(3)] ? a.slice(3) : "random"; hostLobby(); }
+  else if (a.startsWith("ht-") && mode === "host" && !host.playing) { host.team = a === "ht-1"; hostLobby(); }
+  else if (a.startsWith("sw-")) { const id = Number(a.slice(3)); if (mode === "host") swapTeam(id); else if (id === myId) sendHost({ t: "team" }); }
   else if (a === "leave") leave();
   else if (a === "bot+") { host.bots++; hostLobby(); }
   else if (a === "bot-") { host.bots = Math.max(0, host.bots - 1); hostLobby(); }
@@ -1573,7 +2088,7 @@ function frame(nowMs) {
         av.g.visible = t < 1; av.g.scale.setScalar(Math.max(0.01, 1 - t)); continue;
       }
       const dd = Math.hypot(v.x - me.x, v.z - me.z), hid = (v.hideUntil || 0) > nowMs;
-      drawPlate(av, v, id === selId, dd <= SEE * (zoomed ? 3 : 1), hid);
+      drawPlate(av, v, id === selId, dd <= SEE * (zoomed ? 3 : 1), hid, isMate(v));
       av.band.visible = hid;   // はちまき
       // 読める距離のはしでも読みやすいよう、おでこの札だけ少し大きくする
       const s = clamp(dd / 7, 1, 1.8); av.plate.scale.set(s, s, 1);
@@ -1605,7 +2120,11 @@ function frame(nowMs) {
 // （画面の描き直しは、裏に回ると止まるため。2026-11-06 に描画のループから分けた）
 let hostLastT = performance.now(), tmSent = 0;
 setInterval(() => {
-  const nowMs = performance.now(), dt = Math.min(0.1, (nowMs - hostLastT) / 1000); hostLastT = nowMs;
+  const real = performance.now(), dt = Math.min(0.1, (real - hostLastT) / 1000); hostLastT = real;
+  hostTick(dt);
+}, 16);   // 2026-11-07: 60 回/秒（位置を 60 回/秒で配る）
+function hostTick(dt) {
+  const nowMs = nowS() * 1000;
   if (screen !== "game" || !G || mode === "client") return;
   if (!G.over) for (const p of G.players.values()) if (p.bot) botUpdate(p, dt, nowMs / 1000);
   hostItems(nowMs / 1000);
@@ -1614,8 +2133,9 @@ setInterval(() => {
   if (!G.over && nowMs - tmSent > 1000) { tmSent = nowMs; broadcast({ t: "tm", l: Math.max(0, Math.round(left)), rv: left <= REVEAL_AT ? 1 : 0 }); }
   if (!G.over && left <= 0) checkOver(true);
   // 応答のない相手を切る（タブを閉じた・電波が切れた）
-  if (mode === "host") for (const [id, c] of [...host.conns]) if (nowMs - (c.seen || nowMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
-}, 16);   // 2026-11-07: 60 回/秒（位置を 60 回/秒で配る）
+  const realMs = performance.now();
+  if (mode === "host") for (const [id, c] of [...host.conns]) if (realMs - (c.seen || realMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
+}
 renderUI();
 requestAnimationFrame(frame);
 // パーティから開いたとき: メニューを飛ばして自動で部屋を作る・入る。左上に「← 一覧」
@@ -1627,10 +2147,20 @@ if (PARTY) {
   back.addEventListener("click", () => { if (confirm("ゲーム一覧へ戻りますか？" + (PARTY.role === "host" ? "（みんなも一覧へ戻ります）" : ""))) toGames(); });
   document.body.appendChild(back);
   partyBack = back;   // 待ち合わせ画面のあいだは隠す（待ち合わせ画面に自分の「← 一覧」がある）
-  if (PARTY.role === "host") startHost(); else joinRoom(PARTY.code);
+  if (isOffline()) { errMsg = "オフラインのためパーティに入れません。CPUと練習で遊べます"; renderUI(); }   // 2026-11-09
+  else if (PARTY.role === "host") startHost(); else joinRoom(PARTY.code);
 }
+// 2026-11-09: 電波が切れた・もどったら、メニューを出し直す（オフラインなら部屋のボタンを隠す）
+for (const ev of ["online", "offline"]) addEventListener(ev, () => { if (screen === "menu") renderUI(); });
 try { if (window.IN_HUB && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
-window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; }, get STAGE() { return STAGE; }, pickTarget, groundAt, avatars, itemObjs, photos, get held() { return held; }, set held(k) { held = k; }, get selId() { return selId; } };
+window.__dbg = { view, get G() { return G; }, me, get myId() { return myId; }, step(n = 1) { for (let i = 0; i < n; i++) frame(last + 16); }, get actx() { return actx; }, get STAGE() { return STAGE; }, pickTarget, groundAt, avatars, itemObjs, photos, get held() { return held; }, set held(k) { held = k; }, get selId() { return selId; },
+  // 2026-11-09: テスト用（ステージ・チーム戦・CPU の道さがし）
+  host, makeStage, buildNav, navPath, spotOk, itemLevels, get NAV() { return NAV; }, get teamMode() { return teamMode; }, get overInfo() { return overInfo; }, get screen() { return screen; },
+  doAttack, checkOver, startPractice, hostStart, hostLobby, swapTeam, renderUI, isOffline, selectTarget,
+  setPractice(o) { if (o.bots != null) practiceBots = o.bots; if (o.stage) practiceStage = o.stage; if (o.team != null) practiceTeam = !!o.team; },
+  view3(px, py, pz, tx, ty, tz) { camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); renderer.render(scene, camera); },   // 好きな位置からステージを見る
+  fast(sec, dt = 0.05) { for (let t = 0; t < sec; t += dt) { clockOff += dt; hostTick(dt); } },   // ホストの時間を早送り
+};
 </script>
 </body>
 </html>

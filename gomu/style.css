@@ -181,3 +181,32 @@ body.party .app-header { padding-top: 56px; }
 .countdown.hidden {
   display: none;
 }
+
+/* 2026-11-09: CPU と対戦・CPU の出し入れ・チーム戦 */
+.opt-label { font-size: 0.85rem; font-weight: 700; color: #5a5346; margin: 10px 0 6px; }
+.seg { display: flex; gap: 6px; }
+.seg-btn { flex: 1 1 0; appearance: none; border: 0; border-radius: 10px; padding: 10px 6px; font: inherit; font-weight: 700; background: #dcd2b8; color: var(--panel-ink); cursor: pointer; }
+.seg-btn.on { background: var(--accent); color: var(--accent-ink); }
+.seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.check-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 0.92rem; font-weight: 700; }
+.check-row input { width: 22px; height: 22px; }
+.check-row.off { opacity: 0.45; }
+#cpu-card .btn-primary { width: 100%; }
+.offline-note { color: #b5551f; font-weight: 700; }
+.hs-sub { font-size: 0.8rem; color: #7a7262; margin: 6px 0 0; line-height: 1.5; }
+#ykgLobby .hs-sub { color: #9aa3b5; }
+.hs-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hs-list .seg-btn { flex: 0 1 auto; padding: 8px 10px; font-size: 0.85rem; }
+.team-chip { display: inline-block; border-radius: 99px; padding: 1px 8px; font-size: 0.78rem; color: #fff; margin-left: 6px; }
+.team-chip.t0 { background: #e0523d; }
+.team-chip.t1 { background: #3f7fd1; }
+#ykgLobby .hs-list button.t0 { background: #7a2b20; }
+#ykgLobby .hs-list button.t1 { background: #1f3f6a; }
+.hs-list button.t0 { background: #f3c1b6; }
+.hs-list button.t1 { background: #bcd3f2; }
+/* 2026-11-09: .hidden がカード・ボタンに効いていなかった（オフラインで部屋のカードを隠すのに必要） */
+.hidden { display: none !important; }
+/* 2026-11-09: 玉の数 */
+.bp-row { align-items: center; }
+.bp-val { flex: 1 1 0; text-align: center; font-weight: 800; font-size: 1.05rem; }
+#ykgLobby .bp-val { color: #e5e7eb; }

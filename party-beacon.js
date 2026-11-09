@@ -189,6 +189,8 @@
   function sendMembers() { if (isHost) { toGuests({ t: "members", list: defaultMembers().map(m => ({ name: m.name, tag: m.tag })), started: lobbyState.started }); if (lobbyState.opts && !lobbyState.opts.members) renderLobby(); } }
 
   if (typeof Peer !== "function") return;
+  // 2026-11-09: オフライン（または ?offline=1 で試すとき）は、つなぎに行かない
+  if (!navigator.onLine || /[?&]offline=1/.test(location.search)) return;
 
   // ---------- 2. ホスト: 待ち受け ----------
   if (isHost) {

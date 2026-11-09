@@ -345,6 +345,46 @@ function layoutFor(n) {
   return k === 1 ? list : list.map(pl => widen(pl, k));
 }
 const LAYOUTS = [layoutFor(2), layoutFor(2), layoutFor(2), layoutFor(3), layoutFor(4)];   // 人数 0〜4
+// ---------- ステージ選び（2026-11-09）----------
+// 0 =「いつもの」（今までどおり、人数で形が変わる）。1〜3 は仕掛けのあるステージ。どれもメインの足場（main）は上面が PY で、
+// 崖・蜘蛛・テレポートなどメインを使う処理はそのまま動く。上には撃墜ラインがないので、ばねで高く飛んでも落ちない。
+// 動く足場の位置は、ラウンドの始めから数えたフレーム（game.stT）だけで決まる（ホストが計算し、スナップショットで届く）
+const STAGES = [
+  { name: "いつもの", desc: "人数で形が変わる、ふつうのステージ" },
+  { name: "ふわふわ浮島", desc: "空を回る浮島。乗るといっしょに運ばれる" },
+  { name: "ワープ遺跡", desc: "ゲートに入ると、ペアのゲートから出る" },
+  { name: "ばねばね工場", desc: "ばねを踏むと高く跳ぶ。崖の下にもばね" },
+];
+const MAIN_W = { x: CENTER_X - PW * WIDE_SCALE / 2, y: PY, w: PW * WIDE_SCALE, main: true };   // 1.2 倍のメイン（132〜828）
+const FLOAT_T = 600, FLOAT_RX = 330, FLOAT_RY = 75, FLOAT_W = 140;   // 浮島: 1 周 10 秒 / 横・縦の半径 / 幅
+const WARP_R = 30, WARP_CD = 40;                                     // ゲートの半径 / 出たあと、次に入れるまで（フレーム。ゲートの中にいる間は待ちが続く）
+const SPRING_CD = 12;                                                // ばねで跳んだあと、次に跳べるまで
+const ST_PAD_W = 80, ST_PAD_Y = PY + 110;                            // ばねばね工場: 崖の下の小さな足場（全体がばね）
+function stageBase(st, nf, t) {                                      // 縮む前の足場（上から順）。id は動く足場の見分け
+  if (st === 1) {
+    const a = t * 2 * Math.PI / FLOAT_T, m = { x: CENTER_X - 280, y: PY, w: 560, main: true };
+    const fl = [0, Math.PI].map((o, k) => ({ x: CENTER_X + FLOAT_RX * Math.cos(a + o) - FLOAT_W / 2, y: PY - 170 + FLOAT_RY * Math.sin(a + o), w: FLOAT_W, mv: 1, id: k + 1 }));
+    return fl.sort((p, q) => p.y - q.y).concat([m]);
+  }
+  if (st === 2) return layoutFor(4).slice(0, 2).concat([MAIN_W]);
+  if (st === 3) {
+    return [layoutFor(3)[0], MAIN_W,
+      { x: MAIN_W.x - 150 - ST_PAD_W / 2, y: ST_PAD_Y, w: ST_PAD_W, pad: 1 }, { x: MAIN_W.x + MAIN_W.w + 150 - ST_PAD_W / 2, y: ST_PAD_Y, w: ST_PAD_W, pad: 1 }];
+  }
+  return LAYOUTS[Math.max(0, Math.min(4, nf | 0))];
+}
+// ワープ遺跡のゲート: [x, y, 行き先の番号（-1 = 出口だけ）]。0・1 はメインの両端（行き来できる）、2・3 は崖の下（入ると上へ出る一方通行）、4・5 はその出口
+const WARPS = [[MAIN_W.x + 44, PY - 34, 1], [MAIN_W.x + MAIN_W.w - 44, PY - 34, 0],
+  [MAIN_W.x - 110, PY + 90, 4], [MAIN_W.x + MAIN_W.w + 110, PY + 90, 5],
+  [MAIN_W.x + 150, PY - 230, -1], [MAIN_W.x + MAIN_W.w - 150, PY - 230, -1]];
+// ばねばね工場のばね: [x（中心）, 面の y, 幅, 上への速さ, 横の速さ（崖の下のばねは内側へ押し出す）]
+const SPRINGS = [[MAIN_W.x + 60, PY, 50, 16, 0], [MAIN_W.x + MAIN_W.w - 60, PY, 50, 16, 0],
+  [MAIN_W.x - 150, ST_PAD_Y, ST_PAD_W, 19.5, 5], [MAIN_W.x + MAIN_W.w + 150, ST_PAD_Y, ST_PAD_W, 19.5, -5]];
+let stageSel = 0;                                                    // ホスト・CPU 戦で選んでいるステージ（-1 = ランダム。ラウンドごとに決め直す）
+try { const v = Number(localStorage.getItem("shieldfight-stage")); if (Number.isInteger(v) && v >= -1 && v < STAGES.length) stageSel = v; } catch (e) {}
+function setStageSel(v) { v = Number(v); if (!Number.isInteger(v) || v < -1 || v >= STAGES.length) v = 0; stageSel = v; game.ss = v; try { localStorage.setItem("shieldfight-stage", String(v)); } catch (e) {} }
+const pickStage = () => stageSel >= 0 ? stageSel : Math.floor(Math.random() * STAGES.length);   // ランダムは「いつもの」も含めて、ラウンドごとに選ぶ
+const stageName = v => v < 0 ? "ランダム" : (STAGES[v] || STAGES[0]).name;
 const PLW = 40, PLH = 60;                     // プレイヤー
 const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308"];
 // チーム（0 = チームなし / 1〜4 = 赤・青・緑・黄）。同じチームどうしは攻撃・罠・置き物が当たらない。チーム戦では、体の色をチームの色の濃淡にし、体のまわりにチームの色の光を出す
@@ -686,7 +726,7 @@ let netMsg = "";
 // wr: 何本先取か（ロビーでは次の試合の設定。ホストが決めて、スナップショットで参加者へ届く）
 // pj: 飛び道具（ボム・矢） / fl: 花 / cl: 分身（持ち主のスロットごとに 1 つ） / wd: 天狗の風の場（持ち主ごとに 1 つまで）
 // rm: スワッパーの ゾーン（持ち主ごとに 1 つまで） / cb: クロス使いのクロスボウ（持ち主ごとに 1 つまで。ラストスパート中は 2 つまで） / mn: ゴブGの手下
-const game = { ph: "lobby", tm: 0, win: -1, wt: 0, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, pj: [], fl: [], wd: [], rm: [], cb: [], mn: [], sy: [], cg: [], cgT: 0, bc: [], cl: [null, null, null, null], p: [null, null, null, null] };
+const game = { ph: "lobby", tm: 0, win: -1, wt: 0, nf: 0, rt: ROUND_FRAMES, sd: 0, hs: 0, hsf: false, wr: WIN_ROUNDS_DEFAULT, st: 0, stT: 0, ss: stageSel, pj: [], fl: [], wd: [], rm: [], cb: [], mn: [], sy: [], cg: [], cgT: 0, bc: [], cl: [null, null, null, null], p: [null, null, null, null] };
 const clearEntities = () => { game.pj = []; game.fl = []; game.wd = []; game.rm = []; game.cb = []; game.mn = []; game.sy = []; game.cg = []; game.cgT = 0; game.bc = []; game.cl = [null, null, null, null]; };   // bc: ヤニ猫の臭い息の雲   // sy: ヤク猫の注射器 / cg: タバコ / cgT: 次のタバコまで
 // ラストスパート（残り 20 秒以下。サドンデス中も含む。トレーニングにはない）。参加者の画面でも、届いた game.rt で同じように判定できる
 const late = () => game.ph === "play" && !training && game.rt <= LATE_FRAMES;
@@ -700,19 +740,87 @@ const xbowMax = () => late() ? LATE_XBOWS : 1;
                                           // クロス使いが同時に置けるクロスボウの数
 let entSeq = 0;          // クロスボウの番号（ホストだけ。そのクロスボウが撃った矢を見分ける）
 // いま使える足場。サドンデス中は縮む（上の台は早く消え、メインは最小幅まで縮んだあとすべて崩れる）
+// st: ステージ（game.st）/ stT: ラウンドの始めからのフレーム（動く足場の位置）。参加者の画面では、人を少し前の時点で描く（補間）ので、足場も同じ時点に合わせる
+// 同じ状態なら作り直さない（1 フレームに何十回も呼ばれるため）
+// （補間の時点は、届いた最新の時計から 20 フレーム前までに収める。カウントダウン中・ヒットストップ中は時計が止まっているので、ずれても大きく飛ばない）
+const stageTime = () => role === "client" && interpOn && renderTk >= 0 && game.stO !== undefined ? Math.max(0, Math.min(game.stT, Math.max(game.stT - 20, renderTk + game.stO))) : game.stT | 0;
+let platKey = "", platVal = null;
 function platforms() {
-  const base = LAYOUTS[Math.max(0, Math.min(4, game.nf | 0))], sd = game.sd | 0;
-  if (sd <= 0) return base;
-  const out = [];
-  for (const pl of base) {
-    const half = pl.w / 2;
-    const inset = pl.main
-      ? (sd >= SD_SHRINK_FRAMES + SD_HOLD_FRAMES ? half : (pl.w - SD_MIN_W) / 2 * Math.min(1, sd / SD_SHRINK_FRAMES))
-      : half * Math.min(1, sd / SD_UP_FRAMES);
-    if (inset >= half) continue;                       // 消えた足場
-    out.push({ x: pl.x + inset, y: pl.y, w: pl.w - inset * 2, main: pl.main });
+  const st = game.st | 0, t = st === 1 ? stageTime() : 0, sd = game.sd | 0, key = st + "|" + (game.nf | 0) + "|" + t + "|" + sd;
+  if (key === platKey) return platVal;
+  const base = stageBase(st, game.nf, t);
+  let out = base;
+  if (sd > 0) {
+    out = [];
+    for (const pl of base) {
+      const half = pl.w / 2;
+      const inset = pl.main
+        ? (sd >= SD_SHRINK_FRAMES + SD_HOLD_FRAMES ? half : (pl.w - SD_MIN_W) / 2 * Math.min(1, sd / SD_SHRINK_FRAMES))
+        : half * Math.min(1, sd / SD_UP_FRAMES);
+      if (inset >= half) continue;                       // 消えた足場
+      out.push(Object.assign({}, pl, { x: pl.x + inset, w: pl.w - inset * 2 }));
+    }
   }
+  platKey = key; platVal = out;
   return out;
+}
+// ---- ステージの仕掛け（ホストだけが計算する。2026-11-09）----
+// 浮島に立っている人（分身も）は、足場が動いたぶんだけ一緒に動く。stT はここで 1 つ進める（ヒットストップ中は進めない = 足場も止まる）
+function stageCarry(list) {
+  if ((game.st | 0) !== 1) { game.stT++; return; }
+  const on = list.map(e => { const pl = platformUnder(e); return pl && pl.mv ? pl : null; });
+  // 浮島の上に置かれた物（花・注射器・クロスボウ・ゴブGの手下）も一緒に運ぶ: [物, 足もとの x, 足もとの y からの y のずれ]
+  const mvAt = (x, y) => platforms().find(q => q.mv && Math.abs(q.y - y) < 1.5 && x > q.x && x < q.x + q.w) || null;
+  const items = [];
+  for (const f of game.fl) if (!f.air) items.push([f, mvAt(f.x, f.y)]);
+  for (const q of game.sy) if (!q.air) items.push([q, mvAt(q.x, q.y)]);
+  for (const c of game.cb) if (c.g) items.push([c, mvAt(c.x + CB_W / 2, c.y + CB_H)]);
+  for (const m of game.mn) if (m.g) items.push([m, mvAt(m.x + MN_W / 2, m.y + MN_H)]);
+  game.stT++;
+  const now = platforms();
+  const move = (e, o) => {
+    if (!o) return;
+    const n = now.find(q => q.id === o.id); if (!n) return;
+    e.x += (n.x + n.w / 2) - (o.x + o.w / 2); e.y += n.y - o.y;
+  };
+  list.forEach((e, i) => move(e, on[i]));
+  for (const it of items) move(it[0], it[1]);
+}
+// ワープ遺跡のゲートが使えるか: メインの両端のゲートは、その場所にメインが残っている間だけ。崖の下のゲートは、メインがある間だけ
+function warpOn(k) {
+  const m = mainPlat(); if (!m) return false;
+  return k >= 2 || (WARPS[k][0] > m.x && WARPS[k][0] < m.x + m.w);
+}
+// ばねが使えるか: ばねの下に足場が残っているときだけ（サドンデスで縮むと消える）
+const springOn = s => platforms().some(pl => Math.abs(pl.y - s[1]) < 1 && s[0] >= pl.x && s[0] <= pl.x + pl.w);
+const busyWarp = e => e.hd > 0 || e.gr > 0 || e.rw > 0 || e.vbT > 0 || e.yk > 0 || e.wb > 0;   // つかまれている・つかんでいる・巻き戻し・噛みつき・糸の移動中は、仕掛けを使わない
+// 物理の計算のあと: ゲートに入った人をペアのゲートへ移す / ばねの上に立った人を跳ね上げる
+function stageGimmicks(list) {
+  const st = game.st | 0;
+  if (st !== 2 && st !== 3) return;
+  for (const e of list) {
+    if (e.wpc > 0) e.wpc--;
+    if (e.spc > 0) e.spc--;
+    if (busyWarp(e)) continue;
+    if (st === 2) {
+      const x = ecx(e), y = ecy(e);
+      const k = WARPS.findIndex((w, j) => warpOn(j) && Math.hypot(x - w[0], y - w[1]) < WARP_R + 10);
+      if (k < 0) continue;
+      const to = WARPS[k][2];
+      if (e.wpc > 0 || to < 0) { e.wpc = Math.max(e.wpc, 2); continue; }   // 出てきたゲートの中にいる間は、もう一度は入らない（行ったり来たりしない）
+      const a = WARPS[k], b = WARPS[to];
+      e.x += b[0] - a[0]; e.y += b[1] - a[1]; e.ground = false; e.wpc = WARP_CD;
+      if (k >= 2) { e.vx = 0; e.vy = -6; e.dj = 0; }                     // 崖の下のゲート: 上の出口から、少し跳ねて出る（空中ジャンプも戻る）
+      emit("wp", Math.round(a[0]), Math.round(a[1]), Math.round(b[0]), Math.round(b[1]));
+    } else if (e.ground && !e.spc) {
+      const feet = e.y + phOf(e), x = ecx(e);
+      const sp = SPRINGS.find(s => Math.abs(feet - s[1]) < 2 && Math.abs(x - s[0]) < s[2] / 2 + 6 && springOn(s));
+      if (!sp) continue;
+      e.vy = -sp[3]; e.y -= 1; e.ground = false; e.dj = 0; e.jh = 0; e.spc = SPRING_CD;
+      if (sp[4]) e.vx = sp[4];
+      emit("spg", Math.round(sp[0]), Math.round(sp[1]));
+    }
+  }
 }
 const inputs = [0, 0, 0, 0];
 let myKeys = 0, sentKeys = -1;
@@ -751,6 +859,7 @@ function newPlayer() {
            yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
            aiT: 0, aiIn: 0, aiDrop: false, aiWant: 0, aiSideT: 0, aiTgt: null, aiCh: 0, aiWait: 0, aiGoal: null, aiOnce: 0, aiIdle: 0,   // 頭脳（ホストだけが使う）: 次に考えるまで / 続ける入力 / 飛び降りてよいか / 立ちたい側 / その保持 / 狙っている敵 / ためる長さ / 敵の出方を待った長さ / 向かっている x / 続けない入力（向きを変えるだけの 1 回） / 何もしていない長さ
+           wpc: 0, spc: 0,                              // ステージの仕掛け: ゲートに次に入れるまで / ばねで次に跳べるまで（ホストだけ）
            life: 0, isClone: false };
 }
 
@@ -843,7 +952,10 @@ function shieldUp(p) {
 // battle なし: ロビーでメインの上に並ぶ位置
 function spawn(p, slot, n, battle) {
   let x, y = PY - PLH;
-  if (battle) {
+  if (battle && (game.st | 0) !== 0) {                    // 仕掛けのあるステージ（2026-11-09）: 全員メインの上に、端から順に並ぶ（ゲートやばねの上は避ける）
+    const m = stageBase(game.st, n, 0).find(q => q.main);
+    x = m.x + m.w * [0.22, 0.78, 0.4, 0.6][slot] - PLW / 2;
+  } else if (battle) {
     const ups = layoutFor(n).slice(0, -1);                 // 上の台（メインを除く）
     const up = slot >= 2 ? ups[slot - 2] : null;
     if (up) { x = up.x + up.w / 2 - PLW / 2; y = up.y - PLH; }
@@ -866,6 +978,7 @@ function spawn(p, slot, n, battle) {
   p.sp = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
   p.um = 0; p.umR = 0; p.umHp = UMB_HP; p.umh = []; p.aiUm = 0;   // キャンピングシェルター
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
+  p.wpc = 0; p.spc = 0;
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
 }
 
@@ -879,6 +992,7 @@ const readySlots = () => connectedSlots().filter(i => game.p[i].rd);
 function startRound() {
   const fighters = readySlots();
   game.nf = fighters.length;                // 人数でステージの形が変わる
+  game.st = pickStage(); game.stT = 0;      // ステージ（ランダムなら、ラウンドごとに選び直す）
   game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0;
   clearEntities();
   for (const s of connectedSlots()) {
@@ -894,7 +1008,8 @@ function hostStartMatch() {
   if (role !== "host" || game.ph !== "lobby" || readySlots().length < 2) return;
   if (sidesOf(readySlots()) < 2) return;                   // 全員が同じチーム: 始められない（画面に理由を出す）
   readySlots().forEach(s => game.p[s].w = 0);
-  game.wr = winRounds;                                     // 何本先取か（この試合の間は変わらない）
+  if (!solo) readySlots().forEach(s => rollCpuCh(game.p[s]));   // 部屋の CPU: ランダムのキャラは、試合を始めるたびに決める
+  game.wr = winRounds; game.ss = stageSel;                                     // 何本先取か（この試合の間は変わらない）
   trainKO = 0;                                             // トレーニングの撃墜数は、始めるたびに 0 から
   startRound();
 }
@@ -902,7 +1017,7 @@ function hostStartMatch() {
 function toLobby() {
   const slots = connectedSlots();
   slots.forEach((s, idx) => { const p = game.p[s]; p.w = 0; p.lk = false; p.lv = 0; spawn(p, idx, slots.length); p.al = true; });
-  game.ph = "lobby"; game.win = -1; game.wt = 0; game.nf = 0;
+  game.ph = "lobby"; game.win = -1; game.wt = 0; game.nf = 0; game.st = 0; game.stT = 0;   // ロビーはいつものステージ
   game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0;
   clearEntities();
 }
@@ -1090,7 +1205,7 @@ function summonClone(p) {
 }
 function respawn(p) {                        // 残機で復活: いちばん上の足場の真上から降りてくる
   p.lv--;
-  const pl = platforms()[0];
+  const pl = (game.st | 0) !== 0 ? (mainPlat() || platforms()[0]) : platforms()[0];   // 仕掛けのあるステージでは、メインの真上から（浮島は動いていて、崖の外にいることがある）
   p.x = (pl ? pl.x + pl.w / 2 : PX + PW / 2) - PLW / 2;
   p.y = (pl ? pl.y : PY) - PLH - 50;
   p.vx = p.vy = 0; p.s = 0; p.a = 0; p.ak = 0; p.cd = 0; p.ks = 0; p.cn = 0; p.fz = 0; p.gh = 0; p.ground = false;
@@ -2019,7 +2134,7 @@ function physics(p, inp, neutral) {
   p.ground = false;
   if (p.vy >= 0) {
     for (const pl of platforms()) {               // 上にある台から調べる。上からは乗れて、下からは通り抜ける
-      if (prevBottom <= pl.y + 0.01 && p.y + hh >= pl.y && p.x + ww > pl.x && p.x < pl.x + pl.w) {
+      if (prevBottom <= pl.y + 0.01 + (pl.mv ? 4 : 0) && p.y + hh >= pl.y && p.x + ww > pl.x && p.x < pl.x + pl.w) {   // 浮島は上下に動くので、少し余裕を見る
         p.y = pl.y - hh; p.vy = 0; p.ground = true; p.dj = 0; break;
       }
     }
@@ -2810,6 +2925,8 @@ function aiThink(c, owner, pls, B) {
   }
   // 1) メインの面より下へ落ちかけている: 足場へ戻る
   if (!c.ground && feet > PY + 4) {
+    const aid = aiRecoverAid(c, ccx, feet, main);                   // 空中ジャンプを使い切って崖の外: 下にある崖の下のばね・ゲートへ寄る（2026-11-09）
+    if (aid !== null) { steer(aid); return inp; }
     steer(stayX(ccx));
     // テレポーターは、足場のほうを向いていれば、硬直が解けたらすぐ短く（3 フレーム）ためて瞬間移動し、同時に二段ジャンプで戻る。
     // ためが長いと、そのぶん落ちたり二段ジャンプが遅れたりして届かない（人の最善の操作と同じ。ため 3・同時押しがいちばん遠くから戻れる）
@@ -2922,6 +3039,30 @@ function aiAlways(c, B, pls) {
   }
   return 0;
 }
+// ステージの仕掛けを使って崖へ戻る（2026-11-09）: 空中ジャンプを使い切って崖の外へ落ちているとき、下に崖の下のばね（ばねばね工場）・ゲート（ワープ遺跡）があれば、その x を返す
+function aiRecoverAid(c, ccx, feet, main) {
+  const st = game.st | 0;
+  if ((st !== 2 && st !== 3) || !(c.dj || feet > main.y + 80) || (ccx > main.x && ccx < main.x + main.w)) return null;   // 空中ジャンプを使い切った、または深く落ちている
+  const list = st === 3 ? SPRINGS.filter(s => s[4] && springOn(s)).map(s => [s[0], s[1]]) : WARPS.filter((w, k) => k >= 2 && w[2] >= 0 && warpOn(k)).map(w => [w[0], w[1] + PLH / 2]);
+  let best = null, bd = 1e9;
+  for (const a of list) {
+    const down = a[1] - feet, dx = Math.abs(a[0] - ccx);
+    if (down < 0 || dx > down * 0.8 + 60 || dx >= bd) continue;              // 上にある・横に遠すぎて届かない
+    best = a[0]; bd = dx;
+  }
+  return best;
+}
+// ワープ遺跡: 地上を歩いて、メインの両端のゲートに入りそうなとき、出口のほうが狙っている敵に近くならないなら止まる（行ったり来たりしない・崖へ向かわない）
+function aiWarpAvoid(c, inp) {
+  const dir = (inp & KEY.r) ? 1 : -1, x = ecx(c), y = ecy(c), t = c.aiTgt;
+  for (let k = 0; k < 2; k++) {
+    const w = WARPS[k], dx = w[0] - x;
+    if (!warpOn(k) || Math.sign(dx) !== dir || Math.abs(dx) > WARP_R + 10 + pwOf(c) / 2 + 24 || Math.abs(y - w[1]) > 60) continue;
+    const good = t && t.al && Math.abs(WARPS[w[2]][0] - ecx(t)) + 80 < Math.abs(x - ecx(t));
+    if (!good) inp &= ~(KEY.l | KEY.r);
+  }
+  return inp;
+}
 function aiInput(c, owner, B) {                                // 毎フレーム: ボタンの状態を返す
   const pls = platforms();
   if (!pls.length) return 0;
@@ -2948,6 +3089,16 @@ function aiInput(c, owner, B) {                                // 毎フレー�
     if (pl) {
       if ((inp & KEY.l) && x - pl.x < AI_EDGE) inp &= ~KEY.l;
       if ((inp & KEY.r) && pl.x + pl.w - x < AI_EDGE) inp &= ~KEY.r;
+    }
+  }
+  if ((game.st | 0) === 2 && c.ground && (inp & (KEY.l | KEY.r)) && !c.gr) inp = aiWarpAvoid(c, inp);
+  // 空中で、メインの面より上にいるとき: このまま流れるとメインの外へ出そうなら、内側へ入れ直す（考える間隔が長いと、ばねや跳躍の勢いのまま崖の外へ流れてしまうため。2026-11-09）
+  if (!c.ground && !c.gr && c.rw === 0 && c.wb === 0) {
+    const m = pls.find(q => q.main), x = ecx(c);
+    if (m && c.y + phOf(c) <= m.y + 4) {
+      const px = x + c.vx * 12, lo = m.x + 20, hi = m.x + m.w - 20;
+      if (px < lo && !(inp & KEY.r)) inp = (inp & ~KEY.l) | KEY.r;
+      else if (px > hi && !(inp & KEY.l)) inp = (inp & ~KEY.r) | KEY.l;
     }
   }
   if (chOf(c).id === "splat" && !c.isClone) aiStep(c, B);
@@ -3017,9 +3168,11 @@ function hostTick() {
     if (!training) { if (game.rt > 0) { if (--game.rt === LATE_FRAMES) enterLate(); } else game.sd++; }   // 制限時間が尽きたらサドンデス（足場が縮む）。ヒットストップ中も時間は進む。トレーニングには制限時間がない。残り 20 秒になった瞬間にラストスパート
     if (game.hs > 0) { game.hs--; return; }                // ヒットストップ中は全員の動きを止める
     for (const i of slots) { const p = game.p[i]; if (p.cpu) inputs[i] = p.al && !training ? aiInput(p, null, AI_LEVELS[p.cpuLv] || AI_LEVELS[1]) : 0; }   // CPU の頭脳（トレーニングの相手は何も押さない）
+    stageCarry(ents());                                    // 浮島に乗っている人を運ぶ（ステージの時計もここで進む）
     for (const i of slots) physics(game.p[i], inputs[i], false);
     softPush();
     for (const i of slots) tickClone(i);
+    stageGimmicks(ents());                                 // ゲート・ばね
     for (const i of slots) { const p = game.p[i]; if (p.yr && !p.al) yureiStep(p, inputs[i]); }   // 幽霊（足場の上を歩く）
     const list = ents();
     updateFlowers(list);
@@ -3109,7 +3262,7 @@ function serEnt(p) {                                         // 見た目に必�
 }
 function snapshot() {
   const inGame = game.ph !== "lobby";         // キャラは試合が始まるまで他のプレイヤーに送らない
-  const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, wt: game.wt | 0, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr,
+  const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, wt: game.wt | 0, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr, st: game.st | 0, stT: game.stT | 0, ss: game.ss,
     p: game.p.map(p => p ? Object.assign(serEnt(p),
       { w: p.w, c: p.c ? 1 : 0, n: p.n, tg: p.tg | 0, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, am: p.am, amT: p.amT, lv: p.lv },
       inGame ? { ch: p.ch } : null, inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
@@ -3202,6 +3355,7 @@ function applySoloCfg() {                  // ロビーで、CPU の席を設定
     if (i > soloCfg.n) { game.p[i] = null; continue; }
     const p = game.p[i] || (game.p[i] = newPlayer());
     p.own = i; p.c = true; p.rd = true; p.cpu = true; p.cpuLv = soloCfg.lv; p.n = "CPU" + i;
+    p.cpuCh = soloCfg.chars[i - 1];
     p.ch = Math.max(0, soloCfg.chars[i - 1]);                // 「ランダム」は、始めるときに決める（それまではノーマルの見た目）
     p.tg = soloCfg.teams[i - 1] | 0;
   }
@@ -3211,7 +3365,7 @@ function applySoloCfg() {                  // ロビーで、CPU の席を設定
 function rollCpuChars() {
   for (let i = 1; i <= soloCfg.n; i++) {
     const p = game.p[i];
-    if (p && p.cpu) p.ch = soloCfg.chars[i - 1] >= 0 ? soloCfg.chars[i - 1] : Math.floor(Math.random() * CHARS.length);
+    if (p && p.cpu) { p.cpuCh = soloCfg.chars[i - 1]; rollCpuCh(p); }
   }
 }
 function startTraining() { training = true; trainKO = 0; startSolo(true); }
@@ -3262,7 +3416,7 @@ let hostTries = 0;
 // タイトルへ戻る: ページを読み込み直さずに、部屋の接続を切り、試合の状態を最初に戻す（読み込み直すと全画面が解除されるため）
 let sessionId = 0;
 function goTitle() {
-  if (PARTY) { ykgToGames(); return; }   // パーティのときは、ゲーム一覧（パーティの画面）へ戻る
+  if (PARTY && typeof ykgToGames === "function") { ykgToGames(); return; }   // パーティのときは、ゲーム一覧（パーティの画面）へ戻る
   sessionId++;
   for (const u of uchs) { try { if (u) u.close(); } catch (e) {} }
   try { if (uch) uch.close(); } catch (e) {}
@@ -3275,13 +3429,19 @@ function goTitle() {
   lastSnapQ = 0; pauseQ = 0; lastEv = 0; evHist.length = 0;
   role = null; myId = -1; net = "idle"; netMsg = ""; roomCode = ""; solo = false; training = false;
   document.body.classList.remove("solo");
-  game.p = [null, null, null, null]; game.ph = "lobby"; game.tm = 0; game.win = -1; game.nf = 0; game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0; game.hsf = false;
+  game.p = [null, null, null, null]; game.ph = "lobby"; game.tm = 0; game.win = -1; game.nf = 0; game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0; game.hsf = false; game.st = 0; game.stT = 0;   // 2026-11-09: タイトルへ戻ったらステージもいつものへ
   clearEntities(); evq.length = 0;
   inputs.fill(0); held.fill(0); latch.fill(0); hostPause = false; hostLast = 0; hostAcc = 0;
   lastPh = ""; lastSig = ""; lastHud = ""; uiKey = "";
   renderUI();
 }
+// オフライン（2026-11-09）: 端末がオフライン、または URL に ?offline=1（確かめる用）なら、部屋・参加・パーティなどネットの画面は出さず、CPU 戦とトレーニングだけにする
+const FORCE_OFFLINE = new URLSearchParams(location.search).get("offline") === "1";
+const isOffline = () => FORCE_OFFLINE || navigator.onLine === false;
+const peerOk = () => typeof Peer === "function";                     // PeerJS が読み込めなかった（オフラインで開いた等）ときは、部屋を作らない
+function noPeer() { net = "error"; netMsg = "通信の準備ができません（オフラインかもしれません）。CPU戦とトレーニングは遊べます"; renderUI(); }
 function startHost() {
+  if (!peerOk() || isOffline()) { role = "host"; noPeer(); return; }
   role = "host"; net = "connecting"; netMsg = ""; renderUI();
   roomCode = PARTY ? PARTY.code : randCode();
   peer = new Peer(netId(roomCode));
@@ -3358,6 +3518,7 @@ function takeInput(slot, d) {
 }
 
 function startClient(code) {
+  if (!peerOk() || isOffline()) { role = "client"; roomCode = code; noPeer(); return; }
   role = "client"; roomCode = code; net = "connecting"; renderUI();
   const sid = sessionId;
   peer = new Peer();
@@ -3450,6 +3611,10 @@ function applySnapshot(s) {
   if (s.q === undefined || s.q > pauseQ) hostPause = false;           // スナップショットが届くのは、ホストが動いているとき（一時停止の知らせの取りこぼし対策。止まる前に送られたものが、知らせより後に届いた場合は除く）
   const phChanged = game.ph !== s.ph;
   game.ph = s.ph; game.tm = s.tm; game.win = s.win; game.wt = s.wt | 0; game.nf = s.nf | 0; game.rt = s.rt | 0; game.sd = s.sd | 0; game.hsf = !!s.hs;
+  const st = s.st | 0;                                                 // ステージ（古い版のホストは送らない → いつもの）
+  game.st = st >= 0 && st < STAGES.length ? st : 0; game.stT = s.stT | 0;
+  if (s.tk !== undefined) game.stO = game.stT - s.tk;                  // 足場の時計とホストの計算の番号の差（補間した時点の足場を描くため）
+  const ss = s.ss === undefined ? 0 : s.ss | 0, ssChanged = game.ss !== ss; game.ss = ss;   // ロビーで選んでいるステージ（表示用）
   const wrChanged = game.wr !== sanitizeRounds(s.wr);                 // 古い版のホストは wr を送らない（標準の 3 本先取として扱う）
   game.wr = sanitizeRounds(s.wr);
   if (s.ev && !document.hidden) {                                      // 自分が裏にいる間は、効果音や演出をためない
@@ -3489,7 +3654,7 @@ function applySnapshot(s) {
     for (const m of game.mn) m.x -= m.vx * back;
   }
   const sig = game.p.map(p => p ? (p.c ? 1 : 0) + "," + (p.rd ? 1 : 0) + "," + p.n + "," + (p.tg | 0) : "-").join("|");
-  if (phChanged || wrChanged || sig !== lastSig) renderUI();
+  if (phChanged || wrChanged || ssChanged || sig !== lastSig) renderUI();
   lastSig = sig;
   refreshHud();
 }
@@ -4104,6 +4269,35 @@ function paintRounds(root, id) {
   root.querySelector("#" + id + "Minus").disabled = winRounds <= WIN_ROUNDS_MIN;
   root.querySelector("#" + id + "Plus").disabled = winRounds >= WIN_ROUNDS_MAX;
 }
+// ステージを選ぶ欄（ホストのロビーと CPU 戦の設定画面。2026-11-09）
+const stageSelHtml = () => `<select id="selSt">${[-1].concat(STAGES.map((_, i) => i)).map(v => `<option value="${v}"${v === stageSel ? " selected" : ""}>${esc(stageName(v))}</option>`).join("")}</select>`;
+const stageDesc = v => v < 0 ? "ラウンドごとに、どれかのステージになる" : STAGES[v].desc;
+function bindStageSel(root) {
+  const sel = root.querySelector("#selSt"), hint = root.querySelector("#stHint");
+  if (!sel) return;
+  sel.onchange = () => { setStageSel(sel.value); if (hint) hint.textContent = stageDesc(stageSel); };
+  if (hint) hint.textContent = stageDesc(stageSel);
+}
+// CPU の席の設定（キャラは -1 = ランダム。試合を始めるときに決める）。ホストの部屋でも CPU を足せる（2026-11-09）
+function rollCpuCh(p) { if (p && p.cpu) p.ch = p.cpuCh >= 0 ? p.cpuCh : Math.floor(Math.random() * CHARS.length); }
+function addRoomCpu() {
+  if (role !== "host" || solo || game.ph !== "lobby") return;
+  let slot = -1;
+  for (let i = 1; i < MAX_PLAYERS; i++) if (!game.p[i] || !game.p[i].c) { slot = i; break; }
+  if (slot < 0) return;
+  if (conns[slot]) { try { conns[slot].close(); } catch (e) {} conns[slot] = null; }
+  const p = game.p[slot] = newPlayer();
+  p.own = slot; p.c = true; p.rd = true; p.cpu = true; p.cpuLv = 1; p.cpuCh = -1; p.n = "CPU" + slot; p.tg = 0;
+  inputs[slot] = held[slot] = latch[slot] = 0;
+  spawn(p, slot, connectedSlots().length); p.al = true;
+  renderUI();
+}
+function removeRoomCpu(i) {
+  const p = game.p[i];
+  if (role !== "host" || solo || game.ph !== "lobby" || !p || !p.cpu) return;
+  game.p[i] = null; renderUI();
+}
+const cpuOpts = `<option value="-1">ランダム</option>` + CHARS.map((c, i) => `<option value="${i}">${esc(c.name)}</option>`).join("");
 function showSolo() {                       // CPU 戦の設定（自分の名前・キャラ、CPU の数・強さ・キャラ、何本先取か）
   const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
   ui.innerHTML = `<div class="panel setup"><div class="cols"><div class="colL"><h1>${training ? "トレーニング" : "CPU戦"}</h1>
@@ -4118,6 +4312,8 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
       <div class="hint" id="lvHint"${training ? ' style="display:none"' : ""}></div>
       <div id="cpuRows"></div>
       <div class="row"${training ? ' style="display:none"' : ""}><span>何本先取</span>${roundsHtml("wr")}</div>
+      <div class="row"><span>ステージ</span>${stageSelHtml()}</div>
+      <div class="hint" id="stHint"></div>
       <div class="hint" id="teamHint" style="color:#fca5a5"></div>
     </div>
     <div class="btns"><button id="bGo">${training ? "練習開始" : "戦闘開始"}</button>
@@ -4155,6 +4351,7 @@ function showSolo() {                       // CPU 戦の設定（自分の名�
     root.querySelector("#bGo").disabled = same;
   };
   bindRounds(root, "wr", () => paintRounds(root, "wr"));
+  bindStageSel(root);
   bindTeamSeg(root, "segT", v => { draft.tg = v; game.p[0].tg = v; paintTeamHint(); });
   root.querySelectorAll("#segN button").forEach(b => b.onclick = () => { soloCfg.n = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
   root.querySelectorAll("#segLv button").forEach(b => b.onclick = () => { soloCfg.lv = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
@@ -4176,6 +4373,11 @@ function showLobby() {
     ? `<div class="pl" style="color:${colOf(i)}"><b>${esc(nameOf(i))}</b>${teamLabel(p)}${i === myId ? "（あなた）" : ""}<span class="${p.rd ? "ok" : "wt"}">${p.rd ? "✔ 準備OK" : "選択中…"}</span></div>` : "").join("");
   const n = connectedSlots().length, ready = readySlots().length, oneTeam = ready >= 2 && sidesOf(readySlots()) < 2;   // 準備OKの全員が同じチーム
   if (role === "host") {
+    const lvOpts = AI_LEVELS.map((l, v) => `<option value="${v}">強さ: ${esc(l.name)}</option>`).join("");
+    const teamOpts = TEAM_NAMES.map((nm, t) => `<option value="${t}">チーム: ${nm}</option>`).join("");
+    const cpus = game.p.map((p, i) => p && p.c && p.cpu ? i : -1).filter(i => i >= 0);
+    const cpuBox = `<div class="cpuset" id="cpuBox">${cpus.map(i => `<div class="row"><span style="color:${colOf(i)}">CPU${i}</span><select data-ck="${i}">${cpuOpts}</select><select data-ct="${i}">${teamOpts}</select><select data-cl="${i}">${lvOpts}</select><button type="button" class="sub" data-cr="${i}" style="margin:0;padding:4px 10px">×</button></div>`).join("")}
+      ${n < MAX_PLAYERS ? `<button type="button" id="bAddCpu" class="sub" style="margin:4px 0">＋ CPU を入れる</button>` : ""}</div>`;
     ui.innerHTML = `<div class="panel lobby"><h1>ロビー</h1><div class="cols"><div class="colL">
       <p>部屋番号</p>
       <div class="code">${esc(roomCode)}</div>
@@ -4184,17 +4386,26 @@ function showLobby() {
       <button id="bCopy" class="sub">URLをコピー</button></div><div class="colR">
       <p>参加者 ${n}/4</p>${list}
       <div class="rounds"><span>何本先取</span>${roundsHtml("wr")}</div>
+      <div class="rounds"><span>ステージ</span>${stageSelHtml()}</div>
+      <div class="hint" id="stHint" style="font-size:11px;color:#9ca3af"></div>
+      ${cpuBox}
       <button id="bStart" ${ready < 2 || oneTeam ? "disabled" : ""}>ゲーム開始</button>
       <button id="bEdit" class="sub">キャラ・チームを変更</button>
       <p>${ready < 2 ? "準備OKが2人以上になると開始できます<br>" : oneTeam ? "全員が同じチームです。チームを分けると開始できます<br>" : ""}ホストはこの画面を開いたままにしてください<br>（他のアプリに切り替えると全員の画面が止まります）</p></div></div></div>`;
     bindRounds(ui, "wr", renderUI);
+    bindStageSel(ui);
+    const ba = document.getElementById("bAddCpu"); if (ba) ba.onclick = addRoomCpu;
+    ui.querySelectorAll("#cpuBox select[data-ck]").forEach(sel => { const p = game.p[Number(sel.dataset.ck)]; sel.value = String(p.cpuCh); sel.onchange = () => { p.cpuCh = Number(sel.value); p.ch = Math.max(0, p.cpuCh); }; });
+    ui.querySelectorAll("#cpuBox select[data-ct]").forEach(sel => { const p = game.p[Number(sel.dataset.ct)]; sel.value = String(p.tg | 0); sel.onchange = () => { p.tg = sanitizeTeam(sel.value); renderUI(); }; });
+    ui.querySelectorAll("#cpuBox select[data-cl]").forEach(sel => { const p = game.p[Number(sel.dataset.cl)]; sel.value = String(p.cpuLv); sel.onchange = () => { const v = Number(sel.value); p.cpuLv = v >= 0 && v < AI_LEVELS.length ? v : 1; }; });
+    ui.querySelectorAll("#cpuBox button[data-cr]").forEach(b => b.onclick = () => removeRoomCpu(Number(b.dataset.cr)));
     document.getElementById("bCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(shareUrl()); };
     document.getElementById("bStart").onclick = () => { autoFs(); hostStartMatch(); };
     document.getElementById("url").onclick = e => e.target.select();
     document.getElementById("bEdit").onclick = () => { if (canEdit(game.p[0])) { game.p[0].rd = false; renderUI(); } };
   } else {
     ui.innerHTML = `<div class="panel"><h1>ロビー</h1><p>参加者 ${n}/4</p>${list}
-      <p>何本先取: <b style="color:#e5e7eb">${game.wr}</b>（ホストが決めます）</p>
+      <p>何本先取: <b style="color:#e5e7eb">${game.wr}</b> ／ ステージ: <b style="color:#e5e7eb">${esc(stageName(game.ss))}</b>（ホストが決めます）</p>
       <p>ホストの開始を待っています…</p>
       <button id="bEdit" class="sub">キャラ・チームを変更</button></div>`;
 
@@ -4220,7 +4431,14 @@ function renderUI() {
   uiKey = key;
   document.body.classList.toggle("inapp", key !== "title");     // タイトル画面以外では、タイトルへ戻るボタンを出す
   if (key === "title") {
-    ui.innerHTML = `<div class="panel"><h1>シールドファイト</h1>
+    const off = isOffline();
+    ui.innerHTML = off ? `<div class="panel"><h1>シールドファイト</h1>
+      <p>オフラインです。CPU戦とトレーニングで遊べます</p>
+      <button id="bSolo">CPUと戦う（ひとりで遊ぶ）</button>
+      <br><button id="bTrain" class="sub">トレーニング（相手は動かない）</button>
+      ${coarseMq.matches || landForce === "1" ? `<br><button id="bLayout" class="sub">操作ボタンの配置</button>` : ""}
+      <p>操作: WASD / 矢印キーで移動（↑・W でジャンプ）、Space で攻撃、X でスキル</p>
+      <br><button id="bGames" class="sub">← ゲーム一覧へ（you know games）</button></div>` : `<div class="panel"><h1>シールドファイト</h1>
       <p>好きなキャラを選んで戦おう！スキルで逆転もできる<br>盾が外れた隙を突いて、相手をステージから落とせ（最大4人 / 何本先取かは設定できます）<br>制限時間は${ROUND_FRAMES / 60}秒。残り${LATE_FRAMES / 60}秒でラストスパート（スキルのクールタイムが半分、キャラごとの強化）。時間切れになるとステージが縮みます</p>
       <button id="bHost">部屋を作る（ホスト）</button>
       <button id="bSolo" class="sub">CPUと戦う（ひとりで遊ぶ）</button>
@@ -4234,16 +4452,17 @@ function renderUI() {
       ${isLineApp ? `<p class="linehint">LINE の中のブラウザでは、横画面・全画面にできません。右上のメニュー（︙ や …）から「ブラウザで開く」（iPhone は「Safariで開く」）を選ぶか、<a href="${esc(extUrl())}">ここ</a>を押してください</p>` : ""}
       ${isIPhone && !standalone ? `<p class="ioshint">画面を広く使うには: 共有ボタン（□↑）→「ホーム画面に追加」で、ホーム画面のアイコンから開いてください（アドレスバーが消えます）</p>` : ""}
       <br><button id="bGames" class="sub">← ゲーム一覧へ（you know games）</button></div>`;
-    document.getElementById("bHost").onclick = () => { autoFs(); startHost(); };
-    document.getElementById("bSolo").onclick = () => { autoFs(); startSolo(); };
-    document.getElementById("bTrain").onclick = () => { autoFs(); startTraining(); };
-    document.getElementById("bGames").onclick = () => { ykgToGames(); };   // ミニゲーム集のゲーム一覧へ
+    const on = (id, f) => { const el = document.getElementById(id); if (el) el.onclick = f; };   // オフラインの画面には、部屋・参加のボタンがない
+    on("bHost", () => { autoFs(); startHost(); });
+    on("bSolo", () => { autoFs(); startSolo(); });
+    on("bTrain", () => { autoFs(); startTraining(); });
+    on("bGames", () => { if (typeof ykgToGames === "function") ykgToGames(); else location.href = "../"; });   // party-beacon.js が読めなかったときも戻れる   // ミニゲーム集のゲーム一覧へ
     const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d$/.test(c)) { autoFs(); startClient(c); } else document.getElementById("code").style.borderColor = "#ef4444"; };
-    document.getElementById("bJoin").onclick = join;
+    on("bJoin", join);
     const bl = document.getElementById("bLayout"); if (bl) bl.onclick = openLayoutEditor;
     const bi = document.getElementById("bInstall");
     if (bi) bi.onclick = () => { const e = installEvt; if (!e) return; e.prompt(); (e.userChoice || Promise.resolve()).then(() => { installEvt = null; uiKey = ""; renderUI(); }); };
-    document.getElementById("code").onkeydown = e => { if (e.key === "Enter") join(); };
+    const ci = document.getElementById("code"); if (ci) ci.onkeydown = e => { if (e.key === "Enter") join(); };
   } else if (key === "layout") {
     showLayoutEditor();
   } else if (key === "connecting") {
@@ -4523,9 +4742,12 @@ paintFs();
 // アプリとしてのインストール: サービスワーカー（sw.js）を登録する（Chrome がインストールできると判断するのに必要）。https か localhost のときだけ
 try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
 // パーティから開いたときは、タイトル画面を飛ばして自動で部屋を作る・入る
-if (PARTY) { if (PARTY.role === "host") startHost(); else startClient(PARTY.code); }
+if (PARTY && !isOffline()) { if (PARTY.role === "host") startHost(); else startClient(PARTY.code); }   // オフラインなら、パーティでもタイトル（CPU 戦）から
+// ネットにつながった・切れた: タイトル画面なら作り直す（オフラインのときは、部屋・参加のボタンを隠す）
+addEventListener("online", () => { if (uiKey === "title") { uiKey = ""; renderUI(); } });
+addEventListener("offline", () => { if (uiKey === "title") { uiKey = ""; renderUI(); } });
 // パーティの待ち合わせ画面（全部のゲームで同じ構図。party-beacon.js）。ホストがスタートを押すと、みんなキャラ選びへ進む（2026-11-07）
-if (PARTY && window.ykgLobby) {
+if (PARTY && window.ykgLobby && !isOffline()) {
   const rules = "盾が外れた隙を突いて、相手をステージから落とす対戦ゲーム。\nスタートのあと、それぞれキャラを選びます。";
   if (PARTY.role === "host") ykgLobby.open({ title: "シールドファイト", rules, button: { label: "スタート", onClick: () => ykgLobby.closeAll() } });
   else ykgLobby.open({ title: "シールドファイト", rules, wait: PARTY.spec ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" });
@@ -4579,6 +4801,15 @@ function fxEvent(e) {
   const k = e[0], x = e[1], y = e[2], d = e[3] || 1, f = e[4] || 0;
   const fwd = d > 0 ? -0.3 : Math.PI + 0.3;        // 吹っ飛ばす向き（少し上向き）
   if (k === "s") Sfx.swing();
+  else if (k === "wp") {                           // ワープ: 入ったゲートと出たゲートに、輪と光
+    Sfx.teleport();
+    rings.push({ x, y, t: 0, max: 14, c: "#c4b5fd", r0: 10, sp: 3 });
+    rings.push({ x: e[3], y: e[4], t: 0, max: 14, c: "#67e8f9", r0: 10, sp: 3 });
+    burst(e[3], e[4], 10, { v0: 1, v1: 4, l0: 10, l1: 20, s0: 2, s1: 5, colors: ["#e0e7ff", "#a5f3fc", "#ffffff"] });
+  } else if (k === "spg") {                        // ばね
+    Sfx.airJump();
+    burst(x, y - 8, 8, { dir: -Math.PI / 2, spread: 1.6, v0: 2, v1: 5, l0: 10, l1: 18, s0: 2, s1: 4, g: 0.1, colors: ["#fdba74", "#ffffff"] });
+  }
   else if (k === "j") {
     Sfx.jump();
     burst(x, y, 5, { dir: -Math.PI / 2, spread: 2.8, v0: 0.6, v1: 2.2, l0: 10, l1: 18, s0: 3, s1: 6, g: 0.02, colors: ["#94a3b8", "#cbd5e1"] });
@@ -5701,6 +5932,49 @@ const smoothClient = p => {
 };   // 参加者側: 届いた位置へ寄せて滑らかに見せる
 let lastT = performance.now();
 let yureiSince = 0;                                  // 自分が幽霊になった時刻（説明を少しの間だけ出す）
+// ---- ステージの見た目（2026-11-09）----
+const STAGE_BG = [["#3b4b63", "#263347"], ["#4a6a8f", "#2b3d5c"], ["#3d3560", "#221d3a"], ["#4a4f45", "#2b2f2a"]];   // 背景の上・下の色
+const WARP_COL = ["#22d3ee", "#22d3ee", "#c084fc", "#c084fc", "#c084fc", "#c084fc"];   // 両端のゲートは水色、崖の下のゲートと出口は紫
+function drawFloatIsland(pl, now) {                 // 浮島: 草の上面と、下にぶら下がる岩
+  const cxm = pl.x + pl.w / 2;
+  cx.fillStyle = "#6b5b4a";
+  cx.beginPath(); cx.moveTo(pl.x, pl.y + 6); cx.lineTo(pl.x + pl.w, pl.y + 6); cx.lineTo(cxm + 22, pl.y + 40); cx.lineTo(cxm - 18, pl.y + 46); cx.closePath(); cx.fill();
+  cx.fillStyle = "#4ade80"; cx.fillRect(pl.x, pl.y, pl.w, 8);
+  cx.fillStyle = "#bbf7d0"; cx.fillRect(pl.x, pl.y, pl.w, 2);
+  cx.fillStyle = "rgba(255,255,255,0.25)";                                                // 下のふわふわ（ゆれる雲）
+  const b = Math.sin(now / 300 + pl.id) * 2;
+  cx.beginPath(); cx.arc(cxm - 26, pl.y + 34 + b, 9, 0, 6.2832); cx.arc(cxm + 24, pl.y + 30 - b, 8, 0, 6.2832); cx.fill();
+}
+function drawStageBack(now) {
+  const st = game.st | 0;
+  if (st === 2) {
+    WARPS.forEach((w, k) => {
+      if (!warpOn(k)) return;
+      const exit = w[2] < 0, c = WARP_COL[k], sp = now / (exit ? 900 : 400) * (k % 2 ? -1 : 1);
+      cx.save(); cx.translate(w[0], w[1]);
+      cx.globalAlpha = exit ? 0.45 : 0.9;
+      cx.fillStyle = "rgba(15,23,42,0.55)"; cx.beginPath(); cx.ellipse(0, 0, WARP_R * 0.75, WARP_R, 0, 0, 6.2832); cx.fill();
+      cx.strokeStyle = c; cx.lineWidth = 4;
+      for (let i = 0; i < 3; i++) { cx.beginPath(); cx.ellipse(0, 0, WARP_R * 0.75 - i * 6, WARP_R - i * 7, 0, sp + i * 2, sp + i * 2 + 4.2); cx.stroke(); }
+      if (!exit) { cx.fillStyle = c; cx.globalAlpha = 0.35 + 0.25 * Math.sin(now / 200 + k); cx.beginPath(); cx.ellipse(0, 0, 6, 9, 0, 0, 6.2832); cx.fill(); }
+      cx.restore();
+    });
+  } else if (st === 3) {
+    for (const sp of SPRINGS) {
+      if (!springOn(sp)) continue;
+      const half = sp[2] / 2, x = sp[0], y = sp[1], bob = 2 * Math.sin(now / 160 + x);
+      cx.strokeStyle = "#e2e8f0"; cx.lineWidth = 3; cx.beginPath();                        // ばねの巻き（足場の上に、少しだけ出ている）
+      for (let i = 0; i <= 6; i++) { const yy = y - 2 - i * (8 + bob * 0.3) / 6; cx.lineTo(x + (i % 2 ? half - 8 : -half + 8), yy); }
+      cx.stroke();
+      cx.fillStyle = "#f97316"; cx.fillRect(x - half, y - 12 - bob * 0.3, sp[2], 5);      // 踏む板（オレンジ）
+      cx.fillStyle = "#fed7aa"; cx.fillRect(x - half, y - 12 - bob * 0.3, sp[2], 2);
+      const k = (now / 700 + x / 300) % 1;                                                   // 上へ流れる矢印（ここで跳ねると分かるように）
+      cx.save(); cx.globalAlpha = 0.5 * (1 - k); cx.strokeStyle = "#fdba74"; cx.lineWidth = 3; cx.lineJoin = "round";
+      for (let j = 0; j < 2; j++) { const ay = y - 30 - k * 40 - j * 12; cx.beginPath(); cx.moveTo(x - 10, ay + 7); cx.lineTo(x, ay); cx.lineTo(x + 10, ay + 7); cx.stroke(); }
+      cx.restore();
+    }
+  }
+}
 function render() {
   updateLand();
   fitCanvas();
@@ -5722,7 +5996,8 @@ function render() {
     if (uchOpen(uch)) pushKeys(true);                                   // 落としてよい通り道では、毎フレーム今のボタンの状態を送る
     if (hostConn && hostConn.open && now - pingT > 2000) { pingT = now; try { hostConn.send({ t: "pg", c: now }); } catch (e) {} }
   }
-  const g = cx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, "#3b4b63"); g.addColorStop(1, "#263347");   // 2026-10-18 に明るくした（それまでは #1e293b → #0f172a）
+  const bgc = STAGE_BG[game.st | 0] || STAGE_BG[0];                  // 背景の色（ステージごと。2026-11-09）
+  const g = cx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, bgc[0]); g.addColorStop(1, bgc[1]);   // 2026-10-18 に明るくした（それまでは #1e293b → #0f172a）
   cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
   updateCamera(dt);
   // 画面の揺れ（強さは毎フレーム減衰する）
@@ -5741,8 +6016,13 @@ function render() {
   cx.scale(cam.s, cam.s);
   // ステージ（メイン＋人数に応じた上の台）。サドンデス中は縮んでいく端が赤く点滅する
   const sdOn = game.sd > 0, blink = Math.floor(now / 250) % 2 === 0;
+  drawStageBack(now);                              // ゲートの輪・ばね（足場の前に描くと人と重なるので、ここで）
   for (const pl of platforms()) {
-    if (pl.main) {
+    if (pl.mv) { drawFloatIsland(pl, now); }
+    else if (pl.pad) {                                                                  // 崖の下の小さな足場（全体がばね）
+      cx.fillStyle = "#64748b"; cx.fillRect(pl.x, pl.y + 10, pl.w, 12);
+      cx.fillStyle = "#475569"; cx.fillRect(pl.x + 10, pl.y + 22, pl.w - 20, 18);
+    } else if (pl.main) {
       cx.fillStyle = "#8391a8"; cx.fillRect(pl.x, pl.y, pl.w, 22);                    // 2026-10-18 に背景を明るくしたので、足場も少し明るくした
       cx.fillStyle = "#56657d"; cx.fillRect(pl.x + 20, pl.y + 22, Math.max(0, pl.w - 40), 30);
       cx.fillStyle = "#cbd5e1"; cx.fillRect(pl.x, pl.y, pl.w, 3);
@@ -5813,7 +6093,7 @@ function render() {
     cx.fillText("通信 " + ms + "ms" + (interpOn ? " ・補間 " + Math.round(interpD * STEP_MS) + "ms" : ""), cw / 2, y);
     cx.restore();
   }
-  if (game.ph === "count") banner(String(Math.ceil(game.tm / 60)), "ラウンド開始！");
+  if (game.ph === "count") banner(String(Math.ceil(game.tm / 60)), "ラウンド開始！" + ((game.st | 0) || game.ss < 0 ? " ステージ「" + stageName(game.st | 0) + "」" : ""));
   else if (game.ph === "round") banner(game.win >= 0 ? (game.wt ? teamWord(game.wt) : nameOf(game.win)) + " の勝ち！" : "引き分け");
   else if (game.ph === "match") banner((game.wt ? teamWord(game.wt) : nameOf(game.win)) + " 優勝！", "まもなくロビーに戻ります");
 

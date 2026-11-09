@@ -90,8 +90,12 @@ const SNAP_MS = 16;                // 動きを送る間隔（2026-11-06 に 80 
 const PREFIX = "jenga-online-room-";
 // パーティ（you know games のゲーム一覧で作るグループ）から開いたとき（?party=1）は、番号を入れずに自動で部屋を作る・入る。
 // ホストはパーティの番号（1けた）で部屋を作り、ゲストはその部屋が開くまで探し続ける。ホストがいなくなったら、ゲストもゲーム一覧へ戻る。
+// オフライン（2026-11-09）: 電波がないとき、または ?offline=1（確認用）のときは、部屋を作る・入る などを出さず、CPU と対戦・練習だけにする
+const isOffline = () => !navigator.onLine || new URLSearchParams(location.search).get("offline") === "1";
+const netOk = () => !isOffline() && typeof Peer !== "undefined";   // PeerJS が読めなかったときも通信は使えない
+const toGames = () => { if (window.ykgToGames) ykgToGames(); else location.href = "../"; };   // party-beacon.js が読めなかったときも一覧へ戻れるように
 const PARTY = (() => {
-  try { if (!new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
+  try { if (isOffline() || !new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
 })();
 const netId = code => (PARTY ? "jenga-party-" : PREFIX) + code;   // パーティは、ふつうの部屋と別の ID を使う
 let partyTries = 0;
@@ -102,15 +106,29 @@ function partyReport(w, l) {
   try { const a = JSON.parse(sessionStorage.getItem("ykg-results") || "[]"); a.push({ game: "jenga", w, l }); sessionStorage.setItem("ykg-results", JSON.stringify(a)); } catch (e) {}
 }
 const MAX_PLAYERS = 4;
+// CPU（2026-11-09）: 人と同じ操作（ブロックを選ぶ → 指で押す・引く → 上へ運ばれたら指で動かして置く → 離す）を、物理の中で行う。
+// 強さで変わるもの: think 考える時間 / speed 押す速さ（1秒あたり）/ wob 押すときの指の上下のぶれ
+// probe・feel・abs: probe だけ押した所から、すぐ上・下の段が「押した量 × feel」より多く（または abs より多く）いっしょに動いたら「キツい」と感じてやめる
+// tries 戻して選び直す回数の上限 / noise ブロック選びのでたらめさ / perr 置く位置のずれ / gap 離す高さ
+// （2026-11-09 の試験: 新しいタワーでは 4 割ほどのブロックが ほぼ引きずらない（0.05 未満）、残りは 0.3〜1 くらい引きずる）
+const CPU_LV = {
+  weak:   { label: "よわい", think: 0.7, speed: 1.5, wob: 0.03, probe: 0.22, feel: 0.5,  abs: 0.2,  tries: 2, noise: 2.5, perr: 0.1,   gap: 0.15 },
+  normal: { label: "ふつう", think: 1.0, speed: 1.2, wob: 0.015, probe: 0.2, feel: 0.35, abs: 0.08, tries: 5, noise: 1.2, perr: 0.04,  gap: 0.06 },
+  strong: { label: "つよい", think: 1.2, speed: 0.8, wob: 0,    probe: 0.15, feel: 0.25, abs: 0.05, tries: 8, noise: 0.3, perr: 0.015, gap: 0.02 },
+};
+const TEAM_NAMES = ["赤", "青"], TEAM_COLORS = ["#e0533d", "#3d9be0"];
+let teamMode = false;   // チーム戦（2対2。崩した人のチームの負け）
 // 倒れやすさ（難易度）4段階。部屋ごとにホストが決め、開始のときに全員へ送る。4 が一番倒れやすい
 const DIFFS = {
-  1: { label: "1", HVAR: 0.02, JITTER: 0, FRICTION: 0.65, LIFT: 0.1, note: "いちばん倒れにくい。ブロックがきっちりそろっていて、すべりにくい" },
-  2: { label: "2", HVAR: 0.025, JITTER: 0.02, FRICTION: 0.55, LIFT: 0.15, note: "倒れにくい" },
-  3: { label: "3", HVAR: 0.028, JITTER: 0.05, FRICTION: 0.5, LIFT: 0.18, note: "やや倒れやすい" },
+  // 2026-11-09 作り直し: 前の 1 → 3、4 はそのまま。3 と 4 の差（HVAR 0.01 / JITTER 0.08 / FRICTION 0.2 / LIFT 0.1）ずつ倒れにくい側へ進めて 2・1 を作った。
+  // JITTER・LIFT は 0 より下にできないので 0 で止めている（この 2 つは 2 と 1 で同じ）。前の 2・3 はなくした
+  1: { label: "1", HVAR: 0, JITTER: 0, FRICTION: 1.05, LIFT: 0, note: "いちばん倒れにくい。ブロックの高さがぴったりそろっていて、とてもすべりにくい" },
+  2: { label: "2", HVAR: 0.01, JITTER: 0, FRICTION: 0.85, LIFT: 0, note: "とても倒れにくい。ずれがなく、すべりにくい" },
+  3: { label: "3", HVAR: 0.02, JITTER: 0, FRICTION: 0.65, LIFT: 0.1, note: "倒れにくい。ブロックがきっちりそろっている" },
   4: { label: "4", HVAR: 0.03, JITTER: 0.08, FRICTION: 0.45, LIFT: 0.2, note: "いちばん倒れやすい。ずれがあって、すべりやすい" },
 };
-const DIFF_DEFAULT = "2";
-const OLD_DIFF = { s: "2", m: "4", l: "4" };   // 前の 小・中・大 で覚えていた値の読みかえ
+const DIFF_DEFAULT = "3";   // 前のふつう（前の 2）にいちばん近い 3（= 前の 1）
+const OLD_DIFF = { s: "3", m: "4", l: "4" };   // 前の 小・中・大 の読みかえ（古い版から届いたとき）
 let diff = DIFF_DEFAULT;
 function applyDiff(k) {
   k = String(OLD_DIFF[k] || k);
@@ -165,7 +183,7 @@ xray.add(new THREE.LineSegments(new THREE.EdgesGeometry(xray.geometry),
   new THREE.LineBasicMaterial({ color: 0x9fbaff, transparent: true, opacity: 0.95, depthTest: false })));
 xray.renderOrder = 10; xray.children[0].renderOrder = 11; xray.visible = false; scene.add(xray);
 function updateXray() {
-  const i = screen !== "game" || phase === "over" ? -1 : isMine() ? (sel >= 0 ? sel : held) : viewSel;
+  const i = screen !== "game" || phase === "over" ? -1 : simHere() ? (sel >= 0 ? sel : held) : viewSel;
   xray.visible = i >= 0 && !!meshes[i];
   if (!xray.visible) return;
   xray.position.copy(meshes[i].position); xray.quaternion.copy(meshes[i].quaternion); xray.scale.set(BL, heights[i], BW);
@@ -331,7 +349,12 @@ let turnPos = [], baseY = [];
 let overInfo = null, errMsg = "", toastMsg = "", toastT = 0, lastSend = 0;
 let peer = null, hostConn = null, lobby = [];
 
-const isMine = () => mode === "local" || curId === myId;
+const cpuOf = id => (players.find(p => p.id === id) || {}).cpu || null;   // CPU の強さ（人なら null）
+const teamOf = id => (players.find(p => p.id === id) || {}).team;
+// CPU の番はホスト（この端末で遊ぶときはこの端末）が物理と操作を受け持つ
+const cpuTurn = () => (mode === "local" || mode === "host") && screen === "game" && !!cpuOf(curId);
+const isMine = () => !cpuTurn() && (mode === "local" || curId === myId);   // 人が操作する番
+const simHere = () => isMine() || cpuTurn();   // この端末で物理を動かす番
 const nameOf = id => (players.find(p => p.id === id) || { name: "?" }).name;
 
 function beginMyTurn() {
@@ -362,6 +385,7 @@ function releaseSel() {
 }
 
 function physStep() {
+  if (cpuTurn()) { if (!cpu) cpuBegin(); cpuTick(); }   // CPU の指を動かす（人の指と同じ drag / place の目標を動かすだけ）
   if (phase === "pull" && sel >= 0 && drag) {
     const b = bodies[sel], p = b.translation(), v = b.linvel(), o = turnPos[sel];
     const off = (p.x - o.x) * drag.axis.x + (p.z - o.z) * drag.axis.z;
@@ -412,13 +436,15 @@ function physStep() {
   if (phase === "fallen" && phaseT > 2.5) { phase = "wait"; send({ t: "fall", d: snapshot() }); return; }
   const now = performance.now();   // 見ている人へ今の位置を送る
   if (mode !== "local" && now - lastSend > SNAP_MS && ACTIVE.includes(phase)) {
-    lastSend = now; send({ t: "snap", d: snapshot(), s: sel >= 0 ? sel : held, ph: phase, yaw: +cam.yaw.toFixed(3) });
+    const yaw = cpuTurn() ? (avatars.get(curId)?.tyaw ?? cam.yaw) : cam.yaw;   // CPU の番は CPU の立っている向き
+    lastSend = now; send({ t: "snap", d: snapshot(), s: sel >= 0 ? sel : held, ph: phase, yaw: +yaw.toFixed(3) });
   }
 }
+let lastFall = null;
 function checkFallen() {
   for (let i = 0; i < N; i++) {
     if (i === sel || (i === held && (phase === "carry" || phase === "place"))) continue;
-    if (bodies[i].translation().y < baseY[i] - FALL_DROP) return true;
+    if (bodies[i].translation().y < baseY[i] - FALL_DROP) { lastFall = { i, held, y: bodies[i].translation().y, base: baseY[i] }; return true; }   // lastFall: 確認用
   }
   return false;
 }
@@ -469,6 +495,166 @@ function dropHeld() {
   baseY[held] = surf + heights[held] / 2;
   phase = "settle"; phaseT = 0; quietT = 0; place = null; rotHold = 0;
   renderUI();
+}
+
+// ================= CPU（2026-11-09）=================
+// 人と同じ手順を物理の中で行う。ブロックを瞬間移動させたりはしない（指の目標 drag.target / place.tx… を少しずつ動かすだけ）。
+// 慎重な CPU は、押しながらタワーの動きを見て、動きすぎたら押し戻して別のブロックにする（人が「キツい」と感じてやめるのと同じ）。
+let cpu = null;
+const CPU_ACC = 3;   // CPU の指の速さの変わり方の上限（1秒あたり）
+const cpuTight = new Set();   // CPU が試して「キツい」と分かったブロック（ゲームごと。CPU どうしで共有＝見て覚えている）
+function cpuBegin() {
+  const lv = cpuOf(curId) || "normal", P = CPU_LV[lv] || CPU_LV.normal;
+  cpu = { P, st: "think", t: 0, ph: "pull", tried: new Set(), tries: 0, feel: P.feel, rat: new Map(), off: 0, sg: 1, base: null, w: Math.random() * 6 };
+  renderUI();
+}
+// 段の中の場所（-1 / 0 = 真ん中 / 1）。上下の段のブロックの中心から、タワーの中心を求める
+function rowSlot(i, by) {
+  const l = levelOf(i), ax = axisOf(i), px = -ax.z, pz = ax.x;
+  let cx = 0, cz = 0, n = 0;
+  for (const j of [...(by.get(l - 1) || []), ...(by.get(l + 1) || [])]) { const p = bodies[j].translation(); cx += p.x; cz += p.z; n++; }
+  if (!n) return 0;
+  const p = bodies[i].translation();
+  return Math.max(-1, Math.min(1, Math.round(((p.x - cx / n) * px + (p.z - cz / n) * pz) / SLOT)));
+}
+// 抜くブロックを選ぶ: 3本そろった段の真ん中 > 3本の段の端 > 2本の段で真ん中が残る端。真ん中がなくなる・1本だけ残る抜き方は避ける
+function cpuChoose() {
+  const { by, top } = towerInfo(-1), best = [];
+  for (let i = 0; i < N; i++) {
+    if (cpu.tried.has(i) || !canPick(i)) continue;
+    const row = by.get(levelOf(i)) || [], s0 = rowSlot(i, by);
+    let s;
+    if (row.length >= 3) s = s0 === 0 ? 3 : 1.5;
+    else if (row.length === 2) { const o = row.find(j => j !== i); s = s0 !== 0 && rowSlot(o, by) === 0 ? 0.5 : -5; }
+    else s = -10;
+    // いちばん上の近く（上の重さが軽い段）は、引くと上の段ごと引きずって崩しやすいので避ける
+    const l = levelOf(i); if (l >= top - 3) s -= 2.5 - (top - l) * 0.5;
+    if (cpuTight.has(i)) s -= 2;   // 前の番に「キツい」と分かったブロックは後回し（覚えている）
+    best.push({ i, s: s + (Math.random() * 2 - 1) * cpu.P.noise });
+  }
+  best.sort((a, b) => b.s - a.s);
+  return best.length ? best[0].i : -1;
+}
+// 押しているブロックの上と下の段のブロックが、押す向きにどれだけ引きずられたか（指に「キツい」と伝わる量）。
+// タワー全体の小さな揺れ（番の始めに少し揺れる）は数えないよう、すぐ上と下の段・押す向きだけを見る
+// （押す前にタワーの揺れがおさまるのを待っているので、ここではそのまま動いた量を見る）
+function cpuDisturb() {
+  let m = 0;
+  const ax = drag.axis;
+  for (const j of [...cpu.up, ...cpu.dn]) {
+    const p = bodies[j].translation(), b = cpu.base[j];
+    m = Math.max(m, Math.abs((p.x - b.x) * ax.x + (p.z - b.z) * ax.z));
+  }
+  return m;
+}
+// タワーのブロックのいちばん速い動き（揺れているか）
+function towerSpeed(excl) { let mv = 0; for (let j = 0; j < N; j++) if (j !== excl) { const v = bodies[j].linvel(); mv = Math.max(mv, Math.hypot(v.x, v.y, v.z)); } return mv; }
+function cpuTick() {
+  const P = cpu.P;
+  if (cpu.ph !== phase) { cpu.ph = phase; cpu.st = "start"; cpu.t = 0; cpu.q = 0; }
+  cpu.t += DT;
+  if (phase === "pull") {
+    if (cpu.st === "think") {
+      if (cpu.t < P.think) return;
+      let i;
+      if (cpu.tries >= P.tries && cpu.rat.size) {   // 何回か戻したら、試した中でいちばんゆるかったブロックを最後まで押す
+        cpu.feel = Infinity; i = [...cpu.rat].sort((a, b) => a[1] - b[1])[0][0];
+        if (!canPick(i)) i = -1;
+      }
+      if (i == null || i < 0) { if (cpu.tries >= P.tries) cpu.feel = Infinity; i = cpuChoose(); }
+      if (i < 0) { cpu.tried.clear(); cpu.feel = Infinity; i = cpuChoose(); }
+      if (i < 0) return;
+      selectBlock(i);
+      // 押す向き: どちら向きでも抜けるまでの距離は同じなので適当に選び、引き出す端の側へ回りこむ
+      const ax = axisOf(i), a = avatars.get(curId);
+      // 前に試して少し出ているブロックは、その向きのまま続ける（今の位置から押し始める）
+      const pi = bodies[i].translation(), off0 = (pi.x - turnPos[i].x) * ax.x + (pi.z - turnPos[i].z) * ax.z;
+      cpu.sg = Math.abs(off0) > 0.02 ? Math.sign(off0) : Math.random() < 0.5 ? 1 : -1;
+      if (a) a.tyaw = Math.atan2(ax.x * cpu.sg, ax.z * cpu.sg);   // 引き出す端の側へ回りこむ
+      drag = { axis: ax, off0, target: off0, ty: turnPos[i].y, py0: turnPos[i].y, y0: turnPos[i].y, A: { x: 1, y: 0 }, U: { x: 0, y: -1 }, det: 0, sx: 0, sy: 0 };
+      cpu.off = off0; cpu.v = 0; cpu.q = 0; cpu.st = "aim"; cpu.t = 0; renderUI();
+    } else if (cpu.st === "aim") {   // 選んでから少し間をおく（見ている人にどれを選んだか分かるように）。タワーが揺れていたら止まるまで待つ
+      cpu.q = towerSpeed(sel) < 0.04 ? (cpu.q || 0) + DT : 0;
+      if (cpu.t > 0.5 && (cpu.q > 0.2 || cpu.t > 5)) {
+        const L = levelOf(sel);
+        cpu.up = []; cpu.dn = []; for (let j = 0; j < N; j++) if (j !== sel) { const l = levelOf(j); if (l === L + 1) cpu.up.push(j); else if (l === L - 1) cpu.dn.push(j); }
+        cpu.base = bodies.map(b => { const p = b.translation(); return { x: p.x, y: p.y, z: p.z }; });
+        cpu.st = "push"; cpu.t = 0;
+      }
+    } else if (cpu.st === "push" && drag) {
+      // 指の速さは少しずつ上げる（急に動かすとタワーががくっと揺れる）。キツいか確かめる間（probe まで）は、ゆっくり押す
+      const vmax = P !== CPU_LV.weak && Math.abs(cpu.off) < P.probe + 0.05 ? Math.min(P.speed, 0.4) : P.speed;   // よわい CPU はいきなり速く押す
+      cpu.v = Math.min(vmax, (cpu.v || 0) + CPU_ACC * DT);
+      cpu.off += cpu.sg * cpu.v * DT;
+      drag.target = cpu.off;
+      drag.ty = drag.y0 + Math.max(-LIFT_MAX, Math.min(LIFT_MAX, P.wob * Math.sin(cpu.w + cpu.t * 9)));
+      // キツい = すぐ上・下の段が、押した量の feel 倍より多くいっしょに動いている（押した量との割合で見るのは、タワー全体の揺れと分けるため）
+      const dis = Math.abs(cpu.off) < BL * 0.75 ? cpuDisturb() : 0;
+      // または、押した量にかかわらず abs より多く引きずったら（早めに気づく）
+      if ((Math.abs(cpu.off) >= P.probe && dis > Math.abs(cpu.off) * cpu.feel) || dis > P.abs * (cpu.feel === Infinity ? Infinity : 1)) { cpuTight.add(sel); cpu.tried.add(sel); cpu.rat.set(sel, dis / Math.abs(cpu.off)); cpu.tries++; cpu.st = "back"; }
+    } else if (cpu.st === "back" && drag) {   // キツい: そっと止めて、そのまま手を離す（押し戻すとタワーをまた引きずるので戻さない。人も「キツい」と思ったらそこでやめる）
+      cpu.v = Math.max(0, cpu.v - CPU_ACC * 3 * DT); cpu.off += cpu.sg * cpu.v * DT; drag.target = cpu.off;   // 止めるのは速めに（止まるまでに押しすぎないように）
+      if (cpu.v <= 0) { cpu.st = "let"; cpu.t = 0; }
+    } else if (cpu.st === "let") {
+      if (cpu.t > 0.3) { releaseSel(); cpu.st = "think"; cpu.t = P.think * 0.4; renderUI(); }
+    }
+  } else if (phase === "place") {
+    if (cpu.st === "start") {
+      // タワーが揺れているあいだは置き場が動くので、揺れがおさまるまで待つ（最大 6 秒）
+      cpu.q = towerSpeed(held) < 0.04 ? (cpu.q || 0) + DT : 0;
+      if (cpu.t < 0.4 || (cpu.q < 0.3 && cpu.t < 6)) return;
+      // 置き場を今のタワーで調べ直す（抜くときにタワーが少しずれていることがあるので、抜いた時点の位置は使わない）
+      place.info = placeInfo(held); if (!place.info.free.includes(place.k)) place.k = place.info.free[0];
+      const f = place.info.free;
+      // 置き場: よわい CPU は適当、ほかは真ん中があいていれば真ん中（なければ自動で選ばれた所）
+      if (P === CPU_LV.weak) { const n = Math.floor(Math.random() * f.length); for (let k = 0; k < n; k++) moveSlot(1); }
+      else if (f.includes(1) && place.k !== 1) { while (place.k !== 1) moveSlot(1); }
+      const g = slotPose(place.info, place.k), ax = axisOf(held), e1 = (Math.random() * 2 - 1) * P.perr, e2 = (Math.random() * 2 - 1) * P.perr * 0.5;
+      cpu.g = { x: g.x + ax.x * e1 - ax.z * e2, z: g.z + ax.z * e1 + ax.x * e2, y: g.surf + heights[held] / 2 + P.gap * (0.5 + Math.random() * 0.5) };
+      // 同じ段にもう置いてあるブロックと重ならないよう、横（幅の向き）へずらす（タワーの上が少しずれていても、となりに当てない）
+      const { by } = towerInfo(held), px = -ax.z, pz = ax.x;
+      for (const j of by.get(place.info.lt) || []) {
+        // となりが少し回っていると端が出っぱるので、そのぶんも見る
+        const p = bodies[j].translation(), aj = axisOf(j), d = (p.x - cpu.g.x) * px + (p.z - cpu.g.z) * pz;
+        const need = Math.abs(aj.x * px + aj.z * pz) * BL / 2 + Math.abs(aj.x * ax.x + aj.z * ax.z) * BW / 2 + BW / 2 + 0.02;
+        if (Math.abs(d) < need) { const sh = -(Math.sign(d) || 1) * (need - Math.abs(d)); cpu.g.x += px * sh; cpu.g.z += pz * sh; }
+      }
+      // ただし、下の段からはみ出さないようにする（はみ出すと置いたブロックが落ちる）
+      let lo = Infinity, hi = -Infinity;
+      for (const j of by.get(place.info.lt - 1) || []) {
+        const p = bodies[j].translation(), aj = axisOf(j), c0 = p.x * px + p.z * pz;
+        const half = Math.abs(aj.x * px + aj.z * pz) * BL / 2 + Math.abs(aj.x * ax.x + aj.z * ax.z) * BW / 2;
+        lo = Math.min(lo, c0 - half); hi = Math.max(hi, c0 + half);
+      }
+      if (lo < hi) {
+        const s0 = cpu.g.x * px + cpu.g.z * pz, s1 = Math.max(lo + BW * 0.45, Math.min(hi - BW * 0.45, s0));
+        cpu.g.x += px * (s1 - s0); cpu.g.z += pz * (s1 - s0);
+      }
+      cpu.st = "over"; cpu.t = 0;
+    } else if (cpu.st === "over") {   // 置き場の真上へ
+      const dx = cpu.g.x - place.tx, dz = cpu.g.z - place.tz, d = Math.hypot(dx, dz), s = 2.5 * DT;
+      if (d <= s) { place.tx = cpu.g.x; place.tz = cpu.g.z; cpu.st = "down"; cpu.t = 0; }
+      else { place.tx += dx / d * s; place.tz += dz / d * s; }
+    } else if (cpu.st === "down") {   // そっと下ろす
+      place.ty = Math.max(cpu.g.y, place.ty - 1.2 * DT);
+      // 何かに当たって下りなくなったら、それ以上押しこまない（押しこむとタワーを押してしまう）。そこで止めて離す
+      const hy = bodies[held].translation().y;
+      if (hy - place.ty > 0.06) {
+        if (hy - cpu.g.y > 0.15 && (cpu.nudge = (cpu.nudge || 0) + 1) <= 5) {
+          // まだ高い所で当たった = となりのブロックの端に乗っている。少し持ち上げて、となりから離れる向きへずらしてやり直す
+          const ax = axisOf(held), px = -ax.z, pz = ax.x, { by } = towerInfo(held);
+          let near = null, nd = 9;
+          for (const j of by.get(place.info.lt) || []) { const p = bodies[j].translation(), d = (p.x - place.tx) * px + (p.z - place.tz) * pz; if (Math.abs(d) < Math.abs(nd)) { nd = d; near = j; } }
+          if (near != null) { const sh = -(Math.sign(nd) || 1) * 0.08; cpu.g.x += px * sh; cpu.g.z += pz * sh; }
+          place.ty = hy + 0.15; cpu.st = "over"; cpu.t = 0;
+        } else { place.ty = hy; cpu.st = "hold"; cpu.t = 0; }   // それ以外は、そこで止めて離す
+      }
+      if (place.ty <= cpu.g.y) { cpu.st = "hold"; cpu.t = 0; }
+    } else if (cpu.st === "hold") {
+      if (cpu.t > 0.35) dropHeld();
+    }
+    if (phase === "place" && phaseT > 12) dropHeld();   // 念のため
+  }
 }
 
 // ================= 操作（タッチ）=================
@@ -601,7 +787,7 @@ function send(m) {
   if (mode === "client") {
     try { if (m.t === "snap" && uchOpen(hostUch)) hostUch.send(JSON.stringify(m)); else hostConn.send(m); } catch (e) {}
   }
-  else hostHandle(mode === "local" ? curId : 0, m);
+  else hostHandle(mode === "local" || (cpuTurn() && m.t !== "look") ? curId : 0, m);   // CPU の番の動きは、その CPU から来たことにする
 }
 function bcast(m, except) {
   const str = m.t === "snap" ? JSON.stringify(m) : null;
@@ -610,20 +796,45 @@ function bcast(m, except) {
   }
   if (except !== 0) onMsg(m);
 }
+// ホストが部屋に入れた CPU（2026-11-09）。ID は 100 から（人の ID とかぶらないように）
+host.cpus = []; host.nextCpu = 100; host.team = new Map();
+let cpuLv = "normal";   // これから入れる CPU の強さ
+function hostAddCpu() {
+  if (lobby.length >= MAX_PLAYERS || host.playing) return;
+  const used = new Set(host.cpus.map(c => c.name)); let k = 1; while (used.has("CPU" + k)) k++;
+  host.cpus.push({ id: host.nextCpu++, name: "CPU" + k, cpu: cpuLv });
+  hostLobby();
+}
+function hostRemoveCpu(id) { host.cpus = host.cpus.filter(c => c.id !== id); host.team.delete(id); hostLobby(); }
 function hostLobby() {
   const ids = [...host.conns.keys()];
-  lobby = [{ id: 0, name: myName() }, ...ids.filter(id => !host.conns.get(id).spec).map(id => ({ id, name: host.conns.get(id).pname }))];
+  lobby = [{ id: 0, name: myName() }, ...ids.filter(id => !host.conns.get(id).spec).map(id => ({ id, name: host.conns.get(id).pname })), ...host.cpus.map(c => ({ ...c }))];
   lobbySpecs = ids.filter(id => host.conns.get(id).spec).map(id => host.conns.get(id).pname);   // 観戦の人（遊ぶ人には入らない）
-  bcast({ t: "lobby", players: lobby, specs: lobbySpecs, diff });
+  // チーム戦は 4人（2対2）のときだけ。人数が変わって 4人でなくなったら切る
+  if (lobby.length !== 4 && !host.playing) teamMode = false;   // 遊んでいる途中に人が抜けても、その試合はチーム戦のまま
+  if (teamMode) {
+    for (const id of [...host.team.keys()]) if (!lobby.some(p => p.id === id)) host.team.delete(id);
+    for (const p of lobby) if (!host.team.has(p.id)) { const n0 = [...host.team.values()].filter(t => t === 0).length; host.team.set(p.id, n0 < 2 ? 0 : 1); }
+    for (const p of lobby) p.team = host.team.get(p.id);
+  }
+  bcast({ t: "lobby", players: lobby, specs: lobbySpecs, diff, teams: teamMode });
 }
+// チームの人数がそろっているか（2対2）
+const teamsOk = ps => [0, 1].every(t => ps.filter(p => p.team === t).length === 2);
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function hostStart() {
-  host.playing = true; host.turnI = 0; host.n = 0; host.last = null;
   const ps = mode === "local" ? players : lobby.slice();
-  const ord = ps.map(p => p.id);
-  for (let i = ord.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ord[i], ord[j]] = [ord[j], ord[i]]; }
-  if (mode === "local") ord.sort((a, b) => a - b);
+  if (mode !== "local" && teamMode && ps.length !== 4) teamMode = false;
+  const tm = teamMode && ps.length === 4 && teamsOk(ps);
+  if (mode !== "local" && teamMode && !tm) { toast("チームを 2人ずつにしてください"); return; }
+  host.playing = true; host.turnI = 0; host.n = 0; host.last = null;
+  let ord = shuffle(ps.map(p => p.id));
+  if (tm) {   // チーム戦: 赤・青が交互の順番（どちらが先かと、チームの中の順番はランダム）
+    const ft = Math.random() < 0.5 ? 0 : 1, A = shuffle(ps.filter(p => p.team === ft).map(p => p.id)), B = shuffle(ps.filter(p => p.team !== ft).map(p => p.id));
+    ord = [A[0], B[0], A[1], B[1]];
+  } else if (mode === "local" && !ps.some(p => p.cpu)) ord.sort((a, b) => a - b);   // 1台で交代は 1番から
   host.seed = (Math.random() * 2 ** 31) | 0; host.ps = ps;   // 途中から入る観戦の人にも同じタワーを作ってもらう
-  bcast({ t: "start", seed: host.seed, players: ps, order: ord, diff });
+  bcast({ t: "start", seed: host.seed, players: ps, order: ord, diff, teams: tm });
   bcast({ t: "turn", cur: ord[0], d: null, n: 0 });
 }
 function hostHandle(from, m) {
@@ -639,7 +850,9 @@ function hostHandle(from, m) {
     bcast({ t: "turn", cur: order[host.turnI], d: m.d, n: host.n });
   } else if (m.t === "fall") {
     host.playing = false;
-    partyReport(order.filter(id => id !== from).map(nameOf), [nameOf(from)]);   // 崩した人の負け、ほかの人の勝ち
+    // 崩した人（チーム戦はそのチーム）の負け、ほかの人の勝ち。CPU は成績に入れない（2026-11-09）
+    const lost = id => teamMode ? teamOf(id) === teamOf(from) : id === from, human = id => !cpuOf(id);
+    partyReport(order.filter(id => !lost(id) && human(id)).map(nameOf), order.filter(id => lost(id) && human(id)).map(nameOf));
     bcast({ t: "over", loser: from, d: m.d, n: host.n });
   }
 }
@@ -651,9 +864,11 @@ function hostDrop(id) {
   const wasCur = order[host.turnI] === id;
   const idx = order.indexOf(id);
   const nextOrder = order.filter(x => x !== id);
+  hostLobby();   // 抜けた人を部屋の人から外す（「もう一回」で、いない人の番が来ないように。2026-11-09）
   if (idx >= 0 && idx < host.turnI) host.turnI--;
   bcast({ t: "order", order: nextOrder, left: id });
-  if (nextOrder.length < 2) { host.playing = false; bcast({ t: "over", loser: -1, left: id, d: host.last, n: host.n }); return; }
+  // 2人未満、またはチーム戦で片方のチームがいなくなったら終わり（ホストと CPU が残っていれば続ける）
+  if (nextOrder.length < 2 || (teamMode && new Set(nextOrder.map(teamOf)).size < 2)) { host.playing = false; bcast({ t: "over", loser: -1, left: id, d: host.last, n: host.n }); return; }
   host.turnI %= nextOrder.length;
   if (wasCur) bcast({ t: "turn", cur: nextOrder[host.turnI], d: host.last, n: host.n });
 }
@@ -662,10 +877,10 @@ function onMsg(m) {
   switch (m.t) {
     case "welcome": myId = m.you; spectating = !!m.spec; if (screen !== "game") screen = "lobby"; break;
     case "reject": errMsg = m.why; screen = "menu"; cleanupNet(); break;
-    case "lobby": lobby = m.players; lobbySpecs = m.specs || []; if (m.diff) diff = m.diff; break;
+    case "lobby": lobby = m.players; lobbySpecs = m.specs || []; if (m.diff) diff = m.diff; if (mode === "client") teamMode = !!m.teams; break;
     case "start": {
-      players = m.players; order = m.order; overInfo = null;
-      applyDiff(m.diff); buildTower(m.seed); screen = "game"; phase = "watch"; viewSel = -1;
+      players = m.players; order = m.order; overInfo = null; teamMode = !!m.teams;
+      applyDiff(m.diff); buildTower(m.seed); screen = "game"; phase = "watch"; viewSel = -1; cpuTight.clear();
       // オンラインでは、最初の視点を人ごとにずらす（テーブルのまわりに散らばって立つ）
       const me = mode === "local" ? 0 : Math.max(0, players.findIndex(p => p.id === myId));
       Object.assign(cam, { yaw: 0.65 + me * spreadAngle(), dist: 18, ty: 5, pitch: 0.28 });
@@ -682,11 +897,12 @@ function onMsg(m) {
       if (viewSel >= 0) setHighlight(viewSel, false); viewSel = -1;
       curId = m.cur; moves = m.n; activeInfo = null;
       if (m.d) applySnapshot(m.d);
-      if (isMine()) beginMyTurn(); else phase = "watch";
+      cpu = null;
+      if (simHere()) { beginMyTurn(); if (cpuTurn()) cpuBegin(); } else phase = "watch";
       break;
     case "look": { const a = avatars.get(m.id); if (a) a.tyaw = m.yaw; return; }
     case "snap": {
-      if (isMine() || screen !== "game") return;
+      if (simHere() || screen !== "game") return;
       if (m.q && !freshSnap("cur" + curId, m)) return;   // 遅れて届いた古い位置は使わない
       setTargets(m.d);
       activeInfo = { ph: m.ph, s: m.s };
@@ -697,7 +913,7 @@ function onMsg(m) {
     case "over":
       setHighlight(viewSel, false); viewSel = -1;
       phase = "over"; overInfo = m; moves = m.n;
-      if (m.d && !isMine()) setTargets(m.d);
+      if (m.d && !simHere()) setTargets(m.d);
       break;
   }
   renderUI();
@@ -706,7 +922,11 @@ function onMsg(m) {
 function cleanupNet() { try { peer?.destroy(); } catch (e) {} peer = null; hostConn = null; host.conns.clear(); host.playing = false; }
 const randCode = () => String(Math.floor(1000 + Math.random() * 9000));
 let hostTries = 0;
+// 通信が使えない（オフライン・PeerJS が読めなかった）ときは、つながずにメニューへ戻す
+function noNet() { if (netOk()) return false; mode = null; screen = "menu"; errMsg = "通信が使えません。CPU と対戦・練習で遊べます"; cleanupNet(); renderUI(); return true; }
 function startHost() {
+  if (noNet()) return;
+  host.cpus = []; host.team.clear(); teamMode = false;   // 新しい部屋は CPU なしから
   mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; renderUI();
   const code = PARTY ? PARTY.code : randCode();
   peer = new Peer(netId(code));
@@ -722,12 +942,12 @@ function startHost() {
     conn.on("data", m => {
       if (m && m.t === "hello") {
         // パーティ: 観戦を選んだ人、始まったあとに来た人、満員のときの人は観戦にする（遊ぶ人の数には入らない）
-        const nPlayers = [...host.conns.values()].filter(c => !c.spec).length;
+        const nPlayers = [...host.conns.values()].filter(c => !c.spec).length + host.cpus.length;   // CPU も席を 1 つ使う
         if (PARTY && (m.spec || host.playing || nPlayers + 1 >= MAX_PLAYERS)) {
           const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12); conn.spec = true;
           host.conns.set(id, conn); conn.send({ t: "welcome", you: id, spec: true }); hostLobby();
           if (host.playing) {   // 途中から: 今のタワーと番を送る
-            conn.send({ t: "start", seed: host.seed, players: host.ps, order, diff });
+            conn.send({ t: "start", seed: host.seed, players: host.ps, order, diff, teams: teamMode });
             conn.send({ t: "turn", cur: order[host.turnI % order.length], d: host.last, n: host.n });
           }
           renderUI(); return;
@@ -745,6 +965,7 @@ function startHost() {
 function joinRoom(code) {
   code = String(code).replace(/\D/g, "");
   if (code.length !== 4 && !PARTY) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
+  if (noNet()) return;
   mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; renderUI();
   peer = new Peer();
   peer.on("open", () => {
@@ -754,7 +975,7 @@ function joinRoom(code) {
     hostConn.on("open", () => { hc.opened = true; hostUch = openUch(hc, onMsg); hostConn.send({ t: "hello", name: myName(), spec: !!(PARTY && PARTY.spec) }); });
     hostConn.on("data", onMsg);
     hostConn.on("close", () => {
-      if (PARTY) { if (hc.opened) ykgToGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ（つながる前の失敗は探し直しに任せる）
+      if (PARTY) { if (hc.opened) toGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ（つながる前の失敗は探し直しに任せる）
       if (screen !== "menu") { errMsg = "ホストとの接続が切れました"; screen = "menu"; cleanupNet(); renderUI(); }
     });
   });
@@ -766,8 +987,17 @@ function joinRoom(code) {
   });
 }
 function startLocal(n) {
-  mode = "local"; myId = 0;
+  mode = "local"; myId = 0; teamMode = false; cleanupNet();
   players = Array.from({ length: n }, (_, i) => ({ id: i, name: n === 1 ? myName() : `プレイヤー${i + 1}` }));
+  hostStart();
+}
+// CPU と対戦（この端末だけ。通信なしで遊べる）: 自分 + CPU 1〜3人。CPU 3人のときは 2対2 のチーム戦も（自分と CPU1 が赤）
+let menuCpuN = 1, menuTeams = false;
+function startCpu(n, lv, teams) {
+  mode = "local"; myId = 0; cleanupNet();
+  teamMode = !!teams && n === 3;
+  players = [{ id: 0, name: myName() }, ...Array.from({ length: n }, (_, i) => ({ id: i + 1, name: `CPU${i + 1}`, cpu: lv }))];
+  if (teamMode) players.forEach((p, i) => { p.team = i < 2 ? 0 : 1; });
   hostStart();
 }
 
@@ -775,7 +1005,17 @@ function startLocal(n) {
 const ui = document.getElementById("ui");
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
-{ const v = store.get("jenga-diff"), k = OLD_DIFF[v] || v; diff = DIFFS[k] ? k : DIFF_DEFAULT; }
+// 倒れやすさは 2026-11-09 から別の名前（jenga-diff2）で覚える。前の名前で覚えていた値は読みかえる:
+// 前の 1 → 3 / 前の 2 → 3 / 前の 3 → 4 / 前の 4 → 4（前の 小 → 3、中・大 → 4）
+{
+  let v = store.get("jenga-diff2");
+  if (!DIFFS[v]) { const o = store.get("jenga-diff"); v = { 1: "3", 2: "3", 3: "4", 4: "4", s: "3", m: "4", l: "4" }[o] || DIFF_DEFAULT; }
+  diff = DIFFS[v] ? v : DIFF_DEFAULT;
+}
+// CPU と対戦の設定も端末に覚える（2026-11-09）
+{ const n = +store.get("jenga-cpu-n"), l = store.get("jenga-cpu-lv"); if (n >= 1 && n <= 3) menuCpuN = n; if (CPU_LV[l]) cpuLv = l; menuTeams = store.get("jenga-cpu-team") === "1"; }
+// 電波が切れた・戻ったら、メニューを出し直す（部屋を作る・入る を出す/隠す）
+for (const ev of ["online", "offline"]) addEventListener(ev, () => { if (screen === "menu") renderUI(); });
 let meName = "";
 function myName() { if (meName) return meName; return (document.getElementById("name")?.value || store.get("jenga-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
 function fixName() { meName = ""; meName = myName(); store.set("jenga-name", meName); }
@@ -786,6 +1026,38 @@ function diffSeg(canEdit) {
   return `<div class="seg">${Object.entries(DIFFS).map(([k, d]) => `<button class="${k === diff ? "on" : ""}" ${canEdit ? `data-a="diff-${k}"` : "disabled"}>${d.label}</button>`).join("")}</div>
     <div class="diffnote">${esc(DIFFS[diff].note)}</div>`;
 }
+// 部屋の画面の CPU・チームの操作（ホストだけ。2026-11-09）。ふつうの部屋とパーティの待ち合わせ画面で同じものを使う
+const lvSeg = (cur, pre) => `<div class="seg yl-row">${Object.entries(CPU_LV).map(([k, d]) => `<button class="${k === cur ? "on" : ""}" data-a="${pre}${k}">${d.label}</button>`).join("")}</div>`;
+function cpuLobbyHtml() {
+  const full = lobby.length >= MAX_PLAYERS;
+  let h = `<label>CPU を入れる（強さを選んで＋）</label>${lvSeg(cpuLv, "clv-")}
+    <button data-a="addcpu" ${full ? "disabled" : ""}>${full ? "満員です（4人まで）" : "＋ CPU"}</button>`;
+  const cpus = lobby.filter(p => p.cpu);
+  if (cpus.length) h += `<div class="seg yl-row" style="margin-top:8px">${cpus.map(p => `<button data-a="rmcpu-${p.id}">✕ ${esc(p.name)}</button>`).join("")}</div>`;
+  if (lobby.length === 4) {
+    h += `<button data-a="teams" class="${teamMode ? "on" : ""}">${teamMode ? "チーム戦（2対2）: オン" : "チーム戦（2対2）にする"}</button>`;
+    if (teamMode) h += `<div class="seg yl-row" style="margin-top:8px">${lobby.map(p => `<button data-a="tm-${p.id}" style="box-shadow:inset 0 0 0 3px ${TEAM_COLORS[p.team]}">${esc(p.name)}: ${TEAM_NAMES[p.team]}</button>`).join("")}</div>
+      <div class="diffnote yl-sub">名前をタップでチームを入れかえ。崩した人のチームの負け</div>`;
+  }
+  return h;
+}
+const teamTag = p => teamMode && p.team != null ? TEAM_NAMES[p.team] + "チーム" : "";
+// 部屋の画面のボタン（CPU・チーム）。処理したら true
+function lobbyAct(a) {
+  if (mode !== "host" || screen !== "lobby") return false;
+  if (a.startsWith("clv-")) { cpuLv = a.slice(4); store.set("jenga-cpu-lv", cpuLv); }
+  else if (a === "addcpu") hostAddCpu();
+  else if (a.startsWith("rmcpu-")) hostRemoveCpu(+a.slice(6));
+  else if (a === "teams") { teamMode = !teamMode; host.team.clear(); hostLobby(); }
+  else if (a.startsWith("tm-")) { const id = +a.slice(3); host.team.set(id, 1 - (host.team.get(id) || 0)); hostLobby(); }
+  else return false;
+  renderUI(); return true;
+}
+// 始められるか（人数とチーム）
+// 2026-11-09: チーム戦の途中で人が抜けて 4人でなくなったときは、「もう一回」はみんな敵で始める（前は始められず止まった）
+const canStartLobby = () => lobby.length >= 2 && (!teamMode || lobby.length !== 4 || teamsOk(lobby));
+const startLabel = () => lobby.length < 2 ? "参加者か CPU を待っています…" : teamMode && !teamsOk(lobby) ? "チームを 2人ずつに" : `${lobby.length}人で${teamMode ? "チーム戦" : ""}スタート`;
+
 // パーティ: 始まる前の画面は、全部のゲームで同じ構図の待ち合わせ画面（party-beacon.js の ykgLobby）を使う（2026-11-07）
 // 名前の変更はゲーム一覧（パーティの画面）だけでできる
 let lobbySetEl = null;
@@ -796,7 +1068,7 @@ function partyLobby() {
   let o;
   if (screen === "lobby") {
     const members = [
-      ...lobby.map(p => ({ name: p.name, tag: p.id === 0 ? "ホスト" : "", me: !spectating && p.id === myId })),
+      ...lobby.map(p => ({ name: p.name, tag: [p.id === 0 ? "ホスト" : "", p.cpu ? "CPU・" + CPU_LV[p.cpu].label : "", teamTag(p)].filter(Boolean).join(" "), me: !spectating && p.id === myId })),
       ...lobbySpecs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })),
     ];
     let settings;
@@ -804,16 +1076,17 @@ function partyLobby() {
       if (!lobbySetEl) {
         lobbySetEl = document.createElement("div");
         lobbySetEl.addEventListener("click", e => {
+          const a = e.target.closest("[data-a]")?.dataset.a; if (a) { lobbyAct(a); return; }   // CPU・チーム
           const k = e.target.closest("[data-d]")?.dataset.d; if (!k) return;
-          diff = k; store.set("jenga-diff", diff); hostLobby();
+          diff = k; store.set("jenga-diff2", diff); hostLobby(); renderUI();
         });
       }
       lobbySetEl.innerHTML = `<div class="yl-row">${Object.entries(DIFFS).map(([k, d]) => `<button class="${k === diff ? "on" : ""}" data-d="${k}">${esc(d.label)}</button>`).join("")}</div>
-        <div class="yl-sub">倒れやすさ: ${esc(DIFFS[diff].note)}</div>`;
+        <div class="yl-sub">倒れやすさ: ${esc(DIFFS[diff].note)}</div>${cpuLobbyHtml()}`;
       settings = lobbySetEl;
     } else settings = `倒れやすさ: <b>${esc(DIFFS[diff].label)}</b><div class="yl-sub">${esc(DIFFS[diff].note)}（ホストが決めます）</div>`;
     o = { rules, members, settings,
-      button: mode === "host" ? (lobby.length < 2 ? { label: "参加者を待っています…", disabled: true } : { label: `${lobby.length}人でスタート`, onClick: hostStart }) : null,
+      button: mode === "host" ? (!canStartLobby() ? { label: startLabel(), disabled: true } : { label: startLabel(), onClick: hostStart }) : null,
       wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…",
       status: errMsg || "" };
   } else {   // つないでいるところ・つながらなかったとき
@@ -826,14 +1099,22 @@ function renderUI() {
   let h = "";
   if (PARTY && screen !== "game") {   // パーティ: 自分の画面は出さず、共通の待ち合わせ画面だけ
   } else if (screen === "menu") {
+    const off = isOffline();   // オフラインのときは、部屋を作る・入る を出さない
     h = `<div class="screen"><div class="card">
-      <h1>ジェンガ</h1><p class="lead">崩したら負け。2〜4人でオンライン対戦</p>
+      <h1>ジェンガ</h1><p class="lead">${off ? "崩したら負け。オフライン: CPU と対戦・練習で遊べます" : "崩したら負け。2〜4人でオンライン対戦"}</p>
       <label>なまえ</label><input id="name" maxlength="12" value="${esc(store.get("jenga-name") || "")}" placeholder="ゲスト">
-      <button class="main" data-a="host">部屋を作る</button>
+      ${off ? "" : `<button class="main" data-a="host">部屋を作る</button>
       <label>部屋番号で入る</label>
-      <div class="row"><input id="code" inputmode="numeric" maxlength="4" placeholder="1234" value="${esc(urlRoom)}"><button class="blue" data-a="join" style="margin-top:0">入る</button></div>
+      <div class="row"><input id="code" inputmode="numeric" maxlength="4" placeholder="1234" value="${esc(urlRoom)}"><button class="blue" data-a="join" style="margin-top:0">入る</button></div>`}
       <div class="sep"></div>
-      <label>倒れやすさ（部屋を作るとき・この端末で遊ぶとき）</label>${diffSeg(true)}
+      <label>CPU と対戦（CPU の数）</label>
+      <div class="seg">${[1, 2, 3].map(n => `<button class="${n === menuCpuN ? "on" : ""}" data-a="ncpu-${n}">${n}人</button>`).join("")}</div>
+      <label>CPU の強さ</label>${lvSeg(cpuLv, "mlv-")}
+      ${menuCpuN === 3 ? `<div class="seg" style="margin-top:8px"><button class="${menuTeams ? "" : "on"}" data-a="mteam-0">みんな敵</button><button class="${menuTeams ? "on" : ""}" data-a="mteam-1">2対2 チーム戦</button></div>
+        ${menuTeams ? `<div class="diffnote">あなたと CPU1 が赤チーム。崩した人のチームの負け</div>` : ""}` : ""}
+      <button class="main" data-a="cpu">CPU と対戦する</button>
+      <div class="sep"></div>
+      <label>倒れやすさ${off ? "" : "（部屋を作るとき・この端末で遊ぶとき）"}</label>${diffSeg(true)}
       <button data-a="solo">ひとりで練習</button>
       <div class="row"><button data-a="local2">2人で交代</button><button data-a="local3">3人</button><button data-a="local4">4人</button></div>
       ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}
@@ -847,10 +1128,11 @@ function renderUI() {
     h = `<div class="screen"><div class="card">
       <p class="lead" style="margin:0">部屋番号</p><div class="code">${esc(host.code || "")}</div>
       ${PARTY ? "" : `<button class="blue" data-a="share">招待リンクを送る</button>`}
-      <ul class="players">${lobby.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（あなた）" : ""}</span><span style="color:var(--sub)">${p.id === 0 ? "ホスト" : ""}</span></li>`).join("")}</ul>
+      <ul class="players">${lobby.map(p => `<li style="${teamMode && p.team != null ? `box-shadow:inset 4px 0 0 ${TEAM_COLORS[p.team]}` : ""}"><span>${esc(p.name)}${p.id === myId ? "（あなた）" : ""}</span><span style="color:var(--sub)">${[p.id === 0 ? "ホスト" : "", p.cpu ? "CPU・" + CPU_LV[p.cpu].label : "", teamTag(p)].filter(Boolean).join(" ")}</span></li>`).join("")}</ul>
       ${lobbySpecs.length ? `<p class="lead" style="margin:4px 0 0">観戦: ${lobbySpecs.map(esc).join("、")}${spectating ? "（あなたは観戦します）" : ""}</p>` : ""}
       <label>倒れやすさ${mode === "host" ? "" : "（ホストが決めます）"}</label>${diffSeg(mode === "host")}
-      ${mode === "host" ? `<button class="main" data-a="start" ${lobby.length < 2 ? "disabled" : ""}>${lobby.length < 2 ? "参加者を待っています…" : `${lobby.length}人で始める`}</button>`
+      ${mode === "host" ? cpuLobbyHtml() : ""}
+      ${mode === "host" ? `<button class="main" data-a="start" ${canStartLobby() ? "" : "disabled"}>${startLabel()}</button>`
         : `<p class="lead" style="margin-top:12px">ホストが始めるのを待っています…</p>`}
       <button data-a="back">ぬける</button>
     </div></div>`;
@@ -865,10 +1147,14 @@ function renderUI() {
       wait: "…",
       watch: `${spectating ? "観戦中 ・ " : ""}${esc(nameOf(curId))}が挑戦中`,
     };
-    const turnTxt = phase === "over" ? "おわり" : mode === "local" && players.length === 1 ? "練習中" : mine ? (mode === "local" ? `${esc(nameOf(curId))}の番` : "あなたの番") : `${esc(nameOf(curId))}の番`;
+    // CPU の番（この端末で動かしているとき）の説明
+    const cpuHints = { pull: sel < 0 ? "考え中…" : "押しています…", carry: "上へ運んでいます…", place: "置いています…", settle: "揺れがおさまるのを待っています…", fallen: "崩れた！", wait: "…" };
+    const hotseat = mode === "local" && !players.some(p => p.cpu);   // 1台で交代
+    const turnTxt = phase === "over" ? "おわり" : mode === "local" && players.length === 1 ? "練習中" : mine ? (hotseat ? `${esc(nameOf(curId))}の番` : "あなたの番") : `${esc(nameOf(curId))}の番`;
+    const chip = id => teamMode && teamOf(id) != null ? `box-shadow:inset 0 0 0 2px ${TEAM_COLORS[teamOf(id)]}` : "";
     h = `<div class="hud p"><div class="who"><div class="turn ${mine ? "me" : ""}">${turnTxt}</div>
-        <div class="hint">${hints[phase] || ""}</div>
-        ${order.length > 1 ? `<div class="order">${order.map(id => `<span class="${id === curId && phase !== "over" ? "on" : ""}">${esc(nameOf(id))}</span>`).join("")}</div>` : ""}</div>
+        <div class="hint">${(cpuTurn() ? cpuHints[phase] : hints[phase]) || ""}</div>
+        ${order.length > 1 ? `<div class="order">${order.map(id => `<span class="${id === curId && phase !== "over" ? "on" : ""}" style="${chip(id)}">${esc(nameOf(id))}</span>`).join("")}</div>` : ""}</div>
       <div class="cnt">ターン<b>${moves}</b>倒れやすさ ${DIFFS[diff].label}</div><button class="x" data-a="quit">✕</button></div>`;
     if (mine && phase === "place") {
       h += `<div class="bottom p" style="flex-direction:column">
@@ -881,8 +1167,16 @@ function renderUI() {
       let title, sub;
       if (o.loser === -1) { title = "相手がいなくなりました"; sub = `${o.n}ターン`; }
       else if (mode === "local" && players.length === 1) { title = "崩れた！"; sub = `記録：${o.n}本 積みました`; }
-      else { title = o.loser === myId && mode !== "local" ? "あなたの負け…" : `${esc(nameOf(o.loser))}の負け`; sub = `${esc(nameOf(o.loser))}が崩しました（${o.n + 1}ターン目）`; }
-      const canRestart = mode === "local" || (mode === "host" && lobby.length >= 2);
+      else {
+        // 自分も遊んでいる人か（1台で交代・観戦のときは「あなた」と言わない）
+        const meIn = !(mode === "local" && !players.some(p => p.cpu)) && !spectating && players.some(p => p.id === myId);
+        if (teamMode && teamOf(o.loser) != null) {   // チーム戦: 崩した人のチームの負け
+          const lt = teamOf(o.loser);
+          title = meIn && teamOf(myId) != null ? (teamOf(myId) === lt ? "あなたのチームの負け…" : "あなたのチームの勝ち！") : `${TEAM_NAMES[lt]}チームの負け`;
+        } else title = meIn && o.loser === myId ? "あなたの負け…" : meIn && players.length === 2 ? "あなたの勝ち！" : `${esc(nameOf(o.loser))}の負け`;
+        sub = `${esc(nameOf(o.loser))}が崩しました（${o.n + 1}ターン目）`;
+      }
+      const canRestart = mode === "local" || (mode === "host" && canStartLobby());
       h += `<div class="screen" style="background:rgba(16,19,27,.55)"><div class="card"><div class="big">${title}</div><p class="lead">${sub}</p>
         ${canRestart ? `<button class="main" data-a="again">もう一回</button>` : mode === "client" ? `<p class="lead">ホストがもう一回を押すのを待っています…</p>` : ""}
         <button data-a="back">メニューへ</button></div></div>`;
@@ -895,12 +1189,17 @@ function renderUI() {
 }
 ui.addEventListener("click", e => {
   const a = e.target.closest("[data-a]")?.dataset.a; if (!a) return;
+  if (lobbyAct(a)) return;   // 部屋の画面の CPU・チーム
   if (a === "host") { fixName(); startHost(); }
+  else if (a === "cpu") { fixName(); startCpu(menuCpuN, cpuLv, menuTeams); }
+  else if (a.startsWith("ncpu-")) { menuCpuN = +a.slice(5); store.set("jenga-cpu-n", menuCpuN); renderUI(); }
+  else if (a.startsWith("mlv-")) { cpuLv = a.slice(4); store.set("jenga-cpu-lv", cpuLv); renderUI(); }
+  else if (a.startsWith("mteam-")) { menuTeams = a === "mteam-1"; store.set("jenga-cpu-team", menuTeams ? "1" : ""); renderUI(); }
   else if (a === "join") { fixName(); joinRoom(document.getElementById("code").value); }
   else if (a === "solo") { fixName(); startLocal(1); }
   else if (a.startsWith("local")) startLocal(+a.slice(5));
   else if (a === "start") hostStart();
-  else if (a.startsWith("diff-")) { diff = a.slice(5); store.set("jenga-diff", diff); if (mode === "host" && screen === "lobby") hostLobby(); else { for (const b of document.querySelectorAll(".seg button")) b.classList.toggle("on", b.dataset.a === "diff-" + diff); const n = document.querySelector(".diffnote"); if (n) n.textContent = DIFFS[diff].note; } }
+  else if (a.startsWith("diff-")) { diff = a.slice(5); store.set("jenga-diff2", diff); if (mode === "host" && screen === "lobby") hostLobby(); else { for (const b of document.querySelectorAll(".seg button")) b.classList.toggle("on", b.dataset.a === "diff-" + diff); const n = document.querySelector(".diffnote"); if (n) n.textContent = DIFFS[diff].note; } }
   else if (a === "again") { if (mode === "local") hostStart(); else if (mode === "host") hostStart(); }
   else if (a === "share") {
     const url = shareUrl();
@@ -912,13 +1211,13 @@ ui.addEventListener("click", e => {
   else if (a === "drop") dropHeld();
   else if (a === "quit") { if (confirm("ゲームをやめてメニューに戻りますか？")) backToMenu(); }
   else if (a === "back") backToMenu();
-  else if (a === "games") ykgToGames();   // ミニゲーム集のゲーム一覧へ
+  else if (a === "games") toGames();   // ミニゲーム集のゲーム一覧へ
 });
 // 回転ボタンは押している間だけ回る
 ui.addEventListener("pointerdown", e => { const b = e.target.closest("[data-r]"); if (b) { rotHold = +b.dataset.r; e.preventDefault(); } });
 for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { rotHold = 0; });
 ui.addEventListener("contextmenu", e => { if (e.target.closest("[data-r]")) e.preventDefault(); });   // 長押しでメニューが出ないように
-function backToMenu() { if (PARTY) { ykgToGames(); return; } cleanupNet(); clearAvatars(); mode = null; screen = "menu"; phase = "idle"; errMsg = ""; renderUI(); }
+function backToMenu() { if (PARTY) { toGames(); return; } cleanupNet(); clearAvatars(); mode = null; screen = "menu"; phase = "idle"; errMsg = ""; renderUI(); }
 
 // ================= ほかのプレイヤー（オンラインのとき）=================
 // テーブルのまわりに、ほかの人の姿と名前を出す。立つ場所は、その人が見ている向き（カメラの向き）。
@@ -989,7 +1288,7 @@ function clearAvatars() {
 }
 function buildAvatars() {
   clearAvatars();
-  if (mode === "local") return;
+  if (mode === "local" && !players.some(p => p.cpu)) return;   // 1台で交代のときは出さない。CPU と対戦のときは CPU の姿を出す
   players.forEach((p, i) => { if (p.id !== myId) makeAvatar(p, i); });
 }
 const shoulderOf = a => a.g.localToWorld(new THREE.Vector3(1.5, 6.0, 0.1));
@@ -1009,7 +1308,7 @@ function updateAvatars() {
     }
     // 手の行き先
     let tgt = restHand(a), dir = new THREE.Vector3(0, -1, 0);
-    const info = on ? activeInfo : null;
+    const info = on ? (simHere() ? { ph: phase, s: sel >= 0 ? sel : held } : activeInfo) : null;   // CPU の番はこの端末の様子をそのまま使う
     if (info && info.s >= 0 && meshes[info.s]) {
       const m = meshes[info.s], c = m.position, ax = new THREE.Vector3(1, 0, 0).applyQuaternion(m.quaternion);
       if (info.ph === "pull") {   // 自分に近いほうの端をつまむ
@@ -1044,13 +1343,13 @@ function sendLook(now) {
 let acc = 0, last = performance.now();
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  const sim = screen === "game" && isMine() && ACTIVE.includes(phase);
+  const sim = screen === "game" && simHere() && ACTIVE.includes(phase);
   if (sim) {
     acc += dt; let k = 0;
     while (acc >= DT && k < 8) { physStep(); acc -= DT; k++; }
     if (k === 8) acc = 0;
     syncMeshesFromBodies(true);
-  } else if (screen === "game") { acc = 0; if (!isMine() || phase === "over") lerpMeshes(); }
+  } else if (screen === "game") { acc = 0; if (!simHere() || phase === "over") lerpMeshes(); }
   updateCamera(); updateXray();
   if (screen === "game") { updateAvatars(); sendLook(now); }
   renderer.render(scene, camera);
@@ -1071,8 +1370,12 @@ window.__jenga = {
   set: o => { if (o.JITTER != null) JITTER = o.JITTER; if (o.HVAR != null) HVAR = o.HVAR; if (o.FRICTION != null) FRICTION = o.FRICTION; },
   tap: tapBlock, drop: dropHeld, moveSlot, rot: v => { rotHold = v; }, step: n => { for (let i = 0; i < n && ACTIVE.includes(phase); i++) physStep(); syncMeshesFromBodies(true); },
   get place() { return place; }, get cam() { return cam; }, avatars: () => avatars, get diff() { return diff; },
-  render: n => { for (let i = 0; i < (n || 1); i++) { if (!isMine()) lerpMeshes(); updateCamera(); updateXray(); updateAvatars(); } renderer.render(scene, camera); },
+  render: n => { for (let i = 0; i < (n || 1); i++) { if (!simHere()) lerpMeshes(); updateCamera(); updateXray(); updateAvatars(); } renderer.render(scene, camera); },
   raw: n => { for (let i = 0; i < n; i++) world.step(); syncMeshesFromBodies(true); },
+  get lastFall() { return lastFall; }, get cpu() { return cpu; }, get curId() { return curId; }, get order() { return order; }, get players() { return players; }, get over() { return overInfo; }, get lobby() { return lobby; }, get teamMode() { return teamMode; },
+  startCpu, hostAddCpu, hostRemoveCpu, lobbyAct, hostStart, startHost, cpuTurn, simHere,
+  // 確認用: 画面が隠れていて requestAnimationFrame が動かないときに、物理とループを進める（秒）
+  run: sec => { for (let i = 0; i < Math.round(sec / DT); i++) { if (screen !== "game" || !simHere() || !ACTIVE.includes(phase) || (isMine() && phase === "pull" && sel < 0)) break; physStep(); } syncMeshesFromBodies(true); },
   pull: t => { if (sel >= 0) drag = { axis: axisOf(sel), off0: 0, target: t, ty: null, A: { x: 50, y: 0 }, U: { x: 0, y: -50 }, det: 0, sx: 0, sy: 0 }; },
 };
 </script>
