@@ -38,13 +38,11 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid #0008;flex:none}
 /* ---- ゲーム画面（2026-11-11 作り直し: 横画面が基本）----
    上に人の帯、左はしにアイコン、まん中に盤、下に手札、右下にサイコロとボタン、右はしに交換のよびかけ。
-   たて持ちのときは画面ごと 90° まわして横画面にする（スマホを横にして遊ぶ）。 */
+   2026-11-11: たて持ちは下の @media (orientation:portrait) で、盤を画面はばいっぱいにし、手札とボタンを下にならべる。 */
 #stage{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;pointer-events:none;z-index:10}
 #stage>*{pointer-events:auto}
 #stage>#toast{pointer-events:none}
-body.rot #stage{width:100vh;width:100dvh;height:100vw;transform-origin:0 0;transform:translateX(100vw) rotate(90deg)}
 #game{position:absolute;top:0;bottom:env(safe-area-inset-bottom);left:env(safe-area-inset-left);right:env(safe-area-inset-right);overflow:hidden}
-body.rot #game{top:0;bottom:0;left:0;right:0}
 #top{position:absolute;top:3px;left:6px;right:6px;height:44px;display:flex}
 #pls{flex:1;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;min-width:0;max-width:900px;margin:0 auto}
 /* 人の帯: 丸い点数バッジ + その人の色のリボン（名前・手札・カード・道の長さ） */
@@ -52,7 +50,7 @@ body.rot #game{top:0;bottom:0;left:0;right:0}
 .vpb{flex:none;width:34px;height:34px;border-radius:50%;background:#2b1a0e;border:3px solid var(--pc);color:#fff;font-weight:800;font-size:17px;display:grid;place-items:center;box-shadow:0 2px 5px #0009;z-index:1}
 .pi{flex:1;min-width:0;margin-left:-12px;padding:2px 10px 3px 15px;background:linear-gradient(#ffffff26,#0000 45%,#0003),var(--pc);clip-path:polygon(0 0,100% 0,calc(100% - 7px) 50%,100% 100%,0 100%);box-shadow:0 2px 4px #0006}
 .pi .nm{font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pi .st{display:flex;gap:5px;font-size:11px;color:#fff;background:#0007;border-radius:5px;padding:0 4px;width:max-content;max-width:100%;overflow:hidden}
+.pi .st{display:flex;gap:5px;white-space:nowrap;font-size:11px;color:#fff;background:#0007;border-radius:5px;padding:0 4px;width:max-content;max-width:100%;overflow:hidden}
 .pi .st .lr{color:var(--acc);font-weight:800}
 .pl.cur .vpb{border-color:#ffd54a;box-shadow:0 0 0 2px #ffd54a,0 0 12px #ffd54a}
 .pl.cur::after{content:"";position:absolute;left:12px;bottom:-7px;border:5px solid transparent;border-top-color:#ffd54a}
@@ -92,6 +90,29 @@ body.rot #game{top:0;bottom:0;left:0;right:0}
 #acts .sq small{font-size:9px;font-weight:800;margin-top:1px}
 #acts .sq.on{background:linear-gradient(#ffe08a,#f6b93b);box-shadow:0 0 0 2px #fff,0 0 10px #ffd54a}
 #acts .go{height:56px;min-width:96px;padding:0 10px;font-size:15px;line-height:1.15}
+/* たて持ち: 盤は画面はばいっぱい。下に手札トレイ、その下にボタン 2 段（つくる 4 つ / おわり・やり直し・交換） */
+@media (orientation:portrait){
+  #boardWrap{top:47px;left:0;right:0;bottom:180px}
+  /* アイコンは ≡ だけを右上に（あそびかた・できごとはメニューから、カードは手札の 🃏 から） */
+  #side{top:5px;left:auto;right:5px}
+  #side button{width:40px;height:40px}
+  #side button:not(:first-child){display:none}
+  #top{right:52px}
+  #ban{top:51px;max-width:calc(100% - 96px)}
+  #log{left:8px;bottom:182px;max-width:72%}
+  #hand{left:6px;right:6px;bottom:116px;max-width:none}
+  .rc{font-size:10px}.rc .ic{font-size:18px}.rc b{font-size:16px}
+  #corner{left:6px;right:6px;bottom:4px;align-items:stretch}
+  #corner #dice{position:absolute;right:4px;bottom:calc(100% + 70px)}
+  #acts{align-items:stretch}
+  #acts .r{width:100%}
+  #acts .bb{flex:1;width:auto;height:48px;font-size:14px}
+  #acts .bb .cost{font-size:10px}
+  #acts .go{flex:1;font-size:17px}
+  #acts .sq{width:70px}
+  #game #tradeBox{left:6px;right:6px;bottom:4px;max-width:none}
+  #game #offerBox{top:44%}
+}
 /* 番が来たときの知らせ・資源カードが飛ぶ演出 */
 #turnPop{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);background:linear-gradient(#5a3a22,#3a2416);border:2px solid #c9a06a;border-radius:12px;padding:10px 28px;font-size:20px;font-weight:800;z-index:7;pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:8px;box-shadow:0 6px 18px #000a;animation:tp 1.5s forwards}
 @keyframes tp{0%{opacity:0;transform:translate(-50%,-50%) scale(.8)}12%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
@@ -251,6 +272,9 @@ const GEO = (() => {
       edges[emap.get(key)].h.push(i);
     }
   });
+  // 2026-11-11: たて画面で盤を大きくするため、x と y を入れかえる（六角形のとがった角が左右に来る向き。島がたて長になる）
+  for (const o of hex) [o.x, o.y] = [o.y, o.x];
+  for (const o of verts) [o.x, o.y] = [o.y, o.x];
   hex.forEach(h => { h.n = []; hex.forEach((o, j) => { const dq = o.q - h.q, dr = o.r - h.r; if (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr) === 2) h.n.push(j); }); });
   const mid = i => ({ x: (verts[edges[i].a].x + verts[edges[i].b].x) / 2, y: (verts[edges[i].a].y + verts[edges[i].b].y) / 2 });
   const coast = edges.map((e, i) => i).filter(i => edges[i].h.length === 1).sort((i, j) => Math.atan2(mid(i).y, mid(i).x) - Math.atan2(mid(j).y, mid(j).x));
@@ -783,7 +807,7 @@ function startLocal() {
   startGame(shuffle(seats));   // 順番はランダム
 }
 function startGame(seats) {
-  G = newGame(seats); screen = "game"; ui.mode = null; ui.modal = null; ui.overSeen = -1; ui.trade = false; ui.turnKey = null; shownRoll = -1; lastWasRoll = false; wantLandscape();
+  G = newGame(seats); screen = "game"; ui.mode = null; ui.modal = null; ui.overSeen = -1; ui.trade = false; ui.turnKey = null; shownRoll = -1; lastWasRoll = false;
   addLog("島がうまれた！ はじめの村と道を 2 回ずつ置こう");
   renderUI(); afterChange();
 }
@@ -921,12 +945,7 @@ const RULES_HTML = `<div class="rules">
 </div>`;
 const RULES_SHORT = `サイコロで出た数の土地から資源をもらい、道・村(1点)・町(2点)をつくる。先に${TARGET}点で勝ち。7が出たらカラスを動かして1まいもらえる。ほかの人とも自由に交換できる（銀行とは4→1、港なら3→1・2→1）。`;
 
-// たて持ちのときは、ゲーム画面だけ 90° まわして横画面にする。向きを固定できる環境（インストールしたアプリなど）では横に固定してみる
-function updRot() { document.body.classList.toggle("rot", screen === "game" && innerHeight > innerWidth); }
-function wantLandscape() { try { const so = window.screen && window.screen.orientation; if (so && so.lock) { const r = so.lock("landscape"); if (r && r.catch) r.catch(() => {}); } } catch (e) {} }
-addEventListener("resize", () => { const was = document.body.classList.contains("rot"); updRot(); if (was !== document.body.classList.contains("rot")) render(); });
 function renderUI() {
-  updRot();
   // パーティ: 始まる前（つないでいる・部屋）は、全部のゲームで同じ待ち合わせ画面（ykgLobby）を使う
   if (PARTY && (screen === "connecting" || screen === "lobby")) {
     ["menu", "lobby", "game"].forEach(id => $(id).classList.add("hidden")); $("modal").classList.add("hidden");
@@ -1030,9 +1049,9 @@ function keepName() { if (nameDraft != null && $("name")) $("name").value = name
 // ---------------- 盤（SVG） ----------------
 const S = 50;
 // 島をかこむ海（六角形 1 まわり）。盤の外のすき間にもはみ出して描く（その先は木のテーブル）
-const OCEAN = (() => { const o = []; for (let r = -3; r <= 3; r++) for (let q = -3; q <= 3; q++) if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) === 3) o.push({ x: SQ3 * (q + r / 2), y: 1.5 * r }); return o; })();
-const hexPts = (x, y, k) => [...Array(6)].map((_, i) => { const a = Math.PI / 180 * (60 * i - 30); return ((x + Math.cos(a) * k) * S).toFixed(1) + "," + ((y + Math.sin(a) * k) * S).toFixed(1); }).join(" ");
-const VB = (() => { const xs = GEO.verts.map(v => v.x * S), ys = GEO.verts.map(v => v.y * S), m = 50; return [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) - Math.min(...xs) + 2 * m, Math.max(...ys) - Math.min(...ys) + 2 * m]; })();
+const OCEAN = (() => { const o = []; for (let r = -3; r <= 3; r++) for (let q = -3; q <= 3; q++) if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) === 3) o.push({ x: 1.5 * r, y: SQ3 * (q + r / 2) }); return o; })();
+const hexPts = (x, y, k) => [...Array(6)].map((_, i) => { const a = Math.PI / 180 * (60 * i); return ((x + Math.cos(a) * k) * S).toFixed(1) + "," + ((y + Math.sin(a) * k) * S).toFixed(1); }).join(" ");
+const VB = (() => { const xs = GEO.verts.map(v => v.x * S), ys = GEO.verts.map(v => v.y * S), mx = 44, my = 48; return [Math.min(...xs) - mx, Math.min(...ys) - my, Math.max(...xs) - Math.min(...xs) + 2 * mx, Math.max(...ys) - Math.min(...ys) + 2 * my]; })();   // 左右は港が少ししか出ないので余白を小さく
 $("board").setAttribute("viewBox", VB.join(" "));
 $("board").setAttribute("preserveAspectRatio", "xMidYMid meet");
 const CROW_SVG = `<ellipse rx="12" ry="7.5" fill="#111" stroke="#fff" stroke-width="1.5"/><path d="M-6 -2 L-17 -13 L3 -4Z" fill="#222" stroke="#fff" stroke-width="1"/><path d="M-10 2 L-19 7 L-10 6Z" fill="#111"/><circle cx="10" cy="-6" r="6" fill="#111" stroke="#fff" stroke-width="1.5"/><path d="M15 -8 L23 -5 L15 -3Z" fill="#f59e0b"/><circle cx="11" cy="-7.5" r="1.6" fill="#fff"/>`;
@@ -1240,14 +1259,14 @@ function render() {
     else if (inMain) go = `<button class="main go" data-g="end">おわり ▶</button>`;
     else go = `<button class="go" disabled>${myTurn ? "盤をタップ" : "まってね…"}</button>`;
     r2 = go + sq("undo", "↶", "やり直し", inMain && G.undoN > 0) + sq("trade", "⇄", "交換", inMain && !G.free, ui.trade || (G.offer && G.offer.from === s));
-    if (inMain && !G.free) {
-      const can = {
+    {
+      const ok = inMain && !G.free, can = ok && {
         road: afford(me, COST.road) && me.roads < LIM.road && validRoads(s).length > 0,
         vil: afford(me, COST.vil) && me.vils < LIM.vil && validVils(s).length > 0,
         town: afford(me, COST.town) && me.towns < LIM.town && validTowns(s).length > 0,
         card: afford(me, COST.card) && G.deck.length > 0,
       };
-      r1 = ["road", "vil", "town", "card"].map(w => `<button class="bb ${ui.mode === w ? "on" : ""}" data-g="b-${w}" ${can[w] || ui.mode === w ? "" : "disabled"}>${ui.mode === w ? "やめる" : BN[w]}<span class="cost">${costHtml(COST[w])}</span></button>`).join("");
+      r1 = ["road", "vil", "town", "card"].map(w => `<button class="bb ${ui.mode === w ? "on" : ""}" data-g="b-${w}" ${(ok && can[w]) || ui.mode === w ? "" : "disabled"}>${ui.mode === w ? "やめる" : BN[w]}<span class="cost">${costHtml(COST[w])}</span></button>`).join("");
     }
   }
   $("acts").innerHTML = (r1 ? `<div class="r">${r1}</div>` : "") + `<div class="r">${r2}</div>`;
