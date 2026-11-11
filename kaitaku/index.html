@@ -3,21 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#0b2a44">
+<meta name="theme-color" content="#7a4520">
 <title>カイタク島</title>
 <!-- ミニゲーム集「you know games」のゲーム（kakutou/kaitaku/）。2026-11-09 作成:
      六角形の土地が並ぶ島で、サイコロで資源をあつめ、道・村・町をつくって点数を競う（オリジナルのルール）。 -->
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="you know games">
 <link rel="manifest" href="../manifest.json"><link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=3"><link rel="apple-touch-icon" href="../apple-touch-icon.png?v=3">
 <style>
-:root{--bg:#0b2a44;--panel:#10304d;--card:#173c5e;--line:#2a5577;--tx:#eef6ff;--sub:#9fb8cf;--acc:#f6b93b;--btn:#24527a}
+:root{--bg:#a8622f;--panel:rgba(36,20,9,.86);--card:#3a2416;--line:#6b4a30;--tx:#fff7ec;--sub:#d8c0a0;--acc:#f6b93b;--btn:#6b4426;--deep:#24150a;
+  /* 2026-11-11: 木のテーブル（板のつなぎ目・木目） */
+  --wood:repeating-linear-gradient(0deg,rgba(0,0,0,.2) 0 2px,transparent 2px 86px),repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 9px),repeating-linear-gradient(0deg,rgba(0,0,0,.06) 0 3px,transparent 3px 23px),linear-gradient(90deg,#a85f2c,#c27a3e 50%,#a35b2a)}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
-button{font:inherit;color:inherit;cursor:pointer;border:0;border-radius:12px;background:var(--btn);padding:10px 12px;min-height:44px;font-weight:700;touch-action:manipulation}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--wood);background-color:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+button{font:inherit;color:inherit;cursor:pointer;border:0;border-bottom:3px solid #0006;border-radius:12px;background:var(--btn);padding:10px 12px;min-height:44px;font-weight:700;touch-action:manipulation}
 button:disabled{opacity:.38;cursor:default}
 button.on{background:var(--acc);color:#2a1a05}
 button.main{background:var(--acc);color:#2a1a05;font-size:18px}
-input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#0c2238;color:var(--tx);width:100%}
+input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--deep);color:var(--tx);width:100%}
 .hidden{display:none!important}
 /* ---- メニュー・部屋 ---- */
 .scr{position:fixed;inset:0;overflow-y:auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;justify-content:center;align-items:flex-start}
@@ -31,41 +33,50 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .err{color:#ffb4a8;font-size:14px}
 .code{font-size:44px;font-weight:800;text-align:center;letter-spacing:8px;color:var(--acc)}
 .mem{display:flex;flex-wrap:wrap;gap:6px}
-.mem span{background:#0c2238;border-radius:99px;padding:6px 12px;font-size:15px;display:inline-flex;align-items:center;gap:6px}
+.mem span{background:var(--deep);border-radius:99px;padding:6px 12px;font-size:15px;display:inline-flex;align-items:center;gap:6px}
 .mem small{color:var(--sub);font-size:12px}
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid #0008;flex:none}
 /* ---- ゲーム画面: たて持ちは上から 人・案内・盤・手もと。よこ持ちは盤を左、ほかを右に ---- */
-#game{position:fixed;inset:0;display:grid;grid-template-columns:100%;grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"top" "ban" "board" "panel";
+#game{position:fixed;inset:0;display:grid;grid-template-columns:100%;grid-template-rows:auto auto minmax(0,1fr) auto auto;grid-template-areas:"top" "ban" "board" "hand" "panel";
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 @media (orientation:landscape) and (min-width:560px){
-  #game{grid-template-columns:minmax(0,1fr) minmax(270px,40%);grid-template-rows:auto auto minmax(0,1fr);grid-template-areas:"board top" "board ban" "board panel"}
+  /* よこ持ち: 上に人、左に大きく盤、右に案内・手札・ボタン（サイコロは盤の右下） */
+  #game{grid-template-columns:minmax(0,1fr) minmax(260px,34%);grid-template-rows:auto auto auto minmax(0,1fr);grid-template-areas:"top top" "board ban" "board hand" "board panel"}
   #panel{overflow-y:auto}
+  #hand{margin-top:4px}
+  #game #offerBox{left:auto;right:8px;transform:none;width:240px}
 }
 #top{grid-area:top;display:flex;gap:4px;padding:4px 6px;align-items:stretch}
-#pls{flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:4px}
-.pl{background:var(--panel);border:2px solid transparent;border-radius:10px;padding:3px 6px;font-size:12px;line-height:1.25;min-width:0}
-.pl.cur{border-color:var(--acc);background:#1d4569}
-.pl .nm{display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
-.pl .st{color:var(--sub);white-space:nowrap}
-.pl .st b{color:#fff;font-size:14px}
+#pls{flex:1;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;min-width:0}
+/* 人の帯: 丸い点数バッジ + その人の色のリボン（名前・手札・カード・道の長さ） */
+.pl{display:flex;align-items:center;min-width:0;position:relative}
+.vpb{flex:none;width:34px;height:34px;border-radius:50%;background:#2b1a0e;border:3px solid var(--pc);color:#fff;font-weight:800;font-size:17px;display:grid;place-items:center;box-shadow:0 2px 5px #0009;z-index:1}
+.pi{flex:1;min-width:0;margin-left:-12px;padding:2px 10px 3px 15px;background:linear-gradient(#ffffff26,#0000 45%,#0003),var(--pc);clip-path:polygon(0 0,100% 0,calc(100% - 7px) 50%,100% 100%,0 100%);box-shadow:0 2px 4px #0006}
+.pi .nm{font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pi .st{display:flex;gap:5px;font-size:11px;color:#fff;background:#0007;border-radius:5px;padding:0 4px;width:max-content;max-width:100%;overflow:hidden}
+.pi .st .lr{color:var(--acc);font-weight:800}
+.pl.cur .vpb{border-color:#ffd54a;box-shadow:0 0 0 2px #ffd54a,0 0 12px #ffd54a}
+.pl.cur::after{content:"";position:absolute;left:12px;bottom:-7px;border:5px solid transparent;border-top-color:#ffd54a}
 #menuBtn{min-height:0;padding:0 12px;font-size:20px;background:var(--panel)}
+#top{min-height:46px}
 #ban{grid-area:ban;margin:2px 6px;padding:8px 12px;border-radius:12px;background:var(--panel);font-size:15px;font-weight:700;text-align:center;min-height:38px;display:flex;align-items:center;justify-content:center;gap:8px}
 #ban.my{background:var(--acc);color:#2a1a05}
 #boardWrap{grid-area:board;position:relative;min-height:0;min-width:0}
-#board{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation}
-#dice{position:absolute;left:8px;top:6px;display:flex;gap:6px;pointer-events:none;align-items:center}
+#board{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation;overflow:visible}
+#boardWrap{overflow:hidden}
+#dice{position:absolute;right:8px;bottom:6px;display:flex;gap:6px;pointer-events:none;align-items:center}
 .die{width:36px;height:36px;background:#fff;border-radius:8px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:4px;box-shadow:0 2px 6px #0007}
 .die i{display:block;margin:2px;border-radius:50%}.die i.on{background:#222}
 #dice.big .die{width:54px;height:54px;padding:6px}
 #dice .sum{font-size:22px;font-weight:800;text-shadow:0 2px 4px #000}
 #dice .sum.seven{color:#ffb4a8}
 #panel{grid-area:panel;padding:4px 6px 6px;display:flex;flex-direction:column;gap:6px}
-#hand{display:flex;gap:4px}
-.rc{flex:1;background:var(--panel);border-radius:10px;padding:4px 2px;text-align:center;font-size:12px;color:var(--sub);position:relative;min-width:0}
+#hand{grid-area:hand;display:flex;gap:4px;margin:0 6px;padding:5px;background:linear-gradient(#3a2212,#24150a);border:2px solid #6b4a30;border-radius:14px;box-shadow:inset 0 2px 6px #000a,0 2px 6px #0006}
+.rc{flex:1;background:linear-gradient(#fffaf0,#ecdcbc);border-top:5px solid var(--rc,#999);border-radius:8px;padding:2px 2px 3px;text-align:center;font-size:11px;color:#6b4a30;position:relative;min-width:0;box-shadow:0 2px 3px #0007}
 .rc .ic{font-size:20px;line-height:1.1}
-.rc b{display:block;color:#fff;font-size:18px;line-height:1.1}
-.rc .rt{position:absolute;right:3px;top:2px;font-size:10px;color:var(--acc)}
-.rc.cards{background:#2c2550}
+.rc b{display:block;color:#2a170b;font-size:18px;line-height:1.1}
+.rc .rt{position:absolute;right:3px;top:1px;font-size:10px;font-weight:800;color:#b45309}
+.rc.cards{background:linear-gradient(#5b3f8f,#3d2a63);border-top-color:#a78bfa;color:#ddd}.rc.cards b{color:#fff}
 #acts{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
 #acts button{padding:5px 2px;min-height:50px;font-size:14px;line-height:1.15}
 #acts button .cost{display:block;font-size:12px;font-weight:400;letter-spacing:-1px}
@@ -85,16 +96,26 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 #modal .g4 button{padding:6px 1px;font-size:12px;line-height:1.2;min-width:0}
 #modal .g4 .ic{font-size:22px;display:block}
 .rules{font-size:14px;line-height:1.7}
+#offerBox{position:absolute;left:50%;top:6px;transform:translateX(-50%);width:min(320px,94%);background:var(--panel);border:2px solid var(--acc);border-radius:14px;padding:7px 10px;display:flex;flex-direction:column;gap:3px;box-shadow:0 4px 14px #000b;z-index:5;animation:pop .2s}
+@keyframes pop{from{opacity:0;margin-top:-8px}to{opacity:1;margin-top:0}}
+#offerBox .ot{font-size:13px;font-weight:700;display:flex;align-items:center;gap:5px}
+#offerBox .og{font-size:22px;text-align:center;line-height:1.3}
+#offerBox .og.sm{font-size:15px}
+#offerBox .og span{font-size:12px;color:var(--sub);margin:0 5px}
+#offerBox .ob{display:flex;gap:8px}
+#offerBox .ob button{flex:1;min-height:38px;font-size:20px;padding:2px}
+#offerBox [data-o="no"]{background:#b83a3a}
+#offerBox [data-o="ok"]{background:#2f9a48}
 .tline{font-size:26px;text-align:center;line-height:1.5}
 .tline span{font-size:14px;color:var(--sub);margin:0 6px}
 #modal .g4 small{color:var(--sub);font-weight:400}
 .rules b{color:var(--acc)}
-.cl{display:flex;align-items:center;gap:8px;background:#0c2238;border-radius:12px;padding:8px}
+.cl{display:flex;align-items:center;gap:8px;background:var(--deep);border-radius:12px;padding:8px}
 .cl .ci{font-size:26px}
 .cl .cd{flex:1;font-size:13px;line-height:1.4}
 .cl .cd b{font-size:15px}
 .cl button{flex:none}
-.rank{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:#0c2238;font-size:16px}
+.rank{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:var(--deep);font-size:16px}
 .rank.win{background:#5a4512}
 #toast{position:fixed;left:50%;top:40%;transform:translateX(-50%);background:rgba(0,0,0,.85);padding:10px 18px;border-radius:12px;font-size:15px;transition:opacity .3s;opacity:0;pointer-events:none;z-index:60;max-width:90%;text-align:center}
 </style>
@@ -105,8 +126,9 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 <div id="game" class="hidden">
   <div id="top"><div id="pls"></div><button id="menuBtn" aria-label="メニュー">≡</button></div>
   <div id="ban"></div>
-  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="dice"></div></div>
-  <div id="panel"><div id="hand"></div><div id="acts"></div><div id="log"></div></div>
+  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="dice"></div><div id="offerBox" class="hidden"></div></div>
+  <div id="hand"></div>
+  <div id="panel"><div id="acts"></div><div id="log"></div></div>
 </div>
 <div id="modal" class="hidden"><div class="box"></div></div>
 <div id="toast"></div>
@@ -149,6 +171,7 @@ const CARD = {
 };
 const COLS = ["#ef4444", "#3b82f6", "#facc15", "#c084fc"];
 const DIFF = { weak: "よわい", norm: "ふつう", strong: "つよい" };
+const RCOL = Object.fromEntries(Object.values(TT).filter(T => T.res).map(T => [T.res, T.col]));   // 手札のカードの色
 const costHtml = c => RES.filter(r => c[r]).map(r => RI[r].repeat(c[r])).join("");
 
 // ================= 盤の形（いつも同じ。土地の種類と数字だけ毎回ランダム） =================
@@ -920,6 +943,9 @@ function keepName() { if (nameDraft != null && $("name")) $("name").value = name
 
 // ---------------- 盤（SVG） ----------------
 const S = 50;
+// 島をかこむ海（六角形 1 まわり）。盤の外のすき間にもはみ出して描く（その先は木のテーブル）
+const OCEAN = (() => { const o = []; for (let r = -3; r <= 3; r++) for (let q = -3; q <= 3; q++) if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) === 3) o.push({ x: SQ3 * (q + r / 2), y: 1.5 * r }); return o; })();
+const hexPts = (x, y, k) => [...Array(6)].map((_, i) => { const a = Math.PI / 180 * (60 * i - 30); return ((x + Math.cos(a) * k) * S).toFixed(1) + "," + ((y + Math.sin(a) * k) * S).toFixed(1); }).join(" ");
 const VB = (() => { const xs = GEO.verts.map(v => v.x * S), ys = GEO.verts.map(v => v.y * S), m = 50; return [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) - Math.min(...xs) + 2 * m, Math.max(...ys) - Math.min(...ys) + 2 * m]; })();
 $("board").setAttribute("viewBox", VB.join(" "));
 $("board").setAttribute("preserveAspectRatio", "xMidYMid meet");
@@ -944,8 +970,10 @@ function renderBoard() {
   const P = i => { const v = GEO.verts[i]; return [v.x * S, v.y * S]; };
   const poly = h => h.c.map(i => P(i).map(n => n.toFixed(1)).join(",")).join(" ");
   let s = "";
-  // 砂浜（島のまわり）と海
-  s += GEO.hex.map(h => `<polygon points="${poly(h)}" fill="#e9d8a6" stroke="#e9d8a6" stroke-width="22" stroke-linejoin="round"/>`).join("");
+  // 海（外わくは少しこい色）と砂浜（島のまわり）
+  s += OCEAN.map(o => `<polygon points="${hexPts(o.x, o.y, 1.04)}" fill="#2a6fa8"/>`).join("");
+  s += OCEAN.map(o => `<polygon points="${hexPts(o.x, o.y, 0.9)}" fill="#3d8fd0" stroke="#5aa6e0" stroke-width="1.5" stroke-opacity=".5"/>`).join("");
+  s += GEO.hex.map(h => `<polygon points="${poly(h)}" fill="#e9d8a6" stroke="#e9d8a6" stroke-width="12" stroke-linejoin="round"/>`).join("");
   // 港
   for (const hb of G.harbors) {
     const E = GEO.edges[hb.e], m = GEO.mid(hb.e), hc = GEO.hex[E.h[0]];
@@ -1041,16 +1069,16 @@ function render() {
   if (!myTurn || G.phase !== "main") ui.mode = null;
   if (myTurn && G.phase === "main" && G.free > 0) ui.mode = "road";
   // 人
-  $("pls").innerHTML = G.ps.map((p, i) => `<div class="pl ${i === G.cur && G.phase !== "over" ? "cur" : ""}"><div class="nm"><i class="dot" style="background:${COLS[i]}"></i>${esc(p.name)}${p.bot ? "🤖" : ""}</div>
-    <div class="st">★<b>${vp(i)}</b> ✋${tot(p.hand)}${p.cards.length + p.newC.length ? ` 🃏${p.cards.length + p.newC.length}` : ""}${G.roadHolder === i ? " 🛤️" : p.lr >= 3 ? ` 道${p.lr}` : ""}</div></div>`).join("");
+  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length; return `<div class="pl ${i === G.cur && G.phase !== "over" ? "cur" : ""}" style="--pc:${COLS[i]}"><div class="vpb">${vp(i)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}</div>
+    <div class="st"><span>✋${tot(p.hand)}</span>${nc ? `<span>🃏${nc}</span>` : ""}${p.lr ? `<span class="${G.roadHolder === i ? "lr" : ""}">🛤️${p.lr}</span>` : ""}</div></div></div>`; }).join("");
   const bt = bannerText();
   $("ban").className = bt.my ? "my" : ""; $("ban").innerHTML = bt.h;
   renderBoard(); updDice();
   // 手もと
   if (me) {
-    $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc"><div class="ic">${RI[r]}</div><b>${me.hand[r]}</b>${RN[r]}${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
+    $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc" style="--rc:${RCOL[r]}"><div class="ic">${RI[r]}</div><b>${me.hand[r]}</b>${RN[r]}${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
       + `<div class="rc cards" data-g="cards"><div class="ic">🃏</div><b>${me.cards.length + me.newC.length}</b>カード</div>`;
-  } else $("hand").innerHTML = `<div class="rc" style="padding:8px">観戦中: みんなの手は見えません</div>`;
+  } else $("hand").innerHTML = `<div class="rc" style="padding:8px;font-size:13px">観戦中: みんなの手は見えません</div>`;
   // ボタン
   let h = "";
   if (!me) h = `<button class="full" data-g="leave">${PARTY ? "ゲーム一覧へ" : "ぬける"}</button>`;
@@ -1075,10 +1103,17 @@ function render() {
   $("log").innerHTML = G.log.slice(-3).map(l => `<div>${esc(l)}</div>`).join("");
   // 勝負がついたら結果を出す（1 回だけ）
   if (G.phase === "over" && ui.overSeen !== G.ver) { ui.overSeen = G.ver; ui.modal = "over"; }
-  // ほかの人からの交換のよびかけ: 返事がまだなら小窓を出す。終わったら閉じる
-  const o = G.offer;
-  if (o && s >= 0 && s !== o.from && o.resp[s] === null && ui.offerSeen !== o.id) { ui.offerSeen = o.id; ui.modal = "offer"; }
-  if (ui.modal === "offer" && (!o || o.id !== ui.offerSeen || o.resp[s] !== null)) ui.modal = null;
+  // 交換のよびかけは、盤の上の小さな札に出す（✕ / ✓）。画面はふさがない
+  const o = G.offer; let oh = "";
+  if (o && s >= 0 && s !== o.from && o.resp[s] === null)
+    oh = `<div class="ot">🤝 <i class="dot" style="background:${COLS[o.from]}"></i>${esc(G.ps[o.from].name)} から交換のよびかけ</div>
+      <div class="og"><span>もらう</span>${amtStr(o.give)}<span>出す</span>${amtStr(o.get)}</div>
+      <div class="ob"><button data-o="no">✕</button><button data-o="ok">✓</button></div>`;
+  else if (o && s >= 0 && s === o.from && ui.modal !== "trade") {
+    const n = k => o.resp.filter(x => x === k).length;
+    oh = `<div class="ot">🤝 よびかけ中 ${amtStr(o.give)} → ${amtStr(o.get)}</div><div class="og sm">⭕${n("ok")}　⏳${n(null)}　❌${n("no") + n("cant")}</div><div class="ob"><button data-o="open">ひらく</button></div>`;
+  }
+  $("offerBox").innerHTML = oh; $("offerBox").classList.toggle("hidden", !oh);
   renderModal();
 }
 $("panel").addEventListener("click", e => {
@@ -1097,6 +1132,12 @@ $("panel").addEventListener("click", e => {
     if (w === "card") { act({ k: "build", w: "card" }); return; }
     ui.mode = ui.mode === w ? null : w; render();
   }
+});
+$("offerBox").addEventListener("click", e => {
+  const b = e.target.closest("[data-o]"); if (!b || !G) return;
+  const k = b.dataset.o, o = G.offer;
+  if (k === "open") { ui.give = ui.get = null; openModal("trade"); render(); return; }
+  if (o) act({ k: "respond", id: o.id, ok: k === "ok" });
 });
 $("menuBtn").addEventListener("click", () => openModal("menu"));
 
@@ -1147,13 +1188,6 @@ function renderModal() {
       + (me.newC.length ? `<div class="note">買ったばかり（つぎの番から使える）: ${me.newC.map(c => CARD[c].ic + CARD[c].name).join("、")}</div>` : "")
       + (me.vpC ? `<div class="note">🗺️ 宝の地図: ${me.vpC}まい（+${me.vpC}点）</div>` : "")
       + `<div class="note">カードは ${costHtml(COST.card)} で買える。1番に1まいだけ使える。</div><button data-m="close">とじる</button>`;
-  } else if (k === "offer") {
-    const o = G && G.offer;
-    if (!o || !me) { ui.modal = null; $("modal").classList.add("hidden"); return; }
-    h = `<h2>🤝 ${esc(G.ps[o.from].name)} から交換のよびかけ</h2>
-      <div class="note">あなたがもらう</div><div class="tline">${amtStr(o.give)}</div>
-      <div class="note">あなたが出す</div><div class="tline">${amtStr(o.get)}</div>
-      <div class="row"><button class="main" data-m="rok">OK</button><button data-m="rno">ことわる</button></div>`;
   } else if (k === "harvest") {
     h = `<h2>🧺 大豊作</h2><div class="note">好きな資源を2まいえらぼう（同じのを2回でもOK）</div>
       <div class="g4">${RES.map(r => `<button data-m="pick" data-r="${r}" ${ui.picks.length >= 2 ? "disabled" : ""}><span class="ic">${RI[r]}</span>${RN[r]}</button>`).join("")}</div>
@@ -1170,10 +1204,10 @@ function renderModal() {
   box.innerHTML = h;
 }
 $("modal").addEventListener("click", e => {
-  if (e.target.id === "modal" && ui.modal !== "harvest" && ui.modal !== "offer") { ui.modal = null; renderModal(); return; }
+  if (e.target.id === "modal" && ui.modal !== "harvest") { ui.modal = null; renderModal(); return; }
   const b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
   const m = b.dataset.m;
-  if (m === "close") { ui.modal = null; renderModal(); return; }
+  if (m === "close") { ui.modal = null; renderModal(); if (G) render(); return; }
   if (m === "rules" || m === "log") { ui.modal = m; renderModal(); return; }
   if (m === "quit") { ui.modal = null; renderModal(); if (PARTY || mode === "local" || confirm("部屋をぬけますか？")) leave(); return; }
   if (m === "give") { ui.give = b.dataset.r; if (ui.get === ui.give) ui.get = null; renderModal(); return; }
@@ -1185,7 +1219,6 @@ $("modal").addEventListener("click", e => {
   if (m === "offer") { act({ k: "offer", give: cleanAmt(ui.pg), get: cleanAmt(ui.pw) }); renderModal(); return; }
   if (m === "accept") { act({ k: "accept", p: +b.dataset.p }); ui.modal = null; ui.pg = {}; ui.pw = {}; renderModal(); return; }
   if (m === "cancel") { act({ k: "cancel" }); renderModal(); return; }
-  if (m === "rok" || m === "rno") { const o = G && G.offer; ui.modal = null; renderModal(); if (o) act({ k: "respond", id: o.id, ok: m === "rok" }); return; }
   if (m === "dotrade") { act({ k: "trade", give: ui.give, get: ui.get }); ui.give = ui.get = null; renderModal(); return; }
   if (m === "use") {
     const c = b.dataset.c;
