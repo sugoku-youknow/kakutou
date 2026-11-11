@@ -98,6 +98,10 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
   #side button{width:40px;height:40px}
   #side button:not(:first-child){display:none}
   #top{right:52px}
+  #pls{gap:4px}
+  .vpb{width:28px;height:28px;font-size:14px;border-width:2px}
+  .pi{margin-left:-9px;padding:2px 7px 3px 11px}
+  .pi .nm{font-size:11px}
   #ban{top:51px;max-width:calc(100% - 96px)}
   #log{left:8px;bottom:182px;max-width:72%}
   #hand{left:6px;right:6px;bottom:116px;max-width:none}
@@ -134,6 +138,12 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .rules{font-size:14px;line-height:1.7}
 /* 交換のよびかけ（右はし）: もらう +1 / 出す −1 のカードと ✕ ✓ */
 #offerBox{position:absolute;right:0;top:50%;transform:translateY(-50%);min-width:170px;padding:10px 10px 10px 26px;background:linear-gradient(90deg,#0000,#000b 22%);display:flex;flex-direction:column;align-items:flex-end;gap:6px;z-index:6;animation:slide .25s}
+#offerBox:not(.mine){border-right:4px solid #ffd54a;animation:slide .25s,glow 1s .25s infinite alternate}
+@keyframes glow{from{border-right-color:#ffd54a}to{border-right-color:#ffd54a33}}
+#offerBox .cd{font-size:12px;color:#ffd54a;font-weight:700}
+/* 自分のよびかけ中の小さな知らせは、盤をふさがないよう右上に */
+#game #offerBox.mine{top:50px;transform:none;padding:6px 8px 6px 20px;gap:3px}
+#offerBox.mine .ob button{height:34px}
 @keyframes slide{from{opacity:0;margin-right:-40px}to{opacity:1;margin-right:0}}
 #offerBox .ot{font-size:14px;font-weight:700;color:#fff;border-bottom:1px solid #fff5;padding-bottom:4px;display:flex;align-items:center;gap:5px;white-space:nowrap}
 #offerBox .orow{display:flex;align-items:center;gap:6px}
@@ -445,7 +455,8 @@ function trade(s, a) {
 // ---- プレイヤーどうしの交換（2026-11-11）----
 // 番の人が「出す・ほしい」を出す → ほかの人が OK／ことわる → 番の人が OK した人から 1 人えらぶと交換。
 // 提案は 1 ターンに 5 回まで。番の人がほかのこと（つくる・銀行と交換・おわり など）をしたら、提案は消える。
-const OFFER_MAX = 5, OFFER_WAIT = 20000;   // CPU の提案は、人の返事を最大 20 秒待つ
+// 2026-11-11: CPU の提案に人が気づかないと、その間ずっと次の人がサイコロをふれなかった（20 秒）。8 秒にして、のこり秒数を見せる
+const OFFER_MAX = 5, OFFER_WAIT = 8000;   // CPU の提案は、人の返事を最大 8 秒待つ（返事がなければ「ことわった」あつかい）
 const amtStr = o => RES.filter(r => o[r]).map(r => RI[r] + o[r]).join("");
 function cleanAmt(o) {
   if (!o || typeof o !== "object") return null;
@@ -1257,6 +1268,7 @@ function render() {
     if (myTurn && G.phase === "roll") go = `<button class="main go" data-g="roll">🎲 ふる</button>`;
     else if (inMain && G.free > 0) go = `<button class="go" data-g="nofree">道づくりを<br>やめる</button>`;
     else if (inMain) go = `<button class="main go" data-g="end">おわり ▶</button>`;
+    else if (G.offer && G.offer.from !== s && G.offer.resp[s] === null) go = `<button class="go" disabled>交換に<br>返事してね ▶</button>`;
     else go = `<button class="go" disabled>${myTurn ? "盤をタップ" : "まってね…"}</button>`;
     r2 = go + sq("undo", "↶", "やり直し", inMain && G.undoN > 0) + sq("trade", "⇄", "交換", inMain && !G.free, ui.trade || (G.offer && G.offer.from === s));
     {
@@ -1279,6 +1291,7 @@ function render() {
   const o = G.offer; let oh = "";
   if (o && s >= 0 && s !== o.from && o.resp[s] === null)
     oh = `<div class="ot"><i class="dot" style="background:${COLS[o.from]}"></i>${esc(G.ps[o.from].name)} からの交換</div>`
+      + (G.ps[o.from].bot ? `<div class="cd">あと ${Math.max(0, Math.ceil((OFFER_WAIT - (Date.now() - o.t)) / 1000))} 秒</div>` : "")
       + RES.filter(r => o.give[r]).map(r => `<div class="orow"><span class="n p">+${o.give[r]}</span>${cardHtml(r)}</div>`).join("")
       + RES.filter(r => o.get[r]).map(r => `<div class="orow"><span class="n m">−${o.get[r]}</span>${cardHtml(r)}</div>`).join("")
       + `<div class="ob"><button data-o="no" aria-label="ことわる">✕</button><button data-o="ok" aria-label="OK">✓</button></div>`;
@@ -1287,6 +1300,10 @@ function render() {
     oh = `<div class="ot">🤝 よびかけ中</div><div class="orow sm">${amtStr(o.give)} → ${amtStr(o.get)}</div><div class="orow sm">⭕${n("ok")}　⏳${n(null)}　❌${n("no") + n("cant")}</div><div class="ob"><button data-o="open">ひらく</button></div>`;
   }
   $("offerBox").innerHTML = oh; $("offerBox").classList.toggle("hidden", !oh);
+  $("offerBox").classList.toggle("mine", !!(o && s === o.from));
+  // CPU からの提案に返事を待っているあいだは、のこり秒数を 1 秒ごとに書きかえる
+  clearTimeout(ui.cdT);
+  if (o && s >= 0 && s !== o.from && o.resp[s] === null && G.ps[o.from].bot) ui.cdT = setTimeout(render, 1000);
   renderTrade(s, me, myTurn);
   renderModal();
 }
