@@ -81,10 +81,13 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 #modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px;z-index:50}
 #modal .box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;max-width:440px;width:100%;max-height:100%;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
 #modal h2{margin:0;font-size:20px;text-align:center}
-#modal .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-#modal .g4 button{padding:6px 2px;font-size:13px;line-height:1.2}
+#modal .g4{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+#modal .g4 button{padding:6px 1px;font-size:12px;line-height:1.2;min-width:0}
 #modal .g4 .ic{font-size:22px;display:block}
 .rules{font-size:14px;line-height:1.7}
+.tline{font-size:26px;text-align:center;line-height:1.5}
+.tline span{font-size:14px;color:var(--sub);margin:0 6px}
+#modal .g4 small{color:var(--sub);font-weight:400}
 .rules b{color:var(--acc)}
 .cl{display:flex;align-items:center;gap:8px;background:#0c2238;border-radius:12px;padding:8px}
 .cl .ci{font-size:26px}
@@ -114,7 +117,7 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 "use strict";
 // ================= カイタク島（2026-11-09 作成） =================
 // ・盤は毎回ランダム（土地の種類・数字・港の場所）。土地の形（六角形 19 まい）はいつも同じ。
-// ・資源は 4 種類（木・石・魚・くだもの）。7 が出るとカラスが来る。先に 8 点で勝ち。
+// ・資源は 5 種類（木材・レンガ・羊毛・小麦・鉄）。2026-11-11 に 4 種類から 5 種類へ。7 が出るとカラスが来る。先に 8 点で勝ち。
 // ・通信はホストが正しい状態（G）を持ち、ゲストは「やりたいこと」を送るだけ。CPU もホストが動かす。
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -122,17 +125,20 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.f
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
 const TARGET = 8;   // 勝ちの点数
-const RES = ["wood", "stone", "fish", "fruit"];
-const RN = { wood: "木", stone: "石", fish: "魚", fruit: "くだもの" };
-const RI = { wood: "🌲", stone: "⛰️", fish: "🐟", fruit: "🍎" };
+const RES = ["wood", "brick", "sheep", "wheat", "ore"];
+const RN = { wood: "木材", brick: "レンガ", sheep: "羊毛", wheat: "小麦", ore: "鉄" };
+const RI = { wood: "🌲", brick: "🧱", sheep: "🐑", wheat: "🌾", ore: "⛰️" };
+// 土地: 森4・丘3・牧草地4・畑4・山3・火山1（合計 19）
 const TT = {
-  forest: { res: "wood", name: "森", col: "#3f8f3a", ic: "🌲" },
-  hill: { res: "stone", name: "岩山", col: "#8d8f96", ic: "⛰️" },
-  lake: { res: "fish", name: "湖", col: "#2fa7c0", ic: "🐟" },
-  orchard: { res: "fruit", name: "果樹園", col: "#e3a034", ic: "🍎" },
-  volcano: { res: null, name: "火山", col: "#6b2d2d", ic: "🌋" },
+  forest: { res: "wood", name: "森", col: "#3f8f3a", ic: "🌲", n: 4 },
+  hill: { res: "brick", name: "丘", col: "#c0643a", ic: "🧱", n: 3 },
+  pasture: { res: "sheep", name: "牧草地", col: "#8cc84b", ic: "🐑", n: 4 },
+  field: { res: "wheat", name: "畑", col: "#e2bb3a", ic: "🌾", n: 4 },
+  mountain: { res: "ore", name: "山", col: "#8d8f96", ic: "⛰️", n: 3 },
+  volcano: { res: null, name: "火山", col: "#6b2d2d", ic: "🌋", n: 1 },
 };
-const COST = { road: { wood: 1, stone: 1 }, vil: { wood: 1, stone: 1, fish: 1, fruit: 1 }, town: { stone: 2, fruit: 2 }, card: { wood: 1, fish: 1, fruit: 1 } };
+const COST = { road: { wood: 1, brick: 1 }, vil: { wood: 1, brick: 1, sheep: 1, wheat: 1 }, town: { wheat: 2, ore: 2 }, card: { sheep: 1, wheat: 1, ore: 1 } };
+const emptyHand = () => Object.fromEntries(RES.map(r => [r, 0]));
 const BN = { road: "道", vil: "村", town: "町", card: "カード" };
 const LIM = { road: 15, vil: 5, town: 4 };
 const CARD = {
@@ -172,7 +178,7 @@ const GEO = (() => {
 // ================= ゲームの状態とルール（ホスト・ひとり用で使う） =================
 let G = null;
 function newGame(seats) {
-  const types = shuffle([..."FFFF"].map(() => "forest").concat([..."HHHHH"].map(() => "hill"), [..."LLLL"].map(() => "lake"), [..."OOOOO"].map(() => "orchard"), ["volcano"]));
+  const types = shuffle(Object.entries(TT).flatMap(([t, T]) => Array(T.n).fill(t)));
   const tiles = types.map(t => ({ t, n: 0 }));
   // 数字: 6 と 8（よく出る数）どうし、同じ数どうしがとなりにならないように並べ直す
   for (let tries = 0; tries < 800; tries++) {
@@ -181,14 +187,15 @@ function newGame(seats) {
     const red = n => n === 6 || n === 8;
     if (!GEO.hex.some((h, i) => h.n.some(j => { const a = tiles[i].n, b = tiles[j].n; return a && b && ((red(a) && red(b)) || a === b); }))) break;
   }
-  const kinds = shuffle(["any", "any", "wood", "stone", "fish", "fruit"]), off = Math.floor(Math.random() * 5), step = GEO.coast.length / 6;
+  // 港は 9 か所: 3:1 が 4 つ、資源ごとの 2:1 が 5 つ
+  const kinds = shuffle(["any", "any", "any", "any", ...RES]), off = Math.floor(Math.random() * 3), step = GEO.coast.length / kinds.length;
   const harbors = kinds.map((k, i) => ({ e: GEO.coast[(off + Math.round(i * step)) % GEO.coast.length], k }));
   const n = seats.length, order = [...Array(n).keys(), ...[...Array(n).keys()].reverse()];
   const deck = shuffle([..."123456789"].map(() => "scare").concat(["harvest", "harvest", "harvest", "bridge", "bridge", "bridge", "map", "map", "map", "map", "map"]));
   return {
     tiles, crow: tiles.findIndex(t => t.t === "volcano"), harbors, vb: Array(GEO.verts.length).fill(null), er: Array(GEO.edges.length).fill(-1),
-    ps: seats.map((s, i) => ({ name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: { wood: 0, stone: 0, fish: 0, fruit: 0 }, cards: [], newC: [], vpC: 0, used: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
-    cur: order[0], phase: "setup", su: { i: 0, order, step: "v", lastV: -1 }, dice: [0, 0], rollN: 0, log: [], winner: -1, free: 0, cardUsed: false, back: "main", victims: [], deck, roadHolder: -1, turnN: 1, trades: 0, ver: 0,
+    ps: seats.map((s, i) => ({ name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: emptyHand(), cards: [], newC: [], vpC: 0, used: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
+    cur: order[0], phase: "setup", su: { i: 0, order, step: "v", lastV: -1 }, dice: [0, 0], rollN: 0, log: [], winner: -1, free: 0, cardUsed: false, back: "main", victims: [], deck, roadHolder: -1, turnN: 1, trades: 0, ver: 0, offer: null, offN: 0, offerN: 0,
   };
 }
 const tot = h => RES.reduce((s, r) => s + h[r], 0);
@@ -276,7 +283,7 @@ function steal(s, v) {
 function endTurn() {
   const p = G.ps[G.cur];
   p.cards.push(...p.newC); p.newC = [];
-  G.cur = (G.cur + 1) % G.ps.length; G.phase = "roll"; G.cardUsed = false; G.free = 0; G.trades = 0; G.turnN++;
+  G.cur = (G.cur + 1) % G.ps.length; G.phase = "roll"; G.cardUsed = false; G.free = 0; G.trades = 0; G.turnN++; G.offer = null; G.offN = 0;
 }
 function build(s, a) {
   const p = G.ps[s], w = a.w;
@@ -325,6 +332,48 @@ function trade(s, a) {
   p.hand[a.give] -= x; p.hand[a.get]++; G.trades++;
   addLog(`🔁 ${p.name}: ${RI[a.give]}${x} → ${RI[a.get]}1`); return "";
 }
+// ---- プレイヤーどうしの交換（2026-11-11）----
+// 番の人が「出す・ほしい」を出す → ほかの人が OK／ことわる → 番の人が OK した人から 1 人えらぶと交換。
+// 提案は 1 ターンに 5 回まで。番の人がほかのこと（つくる・銀行と交換・おわり など）をしたら、提案は消える。
+const OFFER_MAX = 5, OFFER_WAIT = 20000;   // CPU の提案は、人の返事を最大 20 秒待つ
+const amtStr = o => RES.filter(r => o[r]).map(r => RI[r] + o[r]).join("");
+function cleanAmt(o) {
+  if (!o || typeof o !== "object") return null;
+  const c = emptyHand(); let n = 0;
+  for (const r of RES) { const x = o[r] == null ? 0 : o[r]; if (!Number.isInteger(x) || x < 0 || x > 19) return null; c[r] = x; n += x; }
+  return n ? c : null;
+}
+function offer(s, a) {
+  const p = G.ps[s];
+  if (G.offN >= OFFER_MAX) return `提案は1ターンに${OFFER_MAX}回まで`;
+  const give = cleanAmt(a.give), get = cleanAmt(a.get);
+  if (!give || !get) return "出す資源とほしい資源をえらんでね";
+  if (RES.some(r => give[r] && get[r])) return "同じ資源を出してもらうことはできません";
+  if (!afford(p, give)) return "たりません";
+  G.offerN++; G.offN++;
+  const o = G.offer = { id: G.offerN, from: s, give, get, resp: G.ps.map(() => null), t: Date.now() };
+  o.resp[s] = "me";
+  G.ps.forEach((q, i) => { if (i === s) return; if (!afford(q, get)) o.resp[i] = "cant"; else if (q.bot) o.resp[i] = cpuRespond(i, o) ? "ok" : "no"; });
+  addLog(`🤝 ${p.name}: ${amtStr(give)} → ${amtStr(get)} の交換をよびかけ`); return "";
+}
+function respond(s, a) {
+  const o = G.offer;
+  if (!o || a.id !== o.id || s === o.from || o.resp[s] !== null) return "この提案はもう終わっています";
+  if (a.ok && !afford(G.ps[s], o.get)) return "たりません";
+  o.resp[s] = a.ok ? "ok" : "no"; return "";
+}
+function acceptOffer(s, a) {
+  const o = G.offer;
+  if (!o || o.from !== s) return "提案がありません";
+  const t = a.p;
+  if (!Number.isInteger(t) || o.resp[t] !== "ok") return "その人はOKしていません";
+  const p = G.ps[s], q = G.ps[t];
+  if (!afford(p, o.give) || !afford(q, o.get)) { o.resp[t] = "cant"; return "資源がたりなくなりました"; }
+  pay(p, o.give); pay(q, o.get);
+  RES.forEach(r => { p.hand[r] += o.get[r]; q.hand[r] += o.give[r]; });
+  addLog(`🤝 ${p.name} ⇄ ${q.name}: ${amtStr(o.give)} と ${amtStr(o.get)} を交換`);
+  G.offer = null; return "";
+}
 function playCard(s, a) {
   const p = G.ps[s];
   if (G.cardUsed) return "カードは1ターンに1まいだけ";
@@ -346,8 +395,10 @@ function playCard(s, a) {
 // 1 つの行動を行う。だめならその理由（文字）を返す
 function applyAct(s, a) {
   if (!G || G.phase === "over") return "おわっています";
+  a = a || {};
+  if (a.k === "respond") return respond(s, a);   // 交換の返事だけは、番でない人がする
   if (s !== G.cur) return "あなたの番ではありません";
-  const p = G.ps[s]; a = a || {};
+  const p = G.ps[s];
   switch (G.phase) {
     case "setup": {
       if (G.su.step === "v") {
@@ -380,6 +431,10 @@ function applyAct(s, a) {
       if (a.k !== "steal" || !G.victims.includes(a.p)) return "だれからもらうかえらんでね";
       steal(s, a.p); G.victims = []; G.phase = G.back; return "";
     case "main":
+      if (a.k === "offer") return offer(s, a);
+      if (a.k === "accept") return acceptOffer(s, a);
+      if (a.k === "cancel") { G.offer = null; return ""; }
+      G.offer = null;   // ほかのことをしたら、出していた提案は消える
       if (a.k === "build") return build(s, a);
       if (a.k === "trade") return trade(s, a);
       if (a.k === "play") return playCard(s, a);
@@ -399,7 +454,7 @@ const pips = n => n ? 6 - Math.abs(7 - n) : 0;   // その数の出やすさ（2
 const noise = d => Math.random() * (d === "weak" ? 6 : d === "norm" ? 3 : 0.2);
 const bestBy = (arr, f) => { let b = arr[0], bs = -Infinity; for (const x of arr) { const v = f(x); if (v > bs) { bs = v; b = x; } } return b; };
 function prodOf(s) {
-  const o = { wood: 0, stone: 0, fish: 0, fruit: 0 };
+  const o = emptyHand();
   G.vb.forEach((b, v) => { if (!b || b.p !== s) return; for (const ti of GEO.verts[v].h) { const r = resOf(ti); if (r && ti !== G.crow) o[r] += pips(G.tiles[ti].n) * b.lv; } });
   return o;
 }
@@ -464,6 +519,31 @@ function planTrade(s, g) {
   if (!give.length) return null;
   return { k: "trade", give: bestBy(give, r => p.hand[r] - (c[r] || 0) - ratio(s, r)), get: miss[0] };
 }
+// CPU が交換の提案に OK するか: 足りないものが手に入り、いるものを出さずにすみ、勝ちそうな人の手伝いにならないとき
+function cpuRespond(s, o) {
+  const p = G.ps[s], d = p.diff;
+  if (!afford(p, o.get)) return false;
+  if (d !== "weak" && vp(o.from) >= TARGET - 2) return false;
+  const g = goalOf(s), c = COST[g.w] || COST.vil;
+  const miss = r => Math.max(0, (c[r] || 0) - p.hand[r]);
+  let help = 0, hurt = 0, recv = 0, give = 0;
+  RES.forEach(r => { help += Math.min(o.give[r], miss(r)); hurt += Math.max(0, (c[r] || 0) - (p.hand[r] - o.get[r])) - miss(r); recv += o.give[r]; give += o.get[r]; });
+  const sc = help * 2 - hurt * 2 + (recv - give);
+  if (d === "weak") return sc + Math.random() * 2 - 0.5 > 0;
+  if (d === "strong") return sc > 0.5 && (help > 0 || recv > give);
+  return sc > 0;
+}
+// CPU からの提案: いらない 1 まいと、足りない 1 まいの交換（1 ターンに 1 回）
+function planOffer(s, g) {
+  const p = G.ps[s], c = COST[g.w];
+  if (G.offN >= 1 || (g.w === "card" && !G.deck.length)) return null;
+  if (p.diff === "weak" && Math.random() < 0.5) return null;
+  const miss = need(p, c); if (!miss.length) return null;
+  const spare = RES.filter(r => !miss.includes(r) && p.hand[r] - (c[r] || 0) >= 1);
+  if (!spare.length || !G.ps.some((q, i) => i !== s && tot(q.hand) > 0)) return null;
+  const gv = bestBy(spare, r => p.hand[r] - (c[r] || 0)), gt = bestBy(miss, r => (c[r] || 0) - p.hand[r]);
+  return { k: "offer", give: { [gv]: 1 }, get: { [gt]: 1 } };
+}
 function cpuAction(s) {
   const p = G.ps[s], d = p.diff;
   if (G.phase === "setup") {
@@ -478,6 +558,13 @@ function cpuAction(s) {
   if (G.phase === "crow") return { k: "crow", t: cpuCrow(s) };
   if (G.phase === "steal") return { k: "steal", p: d === "weak" ? G.victims[0] : leaderOf(s, G.victims) };
   // main
+  if (G.offer && G.offer.from === s) {
+    // 自分の提案: 人の返事を待ってから、OK した中でいちばん点の低い人とする
+    const o = G.offer;
+    if (o.resp.some(x => x === null) && Date.now() - o.t < OFFER_WAIT) return { k: "wait" };
+    const oks = o.resp.map((x, i) => x === "ok" ? i : -1).filter(i => i >= 0);
+    return oks.length ? { k: "accept", p: bestBy(oks, i => -vp(i)) } : { k: "cancel" };
+  }
   if (G.free > 0) { const rp = roadPlan(s); if (rp) return { k: "build", w: "road", at: rp.e }; const vr = validRoads(s); return vr.length ? { k: "build", w: "road", at: vr[Math.floor(Math.random() * vr.length)] } : { k: "nofree" }; }
   if (d === "weak" && Math.random() < 0.12) return { k: "end" };
   const g = goalOf(s);
@@ -495,6 +582,7 @@ function cpuAction(s) {
   // つよい: 長い道ボーナスをねらって、手が多いときは道ものばす
   if (d === "strong" && p.roads < LIM.road && afford(p, COST.road) && tot(p.hand) >= 7) { const rp = roadPlan(s); if (rp) return { k: "build", w: "road", at: rp.e }; }
   const lim = d === "weak" ? 1 : d === "norm" ? 2 : 4;
+  { const po = planOffer(s, g); if (po) return po; }
   if (G.trades < lim && !(d === "weak" && tot(p.hand) < 7)) { const tr = planTrade(s, g); if (tr) return tr; }
   return { k: "end" };
 }
@@ -510,7 +598,9 @@ function fallbackAct(s) {
   return G.free > 0 ? { k: "nofree" } : { k: "end" };
 }
 function cpuStep() {
-  const s = G.cur; let a = cpuAction(s), err = applyAct(s, a);
+  const s = G.cur; let a = cpuAction(s);
+  if (a.k === "wait") return a;   // 交換の返事待ち
+  let err = applyAct(s, a);
   if (err) { a = fallbackAct(s); err = applyAct(s, a); }
   return a;
 }
@@ -549,7 +639,7 @@ function myName() { if (meName) return meName; return (($("name") && $("name").v
 function fixName() { meName = ""; meName = myName(); store.set("kaitaku-name", meName); }
 const mySeat = () => G ? G.ps.findIndex(p => !p.bot && p.pid === myPid) : -1;
 let FAST = false, cpuTimer = null, lastWasRoll = false;
-const ui = { mode: null, modal: null, give: null, get: null, picks: [], overSeen: -1 };
+const ui = { mode: null, modal: null, give: null, get: null, picks: [], overSeen: -1, tm: "player", pg: {}, pw: {}, offerSeen: -1 };
 
 // 状態が変わったあと: ゲストへ送る・描く・CPU を動かす
 function afterChange() {
@@ -568,7 +658,9 @@ function schedule() {
   const delay = G.phase === "setup" ? 450 : lastWasRoll ? 1150 : 650;
   cpuTimer = setTimeout(() => {
     if (!G || G.phase === "over" || !G.ps[G.cur].bot) return;
-    const a = cpuStep(); G.ver++; lastWasRoll = a.k === "roll"; checkWin(); afterChange();
+    const a = cpuStep();
+    if (a.k === "wait") { schedule(); return; }
+    G.ver++; lastWasRoll = a.k === "roll"; checkWin(); afterChange();
   }, delay);
 }
 // 自分の行動（ゲストはホストへ送る）
@@ -647,7 +739,7 @@ function hostDrop(conn) {
   if (host.playing && G) {
     // 試合中にぬけた人の席は、CPU（ふつう）が代わりに続ける
     const s = G.ps.findIndex(p => !p.bot && p.pid === conn.pid);
-    if (s >= 0) { G.ps[s].bot = true; G.ps[s].diff = "norm"; addLog(`${G.ps[s].name} がぬけたので CPU が代わります`); afterChange(); }
+    if (s >= 0) { G.ps[s].bot = true; G.ps[s].diff = "norm"; if (G.offer && G.offer.resp[s] === null) G.offer.resp[s] = cpuRespond(s, G.offer) ? "ok" : "no"; addLog(`${G.ps[s].name} がぬけたので CPU が代わります`); afterChange(); }
   } else { host.seats = host.seats.filter(x => x.pid !== conn.pid); hostLobby(); }
 }
 function hostAddCpu() { if (host.playing || host.seats.length >= 4) return; const n = host.seats.filter(s => s.bot).length; host.seats.push({ pid: null, name: "CPU-" + "ABC"[n], bot: true }); hostLobby(); }
@@ -712,18 +804,18 @@ let toastT = null;
 function toast(s) { const t = $("toast"); t.textContent = s; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => { t.style.opacity = 0; }, 1800); }
 const RULES_HTML = `<div class="rules">
 <b>目的</b>: 島に道・村・町をつくって、先に <b>${TARGET}点</b> とった人の勝ち！<br>
-<b>土地と資源</b>: 森🌲＝木、岩山⛰️＝石、湖🐟＝魚、果樹園🍎＝くだもの。火山🌋からは何もとれない。<br>
+<b>土地と資源</b>: 森🌲＝木材、丘🧱＝レンガ、牧草地🐑＝羊毛、畑🌾＝小麦、山⛰️＝鉄。火山🌋からは何もとれない。<br>
 <b>はじめ</b>: 順番に「村＋道」を2回ずつ置く（2回目は逆の順番）。2つめの村のまわりの資源をもらえる。<br>
 <b>自分の番</b>: ①サイコロをふる → 出た数の土地にくっついている村は1まい、町は2まい資源をもらえる（みんな）。<br>
 ②資源を使ってつくる・交換する → ③「おわり」。<br>
 <b>つくる</b>: 道 ${costHtml(COST.road)}／村 ${costHtml(COST.vil)}（1点）／町 ${costHtml(COST.town)}（村を町にする・2点）／ふしぎカード ${costHtml(COST.card)}<br>
 ・村は自分の道のはしにつくる。となりの角に村や町があるところにはつくれない。<br>
 <b>7が出たら</b>: 🐦‍⬛カラスが来る！ カラスを好きな土地へ動かし、そこに村がある人から1まいもらう。カラスのいる土地は資源が出ない。10まい以上持っている人は半分なくす。<br>
-<b>交換</b>: 4まい→1まい。港⚓にくっついた村・町があれば 3→1 や 2→1。<br>
+<b>交換</b>: 自分の番に、ほかの人へ「これを出すから、これがほしい」と🤝よびかけられる（まい数は自由）。OKした人の中から1人えらんで交換。銀行とは 4まい→1まい。港⚓にくっついた村・町があれば 3→1 や 2→1。<br>
 <b>ふしぎカード</b>: 👒カカシ（カラスを動かす）・🧺大豊作（2まいもらう）・🌉橋づくり（道2本タダ）・🗺️宝の地図（+1点）。買った番には使えない。1番に1まいだけ。<br>
 <b>長い道ボーナス</b>: つながった道が5本以上で、いちばん長い人は +2点。
 </div>`;
-const RULES_SHORT = `サイコロで出た数の土地から資源をもらい、道・村(1点)・町(2点)をつくる。先に${TARGET}点で勝ち。7が出たらカラスを動かして1まいもらえる。交換は4→1（港なら3→1・2→1）。`;
+const RULES_SHORT = `サイコロで出た数の土地から資源をもらい、道・村(1点)・町(2点)をつくる。先に${TARGET}点で勝ち。7が出たらカラスを動かして1まいもらえる。ほかの人とも自由に交換できる（銀行とは4→1、港なら3→1・2→1）。`;
 
 function renderUI() {
   // パーティ: 始まる前（つないでいる・部屋）は、全部のゲームで同じ待ち合わせ画面（ykgLobby）を使う
@@ -828,7 +920,7 @@ function keepName() { if (nameDraft != null && $("name")) $("name").value = name
 
 // ---------------- 盤（SVG） ----------------
 const S = 50;
-const VB = (() => { const xs = GEO.verts.map(v => v.x * S), ys = GEO.verts.map(v => v.y * S), m = 34; return [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) - Math.min(...xs) + 2 * m, Math.max(...ys) - Math.min(...ys) + 2 * m]; })();
+const VB = (() => { const xs = GEO.verts.map(v => v.x * S), ys = GEO.verts.map(v => v.y * S), m = 50; return [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) - Math.min(...xs) + 2 * m, Math.max(...ys) - Math.min(...ys) + 2 * m]; })();
 $("board").setAttribute("viewBox", VB.join(" "));
 $("board").setAttribute("preserveAspectRatio", "xMidYMid meet");
 const CROW_SVG = `<ellipse rx="12" ry="7.5" fill="#111" stroke="#fff" stroke-width="1.5"/><path d="M-6 -2 L-17 -13 L3 -4Z" fill="#222" stroke="#fff" stroke-width="1"/><path d="M-10 2 L-19 7 L-10 6Z" fill="#111"/><circle cx="10" cy="-6" r="6" fill="#111" stroke="#fff" stroke-width="1.5"/><path d="M15 -8 L23 -5 L15 -3Z" fill="#f59e0b"/><circle cx="11" cy="-7.5" r="1.6" fill="#fff"/>`;
@@ -977,12 +1069,16 @@ function render() {
       card: afford(me, COST.card) && G.deck.length > 0,
     };
     h = ["road", "vil", "town", "card"].map(w => `<button data-g="b-${w}" class="${ui.mode === w ? "on" : ""}" ${can[w] || ui.mode === w ? "" : "disabled"}>${ui.mode === w ? "やめる" : BN[w]}<span class="cost">${costHtml(COST[w])}</span></button>`).join("")
-      + `<button data-g="trade">🔁交換</button><button data-g="cards" ${me.cards.length && !G.cardUsed ? "" : "disabled"}>🃏カード</button><button class="main wide" data-g="end">おわり ▶</button>`;
+      + `<button data-g="trade" class="${G.offer && G.offer.from === s ? "on" : ""}">🔁交換</button><button data-g="cards" ${me.cards.length && !G.cardUsed ? "" : "disabled"}>🃏カード</button><button class="main wide" data-g="end">おわり ▶</button>`;
   }
   $("acts").innerHTML = h;
   $("log").innerHTML = G.log.slice(-3).map(l => `<div>${esc(l)}</div>`).join("");
   // 勝負がついたら結果を出す（1 回だけ）
   if (G.phase === "over" && ui.overSeen !== G.ver) { ui.overSeen = G.ver; ui.modal = "over"; }
+  // ほかの人からの交換のよびかけ: 返事がまだなら小窓を出す。終わったら閉じる
+  const o = G.offer;
+  if (o && s >= 0 && s !== o.from && o.resp[s] === null && ui.offerSeen !== o.id) { ui.offerSeen = o.id; ui.modal = "offer"; }
+  if (ui.modal === "offer" && (!o || o.id !== ui.offerSeen || o.resp[s] !== null)) ui.modal = null;
   renderModal();
 }
 $("panel").addEventListener("click", e => {
@@ -992,7 +1088,7 @@ $("panel").addEventListener("click", e => {
   else if (g === "end") { ui.mode = null; act({ k: "end" }); }
   else if (g === "nofree") act({ k: "nofree" });
   else if (g === "steal") act({ k: "steal", p: +b.dataset.p });
-  else if (g === "trade") { ui.give = ui.get = null; openModal("trade"); }
+  else if (g === "trade") { ui.give = ui.get = null; ui.pg = {}; ui.pw = {}; openModal("trade"); }
   else if (g === "cards") openModal("cards");
   else if (g === "leave") leave();
   else if (g === "result") openModal("over");
@@ -1018,8 +1114,27 @@ function renderModal() {
   else if (k === "log") h = `<h2>できごと</h2><div class="note" style="max-height:50vh;overflow-y:auto">${G.log.slice().reverse().map(l => `<div>${esc(l)}</div>`).join("")}</div><button data-m="close">とじる</button>`;
   else if (k === "trade") {
     if (!me || !myTurn || G.phase !== "main") { ui.modal = null; $("modal").classList.add("hidden"); return; }
+    const o = G.offer;
+    if (o && o.from === s) {
+      const st = { null: "⏳ 考え中", ok: "⭕ OK", no: "❌ ことわった", cant: "✋ 持っていない" };
+      h = `<h2>🤝 よびかけ中</h2><div class="tline">${amtStr(o.give)}<span>を出して</span>${amtStr(o.get)}<span>がほしい</span></div>`
+        + G.ps.map((q, i) => i === s ? "" : `<div class="cl"><i class="dot" style="background:${COLS[i]}"></i><div class="cd"><b>${esc(q.name)}</b><br>${st[o.resp[i]]}</div><button data-m="accept" data-p="${i}" ${o.resp[i] === "ok" ? "" : "disabled"}>交換する</button></div>`).join("")
+        + `<button data-m="cancel">とりけす</button><button data-m="close">とじる</button>`;
+      box.innerHTML = h; return;
+    }
+    const tabs = `<div class="seg"><button data-m="tm-player" class="${ui.tm === "player" ? "on" : ""}">🤝 ほかの人</button><button data-m="tm-bank" class="${ui.tm === "bank" ? "on" : ""}">🏦 銀行・港</button></div>`;
+    if (ui.tm === "player") {
+      const left = OFFER_MAX - G.offN, okGo = RES.some(r => ui.pg[r]) && RES.some(r => ui.pw[r]) && left > 0;
+      h = `<h2>🔁 交換</h2>${tabs}<div class="note">出す（タップで +1）</div>
+        <div class="g4">${RES.map(r => `<button data-m="pg" data-r="${r}" class="${ui.pg[r] ? "on" : ""}" ${(ui.pg[r] || 0) < me.hand[r] ? "" : "disabled"}><span class="ic">${RI[r]}</span>${ui.pg[r] || 0}<br><small>（${me.hand[r]}）</small></button>`).join("")}</div>
+        <div class="note">ほしい（タップで +1）</div>
+        <div class="g4">${RES.map(r => `<button data-m="pw" data-r="${r}" class="${ui.pw[r] ? "on" : ""}"><span class="ic">${RI[r]}</span>${ui.pw[r] || 0}</button>`).join("")}</div>
+        <button class="main" data-m="offer" ${okGo ? "" : "disabled"}>${okGo ? `${amtStr(ui.pg)} → ${amtStr(ui.pw)} をよびかける` : left > 0 ? "えらんでね" : "このターンはもうよびかけられません"}</button>
+        <div class="row"><button data-m="pclear">えらびなおす</button><button data-m="close">とじる</button></div>`;
+      box.innerHTML = h; return;
+    }
     const g = ui.give, x = g ? ratio(s, g) : 0;
-    h = `<h2>🔁 銀行と交換</h2><div class="note">出す資源（この数で1まいもらえる）</div>
+    h = `<h2>🔁 交換</h2>${tabs}<div class="note">出す資源（この数で1まいもらえる）</div>
       <div class="g4">${RES.map(r => `<button data-m="give" data-r="${r}" class="${g === r ? "on" : ""}" ${me.hand[r] >= ratio(s, r) ? "" : "disabled"}><span class="ic">${RI[r]}</span>${RN[r]}<br>${ratio(s, r)}→1（${me.hand[r]}）</button>`).join("")}</div>
       <div class="note">もらう資源</div>
       <div class="g4">${RES.map(r => `<button data-m="get" data-r="${r}" class="${ui.get === r ? "on" : ""}" ${r === g ? "disabled" : ""}><span class="ic">${RI[r]}</span>${RN[r]}</button>`).join("")}</div>
@@ -1032,6 +1147,13 @@ function renderModal() {
       + (me.newC.length ? `<div class="note">買ったばかり（つぎの番から使える）: ${me.newC.map(c => CARD[c].ic + CARD[c].name).join("、")}</div>` : "")
       + (me.vpC ? `<div class="note">🗺️ 宝の地図: ${me.vpC}まい（+${me.vpC}点）</div>` : "")
       + `<div class="note">カードは ${costHtml(COST.card)} で買える。1番に1まいだけ使える。</div><button data-m="close">とじる</button>`;
+  } else if (k === "offer") {
+    const o = G && G.offer;
+    if (!o || !me) { ui.modal = null; $("modal").classList.add("hidden"); return; }
+    h = `<h2>🤝 ${esc(G.ps[o.from].name)} から交換のよびかけ</h2>
+      <div class="note">あなたがもらう</div><div class="tline">${amtStr(o.give)}</div>
+      <div class="note">あなたが出す</div><div class="tline">${amtStr(o.get)}</div>
+      <div class="row"><button class="main" data-m="rok">OK</button><button data-m="rno">ことわる</button></div>`;
   } else if (k === "harvest") {
     h = `<h2>🧺 大豊作</h2><div class="note">好きな資源を2まいえらぼう（同じのを2回でもOK）</div>
       <div class="g4">${RES.map(r => `<button data-m="pick" data-r="${r}" ${ui.picks.length >= 2 ? "disabled" : ""}><span class="ic">${RI[r]}</span>${RN[r]}</button>`).join("")}</div>
@@ -1048,7 +1170,7 @@ function renderModal() {
   box.innerHTML = h;
 }
 $("modal").addEventListener("click", e => {
-  if (e.target.id === "modal" && ui.modal !== "harvest") { ui.modal = null; renderModal(); return; }
+  if (e.target.id === "modal" && ui.modal !== "harvest" && ui.modal !== "offer") { ui.modal = null; renderModal(); return; }
   const b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
   const m = b.dataset.m;
   if (m === "close") { ui.modal = null; renderModal(); return; }
@@ -1056,6 +1178,14 @@ $("modal").addEventListener("click", e => {
   if (m === "quit") { ui.modal = null; renderModal(); if (PARTY || mode === "local" || confirm("部屋をぬけますか？")) leave(); return; }
   if (m === "give") { ui.give = b.dataset.r; if (ui.get === ui.give) ui.get = null; renderModal(); return; }
   if (m === "get") { ui.get = b.dataset.r; renderModal(); return; }
+  if (m === "tm-player" || m === "tm-bank") { ui.tm = m.slice(3); renderModal(); return; }
+  if (m === "pg") { const r = b.dataset.r; ui.pg[r] = (ui.pg[r] || 0) + 1; ui.pw[r] = 0; renderModal(); return; }
+  if (m === "pw") { const r = b.dataset.r; ui.pw[r] = (ui.pw[r] || 0) + 1; ui.pg[r] = 0; renderModal(); return; }
+  if (m === "pclear") { ui.pg = {}; ui.pw = {}; renderModal(); return; }
+  if (m === "offer") { act({ k: "offer", give: cleanAmt(ui.pg), get: cleanAmt(ui.pw) }); renderModal(); return; }
+  if (m === "accept") { act({ k: "accept", p: +b.dataset.p }); ui.modal = null; ui.pg = {}; ui.pw = {}; renderModal(); return; }
+  if (m === "cancel") { act({ k: "cancel" }); renderModal(); return; }
+  if (m === "rok" || m === "rno") { const o = G && G.offer; ui.modal = null; renderModal(); if (o) act({ k: "respond", id: o.id, ok: m === "rok" }); return; }
   if (m === "dotrade") { act({ k: "trade", give: ui.give, get: ui.get }); ui.give = ui.get = null; renderModal(); return; }
   if (m === "use") {
     const c = b.dataset.c;
@@ -1083,7 +1213,7 @@ try { if ("serviceWorker" in navigator && (location.protocol === "https:" || loc
 // テスト用: CPU だけの試合を早送りできる
 window.__dbg = {
   get G() { return G; }, set G(g) { G = g; }, get mode() { return mode; }, get screen() { return screen; }, get ui() { return ui; }, host, GEO,
-  applyAct, cpuAction, cpuStep, vp, longest, ratio, validVils, validRoads, newGame, render, renderUI, isOffline, mySeat, doAct, act,
+  applyAct, cpuAction, cpuStep, cpuRespond, vp, longest, ratio, validVils, validRoads, newGame, render, renderUI, isOffline, mySeat, doAct, act,
   set fast(v) { FAST = !!v; }, get fast() { return FAST; },
   // CPU だけの試合をはじめる（見るだけ）
   cpuOnly(n = 4, diff = "norm") { clearTimeout(cpuTimer); mode = "local"; myPid = -99; startGame([...Array(n)].map((_, i) => ({ name: "CPU-" + "ABCD"[i], bot: true, diff: Array.isArray(diff) ? diff[i] : diff }))); },
