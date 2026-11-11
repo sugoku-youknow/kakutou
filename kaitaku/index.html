@@ -36,18 +36,17 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .mem span{background:var(--deep);border-radius:99px;padding:6px 12px;font-size:15px;display:inline-flex;align-items:center;gap:6px}
 .mem small{color:var(--sub);font-size:12px}
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid #0008;flex:none}
-/* ---- ゲーム画面: たて持ちは上から 人・案内・盤・手もと。よこ持ちは盤を左、ほかを右に ---- */
-#game{position:fixed;inset:0;display:grid;grid-template-columns:100%;grid-template-rows:auto auto minmax(0,1fr) auto auto;grid-template-areas:"top" "ban" "board" "hand" "panel";
-  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-@media (orientation:landscape) and (min-width:560px){
-  /* よこ持ち: 上に人、左に大きく盤、右に案内・手札・ボタン（サイコロは盤の右下） */
-  #game{grid-template-columns:minmax(0,1fr) minmax(260px,34%);grid-template-rows:auto auto auto minmax(0,1fr);grid-template-areas:"top top" "board ban" "board hand" "board panel"}
-  #panel{overflow-y:auto}
-  #hand{margin-top:4px}
-  #game #offerBox{left:auto;right:8px;transform:none;width:240px}
-}
-#top{grid-area:top;display:flex;gap:4px;padding:4px 6px;align-items:stretch}
-#pls{flex:1;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;min-width:0}
+/* ---- ゲーム画面（2026-11-11 作り直し: 横画面が基本）----
+   上に人の帯、左はしにアイコン、まん中に盤、下に手札、右下にサイコロとボタン、右はしに交換のよびかけ。
+   たて持ちのときは画面ごと 90° まわして横画面にする（スマホを横にして遊ぶ）。 */
+#stage{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;pointer-events:none;z-index:10}
+#stage>*{pointer-events:auto}
+#stage>#toast{pointer-events:none}
+body.rot #stage{width:100vh;width:100dvh;height:100vw;transform-origin:0 0;transform:translateX(100vw) rotate(90deg)}
+#game{position:absolute;top:0;bottom:env(safe-area-inset-bottom);left:env(safe-area-inset-left);right:env(safe-area-inset-right);overflow:hidden}
+body.rot #game{top:0;bottom:0;left:0;right:0}
+#top{position:absolute;top:3px;left:6px;right:6px;height:44px;display:flex}
+#pls{flex:1;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;min-width:0;max-width:900px;margin:0 auto}
 /* 人の帯: 丸い点数バッジ + その人の色のリボン（名前・手札・カード・道の長さ） */
 .pl{display:flex;align-items:center;min-width:0;position:relative}
 .vpb{flex:none;width:34px;height:34px;border-radius:50%;background:#2b1a0e;border:3px solid var(--pc);color:#fff;font-weight:800;font-size:17px;display:grid;place-items:center;box-shadow:0 2px 5px #0009;z-index:1}
@@ -57,34 +56,50 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .pi .st .lr{color:var(--acc);font-weight:800}
 .pl.cur .vpb{border-color:#ffd54a;box-shadow:0 0 0 2px #ffd54a,0 0 12px #ffd54a}
 .pl.cur::after{content:"";position:absolute;left:12px;bottom:-7px;border:5px solid transparent;border-top-color:#ffd54a}
-#menuBtn{min-height:0;padding:0 12px;font-size:20px;background:var(--panel)}
-#top{min-height:46px}
-#ban{grid-area:ban;margin:2px 6px;padding:8px 12px;border-radius:12px;background:var(--panel);font-size:15px;font-weight:700;text-align:center;min-height:38px;display:flex;align-items:center;justify-content:center;gap:8px}
-#ban.my{background:var(--acc);color:#2a1a05}
-#boardWrap{grid-area:board;position:relative;min-height:0;min-width:0}
+#side{position:absolute;left:5px;top:54px;display:flex;flex-direction:column;gap:6px;z-index:4}
+#side button{width:40px;height:40px;min-height:0;padding:0;font-size:18px;border-radius:9px;color:#2a1a05;background:linear-gradient(#f3b84f,#c9822a);border-bottom:3px solid #7a4a14;position:relative;box-shadow:0 2px 4px #0007}
+#side .bd{position:absolute;right:-5px;top:-5px;min-width:18px;background:#c0392b;color:#fff;font-size:11px;line-height:18px;border-radius:9px;padding:0 4px}
+#boardWrap{position:absolute;top:47px;bottom:56px;left:48px;right:4px;overflow:hidden}
 #board{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation;overflow:visible}
-#boardWrap{overflow:hidden}
-#dice{position:absolute;right:8px;bottom:6px;display:flex;gap:6px;pointer-events:none;align-items:center}
-.die{width:36px;height:36px;background:#fff;border-radius:8px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:4px;box-shadow:0 2px 6px #0007}
-.die i{display:block;margin:2px;border-radius:50%}.die i.on{background:#222}
-#dice.big .die{width:54px;height:54px;padding:6px}
-#dice .sum{font-size:22px;font-weight:800;text-shadow:0 2px 4px #000}
-#dice .sum.seven{color:#ffb4a8}
-#panel{grid-area:panel;padding:4px 6px 6px;display:flex;flex-direction:column;gap:6px}
-#hand{grid-area:hand;display:flex;gap:4px;margin:0 6px;padding:5px;background:linear-gradient(#3a2212,#24150a);border:2px solid #6b4a30;border-radius:14px;box-shadow:inset 0 2px 6px #000a,0 2px 6px #0006}
-.rc{flex:1;background:linear-gradient(#fffaf0,#ecdcbc);border-top:5px solid var(--rc,#999);border-radius:8px;padding:2px 2px 3px;text-align:center;font-size:11px;color:#6b4a30;position:relative;min-width:0;box-shadow:0 2px 3px #0007}
-.rc .ic{font-size:20px;line-height:1.1}
-.rc b{display:block;color:#2a170b;font-size:18px;line-height:1.1}
-.rc .rt{position:absolute;right:3px;top:1px;font-size:10px;font-weight:800;color:#b45309}
+#ban{position:absolute;top:50px;left:50%;transform:translateX(-50%);max-width:min(64%,560px);padding:4px 14px;border-radius:99px;background:var(--panel);font-size:13px;font-weight:700;z-index:4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px;pointer-events:none;box-shadow:0 2px 6px #0007}
+#ban:empty{display:none}
+#ban.my{background:var(--acc);color:#2a1a05}
+#bigDice{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;gap:16px;z-index:6;pointer-events:none}
+#bigDice .die{width:64px;height:64px;padding:8px;border-radius:12px;box-shadow:0 6px 16px #000a}
+#log{position:absolute;left:52px;bottom:58px;max-width:42%;font-size:12px;line-height:1.4;color:#fff;text-shadow:0 1px 2px #000,0 0 4px #000;pointer-events:none;z-index:2}
+#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.7}
+#log div:last-child{opacity:1}
+/* 手札: 下の赤茶のトレイに資源カード */
+#hand{position:absolute;bottom:3px;left:48px;right:240px;max-width:440px;display:flex;gap:4px;padding:4px;background:linear-gradient(#5a1f14,#2e0f0a);border:2px solid #8a5a3a;border-radius:12px;box-shadow:inset 0 2px 6px #000a,0 2px 8px #0008;z-index:3}
+.rc{flex:1;background:linear-gradient(#fffaf0,#ecdcbc);border-top:5px solid var(--rc,#999);border-radius:7px;padding:1px 1px 2px;text-align:center;font-size:9px;color:#6b4a30;position:relative;min-width:0;box-shadow:0 2px 3px #0007}
+.rc .ic{font-size:16px;line-height:1.1}
+.rc b{display:block;color:#2a170b;font-size:15px;line-height:1.05}
+.rc .rt{position:absolute;right:2px;top:0;font-size:9px;font-weight:800;color:#b45309}
 .rc.cards{background:linear-gradient(#5b3f8f,#3d2a63);border-top-color:#a78bfa;color:#ddd}.rc.cards b{color:#fff}
-#acts{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
-#acts button{padding:5px 2px;min-height:50px;font-size:14px;line-height:1.15}
-#acts button .cost{display:block;font-size:12px;font-weight:400;letter-spacing:-1px}
-#acts .wide{grid-column:span 2}
-#acts .full{grid-column:1/-1}
-#log{font-size:12px;color:var(--sub);line-height:1.45;min-height:3.2em;padding:0 4px}
-#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#log div:last-child{color:var(--tx)}
+/* 右下: サイコロ、つくるボタン、おわり・やり直し・交換 */
+#corner{position:absolute;right:5px;bottom:3px;display:flex;flex-direction:column;align-items:flex-end;gap:5px;z-index:4}
+#dice{display:flex;gap:5px;align-items:center;pointer-events:none;min-height:30px}
+.die{width:30px;height:30px;background:#fff;border-radius:6px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:3px;box-shadow:0 2px 6px #0007}
+.die i{display:block;margin:1px;border-radius:50%}.die i.on{background:#222}
+#dice .sum{font-size:20px;font-weight:800;text-shadow:0 2px 4px #000}
+#dice .sum.seven{color:#ffb4a8}
+#acts{display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+#acts .r{display:flex;gap:5px}
+#acts button{min-height:0;border-radius:10px;box-shadow:0 2px 5px #0008}
+#acts .bb{width:54px;height:44px;padding:1px;font-size:13px;line-height:1.1;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#acts .bb .cost{font-size:8px;font-weight:400;letter-spacing:-1px;white-space:nowrap}
+#acts .sq{width:56px;height:56px;padding:0;font-size:26px;line-height:1;color:#2a1a05;background:linear-gradient(#f3b84f,#c9822a);border-bottom:4px solid #7a4a14;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#acts .sq small{font-size:9px;font-weight:800;margin-top:1px}
+#acts .sq.on{background:linear-gradient(#ffe08a,#f6b93b);box-shadow:0 0 0 2px #fff,0 0 10px #ffd54a}
+#acts .go{height:56px;min-width:96px;padding:0 10px;font-size:15px;line-height:1.15}
+/* 番が来たときの知らせ・資源カードが飛ぶ演出 */
+#turnPop{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);background:linear-gradient(#5a3a22,#3a2416);border:2px solid #c9a06a;border-radius:12px;padding:10px 28px;font-size:20px;font-weight:800;z-index:7;pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:8px;box-shadow:0 6px 18px #000a;animation:tp 1.5s forwards}
+@keyframes tp{0%{opacity:0;transform:translate(-50%,-50%) scale(.8)}12%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
+#fx{position:absolute;inset:0;z-index:8;pointer-events:none;overflow:hidden}
+.fc{position:absolute;width:34px;height:46px;margin:-23px 0 0 -17px;border-radius:6px;background:linear-gradient(#fffaf0,#ecdcbc);border:3px solid var(--rc);display:grid;place-items:center;font-size:20px;box-shadow:0 3px 8px #000a;transition:left .55s cubic-bezier(.5,0,.3,1),top .55s cubic-bezier(.5,0,.3,1),transform .4s,opacity .3s}
+.fc b{position:absolute;right:-8px;top:-9px;background:#2f9a48;color:#fff;font-size:11px;border-radius:9px;padding:0 4px;border:1px solid #fff}
+.bump{animation:bump .35s}
+@keyframes bump{50%{transform:scale(1.2)}}
 /* ---- 盤 ---- */
 .hl{animation:pulse .8s infinite alternate}
 @keyframes pulse{from{opacity:.55}to{opacity:1}}
@@ -96,16 +111,52 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 #modal .g4 button{padding:6px 1px;font-size:12px;line-height:1.2;min-width:0}
 #modal .g4 .ic{font-size:22px;display:block}
 .rules{font-size:14px;line-height:1.7}
-#offerBox{position:absolute;left:50%;top:6px;transform:translateX(-50%);width:min(320px,94%);background:var(--panel);border:2px solid var(--acc);border-radius:14px;padding:7px 10px;display:flex;flex-direction:column;gap:3px;box-shadow:0 4px 14px #000b;z-index:5;animation:pop .2s}
-@keyframes pop{from{opacity:0;margin-top:-8px}to{opacity:1;margin-top:0}}
-#offerBox .ot{font-size:13px;font-weight:700;display:flex;align-items:center;gap:5px}
-#offerBox .og{font-size:22px;text-align:center;line-height:1.3}
-#offerBox .og.sm{font-size:15px}
-#offerBox .og span{font-size:12px;color:var(--sub);margin:0 5px}
-#offerBox .ob{display:flex;gap:8px}
-#offerBox .ob button{flex:1;min-height:38px;font-size:20px;padding:2px}
-#offerBox [data-o="no"]{background:#b83a3a}
-#offerBox [data-o="ok"]{background:#2f9a48}
+/* 交換のよびかけ（右はし）: もらう +1 / 出す −1 のカードと ✕ ✓ */
+#offerBox{position:absolute;right:0;top:50%;transform:translateY(-50%);min-width:170px;padding:10px 10px 10px 26px;background:linear-gradient(90deg,#0000,#000b 22%);display:flex;flex-direction:column;align-items:flex-end;gap:6px;z-index:6;animation:slide .25s}
+@keyframes slide{from{opacity:0;margin-right:-40px}to{opacity:1;margin-right:0}}
+#offerBox .ot{font-size:14px;font-weight:700;color:#fff;border-bottom:1px solid #fff5;padding-bottom:4px;display:flex;align-items:center;gap:5px;white-space:nowrap}
+#offerBox .orow{display:flex;align-items:center;gap:6px}
+#offerBox .orow.sm{font-size:14px}
+.n{font-size:24px;font-weight:800;text-shadow:0 1px 3px #000}.n.p{color:#5ee07a}.n.m{color:#ff6b6b}
+.ocard{display:inline-grid;place-items:center;width:34px;height:46px;border-radius:6px;border:3px solid var(--rc);background:linear-gradient(#fffaf0,#ecdcbc);font-size:20px;box-shadow:0 2px 4px #0008}
+#offerBox .ob{display:flex;gap:8px;margin-top:2px}
+#offerBox .ob button{width:52px;height:46px;min-height:0;font-size:24px;padding:0;border-radius:10px;color:#fff}
+[data-o="no"]{background:linear-gradient(#e0533f,#b02f22)!important}
+[data-o="ok"]{background:linear-gradient(#4cc35f,#2a8a3c)!important}
+#offerBox [data-o="open"]{width:auto;padding:0 14px;font-size:14px}
+/* 交換の画面（下のまん中）: 上の列 = ほしい / 下の列 = 出す（自分の手札の数つき） */
+#tradeBox{position:absolute;left:48px;right:240px;bottom:3px;max-width:600px;margin:0 auto;background:linear-gradient(#2a3442,#1b222c);border:3px solid #c9a06a;border-radius:12px;padding:18px 8px 6px;z-index:7;box-shadow:0 6px 20px #000c}
+#tradeBox .tt{position:absolute;top:-15px;left:50%;transform:translateX(-50%);background:linear-gradient(#4a5568,#2d3748);border:2px solid #c9a06a;border-radius:6px;padding:2px 22px;font-weight:800;font-size:15px;white-space:nowrap}
+#tradeBox .th{font-size:11px;color:#cbd5e1;text-align:center;font-style:italic;margin-bottom:3px}
+#tradeBox .trow{display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid #fff1}
+#tradeBox .who{width:46px;flex:none;text-align:center;font-size:10px;line-height:1.2;color:#e2e8f0}
+#tradeBox .who .av{width:36px;height:36px;margin:0 auto 1px;border-radius:7px;display:grid;place-items:center;font-size:20px;border:2px solid #c9a06a}
+.tc{flex:1;min-width:0;height:58px;min-height:0;padding:0;border-radius:7px;border:3px solid var(--rc);border-bottom-width:3px;background:linear-gradient(#fffaf0,#e8d6b0);position:relative;font-size:24px;color:#2a170b;box-shadow:0 2px 4px #0008;transition:transform .1s}
+.tc.dim{opacity:.45}
+.tc.on{background:linear-gradient(#fffaf0,#e8d6b0);transform:translateY(-3px);box-shadow:0 0 0 2px #ffd54a,0 4px 8px #000a}
+.tc .hc{position:absolute;left:3px;bottom:2px;font-size:12px;font-weight:800;background:#000a;color:#fff;border-radius:5px;padding:0 4px;line-height:1.3}
+.tc .rt{position:absolute;left:2px;top:1px;font-size:9px;font-weight:800;color:#b45309}
+.tc .sel{position:absolute;right:-6px;top:-8px;min-width:22px;background:#2f9a48;color:#fff;font-size:13px;font-weight:800;border-radius:11px;padding:0 5px;border:2px solid #fff;line-height:18px}
+#tradeBox .tbar{display:flex;align-items:center;gap:7px;margin-top:5px}
+#tradeBox .sp{flex:1}
+#tradeBox .pc{width:30px;height:30px;min-height:0;padding:0;border-radius:50%;border:3px solid #fff;background:var(--pc)}
+#tradeBox .pc.off{opacity:.3;border-color:#fff4}
+#tradeBox .tab{width:40px;height:38px;min-height:0;padding:0;font-size:19px;border-radius:8px;background:#334155}
+#tradeBox .tab.on{background:linear-gradient(#4cc35f,#2a8a3c)}
+#tradeBox .tab.bk.on{background:linear-gradient(#f3b84f,#c9822a)}
+#tradeBox .tx{width:46px;height:38px;min-height:0;padding:0;font-size:20px;border-radius:8px;color:#fff;background:#475569}
+#tradeBox .tx.no{background:linear-gradient(#e0533f,#b02f22)}
+#tradeBox .tx.ok{background:linear-gradient(#4cc35f,#2a8a3c)}
+#tradeBox .tsum{display:flex;align-items:center;justify-content:center;gap:4px;margin:2px 0 4px}
+#tradeBox .tsum>span{font-size:22px;margin:0 8px;color:#cbd5e1}
+#tradeBox .tsum b{font-size:15px}#tradeBox .tsum b.m{color:#ff6b6b}#tradeBox .tsum b.p{color:#5ee07a}
+#tradeBox .tst{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#0003;border-radius:8px;margin-top:4px;font-size:13px}
+#tradeBox .tst span{flex:1;color:#cbd5e1}
+#tradeBox .tst button{min-height:0;height:34px;padding:0 14px;font-size:13px;background:linear-gradient(#4cc35f,#2a8a3c)}
+/* 7 のときの「だれからもらう？」 */
+.stealRow{display:flex;gap:10px;justify-content:center}
+.stb{flex:1;max-width:150px;min-height:76px;background:var(--pc)!important;display:flex;flex-direction:column;align-items:center;justify-content:center;border:3px solid #fff9;color:#fff;text-shadow:0 1px 3px #000}
+.stb small{font-weight:400}
 .tline{font-size:26px;text-align:center;line-height:1.5}
 .tline span{font-size:14px;color:var(--sub);margin:0 6px}
 #modal .g4 small{color:var(--sub);font-weight:400}
@@ -123,15 +174,23 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 <body>
 <div id="menu" class="scr hidden"></div>
 <div id="lobby" class="scr hidden"></div>
+<div id="stage">
 <div id="game" class="hidden">
-  <div id="top"><div id="pls"></div><button id="menuBtn" aria-label="メニュー">≡</button></div>
+  <div id="top"><div id="pls"></div></div>
+  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="bigDice"></div></div>
   <div id="ban"></div>
-  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="dice"></div><div id="offerBox" class="hidden"></div></div>
+  <div id="side"><button data-g="menu" aria-label="メニュー">≡</button><button data-g="rules" aria-label="あそびかた">📖</button><button data-g="log" aria-label="できごと">📜</button><button data-g="cards" aria-label="ふしぎカード">🃏<span class="bd hidden" id="cardBd"></span></button></div>
+  <div id="log"></div>
   <div id="hand"></div>
-  <div id="panel"><div id="acts"></div><div id="log"></div></div>
+  <div id="corner"><div id="dice"></div><div id="acts"></div></div>
+  <div id="offerBox" class="hidden"></div>
+  <div id="tradeBox" class="hidden"></div>
+  <div id="turnPop" class="hidden"></div>
+  <div id="fx"></div>
 </div>
 <div id="modal" class="hidden"><div class="box"></div></div>
 <div id="toast"></div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="../party-beacon.js?v=5"></script>
@@ -200,7 +259,11 @@ const GEO = (() => {
 
 // ================= ゲームの状態とルール（ホスト・ひとり用で使う） =================
 let G = null;
+// やり直し（2026-11-11）: その番のうちに「つくる（道・村・町）」「銀行・港との交換」をする前の状態をとっておく（ホストだけ）。
+// サイコロ・カード・ほかの人との交換をしたら、もうもどせない。番が終わったら消える。
+let UNDO = [];
 function newGame(seats) {
+  UNDO = [];
   const types = shuffle(Object.entries(TT).flatMap(([t, T]) => Array(T.n).fill(t)));
   const tiles = types.map(t => ({ t, n: 0 }));
   // 数字: 6 と 8（よく出る数）どうし、同じ数どうしがとなりにならないように並べ直す
@@ -218,7 +281,7 @@ function newGame(seats) {
   return {
     tiles, crow: tiles.findIndex(t => t.t === "volcano"), harbors, vb: Array(GEO.verts.length).fill(null), er: Array(GEO.edges.length).fill(-1),
     ps: seats.map((s, i) => ({ name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: emptyHand(), cards: [], newC: [], vpC: 0, used: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
-    cur: order[0], phase: "setup", su: { i: 0, order, step: "v", lastV: -1 }, dice: [0, 0], rollN: 0, log: [], winner: -1, free: 0, cardUsed: false, back: "main", victims: [], deck, roadHolder: -1, turnN: 1, trades: 0, ver: 0, offer: null, offN: 0, offerN: 0,
+    cur: order[0], phase: "setup", su: { i: 0, order, step: "v", lastV: -1 }, dice: [0, 0], rollN: 0, log: [], winner: -1, free: 0, cardUsed: false, back: "main", victims: [], deck, roadHolder: -1, turnN: 1, trades: 0, ver: 0, offer: null, offN: 0, offerN: 0, undoN: 0,
   };
 }
 const tot = h => RES.reduce((s, r) => s + h[r], 0);
@@ -283,7 +346,7 @@ function produce(sum) {
 }
 function doRoll(s) {
   const d1 = 1 + Math.floor(Math.random() * 6), d2 = 1 + Math.floor(Math.random() * 6), sum = d1 + d2;
-  G.dice = [d1, d2]; G.rollN++;
+  G.dice = [d1, d2]; G.rollN++; UNDO = []; G.undoN = 0;
   addLog(`🎲 ${G.ps[s].name}: ${sum}`);
   if (sum === 7) {
     // カラスが来る: 10まい以上持っている人は半分なくす（えらばずに自動）
@@ -306,7 +369,7 @@ function steal(s, v) {
 function endTurn() {
   const p = G.ps[G.cur];
   p.cards.push(...p.newC); p.newC = [];
-  G.cur = (G.cur + 1) % G.ps.length; G.phase = "roll"; G.cardUsed = false; G.free = 0; G.trades = 0; G.turnN++; G.offer = null; G.offN = 0;
+  G.cur = (G.cur + 1) % G.ps.length; G.phase = "roll"; G.cardUsed = false; G.free = 0; G.trades = 0; G.turnN++; G.offer = null; G.offN = 0; UNDO = []; G.undoN = 0;
 }
 function build(s, a) {
   const p = G.ps[s], w = a.w;
@@ -373,10 +436,13 @@ function offer(s, a) {
   if (!give || !get) return "出す資源とほしい資源をえらんでね";
   if (RES.some(r => give[r] && get[r])) return "同じ資源を出してもらうことはできません";
   if (!afford(p, give)) return "たりません";
+  // 相手をえらべる（a.to: 席の番号のならび。なければ全員）
+  const to = Array.isArray(a.to) ? [...new Set(a.to)].filter(i => Number.isInteger(i) && i >= 0 && i < G.ps.length && i !== s) : G.ps.map((_, i) => i).filter(i => i !== s);
+  if (!to.length) return "交換する相手をえらんでね";
   G.offerN++; G.offN++;
-  const o = G.offer = { id: G.offerN, from: s, give, get, resp: G.ps.map(() => null), t: Date.now() };
+  const o = G.offer = { id: G.offerN, from: s, give, get, resp: G.ps.map(() => "skip"), t: Date.now() };
   o.resp[s] = "me";
-  G.ps.forEach((q, i) => { if (i === s) return; if (!afford(q, get)) o.resp[i] = "cant"; else if (q.bot) o.resp[i] = cpuRespond(i, o) ? "ok" : "no"; });
+  to.forEach(i => { const q = G.ps[i]; o.resp[i] = !afford(q, get) ? "cant" : q.bot ? (cpuRespond(i, o) ? "ok" : "no") : null; });
   addLog(`🤝 ${p.name}: ${amtStr(give)} → ${amtStr(get)} の交換をよびかけ`); return "";
 }
 function respond(s, a) {
@@ -395,7 +461,14 @@ function acceptOffer(s, a) {
   pay(p, o.give); pay(q, o.get);
   RES.forEach(r => { p.hand[r] += o.get[r]; q.hand[r] += o.give[r]; });
   addLog(`🤝 ${p.name} ⇄ ${q.name}: ${amtStr(o.give)} と ${amtStr(o.get)} を交換`);
-  G.offer = null; return "";
+  G.offer = null; UNDO = []; G.undoN = 0; return "";
+}
+function undo(s) {
+  if (!UNDO.length) return "やり直せることがありません";
+  const g = JSON.parse(UNDO.pop());
+  g.log = G.log; g.ver = G.ver; g.offerN = G.offerN; g.offN = G.offN; g.offer = null;
+  G = g; G.undoN = UNDO.length;
+  addLog(`↩️ ${G.ps[s].name} がやり直した`); return "";
 }
 function playCard(s, a) {
   const p = G.ps[s];
@@ -458,6 +531,13 @@ function applyAct(s, a) {
       if (a.k === "accept") return acceptOffer(s, a);
       if (a.k === "cancel") { G.offer = null; return ""; }
       G.offer = null;   // ほかのことをしたら、出していた提案は消える
+      if (a.k === "undo") return undo(s);
+      if ((a.k === "build" && a.w !== "card") || a.k === "trade") {
+        const snap = JSON.stringify(G), err = a.k === "build" ? build(s, a) : trade(s, a);
+        if (!err) { UNDO.push(snap); G.undoN = UNDO.length; }
+        return err;
+      }
+      UNDO = []; G.undoN = 0;   // カード・おわり などをしたら、もうもどせない
       if (a.k === "build") return build(s, a);
       if (a.k === "trade") return trade(s, a);
       if (a.k === "play") return playCard(s, a);
@@ -662,7 +742,7 @@ function myName() { if (meName) return meName; return (($("name") && $("name").v
 function fixName() { meName = ""; meName = myName(); store.set("kaitaku-name", meName); }
 const mySeat = () => G ? G.ps.findIndex(p => !p.bot && p.pid === myPid) : -1;
 let FAST = false, cpuTimer = null, lastWasRoll = false;
-const ui = { mode: null, modal: null, give: null, get: null, picks: [], overSeen: -1, tm: "player", pg: {}, pw: {}, offerSeen: -1 };
+const ui = { mode: null, modal: null, give: null, get: null, picks: [], overSeen: -1, tm: "player", pg: {}, pw: {}, to: [], trade: false, turnKey: null };
 
 // 状態が変わったあと: ゲストへ送る・描く・CPU を動かす
 function afterChange() {
@@ -703,7 +783,7 @@ function startLocal() {
   startGame(shuffle(seats));   // 順番はランダム
 }
 function startGame(seats) {
-  G = newGame(seats); screen = "game"; ui.mode = null; ui.modal = null; ui.overSeen = -1; shownRoll = -1; lastWasRoll = false;
+  G = newGame(seats); screen = "game"; ui.mode = null; ui.modal = null; ui.overSeen = -1; ui.trade = false; ui.turnKey = null; shownRoll = -1; lastWasRoll = false; wantLandscape();
   addLog("島がうまれた！ はじめの村と道を 2 回ずつ置こう");
   renderUI(); afterChange();
 }
@@ -836,11 +916,17 @@ const RULES_HTML = `<div class="rules">
 <b>7が出たら</b>: 🐦‍⬛カラスが来る！ カラスを好きな土地へ動かし、そこに村がある人から1まいもらう。カラスのいる土地は資源が出ない。10まい以上持っている人は半分なくす。<br>
 <b>交換</b>: 自分の番に、ほかの人へ「これを出すから、これがほしい」と🤝よびかけられる（まい数は自由）。OKした人の中から1人えらんで交換。銀行とは 4まい→1まい。港⚓にくっついた村・町があれば 3→1 や 2→1。<br>
 <b>ふしぎカード</b>: 👒カカシ（カラスを動かす）・🧺大豊作（2まいもらう）・🌉橋づくり（道2本タダ）・🗺️宝の地図（+1点）。買った番には使えない。1番に1まいだけ。<br>
+<b>やり直し↶</b>: 自分の番のあいだなら、つくったもの・銀行との交換を取り消せる（サイコロ・カード・ほかの人との交換のあとは取り消せない）。<br>
 <b>長い道ボーナス</b>: つながった道が5本以上で、いちばん長い人は +2点。
 </div>`;
 const RULES_SHORT = `サイコロで出た数の土地から資源をもらい、道・村(1点)・町(2点)をつくる。先に${TARGET}点で勝ち。7が出たらカラスを動かして1まいもらえる。ほかの人とも自由に交換できる（銀行とは4→1、港なら3→1・2→1）。`;
 
+// たて持ちのときは、ゲーム画面だけ 90° まわして横画面にする。向きを固定できる環境（インストールしたアプリなど）では横に固定してみる
+function updRot() { document.body.classList.toggle("rot", screen === "game" && innerHeight > innerWidth); }
+function wantLandscape() { try { const so = window.screen && window.screen.orientation; if (so && so.lock) { const r = so.lock("landscape"); if (r && r.catch) r.catch(() => {}); } } catch (e) {} }
+addEventListener("resize", () => { const was = document.body.classList.contains("rot"); updRot(); if (was !== document.body.classList.contains("rot")) render(); });
 function renderUI() {
+  updRot();
   // パーティ: 始まる前（つないでいる・部屋）は、全部のゲームで同じ待ち合わせ画面（ykgLobby）を使う
   if (PARTY && (screen === "connecting" || screen === "lobby")) {
     ["menu", "lobby", "game"].forEach(id => $(id).classList.add("hidden")); $("modal").classList.add("hidden");
@@ -1028,23 +1114,79 @@ $("board").addEventListener("click", e => {
   }
 });
 
-// ---------------- サイコロ ----------------
+// ---------------- サイコロ（まん中で大きくふって、右下にのこす） ----------------
 let shownRoll = -1, diceT = null;
 const DOTS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const dieHtml = n => `<div class="die">${[...Array(9)].map((_, i) => `<i class="${DOTS[n].includes(i) ? "on" : ""}"></i>`).join("")}</div>`;
+// 出た目で、だれがどの土地から何まいもらったか（カードを飛ばすのに使う）
+function rollGains() {
+  const sum = G.dice[0] + G.dice[1], out = [];
+  if (sum === 7) return out;
+  GEO.hex.forEach((h, i) => {
+    const t = G.tiles[i], r = TT[t.t].res; if (t.n !== sum || i === G.crow || !r) return;
+    const got = {}; for (const v of h.c) { const b = G.vb[v]; if (b) got[b.p] = (got[b.p] || 0) + b.lv; }
+    Object.entries(got).forEach(([p, n]) => out.push({ ti: i, p: +p, r, n }));
+  });
+  return out;
+}
 function updDice() {
-  const el = $("dice");
-  if (!G.rollN) { el.innerHTML = ""; shownRoll = 0; return; }
+  const el = $("dice"), big = $("bigDice");
+  if (!G.rollN) { el.innerHTML = ""; big.innerHTML = ""; shownRoll = 0; return; }
   if (G.rollN === shownRoll) return;
   const first = shownRoll < 0; shownRoll = G.rollN;
-  const fin = () => { const t = G.dice[0] + G.dice[1]; el.classList.remove("big"); el.innerHTML = dieHtml(G.dice[0]) + dieHtml(G.dice[1]) + `<span class="sum ${t === 7 ? "seven" : ""}">${t}</span>`; };
+  const d = G.dice.slice(), t = d[0] + d[1], gains = rollGains();
+  const fin = () => { big.innerHTML = ""; el.innerHTML = dieHtml(d[0]) + dieHtml(d[1]) + `<span class="sum ${t === 7 ? "seven" : ""}">${t}</span>`; };
   clearInterval(diceT);
   if (first || FAST) { fin(); return; }
-  let k = 0; el.classList.add("big");
+  el.innerHTML = ""; let k = 0;
   diceT = setInterval(() => {
-    if (++k >= 9 || !G) { clearInterval(diceT); if (G) fin(); return; }
-    el.innerHTML = dieHtml(1 + Math.floor(Math.random() * 6)) + dieHtml(1 + Math.floor(Math.random() * 6));
+    if (++k >= 10 || !G) {
+      clearInterval(diceT); if (!G) return;
+      big.innerHTML = dieHtml(d[0]) + dieHtml(d[1]);
+      setTimeout(() => { if (G && shownRoll === G.rollN) { fin(); flyRes(gains); } }, 420);
+      return;
+    }
+    big.innerHTML = dieHtml(1 + Math.floor(Math.random() * 6)) + dieHtml(1 + Math.floor(Math.random() * 6));
   }, 70);
+}
+// ---------------- 資源カードが土地から持ち主へ飛ぶ ----------------
+// 位置は #game の中の座標で計算する（たて持ちで画面をまわしていても同じように動く）
+function lpos(el) {
+  let x = 0, y = 0, e = el; const root = $("game");
+  while (e && e !== root) { x += e.offsetLeft; y += e.offsetTop; e = e.offsetParent; }
+  return { x: x + el.offsetWidth / 2, y: y + el.offsetHeight / 2 };
+}
+function tpos(ti) {
+  const bw = $("boardWrap"), W = bw.clientWidth, H = bw.clientHeight, sc = Math.min(W / VB[2], H / VB[3]);
+  const ox = (W - VB[2] * sc) / 2, oy = (H - VB[3] * sc) / 2, h = GEO.hex[ti];
+  return { x: bw.offsetLeft + ox + (h.x * S - VB[0]) * sc, y: bw.offsetTop + oy + (h.y * S - VB[1]) * sc - 10 };
+}
+function flyRes(list) {
+  if (FAST || !list.length || screen !== "game") return;
+  const fx = $("fx"), me = mySeat(), per = {};
+  list.forEach((g, k) => {
+    const c = document.createElement("div"); c.className = "fc"; c.style.setProperty("--rc", RCOL[g.r]);
+    c.innerHTML = `${RI[g.r]}<b>+${g.n}</b>`;
+    const j = (per[g.ti] = (per[g.ti] || 0) + 1) - 1, p0 = tpos(g.ti);
+    c.style.left = (p0.x + j * 16 - (j ? 8 : 0)) + "px"; c.style.top = (p0.y + j * 3) + "px";
+    c.style.transform = "scale(.3)"; c.style.opacity = "0"; fx.appendChild(c);
+    void c.offsetWidth; c.style.transform = "scale(1)"; c.style.opacity = "1";   // いちど配置を確定させてから変えると、ふわっと出る
+    const tid = g.p === me ? "hc-" + g.r : "pl" + g.p;
+    setTimeout(() => {
+      const tg = $(tid); if (!tg || !G) { c.remove(); return; }
+      const p1 = lpos(tg); c.style.left = p1.x + "px"; c.style.top = p1.y + "px"; c.style.transform = "scale(.5)";
+      setTimeout(() => { c.remove(); const t2 = $(tid); if (t2) { t2.classList.remove("bump"); void t2.offsetWidth; t2.classList.add("bump"); } }, 560);
+    }, 1000 + k * 120);
+  });
+}
+// ---------------- 番が来たときの知らせ ----------------
+let turnPopT = null;
+function showTurn() {
+  if (FAST) return;
+  const el = $("turnPop"), s = mySeat();
+  el.innerHTML = s === G.cur ? "あなたの番です！" : `<i class="dot" style="background:${COLS[G.cur]}"></i>${esc(G.ps[G.cur].name)} の番です`;
+  el.classList.remove("hidden"); el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+  clearTimeout(turnPopT); turnPopT = setTimeout(() => el.classList.add("hidden"), 1500);
 }
 
 // ---------------- 案内・手もと ----------------
@@ -1061,74 +1203,144 @@ function bannerText() {
   if (G.phase === "steal") return { my: true, h: "だれから1まいもらう？" };
   if (G.free > 0) return { my: true, h: `🌉 タダで道をつくれる（あと${G.free}本）` };
   if (ui.mode) return { my: true, h: `${BN[ui.mode]}をつくる場所をタップ` };
-  return { my: true, h: "つくる・交換する → おわったら「おわり」" };
+  return { my: false, h: "" };
 }
+const cardHtml = r => `<span class="ocard" style="--rc:${RCOL[r]}">${RI[r]}</span>`;
 function render() {
   if (!G || screen !== "game") return;
   const s = mySeat(), me = s >= 0 ? G.ps[s] : null, myTurn = s >= 0 && G.cur === s && G.phase !== "over";
   if (!myTurn || G.phase !== "main") ui.mode = null;
   if (myTurn && G.phase === "main" && G.free > 0) ui.mode = "road";
   // 人
-  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length; return `<div class="pl ${i === G.cur && G.phase !== "over" ? "cur" : ""}" style="--pc:${COLS[i]}"><div class="vpb">${vp(i)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}</div>
+  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length; return `<div class="pl ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" style="--pc:${COLS[i]}"><div class="vpb">${vp(i)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}</div>
     <div class="st"><span>✋${tot(p.hand)}</span>${nc ? `<span>🃏${nc}</span>` : ""}${p.lr ? `<span class="${G.roadHolder === i ? "lr" : ""}">🛤️${p.lr}</span>` : ""}</div></div></div>`; }).join("");
   const bt = bannerText();
   $("ban").className = bt.my ? "my" : ""; $("ban").innerHTML = bt.h;
   renderBoard(); updDice();
-  // 手もと
+  // 番が来たら、まん中に「〇〇の番です」
+  const tk = G.turnN + ":" + G.cur;
+  if (G.phase === "roll" && ui.turnKey !== tk) { ui.turnKey = tk; showTurn(); }
+  // 手もと（下のトレイ）
   if (me) {
-    $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc" style="--rc:${RCOL[r]}"><div class="ic">${RI[r]}</div><b>${me.hand[r]}</b>${RN[r]}${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
+    $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc" id="hc-${r}" style="--rc:${RCOL[r]}"><div class="ic">${RI[r]}</div><b>${me.hand[r]}</b>${RN[r]}${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
       + `<div class="rc cards" data-g="cards"><div class="ic">🃏</div><b>${me.cards.length + me.newC.length}</b>カード</div>`;
   } else $("hand").innerHTML = `<div class="rc" style="padding:8px;font-size:13px">観戦中: みんなの手は見えません</div>`;
-  // ボタン
-  let h = "";
-  if (!me) h = `<button class="full" data-g="leave">${PARTY ? "ゲーム一覧へ" : "ぬける"}</button>`;
-  else if (G.phase === "over") h = `<button class="main full" data-g="result">🏆 結果を見る</button>`;   // 2026-11-10: 「盤を見る」で閉じたあとも結果（部屋にもどる）を開き直せる
-  else if (!myTurn) h = `<button class="full" disabled>ほかの人の番です…</button>`;
-  else if (G.phase === "setup") h = `<button class="full" disabled>${G.su.step === "v" ? "光っている角をタップ" : "光っている道をタップ"}</button>`;
-  else if (G.phase === "roll") h = `<button class="main wide" data-g="roll" style="grid-column:span 3">🎲 サイコロをふる</button><button data-g="cards" ${me.cards.length && !G.cardUsed ? "" : "disabled"}>🃏カード</button>`;
-  else if (G.phase === "crow") h = `<button class="full" disabled>光っている土地をタップ</button>`;
-  else if (G.phase === "steal") h = G.victims.map(i => `<button class="wide" data-g="steal" data-p="${i}"><i class="dot" style="background:${COLS[i]}"></i> ${esc(G.ps[i].name)}（${tot(G.ps[i].hand)}まい）</button>`).join("");
-  else if (G.free > 0) h = `<button class="full" data-g="nofree">道づくりをやめる</button>`;
+  const nc = me ? me.cards.length + me.newC.length : 0;
+  $("cardBd").textContent = nc; $("cardBd").classList.toggle("hidden", !nc);
+  // 右下のボタン: [つくる 4つ] / [おわり・ふる] [↶ やり直し] [⇄ 交換]
+  const sq = (g, ic, lbl, en, on) => `<button class="sq ${on ? "on" : ""}" data-g="${g}" ${en ? "" : "disabled"}>${ic}<small>${lbl}</small></button>`;
+  let r1 = "", r2 = "";
+  if (!me) r2 = `<button class="go" data-g="leave">${PARTY ? "ゲーム一覧へ" : "ぬける"}</button>`;
+  else if (G.phase === "over") r2 = `<button class="main go" data-g="result">🏆 結果</button>`;   // 2026-11-10: 「盤を見る」で閉じたあとも結果（部屋にもどる）を開き直せる
   else {
-    const can = {
-      road: (afford(me, COST.road)) && me.roads < LIM.road && validRoads(s).length > 0,
-      vil: afford(me, COST.vil) && me.vils < LIM.vil && validVils(s).length > 0,
-      town: afford(me, COST.town) && me.towns < LIM.town && validTowns(s).length > 0,
-      card: afford(me, COST.card) && G.deck.length > 0,
-    };
-    h = ["road", "vil", "town", "card"].map(w => `<button data-g="b-${w}" class="${ui.mode === w ? "on" : ""}" ${can[w] || ui.mode === w ? "" : "disabled"}>${ui.mode === w ? "やめる" : BN[w]}<span class="cost">${costHtml(COST[w])}</span></button>`).join("")
-      + `<button data-g="trade" class="${G.offer && G.offer.from === s ? "on" : ""}">🔁交換</button><button data-g="cards" ${me.cards.length && !G.cardUsed ? "" : "disabled"}>🃏カード</button><button class="main wide" data-g="end">おわり ▶</button>`;
+    const inMain = myTurn && G.phase === "main";
+    let go;
+    if (myTurn && G.phase === "roll") go = `<button class="main go" data-g="roll">🎲 ふる</button>`;
+    else if (inMain && G.free > 0) go = `<button class="go" data-g="nofree">道づくりを<br>やめる</button>`;
+    else if (inMain) go = `<button class="main go" data-g="end">おわり ▶</button>`;
+    else go = `<button class="go" disabled>${myTurn ? "盤をタップ" : "まってね…"}</button>`;
+    r2 = go + sq("undo", "↶", "やり直し", inMain && G.undoN > 0) + sq("trade", "⇄", "交換", inMain && !G.free, ui.trade || (G.offer && G.offer.from === s));
+    if (inMain && !G.free) {
+      const can = {
+        road: afford(me, COST.road) && me.roads < LIM.road && validRoads(s).length > 0,
+        vil: afford(me, COST.vil) && me.vils < LIM.vil && validVils(s).length > 0,
+        town: afford(me, COST.town) && me.towns < LIM.town && validTowns(s).length > 0,
+        card: afford(me, COST.card) && G.deck.length > 0,
+      };
+      r1 = ["road", "vil", "town", "card"].map(w => `<button class="bb ${ui.mode === w ? "on" : ""}" data-g="b-${w}" ${can[w] || ui.mode === w ? "" : "disabled"}>${ui.mode === w ? "やめる" : BN[w]}<span class="cost">${costHtml(COST[w])}</span></button>`).join("");
+    }
   }
-  $("acts").innerHTML = h;
-  $("log").innerHTML = G.log.slice(-3).map(l => `<div>${esc(l)}</div>`).join("");
+  $("acts").innerHTML = (r1 ? `<div class="r">${r1}</div>` : "") + `<div class="r">${r2}</div>`;
+  $("log").innerHTML = G.log.slice(-2).map(l => `<div>${esc(l)}</div>`).join("");
   // 勝負がついたら結果を出す（1 回だけ）
   if (G.phase === "over" && ui.overSeen !== G.ver) { ui.overSeen = G.ver; ui.modal = "over"; }
-  // 交換のよびかけは、盤の上の小さな札に出す（✕ / ✓）。画面はふさがない
+  // 7 のとき、だれからもらうかは、まん中の小窓でえらぶ
+  if (myTurn && G.phase === "steal") ui.modal = "steal"; else if (ui.modal === "steal") ui.modal = null;
+  // 交換のよびかけ（右はし）
   const o = G.offer; let oh = "";
   if (o && s >= 0 && s !== o.from && o.resp[s] === null)
-    oh = `<div class="ot">🤝 <i class="dot" style="background:${COLS[o.from]}"></i>${esc(G.ps[o.from].name)} から交換のよびかけ</div>
-      <div class="og"><span>もらう</span>${amtStr(o.give)}<span>出す</span>${amtStr(o.get)}</div>
-      <div class="ob"><button data-o="no">✕</button><button data-o="ok">✓</button></div>`;
-  else if (o && s >= 0 && s === o.from && ui.modal !== "trade") {
+    oh = `<div class="ot"><i class="dot" style="background:${COLS[o.from]}"></i>${esc(G.ps[o.from].name)} からの交換</div>`
+      + RES.filter(r => o.give[r]).map(r => `<div class="orow"><span class="n p">+${o.give[r]}</span>${cardHtml(r)}</div>`).join("")
+      + RES.filter(r => o.get[r]).map(r => `<div class="orow"><span class="n m">−${o.get[r]}</span>${cardHtml(r)}</div>`).join("")
+      + `<div class="ob"><button data-o="no" aria-label="ことわる">✕</button><button data-o="ok" aria-label="OK">✓</button></div>`;
+  else if (o && s >= 0 && s === o.from && !ui.trade) {
     const n = k => o.resp.filter(x => x === k).length;
-    oh = `<div class="ot">🤝 よびかけ中 ${amtStr(o.give)} → ${amtStr(o.get)}</div><div class="og sm">⭕${n("ok")}　⏳${n(null)}　❌${n("no") + n("cant")}</div><div class="ob"><button data-o="open">ひらく</button></div>`;
+    oh = `<div class="ot">🤝 よびかけ中</div><div class="orow sm">${amtStr(o.give)} → ${amtStr(o.get)}</div><div class="orow sm">⭕${n("ok")}　⏳${n(null)}　❌${n("no") + n("cant")}</div><div class="ob"><button data-o="open">ひらく</button></div>`;
   }
   $("offerBox").innerHTML = oh; $("offerBox").classList.toggle("hidden", !oh);
+  renderTrade(s, me, myTurn);
   renderModal();
 }
-$("panel").addEventListener("click", e => {
+// ---------------- 交換の画面（下のまん中） ----------------
+function openTrade() {
+  const s = mySeat(); ui.trade = true; ui.give = ui.get = null; ui.pg = {}; ui.pw = {};
+  ui.to = G.ps.map((_, i) => i).filter(i => i !== s);
+}
+function renderTrade(s, me, myTurn) {
+  const box = $("tradeBox");
+  if (!(ui.trade && me && myTurn && G.phase === "main" && !G.free)) { ui.trade = false; box.classList.add("hidden"); box.innerHTML = ""; return; }
+  box.classList.remove("hidden");
+  const o = G.offer, who = (av, bg, lbl) => `<div class="who"><div class="av" style="background:${bg}">${av}</div>${lbl}</div>`;
+  if (o && o.from === s) {
+    const st = { null: "⏳ 考え中", ok: "⭕ OK", no: "❌ ことわった", cant: "✋ 持っていない" };
+    box.innerHTML = `<div class="tt">交換のよびかけ中</div>`
+      + `<div class="tsum">${RES.filter(r => o.give[r]).map(r => cardHtml(r) + `<b class="m">−${o.give[r]}</b>`).join("")}<span>⇄</span>${RES.filter(r => o.get[r]).map(r => cardHtml(r) + `<b class="p">+${o.get[r]}</b>`).join("")}</div>`
+      + G.ps.map((q, i) => i === s || o.resp[i] === "skip" ? "" : `<div class="tst"><i class="dot" style="background:${COLS[i]}"></i><b>${esc(q.name)}</b><span>${st[o.resp[i]]}</span><button data-x="accept" data-p="${i}" ${o.resp[i] === "ok" ? "" : "disabled"}>交換する</button></div>`).join("")
+      + `<div class="tbar"><span class="sp"></span><button class="tx no" data-x="cancel" aria-label="とりけす">⇤</button><button class="tx" data-x="close" aria-label="とじる">▾</button></div>`;
+    return;
+  }
+  const bank = ui.tm === "bank", left = OFFER_MAX - G.offN;
+  const top = RES.map(r => {
+    const n = bank ? (ui.get === r ? 1 : 0) : (ui.pw[r] || 0);
+    return `<button class="tc ${n ? "on" : ""}" data-x="w" data-r="${r}" style="--rc:${RCOL[r]}" ${bank && ui.give === r ? "disabled" : ""}>${RI[r]}${n ? `<span class="sel" ${bank ? "" : `data-minus="pw"`} data-r="${r}">${n}</span>` : ""}</button>`;
+  }).join("");
+  const bot = RES.map(r => {
+    const x = ratio(s, r), n = bank ? (ui.give === r ? x : 0) : (ui.pg[r] || 0), dim = bank ? me.hand[r] < x : !me.hand[r];
+    return `<button class="tc ${n ? "on" : ""} ${dim ? "dim" : ""}" data-x="g" data-r="${r}" style="--rc:${RCOL[r]}">${RI[r]}<span class="hc">${me.hand[r]}</span>${bank && x < 4 ? `<span class="rt">${x}:1</span>` : ""}${n ? `<span class="sel" ${bank ? "" : `data-minus="pg"`} data-r="${r}">${n}</span>` : ""}</button>`;
+  }).join("");
+  const ok = bank ? !!(ui.give && ui.get && ui.give !== ui.get) : RES.some(r => ui.pg[r]) && RES.some(r => ui.pw[r]) && ui.to.length > 0 && left > 0;
+  const hint = bank ? "下で出す資源、上でもらう資源をえらんでね（港があれば少なくてすむ）"
+    : left > 0 ? "上にほしい資源、下に出す資源をタップ。緑の数字をタップすると1まいへらせる" : "このターンはもうよびかけられません";
+  const pcs = bank ? "" : G.ps.map((q, i) => i === s ? "" : `<button class="pc ${ui.to.includes(i) ? "" : "off"}" data-x="to" data-p="${i}" style="--pc:${COLS[i]}" aria-label="${esc(q.name)}"></button>`).join("");
+  box.innerHTML = `<div class="tt">${bank ? "銀行・港と交換" : "プレイヤーと交換"}</div><div class="th">${hint}</div>
+    <div class="trow">${who(bank ? "🏛️" : "👥", "#64748b", bank ? "もらう" : "ほしい")}${top}</div>
+    <div class="trow">${who("✋", COLS[s], "出す")}${bot}</div>
+    <div class="tbar">${pcs}<span class="sp"></span><button class="tab ${bank ? "" : "on"}" data-x="tm" data-v="player" aria-label="プレイヤーと">👤</button><button class="tab bk ${bank ? "on" : ""}" data-x="tm" data-v="bank" aria-label="銀行・港と">🏛️</button><span class="sp"></span><button class="tx no" data-x="close" aria-label="とじる">⇤</button><button class="tx ok" data-x="ok" ${ok ? "" : "disabled"} aria-label="${bank ? "交換する" : "よびかける"}">✓</button></div>`;
+}
+$("tradeBox").addEventListener("click", e => {
+  if (!G) return; const s = mySeat(), me = G.ps[s]; if (!me) return;
+  const mi = e.target.closest("[data-minus]");
+  if (mi) { const k = mi.dataset.minus, r = mi.dataset.r; ui[k][r] = Math.max(0, (ui[k][r] || 0) - 1); render(); return; }
+  const b = e.target.closest("[data-x]"); if (!b || b.disabled) return;
+  const x = b.dataset.x, r = b.dataset.r, bank = ui.tm === "bank";
+  if (x === "w") { if (bank) ui.get = ui.get === r ? null : r; else { ui.pw[r] = (ui.pw[r] || 0) + 1; ui.pg[r] = 0; } }
+  else if (x === "g") {
+    if (bank) { if (me.hand[r] < ratio(s, r)) { toast(`${RN[r]}が${ratio(s, r)}まい いります`); return; } ui.give = ui.give === r ? null : r; if (ui.get === ui.give) ui.get = null; }
+    else { if ((ui.pg[r] || 0) >= me.hand[r]) { toast(`${RN[r]}はもう出せません`); return; } ui.pg[r] = (ui.pg[r] || 0) + 1; ui.pw[r] = 0; }
+  }
+  else if (x === "tm") ui.tm = b.dataset.v;
+  else if (x === "to") { const p = +b.dataset.p; ui.to = ui.to.includes(p) ? ui.to.filter(i => i !== p) : ui.to.concat(p); }
+  else if (x === "close") ui.trade = false;
+  else if (x === "ok") { if (bank) { act({ k: "trade", give: ui.give, get: ui.get }); ui.give = ui.get = null; } else act({ k: "offer", give: cleanAmt(ui.pg), get: cleanAmt(ui.pw), to: ui.to.slice() }); }
+  else if (x === "accept") { act({ k: "accept", p: +b.dataset.p }); ui.trade = false; ui.pg = {}; ui.pw = {}; }
+  else if (x === "cancel") act({ k: "cancel" });
+  render();
+});
+// 画面のボタン（左はしのアイコン・手札・右下）
+$("game").addEventListener("click", e => {
   const b = e.target.closest("[data-g]"); if (!b || b.disabled || !G) return;
   const g = b.dataset.g;
   if (g === "roll") act({ k: "roll" });
-  else if (g === "end") { ui.mode = null; act({ k: "end" }); }
+  else if (g === "end") { ui.mode = null; ui.trade = false; act({ k: "end" }); }
   else if (g === "nofree") act({ k: "nofree" });
-  else if (g === "steal") act({ k: "steal", p: +b.dataset.p });
-  else if (g === "trade") { ui.give = ui.get = null; ui.pg = {}; ui.pw = {}; openModal("trade"); }
+  else if (g === "undo") { ui.mode = null; act({ k: "undo" }); }
+  else if (g === "trade") { if (ui.trade) ui.trade = false; else { ui.mode = null; openTrade(); } render(); }
   else if (g === "cards") openModal("cards");
+  else if (g === "menu" || g === "rules" || g === "log") openModal(g);
   else if (g === "leave") leave();
   else if (g === "result") openModal("over");
   else if (g.startsWith("b-")) {
-    const w = g.slice(2);
+    const w = g.slice(2); ui.trade = false;
     if (w === "card") { act({ k: "build", w: "card" }); return; }
     ui.mode = ui.mode === w ? null : w; render();
   }
@@ -1136,11 +1348,9 @@ $("panel").addEventListener("click", e => {
 $("offerBox").addEventListener("click", e => {
   const b = e.target.closest("[data-o]"); if (!b || !G) return;
   const k = b.dataset.o, o = G.offer;
-  if (k === "open") { ui.give = ui.get = null; openModal("trade"); render(); return; }
+  if (k === "open") { openTrade(); render(); return; }
   if (o) act({ k: "respond", id: o.id, ok: k === "ok" });
 });
-$("menuBtn").addEventListener("click", () => openModal("menu"));
-
 // ---------------- 小窓 ----------------
 function openModal(k) { ui.modal = k; ui.picks = []; renderModal(); }
 function renderModal() {
@@ -1153,33 +1363,9 @@ function renderModal() {
   else if (k === "menu") h = `<h2>メニュー</h2><button data-m="rules">あそびかた</button><button data-m="log">これまでのできごと</button>
       <button data-m="quit">${PARTY ? "ゲーム一覧へ" : mode === "local" ? "やめてメニューへ" : "部屋をぬける"}</button><button data-m="close">とじる</button>`;
   else if (k === "log") h = `<h2>できごと</h2><div class="note" style="max-height:50vh;overflow-y:auto">${G.log.slice().reverse().map(l => `<div>${esc(l)}</div>`).join("")}</div><button data-m="close">とじる</button>`;
-  else if (k === "trade") {
-    if (!me || !myTurn || G.phase !== "main") { ui.modal = null; $("modal").classList.add("hidden"); return; }
-    const o = G.offer;
-    if (o && o.from === s) {
-      const st = { null: "⏳ 考え中", ok: "⭕ OK", no: "❌ ことわった", cant: "✋ 持っていない" };
-      h = `<h2>🤝 よびかけ中</h2><div class="tline">${amtStr(o.give)}<span>を出して</span>${amtStr(o.get)}<span>がほしい</span></div>`
-        + G.ps.map((q, i) => i === s ? "" : `<div class="cl"><i class="dot" style="background:${COLS[i]}"></i><div class="cd"><b>${esc(q.name)}</b><br>${st[o.resp[i]]}</div><button data-m="accept" data-p="${i}" ${o.resp[i] === "ok" ? "" : "disabled"}>交換する</button></div>`).join("")
-        + `<button data-m="cancel">とりけす</button><button data-m="close">とじる</button>`;
-      box.innerHTML = h; return;
-    }
-    const tabs = `<div class="seg"><button data-m="tm-player" class="${ui.tm === "player" ? "on" : ""}">🤝 ほかの人</button><button data-m="tm-bank" class="${ui.tm === "bank" ? "on" : ""}">🏦 銀行・港</button></div>`;
-    if (ui.tm === "player") {
-      const left = OFFER_MAX - G.offN, okGo = RES.some(r => ui.pg[r]) && RES.some(r => ui.pw[r]) && left > 0;
-      h = `<h2>🔁 交換</h2>${tabs}<div class="note">出す（タップで +1）</div>
-        <div class="g4">${RES.map(r => `<button data-m="pg" data-r="${r}" class="${ui.pg[r] ? "on" : ""}" ${(ui.pg[r] || 0) < me.hand[r] ? "" : "disabled"}><span class="ic">${RI[r]}</span>${ui.pg[r] || 0}<br><small>（${me.hand[r]}）</small></button>`).join("")}</div>
-        <div class="note">ほしい（タップで +1）</div>
-        <div class="g4">${RES.map(r => `<button data-m="pw" data-r="${r}" class="${ui.pw[r] ? "on" : ""}"><span class="ic">${RI[r]}</span>${ui.pw[r] || 0}</button>`).join("")}</div>
-        <button class="main" data-m="offer" ${okGo ? "" : "disabled"}>${okGo ? `${amtStr(ui.pg)} → ${amtStr(ui.pw)} をよびかける` : left > 0 ? "えらんでね" : "このターンはもうよびかけられません"}</button>
-        <div class="row"><button data-m="pclear">えらびなおす</button><button data-m="close">とじる</button></div>`;
-      box.innerHTML = h; return;
-    }
-    const g = ui.give, x = g ? ratio(s, g) : 0;
-    h = `<h2>🔁 交換</h2>${tabs}<div class="note">出す資源（この数で1まいもらえる）</div>
-      <div class="g4">${RES.map(r => `<button data-m="give" data-r="${r}" class="${g === r ? "on" : ""}" ${me.hand[r] >= ratio(s, r) ? "" : "disabled"}><span class="ic">${RI[r]}</span>${RN[r]}<br>${ratio(s, r)}→1（${me.hand[r]}）</button>`).join("")}</div>
-      <div class="note">もらう資源</div>
-      <div class="g4">${RES.map(r => `<button data-m="get" data-r="${r}" class="${ui.get === r ? "on" : ""}" ${r === g ? "disabled" : ""}><span class="ic">${RI[r]}</span>${RN[r]}</button>`).join("")}</div>
-      <button class="main" data-m="dotrade" ${g && ui.get && g !== ui.get ? "" : "disabled"}>${g && ui.get ? `${RI[g]}${x}まい → ${RI[ui.get]}1まい` : "えらんでね"}</button><button data-m="close">とじる</button>`;
+  else if (k === "steal") {
+    if (!G || G.phase !== "steal") { ui.modal = null; $("modal").classList.add("hidden"); return; }
+    h = `<h2>だれから1まいもらう？</h2><div class="stealRow">${G.victims.map(i => `<button class="stb" data-m="steal" data-p="${i}" style="--pc:${COLS[i]}"><b>${esc(G.ps[i].name)}</b><small>${tot(G.ps[i].hand)}まい</small></button>`).join("")}</div>`;
   } else if (k === "cards") {
     if (!me) { ui.modal = null; $("modal").classList.add("hidden"); return; }
     const canUse = c => myTurn && !G.cardUsed && (G.phase === "main" || (G.phase === "roll" && c !== "bridge"));
@@ -1204,22 +1390,13 @@ function renderModal() {
   box.innerHTML = h;
 }
 $("modal").addEventListener("click", e => {
-  if (e.target.id === "modal" && ui.modal !== "harvest") { ui.modal = null; renderModal(); return; }
+  if (e.target.id === "modal" && ui.modal !== "harvest" && ui.modal !== "steal") { ui.modal = null; renderModal(); return; }
   const b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
   const m = b.dataset.m;
   if (m === "close") { ui.modal = null; renderModal(); if (G) render(); return; }
   if (m === "rules" || m === "log") { ui.modal = m; renderModal(); return; }
   if (m === "quit") { ui.modal = null; renderModal(); if (PARTY || mode === "local" || confirm("部屋をぬけますか？")) leave(); return; }
-  if (m === "give") { ui.give = b.dataset.r; if (ui.get === ui.give) ui.get = null; renderModal(); return; }
-  if (m === "get") { ui.get = b.dataset.r; renderModal(); return; }
-  if (m === "tm-player" || m === "tm-bank") { ui.tm = m.slice(3); renderModal(); return; }
-  if (m === "pg") { const r = b.dataset.r; ui.pg[r] = (ui.pg[r] || 0) + 1; ui.pw[r] = 0; renderModal(); return; }
-  if (m === "pw") { const r = b.dataset.r; ui.pw[r] = (ui.pw[r] || 0) + 1; ui.pg[r] = 0; renderModal(); return; }
-  if (m === "pclear") { ui.pg = {}; ui.pw = {}; renderModal(); return; }
-  if (m === "offer") { act({ k: "offer", give: cleanAmt(ui.pg), get: cleanAmt(ui.pw) }); renderModal(); return; }
-  if (m === "accept") { act({ k: "accept", p: +b.dataset.p }); ui.modal = null; ui.pg = {}; ui.pw = {}; renderModal(); return; }
-  if (m === "cancel") { act({ k: "cancel" }); renderModal(); return; }
-  if (m === "dotrade") { act({ k: "trade", give: ui.give, get: ui.get }); ui.give = ui.get = null; renderModal(); return; }
+  if (m === "steal") { ui.modal = null; act({ k: "steal", p: +b.dataset.p }); renderModal(); return; }
   if (m === "use") {
     const c = b.dataset.c;
     if (c === "harvest") { ui.modal = "harvest"; ui.picks = []; renderModal(); return; }
