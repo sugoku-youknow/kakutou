@@ -309,7 +309,8 @@
 <body>
 <div id="app"></div>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=5"></script>
+<script src="../party-beacon.js?v=6"></script>
+<script src="../ykg-sfx.js?v=1"></script>
 <script>
 (function(){
   "use strict";
@@ -1488,6 +1489,7 @@
     }
 
     myMove=nextMove;
+    if(window.YkgSfx) YkgSfx.select();   // 2026-11-13: 行動をえらんだ音（行動ボタンは div なので自動の「カチッ」は鳴らない）
     if(role==='host'){
       hostPending.p1=nextMove;
       tryResolveHost();
@@ -1559,6 +1561,7 @@
       });
       document.getElementById('btnCpu').addEventListener('click', function(){ startCpuBattle(ui.cpuLevel); });
       document.getElementById('btnGames').addEventListener('click', toGames);
+      placeSfxToggle(document.getElementById('btnGames').parentNode);   // 2026-11-13: 音のオン・オフ
       return;
     }
 
@@ -1789,7 +1792,7 @@
 
     html += '</div></div>'; // .duel-half.me, .duel-wrap
 
-    html += '<div class="meta-line">' + (state.mode === 'custom' ? 'カスタマイズモード' : '通常モード') + ' ・ ROUND ' + state.round + (lastLog ? ' ・ ' + esc(lastLog.text) : '') + '</div>';
+    html += '<div class="meta-line" id="metaLine">' + (state.mode === 'custom' ? 'カスタマイズモード' : '通常モード') + ' ・ ROUND ' + state.round + (lastLog ? ' ・ ' + esc(lastLog.text) : '') + '</div>';
 
     if(state.status === 'finished' && oppLeft && !cpu.on){
       // 2026-11-12: 相手が抜けた。勝ち負けが決まる前なら負けにしない。再戦は出さず、待ち画面（ホスト）かメニューへ
@@ -1898,6 +1901,66 @@
       });
     });
 
+    placeSfxToggle(document.getElementById('metaLine'));   // 2026-11-13: 対戦中は画面いちばん下の行に音のオン・オフ
+    sfxWatch(myKey, oppKey);
+  }
+
+  // ---------- 音（2026-11-13: ykg-sfx.js） ----------
+  // 画面は何度も作り直されるので、音は「前に見た状態」とくらべて変わったときに 1 回だけ鳴らす
+  var sfxToggleBtn = null;
+  function placeSfxToggle(parent){
+    if(!window.YkgSfx || !parent) return;
+    if(!sfxToggleBtn){ sfxToggleBtn = YkgSfx.toggleButton('link'); sfxToggleBtn.style.marginLeft = '6px'; }   // ボタンは 1 個だけ作って使い回す
+    parent.appendChild(sfxToggleBtn);
+  }
+  var sfxSeen = { round:0, status:'', revealRound:0, result:false, oppLeft:false };
+  function sfxWatch(myKey, oppKey){
+    var S = window.YkgSfx;
+    if(!S || !state) return;
+    var w = sfxSeen;
+    if(state.status === 'ready'){ w.result = false; w.revealRound = 0; }   // 試合の前（再戦も）: 覚えている分を消す
+    // ラウンドが始まった（1 ラウンド目はスタートの音、それ以降は軽く）
+    if(state.status === 'playing' && (w.status !== 'playing' || w.round !== state.round)){
+      if(state.round === 1 && w.status !== 'playing') S.go(); else S.tick();   // 毎ラウンド鳴るので、短く小さい音・振動なし
+      w.result = false;
+    }
+    // 行動の公開: 両者の行動からそのラウンドの音を決める（HP が変わる前に鳴らす）
+    if(reveal && w.revealRound !== state.round){
+      w.revealRound = state.round;
+      sfxReveal(S, reveal[myKey], reveal[oppKey], state.players[myKey], state.players[oppKey]);
+    }
+    // 必殺技
+    if(state.status === 'special' && w.status !== 'special'){ S.hit(); S.crash(); }
+    // 勝敗（観戦の人は鳴らさない）。相手が抜けて勝ち負けがないときも鳴らさない
+    if((state.status === 'normal-finish' || state.status === 'finished') && !w.result){
+      w.result = true;
+      if(!spectating && (state.winner === 'p1' || state.winner === 'p2' || state.winner === 'draw')){
+        if(state.winner === 'draw') S.draw(); else if(state.winner === myKey) S.win(); else S.lose();
+      }
+    }
+    // 相手が退出した
+    if(oppLeft && !w.oppLeft && !cpu.on) S.leave();
+    w.oppLeft = oppLeft;
+    w.round = state.round; w.status = state.status;
+  }
+  // 公開された行動の音。mine=自分の行動・opp=相手の行動、pm/po=公開前の自分・相手（バリアの連続回数 bs を見る）
+  function sfxReveal(S, mine, opp, pm, po){
+    var am = moveAction(mine), ao = moveAction(opp);
+    var brkM = am === 'barrier' && (pm.bs||0) >= 2, brkO = ao === 'barrier' && (po.bs||0) >= 2;
+    if(am === 'attack' && ao === 'attack'){ S.knock(); setTimeout(function(){ S.knock(); }, 90); return; }   // 攻撃同士の相殺（カツカツッ）
+    var played = false;
+    if(brkM || brkO){ S.breakGuard(); played = true; }   // 3 回目のバリアが割れた
+    var later = played ? 160 : 0;
+    if(ao === 'attack'){   // 相手の攻撃
+      if(am === 'barrier' && !brkM) S.guard(); else setTimeout(function(){ S.damage(); }, later);
+      played = true;
+    }
+    if(am === 'attack'){   // 自分の攻撃
+      if(ao === 'barrier' && !brkO) S.guard(); else setTimeout(function(){ S.hit(); }, later);
+      played = true;
+    }
+    if(am === 'charge' && ao !== 'attack') S.charge();   // 自分がためた（やられていないとき）
+    else if(!played && ao === 'charge') S.charge();
   }
 
   function pipsHtml(charge){

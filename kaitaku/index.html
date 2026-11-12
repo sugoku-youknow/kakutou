@@ -268,7 +268,8 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=5"></script>
+<script src="../party-beacon.js?v=6"></script>
+<script src="../ykg-sfx.js?v=1"></script>
 <script>
 "use strict";
 // ================= カイタク島（2026-11-09 作成） =================
@@ -914,7 +915,7 @@ function act(a) {
   if (!G) return;
   if (mode === "client") { if (hostConn && hostConn.open) hostConn.send({ t: "act", a }); return; }
   const err = doAct(mySeat(), a);
-  if (err) toast(err);
+  if (err) { toast(err); if (window.YkgSfx) YkgSfx.error(); }
 }
 
 // ---------------- ひとりで CPU 対戦 ----------------
@@ -926,7 +927,7 @@ function startLocal() {
   startGame(shuffle(seats));   // 順番はランダム
 }
 function startGame(seats, c = cfg) {
-  G = newGame(seats, c); setBoardGeo(); screen = "game"; ui.mode = null; ui.modal = null; ui.overSeen = -1; ui.trade = false; ui.turnKey = null; ui.probMode = false; shownRoll = -1; lastWasRoll = false;
+  G = newGame(seats, c); setBoardGeo(); screen = "game"; ui.mode = null; ui.modal = null; ui.overSeen = -1; ui.trade = false; ui.turnKey = null; ui.probMode = false; ui.sfx = null; shownRoll = -1; lastWasRoll = false;
   addLog(`島がうまれた！ はじめの村と道を ${G.setupN} 回ずつ置こう`);
   renderUI(); afterChange();
 }
@@ -1037,8 +1038,8 @@ function onMsg(m) {
     if (screen === "game" && G && G.phase !== "over") return;   // 試合中（観戦の人が来たなど）は画面を変えない
     screen = "lobby"; G = null; ui.modal = null; renderUI(); return;
   }
-  if (m.t === "st") { const first = !G || screen !== "game"; G = m.G; GEO = geoFor(G.size || "std"); setBoardGeo(); if (first) { screen = "game"; ui.mode = null; ui.overSeen = -1; ui.probMode = false; shownRoll = -1; renderUI(); } else render(); return; }
-  if (m.t === "err") { toast(m.msg); return; }
+  if (m.t === "st") { const first = !G || screen !== "game"; G = m.G; GEO = geoFor(G.size || "std"); setBoardGeo(); if (first) { screen = "game"; ui.mode = null; ui.overSeen = -1; ui.probMode = false; ui.sfx = null; shownRoll = -1; renderUI(); } else render(); return; }
+  if (m.t === "err") { toast(m.msg); if (window.YkgSfx) YkgSfx.error(); return; }
 }
 function leave() {
   if (PARTY) { toGames(); return; }
@@ -1098,6 +1099,7 @@ function renderMenu() {
     ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}
     <div class="row"><button data-a="rules">あそびかた</button><button data-a="games">← ゲーム一覧へ</button></div>
   </div>`;
+  if (window.YkgSfx) $("menu").querySelector(".card").appendChild(sfxBtn());   // 音のオン・オフ（全部のゲームで共通）
 }
 function renderLobby() {
   const L = lobbyInfo, isHost = mode === "host";
@@ -1360,11 +1362,12 @@ function updDice() {
   clearInterval(diceT);
   if (first || FAST) { fin(); return; }
   el.innerHTML = ""; let k = 0;
+  if (window.YkgSfx) YkgSfx.dice();
   diceT = setInterval(() => {
     if (++k >= 10 || !G) {
       clearInterval(diceT); if (!G) return;
       big.innerHTML = dieHtml(d[0]) + dieHtml(d[1]);
-      setTimeout(() => { if (G && shownRoll === G.rollN) { fin(); ui.hitAt = Date.now(); renderBoard(); flyRes(gains); } }, 420);
+      setTimeout(() => { if (G && shownRoll === G.rollN) { fin(); if (t === 7 && window.YkgSfx) YkgSfx.warn(); ui.hitAt = Date.now(); renderBoard(); flyRes(gains); } }, 420);
       return;
     }
     big.innerHTML = dieHtml(1 + Math.floor(Math.random() * 6)) + dieHtml(1 + Math.floor(Math.random() * 6));
@@ -1384,7 +1387,7 @@ function tpos(ti) {
 }
 function flyRes(list) {
   if (FAST || !list.length || screen !== "game") return;
-  const fx = $("fx"), me = mySeat(), per = {};
+  const fx = $("fx"), me = mySeat(), per = {}; let coined = false;
   list.forEach((g, k) => {
     const c = document.createElement("div"); c.className = "fc"; c.style.setProperty("--rc", RCOL[g.r]);
     c.innerHTML = `${RI[g.r]}<b>+${g.n}</b>`;
@@ -1396,6 +1399,7 @@ function flyRes(list) {
     setTimeout(() => {
       const tg = $(tid); if (!tg || !G) { c.remove(); return; }
       const p1 = lpos(tg); c.style.left = p1.x + "px"; c.style.top = p1.y + "px"; c.style.transform = "scale(.5)";
+      if (g.p === me && !coined && window.YkgSfx) { coined = true; YkgSfx.coin(); }   // 自分の手もとに届いたら「チャリン」
       setTimeout(() => { c.remove(); const t2 = $(tid); if (t2) { t2.classList.remove("bump"); void t2.offsetWidth; t2.classList.add("bump"); } }, 560);
     }, 1000 + k * 120);
   });
@@ -1408,6 +1412,28 @@ function showTurn() {
   el.innerHTML = s === G.cur ? "あなたの番です！" : `<i class="dot" style="background:${COLS[G.cur]}"></i>${esc(G.ps[G.cur].name)} の番です`;
   el.classList.remove("hidden"); el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
   clearTimeout(turnPopT); turnPopT = setTimeout(() => el.classList.add("hidden"), 1500);
+}
+
+// ---------------- 音（ykg-sfx.js）: 前に見た状態とくらべて、変わったときだけ鳴らす ----------------
+// render() は何度も呼ばれ、ゲストには状態がまるごと届くので、G.ver が変わったときだけ くらべる
+// 音の切り替えボタンは 1 こを使い回す（画面を書きなおすたびに作ると、通知の登録がたまっていくため）
+let sfxBtnEl = null;
+const sfxBtn = () => sfxBtnEl || (sfxBtnEl = YkgSfx.toggleButton());
+function sfxWatch(s) {
+  if (!window.YkgSfx || !G) return;
+  const now = { ver: G.ver, rollN: G.rollN, offer: G.offer ? G.offer.id : 0,
+    b: G.ps.map(p => [p.roads, p.vils + p.towns, p.towns]), c: G.ps.map(p => p.cards.length + p.newC.length + p.vpC),
+    h: s >= 0 ? tot(G.ps[s].hand) : 0 };
+  const o = ui.sfx; ui.sfx = now;
+  if (!o || o.ver === now.ver || o.b.length !== now.b.length || FAST) return;   // はじめて見た・変わっていない
+  if (now.b.some((x, i) => x.some((n, j) => n > o.b[i][j]))) YkgSfx.build();   // だれかが道・村・町をつくった
+  else if (now.c.some((n, i) => n > o.c[i])) YkgSfx.card();                     // だれかがカードを買った
+  // 7 で手札が半分になった（盗賊の前に、自動でへる）
+  if (now.rollN !== o.rollN && G.dice[0] + G.dice[1] === 7 && s >= 0 && now.h < o.h) setTimeout(() => window.YkgSfx && YkgSfx.damage(), 1100);
+  // 交換: 自分あての提案が来た／人どうしの交換が成立した
+  const of = G.offer;
+  if (of && of.id !== o.offer && s >= 0 && of.from !== s && of.resp[s] === null) YkgSfx.select();
+  if (o.offer && !of && / ⇄ /.test(G.log[G.log.length - 1] || "")) YkgSfx.coin();
 }
 
 // ---------------- 案内・手もと ----------------
@@ -1441,7 +1467,8 @@ function render() {
   renderBoard(); updDice();
   // 番が来たら、まん中に「〇〇の番です」
   const tk = G.turnN + ":" + G.cur;
-  if (G.phase === "roll" && ui.turnKey !== tk) { ui.turnKey = tk; showTurn(); }
+  if (G.phase === "roll" && ui.turnKey !== tk) { ui.turnKey = tk; showTurn(); if (s >= 0 && s === G.cur && window.YkgSfx) YkgSfx.turn(); }
+  sfxWatch(s);
   // 手もと（下のトレイ）
   if (me) {
     $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc" id="hc-${r}" style="--rc:${RCOL[r]}"><div class="ic">${RI[r]}</div><b>${me.hand[r]}</b>${RN[r]}${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
@@ -1480,7 +1507,7 @@ function render() {
   }
   $("acts").innerHTML = (r1 ? `<div class="r">${r1}</div>` : "") + `<div class="r">${r2}</div>`;
   // 勝負がついたら結果を出す（1 回だけ）
-  if (G.phase === "over" && ui.overSeen !== G.ver) { ui.overSeen = G.ver; ui.modal = "over"; }
+  if (G.phase === "over" && ui.overSeen !== G.ver) { ui.overSeen = G.ver; ui.modal = "over"; if (s >= 0 && !spectating && window.YkgSfx) (G.winner === s ? YkgSfx.win : YkgSfx.lose)(); }
   // 7 のとき、だれからもらうかは、まん中の小窓でえらぶ
   if (myTurn && G.phase === "steal") ui.modal = "steal"; else if (ui.modal === "steal") ui.modal = null;
   // 交換のよびかけ（右はし）
@@ -1657,6 +1684,7 @@ function renderModal() {
           : `<div class="note" style="text-align:center">ホストが部屋にもどるのを待っています…</div><button data-m="close">盤を見る</button><button data-m="quit">${PARTY ? "ゲーム一覧へ" : "ぬける"}</button>`);
   }
   box.innerHTML = h;
+  if (k === "menu" && window.YkgSfx) box.insertBefore(sfxBtn(), box.querySelector('[data-m="close"]'));   // 音のオン・オフ
 }
 $("modal").addEventListener("click", e => {
   if (e.target.id === "modal" && ui.modal !== "harvest" && ui.modal !== "steal") { ui.modal = null; renderModal(); return; }

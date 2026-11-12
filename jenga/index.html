@@ -60,9 +60,11 @@
   .seg button { margin-top:0; padding:10px 4px; }
   .seg button.on { background:var(--accent); color:#2a1a05; }
   .diffnote { font-size:12px; color:var(--sub); margin-top:6px; }
+  .hud .snd { width:auto; margin:6px 0 0; padding:6px 8px; border-radius:99px; font-size:11px; background:rgba(42,49,66,.9); white-space:nowrap; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=5"></script>
+<script src="../party-beacon.js?v=6"></script>
+<script src="../ykg-sfx.js?v=1"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 </head>
 <body>
@@ -95,6 +97,9 @@ const PREFIX = "jenga-online-room-";
 const isOffline = () => !navigator.onLine || new URLSearchParams(location.search).get("offline") === "1";
 const netOk = () => !isOffline() && typeof Peer !== "undefined";   // PeerJS が読めなかったときも通信は使えない
 const toGames = () => { if (window.ykgToGames) ykgToGames(); else location.href = "../"; };   // party-beacon.js が読めなかったときも一覧へ戻れるように
+// 音と振動（2026-11-13）: ミニゲーム集で共通の ykg-sfx.js。読めなかったときは鳴らさないだけ
+const sfx = k => { if (window.YkgSfx) try { YkgSfx[k](); } catch (e) {} };
+let creakT = 0, crashed = false;   // こすれる音を最後に鳴らした時刻 / この番の「崩れる」音を鳴らしたか（2 回鳴らさないように）
 const PARTY = (() => {
   try { if (isOffline() || !new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; }
 })();
@@ -372,7 +377,7 @@ function setHighlight(i, on) {
 function selectBlock(i) {
   if (sel === i) return;
   releaseSel();
-  sel = i; setHighlight(i, true);
+  sel = i; setHighlight(i, true); sfx("pick");
   const b = bodies[i];
   cam.goal = b.translation().y;
   b.setGravityScale(0, true);      // 指でつまんでいるので、引き出しても落ちない
@@ -395,6 +400,9 @@ function physStep() {
     const want = Math.max(-FINGER_VMAX, Math.min(FINGER_VMAX, (drag.target - off) / DT));
     const vy = drag.ty == null ? v.y : Math.max(-FINGER_VMAX, Math.min(FINGER_VMAX, (drag.ty - p.y) / DT));   // 上下も指と同じに
     b.setLinvel({ x: v.x + drag.axis.x * (want - va), y: vy, z: v.z + drag.axis.z * (want - va) }, true);
+    // 押している・引いているブロックが動いている間だけ、ときどき「ギギッ」（0.6 秒に 1 回まで）
+    const now = performance.now();
+    if (Math.abs(va) > 0.3 && now - creakT > 600) { creakT = now; sfx("creak"); }
   }
   if (phase === "carry") {   // 抜いたブロックを、タワーの上（少し浮かせた所）まで自動で運ぶ
     const b = bodies[held], p = b.translation(), q = b.rotation(), t = place.pose;
@@ -430,13 +438,15 @@ function physStep() {
     if ((phaseT > 0.8 && quietT > 0.6) || phaseT > 8) {
       if (!checkFallen()) {
         // 置いたブロックがタワーの上に乗っていない（テーブルに落ちた・横に置いた）ときは番を終えず、もう一度上へ運んで置き直す
-        if (levelOf(held) < Math.max(1, towerInfo(held).top)) { toast("タワーの上に置いてください"); liftHeld(); return; }
+        if (levelOf(held) < Math.max(1, towerInfo(held).top)) { toast("タワーの上に置いてください"); sfx("error"); liftHeld(); return; }
         phase = "wait"; send({ t: "end", d: snapshot() }); renderUI(); return;
       }
     }
   }
   if ((phase === "pull" || phase === "carry" || phase === "place" || phase === "settle") && checkFallen()) {
-    phase = "fallen"; phaseT = 0; releaseSel(); navigator.vibrate?.([80, 40, 160]); renderUI();
+    phase = "fallen"; phaseT = 0; releaseSel(); navigator.vibrate?.([80, 40, 160]);
+    if (!crashed) { crashed = true; sfx("crash"); }
+    renderUI();
   }
   if (phase === "fallen" && phaseT > 2.5) { phase = "wait"; send({ t: "fall", d: snapshot() }); return; }
   const now = performance.now();   // 見ている人へ今の位置を送る
@@ -504,6 +514,7 @@ function dropHeld() {
   }
   baseY[held] = surf + heights[held] / 2;
   phase = "settle"; phaseT = 0; quietT = 0; place = null; rotHold = 0;
+  sfx("place");
   renderUI();
 }
 
@@ -772,7 +783,7 @@ canvas.addEventListener("pointerup", pointerEnd);
 canvas.addEventListener("pointercancel", pointerEnd);
 function tapBlock(i) {
   if (screen !== "game" || !isMine() || phase !== "pull") return;
-  if (!canPick(i)) { toast("上の段からは抜けません"); return; }
+  if (!canPick(i)) { toast("上の段からは抜けません"); sfx("error"); return; }
   selectBlock(i); renderUI();
 }
 function toast(t) { toastMsg = t; toastT = performance.now() + 1500; renderUI(); setTimeout(renderUI, 1600); }
@@ -842,7 +853,7 @@ function hostStart() {
   const ps = mode === "local" ? players : lobby.slice();
   if (mode !== "local" && teamMode && ps.length !== 4) teamMode = false;
   const tm = teamMode && ps.length === 4 && teamsOk(ps);
-  if (mode !== "local" && teamMode && !tm) { toast("チームを 2人ずつにしてください"); return; }
+  if (mode !== "local" && teamMode && !tm) { toast("チームを 2人ずつにしてください"); sfx("error"); return; }
   host.playing = true; host.turnI = 0; host.n = 0; host.last = null;
   let ord = shuffle(ps.map(p => p.id));
   if (tm) {   // チーム戦: 赤・青が交互の順番（どちらが先かと、チームの中の順番はランダム）
@@ -895,7 +906,13 @@ function onMsg(m) {
   switch (m.t) {
     case "welcome": myId = m.you; spectating = !!m.spec; if (screen !== "game") screen = "lobby"; break;
     case "reject": errMsg = m.why; screen = "menu"; cleanupNet(); break;
-    case "lobby": lobby = m.players; lobbySpecs = m.specs || []; if (m.diff) diff = m.diff; if (mode === "client") teamMode = !!m.teams; break;
+    case "lobby": {
+      // 部屋の画面で、人（CPU 以外）・観戦の人が来た・抜けたら音を鳴らす（最初に届いたときは鳴らさない）
+      const ids = new Set([...m.players.filter(p => !p.cpu).map(p => "p" + p.id), ...(m.specs || []).map(n => "s" + n)]);
+      if (sfxLobby && screen === "lobby") { if ([...ids].some(k => !sfxLobby.has(k))) sfx("join"); else if ([...sfxLobby].some(k => !ids.has(k))) sfx("leave"); }
+      sfxLobby = ids;
+      lobby = m.players; lobbySpecs = m.specs || []; if (m.diff) diff = m.diff; if (mode === "client") teamMode = !!m.teams; break;
+    }
     case "start": {
       players = m.players; order = m.order; overInfo = null; teamMode = !!m.teams;
       applyDiff(m.diff); buildTower(m.seed); screen = "game"; phase = "watch"; viewSel = -1; cpuTight.clear();
@@ -909,26 +926,36 @@ function onMsg(m) {
       order = m.order;
       const a = avatars.get(m.left);
       if (a) { for (const o of [a.g, a.arm, a.hand]) scene.remove(o); avatars.delete(m.left); }
+      sfx("leave");
       break;
     }
     case "turn":
       if (viewSel >= 0) setHighlight(viewSel, false); viewSel = -1;
       curId = m.cur; moves = m.n; activeInfo = null;
       if (m.d) applySnapshot(m.d);
-      cpu = null;
+      cpu = null; crashed = false;
       if (simHere()) { beginMyTurn(); if (cpuTurn()) cpuBegin(); } else phase = "watch";
+      if (isMine() && !spectating && players.length > 1) sfx("turn");   // 自分の番になった（ひとりで練習は毎回なので鳴らさない。turn は番ごとに 1 回だけ届く）
       break;
     case "look": { const a = avatars.get(m.id); if (a) a.tyaw = m.yaw; return; }
     case "snap": {
       if (simHere() || screen !== "game") return;
       if (m.q && !freshSnap("cur" + curId, m)) return;   // 遅れて届いた古い位置は使わない
       setTargets(m.d);
+      // 見ている人の音: つまんだ・置いた・崩れた（届いた状態が変わったときだけ。同じ状態の snap が続いても鳴らさない）
+      const ph0 = activeInfo && activeInfo.ph;
+      if (m.ph !== ph0) {
+        if (m.ph === "settle" && ph0 === "place") sfx("place");
+        if (m.ph === "fallen" && !crashed) { crashed = true; sfx("crash"); }
+      }
+      if (m.ph === "pull" && m.s >= 0 && m.s !== viewSel) sfx("pick");
       activeInfo = { ph: m.ph, s: m.s };
       const a = avatars.get(curId); if (a && m.yaw != null) a.tyaw = m.yaw;
       if (m.s !== viewSel) { setHighlight(viewSel, false); viewSel = m.s; setHighlight(viewSel, true); }
       return;
     }
     case "over":
+      if (phase !== "over") overSfx(m);
       setHighlight(viewSel, false); viewSel = -1;
       phase = "over"; overInfo = m; moves = m.n;
       if (m.d && !simHere()) setTargets(m.d);
@@ -937,6 +964,16 @@ function onMsg(m) {
   renderUI();
 }
 
+let sfxLobby = null;   // 部屋の画面で最後に見た人たち（来た・抜けたの音のため）
+// 結果の音: 自分（チーム戦は自分のチーム）が勝ち → win / 負け → lose。相手がいなくなった・1台で交代 → draw。観戦・ひとりで練習は「崩れる」音だけ
+function overSfx(o) {
+  if (o.loser !== -1 && !crashed) { crashed = true; sfx("crash"); }   // 崩れた snap が届かなかった人にも
+  if (spectating || (mode === "local" && players.length === 1)) return;
+  const meIn = !(mode === "local" && !players.some(p => p.cpu)) && players.some(p => p.id === myId);
+  if (o.loser === -1 || !meIn) { sfx("draw"); return; }
+  const lost = teamMode && teamOf(o.loser) != null && teamOf(myId) != null ? teamOf(myId) === teamOf(o.loser) : o.loser === myId;
+  sfx(lost ? "lose" : "win");
+}
 function cleanupNet() { try { peer?.destroy(); } catch (e) {} peer = null; hostConn = null; host.conns.clear(); host.playing = false; }
 const randCode = () => String(Math.floor(1000 + Math.random() * 9000));
 let hostTries = 0;
@@ -945,7 +982,7 @@ function noNet() { if (netOk()) return false; mode = null; screen = "menu"; errM
 function startHost() {
   if (noNet()) return;
   host.cpus = []; host.team.clear(); teamMode = false;   // 新しい部屋は CPU なしから
-  mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; renderUI();
+  mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; sfxLobby = null; renderUI();
   const code = PARTY ? PARTY.code : randCode();
   peer = new Peer(netId(code));
   peer.on("open", () => { host.code = code; screen = "lobby"; hostLobby(); renderUI(); });
@@ -984,7 +1021,7 @@ function joinRoom(code) {
   code = String(code).replace(/\D/g, "");
   if (code.length !== 4 && !PARTY) { errMsg = "部屋番号は4けたです"; renderUI(); return; }
   if (noNet()) return;
-  mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; renderUI();
+  mode = "client"; screen = "connecting"; errMsg = ""; host.code = code; sfxLobby = null; renderUI();
   peer = new Peer();
   peer.on("open", () => {
     const hc = hostConn = peer.connect(netId(code), { reliable: true });
@@ -1113,6 +1150,7 @@ function partyLobby() {
   }
   if (ykgLobby.active) ykgLobby.update(o); else ykgLobby.open(o);
 }
+const sndBtn = window.YkgSfx ? YkgSfx.toggleButton("") : null;   // 音のオン・オフのボタン（ykg-sfx.js が読めなかったときは出さない）
 function renderUI() {
   let h = "";
   if (PARTY && screen !== "game") {   // パーティ: 自分の画面は出さず、共通の待ち合わせ画面だけ
@@ -1137,6 +1175,7 @@ function renderUI() {
       <div class="row"><button data-a="local2">2人で交代</button><button data-a="local3">3人</button><button data-a="local4">4人</button></div>
       ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}
       <div class="sep"></div>
+      <div class="snd-slot"></div>
       <button data-a="games">← ゲーム一覧へ（you know games）</button>
     </div></div>`;
   } else if (screen === "loading" || screen === "connecting") {
@@ -1173,7 +1212,7 @@ function renderUI() {
     h = `<div class="hud p"><div class="who"><div class="turn ${mine ? "me" : ""}">${turnTxt}</div>
         <div class="hint">${(cpuTurn() ? cpuHints[phase] : hints[phase]) || ""}</div>
         ${order.length > 1 ? `<div class="order">${order.map(id => `<span class="${id === curId && phase !== "over" ? "on" : ""}" style="${chip(id)}">${esc(nameOf(id))}</span>`).join("")}</div>` : ""}</div>
-      <div class="cnt">ターン<b>${moves}</b>倒れやすさ ${DIFFS[diff].label}</div><button class="x" data-a="quit">✕</button></div>`;
+      <div class="cnt">ターン<b>${moves}</b>倒れやすさ ${DIFFS[diff].label}<div class="snd-slot"></div></div><button class="x" data-a="quit">✕</button></div>`;
     if (mine && phase === "place") {
       h += `<div class="bottom p" style="flex-direction:column">
         <div class="row"><button data-a="left">◀ 置き場</button><button data-a="right">置き場 ▶</button></div>
@@ -1202,6 +1241,9 @@ function renderUI() {
   }
   if (toastMsg && performance.now() < toastT) h += `<div class="toast">${esc(toastMsg)}</div>`;
   ui.innerHTML = h;
+  // 音のオン・オフ（メニューの下と、ゲーム中は右上のターン数の下）。同じボタンを入れ直して使う
+  const sndSlot = ui.querySelector(".snd-slot");
+  if (sndSlot && sndBtn) { sndBtn.className = screen === "game" ? "snd" : ""; sndSlot.appendChild(sndBtn); }
   const nm = document.getElementById("name"); if (nm) nm.oninput = () => store.set("jenga-name", nm.value);
   partyLobby();
 }

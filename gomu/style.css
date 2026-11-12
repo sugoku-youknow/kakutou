@@ -156,6 +156,7 @@ body[data-screen="game"] .board-wrap { border-radius: 0; background: #171a22; }
 #game-canvas { touch-action: none; border-radius: 10px; display: block; }
 .game-foot { display: flex; align-items: center; gap: 10px; padding: 6px 12px calc(env(safe-area-inset-bottom) + 8px); }
 .game-foot .hint { flex: 1; margin: 0; color: var(--muted); font-size: 0.82rem; }
+.game-foot .btn { flex: none; white-space: nowrap; }   /* 2026-11-13: 音のボタンと退出を並べても折り返さない */
 #timer { font-family: 'Baloo 2', system-ui, sans-serif; font-weight: 700; font-size: 1.4rem; min-width: 3.4em; text-align: right; color: #fff; }
 #timer.hot { color: var(--danger); }
 .btn-small { padding: 10px 14px; font-size: 0.9rem; min-height: 44px; }

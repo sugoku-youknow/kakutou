@@ -97,6 +97,18 @@ export function removeInnerWalls(engine) {
   return inner.length;
 }
 
+// 2026-11-13: 玉が玉・壁にぶつかったとき、ぶつかった強さ（2 つの速さの差）を cb に渡す（音を鳴らすため。ホストだけ）
+export function onImpact(engine, cb) {
+  M().Events.on(engine, 'collisionStart', (ev) => {
+    let max = 0;
+    for (const { bodyA: a, bodyB: b } of ev.pairs) {
+      const v = Math.hypot(a.velocity.x - b.velocity.x, a.velocity.y - b.velocity.y);
+      if (v > max) max = v;
+    }
+    if (max > 0) cb(max);
+  });
+}
+
 export function stepWorld(engine, deltaMs) {
   M().Engine.update(engine, deltaMs);
 }

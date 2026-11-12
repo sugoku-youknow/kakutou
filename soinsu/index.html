@@ -140,18 +140,19 @@ table.res td:last-child{text-align:right}
   <div id="toast"></div>
   <div id="stick" class="lay" data-lay="stick" data-name="スティック"><div id="knob"></div></div>
   <button id="target" class="lay" data-lay="target" data-name="相手をえらぶ"><b>🎯</b>相手</button>
-  <button id="jump" class="lay" data-lay="jump" data-name="ジャンプ"><b>⤒</b>ジャンプ</button>
+  <button id="jump" class="lay" data-nosfx data-lay="jump" data-name="ジャンプ"><b>⤒</b>ジャンプ</button>
   <button id="item" class="lay itembtn hidden" data-lay="item" data-name="アイテム"><b id="itemi"></b><span id="itemt"></span></button>
   <div id="pad" class="lay hidden" data-lay="pad" data-name="入力パッド">
     <div id="padhead"><span id="ptname"></span><span id="pdisp"></span></div>
-    <div class="keys" id="keys"></div>
+    <div class="keys" id="keys" data-nosfx></div>
   </div>
 </div>
 <div id="screen"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=5"></script>
+<script src="../party-beacon.js?v=6"></script>
+<script src="../ykg-sfx.js?v=1"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 <script type="module">
 import * as THREE from "three";
@@ -651,6 +652,7 @@ let G = null;             // ホストだけが持つ正式な状態
 const view = new Map();   // 画面に出す全員の状態
 const me = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, pitch: 0 };
 let selId = null, inp = [], kbuf = "", lastAtk = -99, overInfo = null, practiceBots = 3;
+let sfxBtn = null;   // 共通の「音：オン／オフ」ボタン（メニューで足音ボタンのとなりに置く）
 let teamMode = false;   // いまの試合がチーム戦か（start のメッセージで決まる）
 // CPU 練習の設定（2026-11-09）: ステージとチーム戦。覚えておく
 let practiceStage = "random", practiceTeam = false;
@@ -1082,7 +1084,10 @@ function onMsg(m) {
       previewStage(host.stage, lobbyPs.length);
       break;
     case "start": startView(m); break;
-    case "tm": timeLeft = m.l; if (m.rv && !reveal) { reveal = true; setReveal(true); toast("残り1分！ 物かげの向こうの数字も見える"); } return;
+    case "tm":
+      // 共通の音（ykg-sfx.js）: 残り10秒で 1 回、残り5秒から 1 秒ごと（1 秒に 1 回届くので、値が変わったときだけ）
+      if (window.YkgSfx && m.l !== timeLeft && !overInfo && screen === "game") { if (m.l === 10) YkgSfx.warn(); else if (m.l > 0 && m.l <= 5) YkgSfx.tick(true); }
+      timeLeft = m.l; if (m.rv && !reveal) { reveal = true; setReveal(true); toast("残り1分！ 物かげの向こうの数字も見える"); } return;
     case "st":
       if (m.q) { if (m.q <= lastStQ) return; lastStQ = m.q; }   // 遅れて届いた古い位置は使わない
       for (const [id, x, z, yaw, y] of m.p) { const v = view.get(id); if (v && id !== myId) { v.tx = x; v.tz = z; v.tyaw = yaw; v.ty = y; } }
@@ -1093,7 +1098,7 @@ function onMsg(m) {
     case "use": applyUse(m); return;
     case "gone": { const v = view.get(m.id); if (v) { v.alive = false; addFeed(`${v.name} が抜けました`); } if (selId === m.id) closePad(); return; }
     case "msg": toast(m.s); return;
-    case "over": overInfo = m; closePad(); break;
+    case "over": if (!overInfo) overSfx(m); overInfo = m; closePad(); break;
   }
   renderUI();
 }
@@ -1105,6 +1110,8 @@ function applyEv(m) {
     else addFeed(`${a.name} → ${t.name}：命中`);
     if (t.id !== myId) floatText(t, m.dead ? "撃破！" : "命中", m.dead ? "#ffd400" : "#ff6060");
     hitFx(t, m.dead ? "kill" : "hit");
+    // 共通の音: 自分が当てた → 撃つ音＋命中、自分がやられた → ダメージ（撃破されたら崩れる音）、ほかの人の撃破 → 小さく「カツッ」
+    if (window.YkgSfx) { if (a.id === myId) { YkgSfx.shot(); YkgSfx.hit(); } else if (t.id === myId) { if (m.dead) YkgSfx.crash(); else YkgSfx.damage(); } else if (m.dead) YkgSfx.knock(); }
     if (t.id === myId) { flash(); vibrate(m.dead ? 300 : 80); if (m.dead) toast(`${a.name} にやられた…`); }
     const hs = m.heal && m.heal.length ? m.heal.join("×") : "";
     if (a.id === myId) toast(m.dead ? (hs ? `撃破！ 回復 ×${hs} → ${prod(m.fa)}` : "撃破！") : "命中！");
@@ -1117,17 +1124,29 @@ function applyEv(m) {
     addFeed(`${a.name} の打ち込みは外れ`);
     hitFx(a, "miss");
     if (a.id !== myId) floatText(a, "失敗", "#ff9a3a");
-    else { flash(); vibrate(150); lastAtk = performance.now() / 1000 + WRONG_LOCK - COOLDOWN; toast(`失敗！ 自分の数字 ${m.ab} → ${prod(m.fa)}（${WRONG_LOCK}秒 打ち込めない）`); }
+    else {
+      if (window.YkgSfx) { YkgSfx.miss(); YkgSfx.damage(); }   // 間違えた: 不発＋自分の数字が減る
+      flash(); vibrate(150); lastAtk = performance.now() / 1000 + WRONG_LOCK - COOLDOWN; toast(`失敗！ 自分の数字 ${m.ab} → ${prod(m.fa)}（${WRONG_LOCK}秒 打ち込めない）`); }
   }
   if (m.dead && (selId === m.to || m.to === myId)) closePad();   // 撃破したら（自分がやられても）入力パッドを閉じる
 }
 
+// 共通の音: 試合の結果（自分・自分のチームが勝ち／負け／引き分け。観戦の人は鳴らさない）
+function overSfx(m) {
+  if (!window.YkgSfx || spectating || myId < 0 || !m.ps || !m.ps.some(p => p.id === myId)) return;
+  const wins = m.wins || (m.win != null ? [m.win] : []);
+  const draw = m.team != null ? m.team < 0 : wins.length !== 1;
+  if (draw && (m.team != null || !wins.length || wins.includes(myId))) YkgSfx.draw();
+  else if (wins.includes(myId)) YkgSfx.win();
+  else YkgSfx.lose();
+}
 function applyPick(m) {
   const g = itemObjs.get(m.iid); if (g) { scene.remove(g); itemObjs.delete(m.iid); }
   const v = view.get(m.pid), info = ITEM[m.k]; if (!v || !info) return;
   addFeed(`${v.name} が ${info.name} を拾った`);
   if (m.pid === myId) {
     const old = held; held = m.k; if (m.k !== "scope") zoomed = false;
+    if (window.YkgSfx) YkgSfx.coin();   // 共通の音: アイテムを拾った
     toast(`${info.name}を拾った${old && old !== m.k ? `（${ITEM[old].name}と入れかえ）` : ""}！ ${info.hint}`);
   }
 }
@@ -1444,6 +1463,7 @@ function startView(m) {
   lastAtk = -99; screen = "game"; lastMine = ""; hostSeen = performance.now();
   timeLeft = TIME_LIMIT; lastStQ = 0;
   toast("おでこの数字を覚えて、素因数を打ち込もう！");
+  if (window.YkgSfx) YkgSfx.go();   // 共通の音: スタート（カウントダウンはないので、始まったときに 1 回）
 }
 
 // ================= 入力 =================
@@ -1574,16 +1594,16 @@ function padPress(k) {
 function submit() {
   const t = view.get(selId); if (!t || !t.alive) { closePad(); return; }
   if (kbuf) { if (!commitKbuf()) return; }
-  if (!inp.length) { toast("素数をえらんでください"); return; }
+  if (!inp.length) { toast("素数をえらんでください"); if (window.YkgSfx) YkgSfx.error(); return; }
   const now = performance.now() / 1000;
-  if (now < lastAtk + COOLDOWN) return;
+  if (now < lastAtk + COOLDOWN) { if (window.YkgSfx) YkgSfx.error(); return; }   // 共通の音: 待ち時間中は打ち込めない
   lastAtk = now;
   sendHost({ t: "atk", to: selId, p: inp.slice() });
   inp = []; updPad(true);
 }
 function commitKbuf() {
   const n = Number(kbuf); kbuf = "";
-  if (!isPrime(n)) { toast(`${n} は素数ではありません`); updPad(true); return false; }
+  if (!isPrime(n)) { toast(`${n} は素数ではありません`); if (window.YkgSfx) YkgSfx.error(); updPad(true); return false; }
   if (inp.length < 12) inp.push(n);
   updPad(true); return true;
 }
@@ -1835,7 +1855,7 @@ function updListener() {
   else { L.setPosition(me.x, y, me.z); L.setOrientation(fx, 0, fz, 0, 1, 0); }
 }
 function stepSound(x, y, z, mine) {
-  if (!actx || !soundOn || actx.state !== "running") return;
+  if (!actx || !soundOn || actx.state !== "running" || window.YkgSfx?.muted) return;   // 全部のゲーム共通の「音：オフ」でも鳴らさない
   const t = actx.currentTime;
   const src = actx.createBufferSource(); src.buffer = noiseBuf; src.playbackRate.value = 0.7 + Math.random() * 0.5;
   const f = actx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 350 + Math.random() * 250; f.Q.value = 1.5;
@@ -1952,7 +1972,8 @@ function renderUI() {
       ${practiceTeam ? `<div class="note">チーム戦: あなたは赤チーム。CPUは青・赤に分かれる</div>` : ""}
       <button class="btn sub" data-a="practice">CPUと練習する</button></div>
       <details class="rd"><summary>ルール・遊び方</summary>${RULES}</details>
-      <div class="row" style="margin-top:14px"><button class="btn sub" style="margin-top:0" data-a="layout">ボタン配置を変える</button><button class="btn sub" style="margin-top:0" data-a="sound">足音：${soundOn ? "ON" : "OFF"}</button></div>
+      <button class="btn sub" style="margin-top:14px" data-a="layout">ボタン配置を変える</button>
+      <div class="row" id="sndrow"><button class="btn sub" style="margin-top:0" data-a="sound">足音：${soundOn ? "ON" : "OFF"}</button></div>
       ${window.IN_HUB ? `<button class="btn sub" data-a="games">← ゲーム一覧へ（you know games）</button>` : ""}
       ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}</div>`;
   } else if (screen === "layout") {
@@ -1995,6 +2016,8 @@ function renderUI() {
       <button class="btn sub" data-a="leave">${PARTY ? "ゲーム一覧へ" : "メニューへ"}</button></div>`;
   }
   s.innerHTML = h;
+  // 全部のゲーム共通の「音：オン／オフ」（ykg-sfx.js）を足音ボタンのとなりに置く
+  if (window.YkgSfx && $("sndrow")) { if (!sfxBtn) { sfxBtn = YkgSfx.toggleButton("btn sub"); sfxBtn.style.marginTop = "0"; } $("sndrow").appendChild(sfxBtn); }
   $("laysize")?.addEventListener("input", e => { LAY[editSel].s = Number(e.target.value) / 100; applyLayout(); updLayBar(); saveLayout(); });
 }
 $("screen").addEventListener("click", async e => {

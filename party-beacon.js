@@ -47,11 +47,69 @@
       });
       on("open", () => { wait = 1000; });
       on("error", () => {});   // 上で拾ったエラーで止まらないように
+      // 2026-11-13: 相手とのつながりを見守る（下の 1b）。自分からつないだ道 = 相手がホスト
+      const conn0 = p.connect.bind(p);
+      p.connect = function () { const c = conn0.apply(null, arguments); try { watchConn(c, true); } catch (e) {} return c; };
+      on("connection", c => { try { watchConn(c, false); } catch (e) {} });
       return p;
     };
     YP.prototype = P.prototype; YP.__ykg = true;
     window.Peer = YP;
   }
+
+  // ---------- 1b. 接続の見守り（2026-11-13） ----------
+  // すべての道で 2 秒ごとに小さな合図（{__ykg:"ping"}）を送り合う。合図はゲームには渡さずここで捨てる。
+  // 自分からつないだ相手（ゲストから見たホスト）から 5 秒なにも届かないと、画面の上に「ホストの応答がありません」を出す。
+  // 届いたら消える。ゲームの側は window.ykgNet.lost（何秒とどいていないか。0 ならだいじょうぶ）と ykgNet.onChange(fn) で使える。
+  // 合図を送るのは中身をそのまま送る道（serialization: raw / none）以外。届いたかどうかは、どの道でも数える。
+  const watched = new Set(), netFns = new Set();
+  let lostSec = 0, banner = null, watchTimer = null;
+  function watchConn(c, out) {
+    if (!c || c.__ykgWatch) return; c.__ykgWatch = true;
+    const w = { c, out, seen: Date.now(), timer: null };
+    const emit = c.emit;
+    c.emit = function (ev, d) {
+      if (ev === "data") {
+        w.seen = Date.now();
+        if (d && typeof d === "object" && d.__ykg === "ping") return true;   // 見守りの合図はゲームに渡さない
+      } else if (ev === "open") {
+        w.seen = Date.now(); watched.add(w);
+        if (c.serialization !== "raw" && c.serialization !== "none")
+          w.timer = setInterval(() => { if (c.open) { try { c.send({ __ykg: "ping" }); } catch (e) {} } }, 2000);
+        if (!watchTimer) watchTimer = setInterval(checkNet, 1000);
+      } else if (ev === "close" || ev === "error") {
+        clearInterval(w.timer); watched.delete(w); checkNet();
+      }
+      return emit.apply(this, arguments);
+    };
+  }
+  function checkNet() {
+    const now = Date.now(), byPeer = new Map();
+    for (const w of watched) {
+      if (!w.c.open) { clearInterval(w.timer); watched.delete(w); continue; }
+      if (w.out) byPeer.set(w.c.peer, Math.max(byPeer.get(w.c.peer) || 0, w.seen));
+    }
+    let worst = 0;
+    for (const t of byPeer.values()) worst = Math.max(worst, now - t);
+    const s = document.hidden || worst < 5000 ? 0 : Math.floor(worst / 1000);
+    if (s !== lostSec) { const was = lostSec; lostSec = s; showBanner(); if (!was !== !s) netFns.forEach(fn => { try { fn(s); } catch (e) {} }); }
+  }
+  // 自分のアプリが裏にいるあいだは数えない（表に戻ったら数え直す）
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { const t = Date.now(); watched.forEach(w => { w.seen = t; }); } checkNet(); });
+  function showBanner() {
+    if (!document.body) return;
+    if (!banner) {
+      banner = document.createElement("div"); banner.id = "ykgNetBanner";
+      banner.style.cssText = "position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 8px);transform:translateX(-50%);z-index:2147483600;"
+        + "background:rgba(20,20,28,.92);color:#ffe08a;border:1px solid #f0b25a;border-radius:12px;padding:8px 14px;max-width:88vw;"
+        + "font:700 14px/1.45 system-ui,-apple-system,'Hiragino Sans','Noto Sans JP',sans-serif;text-align:center;pointer-events:none;box-shadow:0 4px 14px #0008";
+      document.body.appendChild(banner);
+    }
+    banner.style.display = lostSec ? "block" : "none";
+    if (lostSec) banner.innerHTML = `📡 ホストの応答がありません（${lostSec}秒）<br><span style="font-weight:400;font-size:12px;color:#e5e7eb">`
+      + (lostSec < 20 ? "電波がもどるのを待っています…" : "ホストがアプリを閉じたか、電波が切れたかもしれません") + "</span>";
+  }
+  window.ykgNet = { get lost() { return lostSec; }, onChange(fn) { netFns.add(fn); return () => netFns.delete(fn); } };
 
   // このタブの決まった ID（つなぎ直しても同じ人だとわかるように。2 人用のゲームで、つなぎ直した人が観戦にされないように）
   try {

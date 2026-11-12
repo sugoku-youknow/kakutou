@@ -502,7 +502,8 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=5"></script>
+<script src="../party-beacon.js?v=6"></script>
+<script src="../ykg-sfx.js?v=1"></script>
 <script>
 (function(){
   const ROWS=9, COLS=9;
@@ -710,7 +711,7 @@
 
     if(selected){
       const {r:sr,c:sc}=selected;
-      if(sr===r&&sc===c){ clearSelection(); return; }
+      if(sr===r&&sc===c){ clearSelection(); if(window.YkgSfx) YkgSfx.cancel(); return; }
       const moves = legalMovesFor(sr,sc,board).filter(m=>m.r===r&&m.c===c);
       if(moves.length){
         attemptAction({kind:'move',owner:board[sr][sc].owner,sr,sc,dr:r,dc:c});
@@ -741,6 +742,7 @@
 
   function selectSquare(r,c){
     selected={r,c};
+    if(window.YkgSfx) YkgSfx.pick();   // 2026-11-13: 駒をつまむ音（タップしたときだけ呼ばれる）
     renderAll();
   }
   function clearSelection(){
@@ -763,12 +765,35 @@
       if(capturedIsKing){
         board[dr][dc]=null;
         board[sr][sc]=null;
+        sfxMove('capture');
         finishMove(p,dr,dc,sr,sc);
         endGame(p.owner);
         return;
       }
     }
+    const wasPromoted = p.promoted;
     finishMove(p,dr,dc,sr,sc);
+    sfxMove(target ? 'capture' : 'move', !wasPromoted && p.promoted);   // 成りが決まった（行き所のない駒）ときも音を足す
+  }
+
+  // ===== 音（2026-11-13: ykg-sfx.js）=====
+  // ホスト・この端末で指した手はその場で鳴らし、番号（sfxNo）と種類を盤面といっしょにゲストへ送る。
+  // ゲストは番号が増えたときだけ鳴らす（同じ盤面が送り直されても二重に鳴らないように）
+  let sfxNo = 0, sfxKind = null, sfxHeard = -1;
+  function playMoveSfx(kind){
+    if(!window.YkgSfx || !kind) return;
+    YkgSfx.knock();
+    if(kind.indexOf('capture')===0) YkgSfx.hit();
+    if(kind.indexOf('+')>=0 || kind==='promote') YkgSfx.build();
+  }
+  function sfxMove(kind, promo){
+    sfxKind = kind==='promote' ? 'promote' : kind + (promo ? '+' : '');
+    sfxNo++;
+    playMoveSfx(sfxKind);
+  }
+  function sfxResult(w){
+    if(!window.YkgSfx || spectating) return;   // 観戦の人は鳴らさない
+    if(!myColor || w===myColor) YkgSfx.win(); else YkgSfx.lose();   // この端末だけの 2 人プレイは勝った音
   }
 
   function finishMove(p,dr,dc,sr,sc){
@@ -817,6 +842,7 @@
       const loser = otherColor(winner);
       if(!(lostSeats.includes(loser) && !side(loser).length)) partyReport(side(winner), side(loser));
     }
+    if(!gameOver) sfxResult(winner);
     gameOver=true;
     winnerColor=winner;
     winText.textContent = winLabel(winner);
@@ -849,6 +875,7 @@
   function performDrop(owner,type,r,c){
     board[r][c] = {type, owner, promoted:false, cooldownUntil: now()+cooldownFor(type)};
     hands[owner][type]--;
+    sfxMove('drop');
     if(dropSelection && dropSelection.owner===owner && dropSelection.type===type && !hands[owner][type]){ dropSelection=null; dropHint.classList.remove('show'); }   // 味方が最後の 1 枚を打った
     renderAll();
     checkKingCapture();
@@ -856,12 +883,13 @@
 
   function performPromote(r,c){
     const p = board[r][c];
-    if(p){ p.promoted = true; }
+    if(p){ p.promoted = true; sfxMove('promote'); }
     promoOffers = promoOffers.filter(o=>!(o.r===r&&o.c===c));
     renderAll();
   }
 
-  function flashStatus(msg){
+  function flashStatus(msg){   // できない操作をタップしたときだけ呼ばれる
+    if(window.YkgSfx) YkgSfx.error();
     statusEl.textContent = msg;
     clearTimeout(flashStatus._t);
     flashStatus._t = setTimeout(()=>{ if(statusEl.textContent===msg) statusEl.textContent=''; }, 1400);
@@ -994,9 +1022,11 @@
         clearSelection();
         if(dropSelection && dropSelection.owner===owner && dropSelection.type===type){
           cancelDrop();
+          if(window.YkgSfx) YkgSfx.cancel();
           return;
         }
         dropSelection = {owner,type};
+        if(window.YkgSfx) YkgSfx.pick();
         dropHint.classList.add('show');
         renderHands();
       });
@@ -1129,7 +1159,7 @@
     if(a.kind==='move'){
       const p=board[a.dr] && board[a.dr][a.dc];
       const mine = o => o.by==='cpu' && o.r===a.dr && o.c===a.dc;
-      if(p && p.owner===color && !p.promoted && promoOffers.some(mine)) p.promoted=true;
+      if(p && p.owner===color && !p.promoted && promoOffers.some(mine)){ p.promoted=true; if(window.YkgSfx) YkgSfx.build(); if(sfxKind && sfxKind.indexOf('+')<0) sfxKind += '+'; }   // CPU が成った（ゲストには成りの音として送る）
       promoOffers = promoOffers.filter(o=>!mine(o));   // 人の「成る？」はそのまま
       renderAll();
     }
@@ -1191,10 +1221,15 @@
       const secs = Math.max(1, Math.ceil(remain/1000));
       countdownStatusEl.textContent = secs+'…';
       countdownStatusEl.style.display = 'block';
+      if(secs!==countSfxLast && window.YkgSfx) YkgSfx.count(secs);   // 2026-11-13: 3・2・1 の音
+      countSfxLast = secs;
     } else {
       countdownStatusEl.style.display = 'none';
+      if(countSfxLast && matchStarted && window.YkgSfx) YkgSfx.go();   // 数え終わって始まった
+      countSfxLast = 0;
     }
   }
+  let countSfxLast = 0;
 
   const netStatusEl = document.getElementById('netStatus');
   const battleStatusEl = document.getElementById('battleStatus');
@@ -1485,12 +1520,18 @@
       readyState: {sente:readyState.sente, gote:readyState.gote},
       readyIds: [...readyIds],
       countdownRemain: countdownUntil>0 ? Math.max(0, countdownUntil-now()) : 0,
+      sfxNo, sfxKind,   // 2026-11-13: 最後の手の音（ゲストは番号が増えたときだけ鳴らす）
       lobby: PARTY && isHost ? lobbyMembers() : null
     };
   }
 
   function applySyncState(state){
-    const wasMatchStarted = matchStarted;
+    const wasMatchStarted = matchStarted, wasOver = gameOver, firstSync = sfxHeard<0;
+    // 新しい手のときだけ音を出す（入ったばかりのときは数えるだけ。番号が減ったら「最初から」なので合わせ直す）
+    if(typeof state.sfxNo==='number'){
+      if(sfxHeard>=0 && state.sfxNo>sfxHeard) playMoveSfx(state.sfxKind);
+      sfxHeard = state.sfxNo;
+    }
     const prevSel = selected && board[selected.r] && board[selected.r][selected.c];
     board = state.board.map(row=>row.map(p=>{
       if(!p) return null;
@@ -1523,6 +1564,7 @@
     updateNetStatus(1);
     renderAll();
     if(gameOver){
+      if(!wasOver && !firstSync) sfxResult(winnerColor);   // 決着のあとに入ってきた人には鳴らさない
       winText.textContent = winLabel(winnerColor);
       overlayEl.classList.add('show');
     } else {
@@ -1916,6 +1958,13 @@
   }
 
   if(!PARTY){ seatPanelEl.id = 'seatPanel'; seatPanelEl.style.display = 'none'; readyRow.after(seatPanelEl); }   // 2026-11-09: パーティでないときは盤の上に出す
+  // 2026-11-13: 音のオン・オフ（メニューの「ゲーム一覧へ」の横と、対局中の「最初から」「メニューへ」の横）
+  if(window.YkgSfx){
+    for(const id of ['ykgGames', 'menuBtn']){
+      const sb = YkgSfx.toggleButton('action'); sb.style.flex = 'none';
+      document.getElementById(id).parentNode.appendChild(sb);
+    }
+  }
   init();
   requestAnimationFrame(tick);
   applyOfflineUI();

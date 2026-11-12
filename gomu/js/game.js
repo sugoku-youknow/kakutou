@@ -17,7 +17,7 @@
 //   となりへ送ればかならず相手の玉が増える。味方の陣地へ入った玉はチームの数が変わらないだけ（味方への攻撃にならない）。
 //   チームの玉の合計が 0 になったら勝ち。時間切れは合計が少ないチームの勝ち（同点ならサドンデス）。
 import { getBoardConfig } from './board.js';
-import { createWorld, buildBoardBodies, buildBallDefs, spawnBalls, launchBall, stepWorld, removeInnerWalls } from './physics.js';
+import { createWorld, buildBoardBodies, buildBallDefs, spawnBalls, launchBall, stepWorld, removeInnerWalls, onImpact } from './physics.js';
 import { ZONE_COLORS, defaultBallsPer, clampBalls } from './board.js';
 import { cpuDecide, cpuThinkMs } from './cpu.js';
 
@@ -66,6 +66,7 @@ export class Game {
     this.onPhaseChange = () => {};
     this.onCounts = () => {};
     this.onResult = () => {};   // ホスト: 勝ち負けが決まった（名前の一覧で）
+    this.onImpact = () => {};   // 2026-11-13: ホスト: 玉がぶつかった（強さ）。音を鳴らすため
 
     this._wireNetwork();
   }
@@ -159,6 +160,7 @@ export class Game {
         this.engine = createWorld();
         buildBoardBodies(this.engine, this.config);
         const bodies = spawnBalls(this.engine, ballDefs);
+        onImpact(this.engine, (v) => this.onImpact(v));   // 2026-11-13: ぶつかった音（ホストだけ）
         this.bodiesById = new Map(bodies.map((b) => [b.gameId, b]));
         this._lastShot = new Map();       // 人 -> 最近撃った時刻の一覧
         this._lastBallShot = new Map();   // 玉 -> 最後に撃った時刻
@@ -323,14 +325,25 @@ export class Game {
     if (now - (this._lastBallShot.get(ballId) || 0) < SHOT_COOLDOWN_MS) return;   // 同じ玉は 0.4 秒あける
     const recent = (this._lastShot.get(peerId) || []).filter((t) => now - t < SHOT_COOLDOWN_MS);
     if (recent.length >= SHOTS_PER_WINDOW) return;                                 // 1 人 0.4 秒に 3 発まで
-    if (launchBall(body, pull)) { recent.push(now); this._lastShot.set(peerId, recent); this._lastBallShot.set(ballId, now); }
+    if (launchBall(body, pull)) { recent.push(now); this._lastShot.set(peerId, recent); this._lastBallShot.set(ballId, now); return true; }
+    return false;
   }
 
   // ---- 入力(誰でも呼ぶ: ホストなら直接、ゲスト側ならネットワーク送信) ----
+  // 2026-11-13: 撃てたら true（ゲストは、ホストと同じ決まりを手元で先に確かめて、通りそうなら送って true）。音を鳴らし分けるため
   requestLaunch(ballId, pull) {
-    if (this.isSpectator) return;
-    if (this.network.isHost) this._handleInput({ ballId, pull }, this.network.selfId);
-    else this.network.send('input', { ballId, pull });
+    if (this.isSpectator) return false;
+    if (this.network.isHost) return !!this._handleInput({ ballId, pull }, this.network.selfId);
+    if (!pull || Math.hypot(pull.x, pull.y) < 6) return false;                 // 引っ張りが小さすぎる
+    if (!this.getMyZoneBallIds().includes(ballId)) return false;              // 自分の陣地の玉ではなくなった
+    const now = performance.now();
+    this._myBallShot = this._myBallShot || new Map();
+    if (now - (this._myBallShot.get(ballId) || 0) < SHOT_COOLDOWN_MS) return false;
+    const recent = (this._myShots || []).filter((t) => now - t < SHOT_COOLDOWN_MS);
+    if (recent.length >= SHOTS_PER_WINDOW) return false;
+    recent.push(now); this._myShots = recent; this._myBallShot.set(ballId, now);
+    this.network.send('input', { ballId, pull });
+    return true;
   }
 
   // 毎フレーム呼び出す: ゲスト側の表示位置をなめらかに追従させる（画面の速さに関係なく同じ速さで近づける）

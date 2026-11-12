@@ -22,6 +22,13 @@ const network = new Network(PARTY);
 const game = new Game(network);
 const nameOf = (id, i) => network.playerNames.get(id) || game.playerNames.get(id) || `プレイヤー${(i ?? 0) + 1}`;
 window.__gomu = { game, network };   // 2026-11-09: 動作確認用（画面が隠れていても JS から動かせるように）
+// 2026-11-13: 音と振動（../ykg-sfx.js）。読みこめなかったときは鳴らさないだけ
+const sfx = (name, ...a) => { if (window.YkgSfx && window.YkgSfx[name]) window.YkgSfx[name](...a); };
+// 音のオン・オフのボタン: ロビー（ゲーム一覧へのボタンの下）と、対戦画面の下（退出のとなり）
+if (window.YkgSfx) {
+  document.getElementById('btn-games').after(YkgSfx.toggleButton('btn btn-ghost'));
+  document.getElementById('btn-leave-game').before(YkgSfx.toggleButton('btn btn-ghost btn-small'));
+}
 
 // ---- 2026-11-09: 部屋の参加者（人 → CPU の順）と、CPU・チーム戦の設定 ----------------
 function memberIds() {
@@ -232,6 +239,13 @@ network.onHostLost = () => {
   alert('ホストとの接続が切れました'); location.reload();
 };
 game.onResult = (w, l) => partyReport(w, l);
+// 2026-11-13: 玉がぶつかった音（物理を計算しているホストだけ）。強いときだけ、0.08 秒に 1 回まで
+let lastBounce = 0;
+game.onImpact = (v) => {
+  const now = performance.now();
+  if (v < 2.5 || now - lastBounce < 80) return;
+  lastBounce = now; sfx('bounce');
+};
 
 document.getElementById('btn-start-game').addEventListener('click', () => {
   try { game.startAsHost(); } catch (e) { console.error(e); }
@@ -431,7 +445,28 @@ function updateHud(counts) {
     : game.innerOpen ? '真ん中が開いた！ 時間切れのときは玉がいちばん少ない人の勝ち'
     : '自分の陣地の玉（白いふち）を引っ張って離すと発射。0個にするか、時間切れのときにいちばん少なければ勝ち';
 }
-game.onCounts = updateHud;
+// 2026-11-13: 玉の数と残り時間の音（ホストは 1/60 秒ごと、ゲストは届くたびに呼ばれるので、変わったときだけ鳴らす）
+const sfxState = { mine: null, sec: null, sudden: false, coinAt: 0 };
+function resetSfxState() { sfxState.mine = null; sfxState.sec = null; sfxState.sudden = false; }
+function countSounds(counts) {
+  if (game.phase !== 'playing' || !game.config) return;
+  if (game.myZone != null) {
+    const mine = game.teams ? game.teamTotals(counts)[game.teamOfZone(game.myZone)] : counts[game.myZone];
+    const now = performance.now();
+    // 自分（のチーム）の玉が減った = 相手の陣地へ送れた。境目で行ったり来たりしても鳴りすぎないように 0.3 秒あける
+    if (sfxState.mine != null && mine < sfxState.mine && now - sfxState.coinAt > 300) { sfxState.coinAt = now; sfx('coin'); }
+    sfxState.mine = mine;
+  }
+  const t = Math.ceil(game.timeLeftMs / 1000);
+  if (sfxState.sec != null && t !== sfxState.sec && !game.sudden) {
+    if (t === 10) sfx('warn');                  // 残り 10 秒
+    else if (t >= 1 && t <= 5) sfx('tick', true);   // 残り 5 秒からは 1 秒ごと
+  }
+  sfxState.sec = t;
+  if (game.sudden && !sfxState.sudden) sfx('warn');   // サドンデスが始まった
+  sfxState.sudden = game.sudden;
+}
+game.onCounts = (c) => { countSounds(c); updateHud(c); };
 
 // ---- 入力: 自陣の玉をドラッグして引っ張り、離すと発射 ------------------
 function canvasPointToBoard(clientX, clientY) {
@@ -456,6 +491,7 @@ canvas.addEventListener('pointerdown', (e) => {
   const reach = BALL_RADIUS_PX * (game.config.playerCount > 2 ? 3.5 : 2.5);   // 3〜4人の盤面は玉が小さく見えるので、つかめる範囲を広く
   if (closest && closestDist <= reach) {
     drags.set(e.pointerId, { ballId: closest.id, originX: closest.x, originY: closest.y, pointerX: p.x, pointerY: p.y });
+    sfx('pick');   // 2026-11-13: 玉をつかんだ
     try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
   }
 });
@@ -469,7 +505,10 @@ function endDrag(e) {
   const d = drags.get(e.pointerId); if (!d) return;
   drags.delete(e.pointerId);
   const pull = { x: d.originX - d.pointerX, y: d.originY - d.pointerY };
-  if (e.type !== 'pointercancel' && game.phase === 'playing') game.requestLaunch(d.ballId, pull);   // 指ごとに別の発射として送る
+  if (e.type !== 'pointercancel' && game.phase === 'playing') {
+    // 指ごとに別の発射として送る。2026-11-13: 撃てたら「シュッ」、撃てなかったら（引っ張りが短い・連打・陣地の外）「ポッ」
+    if (game.requestLaunch(d.ballId, pull)) sfx('shot'); else sfx('miss');
+  }
 }
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', endDrag);
@@ -501,12 +540,15 @@ game.onPhaseChange = (phase) => {
     countdown.classList.remove('hidden');
     let count = 3;
     countdown.textContent = count;
+    resetSfxState();
+    sfx('count', count);   // 2026-11-13: 3・2・1 の音と、スタートの音
     const timer = setInterval(() => {
       count--;
-      if (count > 0) countdown.textContent = count;
-      else { clearInterval(timer); countdown.classList.add('hidden'); }
+      if (count > 0) { countdown.textContent = count; sfx('count', count); }
+      else { clearInterval(timer); countdown.classList.add('hidden'); if (game.phase === 'countdown' || game.phase === 'playing') sfx('go'); }
     }, 1000);
   } else if (phase === 'playing') {
+    resetSfxState();   // 2026-11-13: 前の試合の数・時間を忘れる（途中から来た観戦の人のため）
     showScreen('game');
     resizeCanvas();
   } else if (phase === 'ended') {
@@ -526,11 +568,13 @@ game.onPhaseChange = (phase) => {
       if (wt.length !== 1) title.textContent = '🤝 引き分け';
       else if (myTeam != null && wt[0] === myTeam) title.textContent = `🎉 あなたのチーム（${TEAM_NAMES[myTeam]}）の勝ち！`;
       else title.textContent = `${TEAM_NAMES[wt[0]]}チームの勝ち`;
+      if (myTeam != null) sfx(wt.length !== 1 ? 'draw' : wt[0] === myTeam ? 'win' : 'lose');   // 2026-11-13: 観戦の人は鳴らさない
       lead.textContent = (tt.some((c) => c === 0) ? 'チームの玉を 0 個にしました' : '時間切れ: チームの玉の合計が少ない方の勝ち') + `（あか ${tt[0]} ／ あお ${tt[1]}）`;
     } else {
       const draw = game.winnerZones.length > 1;
       if (game.winnerZones.includes(game.myZone)) title.textContent = draw ? '🤝 引き分け（あなたも勝ち）' : '🎉 あなたの勝ち！';
       else title.textContent = draw ? '引き分け' : `${names[0]}の勝ち`;
+      if (game.myZone != null) sfx(game.winnerZones.includes(game.myZone) ? (draw ? 'draw' : 'win') : 'lose');   // 2026-11-13: 観戦の人は鳴らさない
       lead.textContent = counts.some((c) => c === 0) ? '陣地の玉を 0 個にしました' : '時間切れ: 陣地の玉がいちばん少ない人の勝ち';
     }
     msg.appendChild(lead);
