@@ -28,6 +28,10 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .card h1 small{display:block;font-size:13px;color:var(--sub);letter-spacing:0;font-weight:400;margin-top:4px}
 .card h3{margin:8px 0 0;font-size:14px;color:var(--sub)}
 .seg{display:flex;gap:6px}.seg>*{flex:1}
+/* −／＋ で数をえらぶ（勝利点・はじめの村） */
+.stepr{display:flex;align-items:center;gap:8px}
+.stepr button{width:56px;flex:none;font-size:22px;padding:6px 0}
+.stepr b{flex:1;text-align:center;font-size:22px;background:var(--deep);border-radius:10px;padding:7px 0}
 .row{display:flex;gap:8px}.row>*{flex:1}
 .note{font-size:13px;color:var(--sub);line-height:1.5}
 .err{color:#ffb4a8;font-size:14px}
@@ -59,9 +63,15 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 #side{position:absolute;left:5px;top:4px;display:flex;flex-direction:column;gap:6px;z-index:4}
 #side button{width:40px;height:40px;min-height:0;padding:0;font-size:18px;border-radius:9px;color:#2a1a05;background:linear-gradient(#f3b84f,#c9822a);border-bottom:3px solid #7a4a14;position:relative;box-shadow:0 2px 4px #0007}
 #side .pr{font-size:12px;font-weight:800;line-height:1}
+#side button.on{background:linear-gradient(#ff8a7a,#e0533f);color:#fff;box-shadow:0 0 0 2px #fff,0 2px 4px #0007}
+.pi .st+.st{margin-top:1px}
 #side .bd{position:absolute;right:-5px;top:-5px;min-width:18px;background:#c0392b;color:#fff;font-size:11px;line-height:18px;border-radius:9px;padding:0 4px}
-#boardWrap{position:absolute;top:4px;bottom:56px;left:48px;right:4px;overflow:hidden}
-#board{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation;overflow:visible}
+#boardWrap{position:absolute;top:4px;bottom:72px;left:48px;right:4px;overflow:hidden}
+#board{position:absolute;inset:0;width:100%;height:100%;touch-action:none;overflow:visible}
+/* ズームのボタン（右上の人の下） */
+#zoomBtns{position:absolute;right:6px;top:56px;display:flex;gap:4px;z-index:4}
+#zoomBtns button{width:32px;height:32px;min-height:0;padding:0;font-size:17px;border-radius:8px;color:#2a1a05;background:linear-gradient(#f3b84f,#c9822a);border-bottom:3px solid #7a4a14;box-shadow:0 2px 4px #0007}
+#zoomBtns button:disabled{opacity:.35}
 #ban{position:absolute;top:6px;left:50%;transform:translateX(-50%);max-width:min(40%,420px);padding:4px 14px;border-radius:99px;background:var(--panel);font-size:13px;font-weight:700;z-index:4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px;pointer-events:none;box-shadow:0 2px 6px #0007}
 #ban:empty{display:none}
 #ban.my{background:var(--acc);color:#2a1a05}
@@ -99,12 +109,15 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 @keyframes goIn{from{opacity:.25;transform:scale(.92)}to{opacity:1;transform:none}}
 /* たて持ち: 盤は画面はばいっぱい。下に手札トレイ、その下にボタン 2 段（つくる 4 つ / おわり・やり直し・交換） */
 @media (orientation:portrait){
-  #boardWrap{top:4px;left:0;right:0;bottom:180px}
+  #boardWrap{top:4px;left:0;right:0;bottom:188px}
   /* アイコンは ≡ と 確率 だけを上のまん中に（四すみは人。あそびかた・できごとはメニューから、カードは手札の 🃏 から） */
   #side{top:4px;left:50%;transform:translateX(-50%);flex-direction:row}
   #side button{width:40px;height:40px}
   #side button:not(:first-child):not(.pr){display:none}
-  .pl{max-width:calc(50% - 48px)}
+  #side{gap:5px}
+  #side button{width:38px}
+  /* 上のまん中に ≡・確率・ログ の 3 つがならぶので、人の帯はそのぶん細く。下のまん中はサイコロ */
+  .pl{max-width:calc(50% - 68px)}
   .pl.c2{bottom:4px}
   .vpb{width:28px;height:28px;font-size:14px;border-width:2px}
   .pi{margin-left:-9px;padding:2px 7px 3px 11px}
@@ -112,10 +125,13 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
   #ban{top:50px;max-width:calc(100% - 96px)}
   #log{left:8px;bottom:182px;max-width:72%}
   #game.p4 #log{bottom:228px}
-  #hand{left:6px;right:6px;bottom:116px;max-width:none}
+  #hand{left:6px;right:6px;bottom:114px;max-width:none}
   .rc{font-size:10px}.rc .ic{font-size:18px}.rc b{font-size:16px}
   #corner{left:6px;right:6px;bottom:4px;align-items:stretch}
-  #corner #dice{position:absolute;right:4px;bottom:calc(100% + 70px)}
+  /* サイコロは盤の下のまん中（右下の人と重ならないように） */
+  #corner #dice{position:absolute;left:50%;right:auto;transform:translateX(-50%);bottom:calc(100% + 78px)}
+  #corner #dice .die{width:26px;height:26px;padding:2px}
+  #corner #dice .sum{font-size:18px}
   #acts{align-items:stretch}
   #acts .r{width:100%}
   #acts .bb{flex:1;width:auto;height:48px;font-size:14px}
@@ -135,6 +151,11 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 @keyframes bump{50%{transform:scale(1.2)}}
 /* ---- 盤 ---- */
 .hl{animation:pulse .8s infinite alternate}
+/* サイコロで当たった土地: 白く 3 回光る + 数字のまわりに金の輪が広がる */
+.hitfx{fill:#fff7b0;stroke:#fff;stroke-width:7;stroke-linejoin:round;animation:hitflash .9s ease-in-out 3 both}
+@keyframes hitflash{0%,100%{fill-opacity:0;stroke-opacity:.2}50%{fill-opacity:.62;stroke-opacity:1}}
+.hitring{fill:none;stroke:#ffd54a;stroke-width:5;transform-box:fill-box;transform-origin:center;animation:hitring .9s ease-out 3 both}
+@keyframes hitring{from{transform:scale(.7);opacity:1}to{transform:scale(2.6);opacity:0}}
 @keyframes pulse{from{opacity:.55}to{opacity:1}}
 /* ---- 小窓 ---- */
 #modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:12px;z-index:50}
@@ -232,10 +253,9 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 <div id="lobby" class="scr hidden"></div>
 <div id="stage">
 <div id="game" class="hidden">
-  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="bigDice"></div><div id="pls"></div></div>
+  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="bigDice"></div><div id="pls"></div><div id="zoomBtns"><button data-z="in" aria-label="ズーム">＋</button><button data-z="out" aria-label="ズームをもどす">−</button><button data-z="fit" aria-label="全体を見る">⤢</button></div></div>
   <div id="ban"></div>
-  <div id="side"><button data-g="menu" aria-label="メニュー">≡</button><button class="pr" data-g="prob" aria-label="サイコロの確率">確率</button><button data-g="rules" aria-label="あそびかた">📖</button><button data-g="log" aria-label="できごと">📜</button><button data-g="cards" aria-label="ふしぎカード">🃏<span class="bd hidden" id="cardBd"></span></button></div>
-  <div id="log"></div>
+  <div id="side"><button data-g="menu" aria-label="メニュー">≡</button><button class="pr" data-g="prob" aria-label="サイコロの確率">確率</button><button data-g="rules" aria-label="あそびかた">📖</button><button class="pr lg" data-g="log" aria-label="ログ">ログ</button><button data-g="cards" aria-label="カード">🃏<span class="bd hidden" id="cardBd"></span></button></div>
   <div id="hand"></div>
   <div id="corner"><div id="dice"></div><div id="acts"></div></div>
   <div id="offerBox" class="hidden"></div>
@@ -253,32 +273,40 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 "use strict";
 // ================= カイタク島（2026-11-09 作成） =================
 // ・盤は毎回ランダム（土地の種類・数字・港の場所）。土地の形（六角形 19 まい）はいつも同じ。
-// ・資源は 5 種類（木材・レンガ・羊毛・小麦・鉄）。2026-11-11 に 4 種類から 5 種類へ。7 が出るとカラスが来る。先に 8 点で勝ち。
+// ・資源は 5 種類（木材・レンガ・羊毛・小麦・鉄）。7 が出ると盗賊が来る。勝利点はふつう 10 点（えらべる）。2026-11-12: カラス→盗賊、カカシ→騎士、最大騎士力、町は鉄 3。
 // ・通信はホストが正しい状態（G）を持ち、ゲストは「やりたいこと」を送るだけ。CPU もホストが動かす。
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
-const TARGET = 8;   // 勝ちの点数
+// 2026-11-12: 勝利点（ふつうは 10）・はじめに置く村の数・島の大きさは、はじめる前にえらべる（G.target / G.setupN / G.size）
+// 勝利点・はじめの村は −／＋ で 1 ずつ（2026-11-12）。村は 1 人 5 つまでなので、はじめの村は 4 こまで
+// 勝利点の上限: ふつうの島は 12、大きい島は 15。それより大きいと、4 人だと島がうまって、だれも点をふやせず終わらないことがある
+const OPT = { target: [3, 15], setupN: [1, 4], size: { std: "ふつう（19マス）", big: "大きい（37マス）" } };
+const CFG_DEF = { target: 10, setupN: 2, size: "std" };
+const inRange = (v, [lo, hi], def) => Number.isInteger(+v) && v !== null && v !== "" && +v >= lo && +v <= hi ? +v : def;
+const tMax = size => size === "big" ? 15 : 12;
+const cleanCfg = c => { const size = c && OPT.size[c.size] ? c.size : CFG_DEF.size; return { target: Math.min(tMax(size), inRange(c && c.target, OPT.target, CFG_DEF.target)), setupN: inRange(c && c.setupN, OPT.setupN, CFG_DEF.setupN), size }; };
+const tgt = () => (G && G.target) || cfg.target;   // いまの試合（はじまる前はメニューの設定）の勝利点
 const RES = ["wood", "brick", "sheep", "wheat", "ore"];
 const RN = { wood: "木材", brick: "レンガ", sheep: "羊毛", wheat: "小麦", ore: "鉄" };
 const RI = { wood: "🌲", brick: "🧱", sheep: "🐑", wheat: "🌾", ore: "⛰️" };
-// 土地: 森4・丘3・牧草地4・畑4・山3・火山1（合計 19）
+// 土地: ふつうの島は 森4・丘3・牧草地4・畑4・山3・火山1（合計 19）、大きい島は nb の数（合計 37）
 const TT = {
-  forest: { res: "wood", name: "森", col: "#3f8f3a", ic: "🌲", n: 4 },
-  hill: { res: "brick", name: "丘", col: "#c0643a", ic: "🧱", n: 3 },
-  pasture: { res: "sheep", name: "牧草地", col: "#8cc84b", ic: "🐑", n: 4 },
-  field: { res: "wheat", name: "畑", col: "#e2bb3a", ic: "🌾", n: 4 },
-  mountain: { res: "ore", name: "山", col: "#8d8f96", ic: "⛰️", n: 3 },
-  volcano: { res: null, name: "火山", col: "#6b2d2d", ic: "🌋", n: 1 },
+  forest: { res: "wood", name: "森", col: "#3f8f3a", ic: "🌲", n: 4, nb: 7 },
+  hill: { res: "brick", name: "丘", col: "#c0643a", ic: "🧱", n: 3, nb: 6 },
+  pasture: { res: "sheep", name: "牧草地", col: "#8cc84b", ic: "🐑", n: 4, nb: 8 },
+  field: { res: "wheat", name: "畑", col: "#e2bb3a", ic: "🌾", n: 4, nb: 8 },
+  mountain: { res: "ore", name: "山", col: "#8d8f96", ic: "⛰️", n: 3, nb: 6 },
+  volcano: { res: null, name: "火山", col: "#6b2d2d", ic: "🌋", n: 1, nb: 2 },
 };
-const COST = { road: { wood: 1, brick: 1 }, vil: { wood: 1, brick: 1, sheep: 1, wheat: 1 }, town: { wheat: 2, ore: 2 }, card: { sheep: 1, wheat: 1, ore: 1 } };
+const COST = { road: { wood: 1, brick: 1 }, vil: { wood: 1, brick: 1, sheep: 1, wheat: 1 }, town: { wheat: 2, ore: 3 }, card: { sheep: 1, wheat: 1, ore: 1 } };
 const emptyHand = () => Object.fromEntries(RES.map(r => [r, 0]));
 const BN = { road: "道", vil: "村", town: "町", card: "カード" };
 const LIM = { road: 15, vil: 5, town: 4 };
 const CARD = {
-  scare: { name: "カカシ", ic: "👒", txt: "カラスを好きな土地へ動かして、そこの人から1まいもらう" },
+  knight: { name: "騎士", ic: "⚔️", txt: "盗賊を好きな土地へ動かして、そこの人から1まいもらう（3回以上使うと最大騎士力をねらえる）" },
   harvest: { name: "大豊作", ic: "🧺", txt: "好きな資源を2まいもらう" },
   bridge: { name: "橋づくり", ic: "🌉", txt: "道を2本タダでつくる（サイコロのあと）" },
   map: { name: "宝の地図", ic: "🗺️", txt: "買ったらすぐ +1点" },
@@ -290,9 +318,10 @@ const costHtml = c => RES.filter(r => c[r]).map(r => RI[r].repeat(c[r])).join(""
 
 // ================= 盤の形（いつも同じ。土地の種類と数字だけ毎回ランダム） =================
 const SQ3 = Math.sqrt(3);
-const GEO = (() => {
+// 2026-11-12: 島の大きさをえらべるので、盤の形は半径 R から作る（ふつう R=2: 19 マス、大きい R=3: 37 マス）
+function makeGeo(R) {
   const hex = [], verts = [], edges = [], vmap = new Map(), emap = new Map();
-  for (let r = -2; r <= 2; r++) for (let q = -2; q <= 2; q++) if (Math.abs(q + r) <= 2) hex.push({ q, r, x: SQ3 * (q + r / 2), y: 1.5 * r, c: [] });
+  for (let r = -R; r <= R; r++) for (let q = -R; q <= R; q++) if (Math.abs(q + r) <= R) hex.push({ q, r, x: SQ3 * (q + r / 2), y: 1.5 * r, c: [] });
   const vid = (x, y) => {
     const k = Math.round(x * 100) + "," + Math.round(y * 100);
     if (!vmap.has(k)) { vmap.set(k, verts.length); verts.push({ x, y, h: [], v: [], e: [] }); }
@@ -312,34 +341,42 @@ const GEO = (() => {
   hex.forEach(h => { h.n = []; hex.forEach((o, j) => { const dq = o.q - h.q, dr = o.r - h.r; if (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr) === 2) h.n.push(j); }); });
   const mid = i => ({ x: (verts[edges[i].a].x + verts[edges[i].b].x) / 2, y: (verts[edges[i].a].y + verts[edges[i].b].y) / 2 });
   const coast = edges.map((e, i) => i).filter(i => edges[i].h.length === 1).sort((i, j) => Math.atan2(mid(i).y, mid(i).x) - Math.atan2(mid(j).y, mid(j).x));
-  return { hex, verts, edges, coast, mid };
-})();
+  return { hex, verts, edges, coast, mid, R };
+}
+const GEOS = {};
+const geoFor = size => GEOS[size] || (GEOS[size] = makeGeo(size === "big" ? 3 : 2));
+let GEO = geoFor("std");
 
 // ================= ゲームの状態とルール（ホスト・ひとり用で使う） =================
 let G = null;
 // やり直し（2026-11-11）: その番のうちに「つくる（道・村・町）」「銀行・港との交換」をする前の状態をとっておく（ホストだけ）。
 // サイコロ・カード・ほかの人との交換をしたら、もうもどせない。番が終わったら消える。
 let UNDO = [];
-function newGame(seats) {
-  UNDO = [];
-  const types = shuffle(Object.entries(TT).flatMap(([t, T]) => Array(T.n).fill(t)));
+function newGame(seats, c) {
+  UNDO = []; c = cleanCfg(c); GEO = geoFor(c.size); const big = c.size === "big";
+  const types = shuffle(Object.entries(TT).flatMap(([t, T]) => Array(big ? T.nb : T.n).fill(t)));
   const tiles = types.map(t => ({ t, n: 0 }));
-  // 数字: 6 と 8（よく出る数）どうし、同じ数どうしがとなりにならないように並べ直す
-  for (let tries = 0; tries < 800; tries++) {
-    const nums = shuffle([2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12]); let k = 0;
-    tiles.forEach(t => { t.n = t.t === "volcano" ? 0 : nums[k++]; });
-    const red = n => n === 6 || n === 8;
-    if (!GEO.hex.some((h, i) => h.n.some(j => { const a = tiles[i].n, b = tiles[j].n; return a && b && ((red(a) && red(b)) || a === b); }))) break;
+  // 数字: 6 と 8（よく出る数）どうし、同じ数どうしがとなりにならないように並べ直す（大きい島で無理なときは、いちばん少ない並びを使う）
+  const base = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12], pool = big ? base.concat(base.slice(0, -1)) : base;
+  let best = null, bestBad = Infinity;
+  for (let tries = 0; tries < 1500 && bestBad > 0; tries++) {
+    const nums = shuffle(pool.slice()); let k = 0, bad = 0;
+    const ns = types.map(t => t === "volcano" ? 0 : nums[k++]), red = n => n === 6 || n === 8;
+    GEO.hex.forEach((h, i) => h.n.forEach(j => { const a = ns[i], b = ns[j]; if (j > i && a && b && ((red(a) && red(b)) || a === b)) bad++; }));
+    if (bad < bestBad) { bestBad = bad; best = ns; }
   }
-  // 港は 9 か所: 3:1 が 4 つ、資源ごとの 2:1 が 5 つ
-  const kinds = shuffle(["any", "any", "any", "any", ...RES]), off = Math.floor(Math.random() * 3), step = GEO.coast.length / kinds.length;
+  tiles.forEach((t, i) => { t.n = best[i]; });
+  // 港: ふつうの島は 9 か所（3:1 が 4 つ、資源ごとの 2:1 が 5 つ）、大きい島は 3:1 が 6 つで 11 か所
+  const kinds = shuffle([...Array(big ? 6 : 4).fill("any"), ...RES]), off = Math.floor(Math.random() * 3), step = GEO.coast.length / kinds.length;
   const harbors = kinds.map((k, i) => ({ e: GEO.coast[(off + Math.round(i * step)) % GEO.coast.length], k }));
-  const n = seats.length, order = [...Array(n).keys(), ...[...Array(n).keys()].reverse()];
-  const deck = shuffle([..."123456789"].map(() => "scare").concat(["harvest", "harvest", "harvest", "bridge", "bridge", "bridge", "map", "map", "map", "map", "map"]));
+  // はじめの村と道: 1 周目は順番どおり、2 周目は逆、3 周目はまた順番どおり…
+  const n = seats.length, order = [...Array(c.setupN)].flatMap((_, r) => r % 2 ? [...Array(n).keys()].reverse() : [...Array(n).keys()]);
+  const deck = shuffle([...Array(big ? 20 : 14).fill("knight"), "harvest", "harvest", "harvest", "bridge", "bridge", "bridge", "map", "map", "map", "map", "map"]);
   return {
     tiles, crow: tiles.findIndex(t => t.t === "volcano"), harbors, vb: Array(GEO.verts.length).fill(null), er: Array(GEO.edges.length).fill(-1),
-    ps: seats.map((s, i) => ({ name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: emptyHand(), cards: [], newC: [], vpC: 0, used: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
+    ps: seats.map((s, i) => ({ name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: emptyHand(), cards: [], newC: [], vpC: 0, used: 0, kn: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
     cur: order[0], phase: "setup", su: { i: 0, order, step: "v", lastV: -1 }, dice: [0, 0], rollN: 0, log: [], winner: -1, free: 0, cardUsed: false, back: "main", victims: [], deck, roadHolder: -1, turnN: 1, trades: 0, ver: 0, offer: null, offN: 0, offerN: 0, undoN: 0,
+    size: c.size, target: c.target, setupN: c.setupN, armyHolder: -1,
   };
 }
 const tot = h => RES.reduce((s, r) => s + h[r], 0);
@@ -347,7 +384,7 @@ const afford = (p, c) => RES.every(r => p.hand[r] >= (c[r] || 0));
 const pay = (p, c) => RES.forEach(r => { p.hand[r] -= (c[r] || 0); });
 const resOf = ti => TT[G.tiles[ti].t].res;
 function addLog(s) { G.log.push(s); if (G.log.length > 40) G.log.shift(); }
-function vp(i) { const p = G.ps[i]; return p.vils + 2 * p.towns + p.vpC + (G.roadHolder === i ? 2 : 0); }
+function vp(i) { const p = G.ps[i]; return p.vils + 2 * p.towns + p.vpC + (G.roadHolder === i ? 2 : 0) + (G.armyHolder === i ? 2 : 0); }
 function canVil(s, v, setup) {
   if (G.vb[v] || GEO.verts[v].v.some(u => G.vb[u])) return false;   // となりの角に村・町があるところには置けない
   return setup || GEO.verts[v].e.some(e => G.er[e] === s);
@@ -384,13 +421,18 @@ function longest(s) {
   for (let e = 0; e < G.er.length; e++) if (G.er[e] === s) { dfs(GEO.edges[e].a); dfs(GEO.edges[e].b); }
   return best;
 }
-// 「長い道ボーナス」（5本以上つながった、いちばん長い道 = +2点）。同じ長さなら、いま持っている人のまま
+// 「最長道」（5本以上つながった、いちばん長い道 = +2点）。同じ長さなら、いま持っている人のまま
 function updRoad() {
   G.ps.forEach((p, i) => { p.lr = longest(i); });
   const mx = Math.max(...G.ps.map(p => p.lr)), h = G.roadHolder;
   let nh = -1;
   if (mx >= 5) { if (h >= 0 && G.ps[h].lr === mx) nh = h; else { const c = G.ps.map((p, i) => p.lr === mx ? i : -1).filter(i => i >= 0); nh = c.length === 1 ? c[0] : -1; } }
-  if (nh !== h) { G.roadHolder = nh; if (nh >= 0) addLog(`🛤️ ${G.ps[nh].name} が長い道ボーナス（+2点）`); }
+  if (nh !== h) { G.roadHolder = nh; if (nh >= 0) addLog(`🛤️ ${G.ps[nh].name} が最長道（+2点）`); }
+}
+// 最大騎士力（2026-11-12）: 騎士を 3 回以上使った人のうち、いちばん多い人 = +2点。同じ回数なら、いま持っている人のまま
+function updArmy(s) {
+  const p = G.ps[s], h = G.armyHolder;
+  if (p.kn >= 3 && h !== s && (h < 0 || p.kn > G.ps[h].kn)) { G.armyHolder = s; addLog(`⚔️ ${p.name} が最大騎士力（+2点）`); }
 }
 function produce(sum) {
   const gains = G.ps.map(() => ({}));
@@ -407,13 +449,13 @@ function doRoll(s) {
   G.dice = [d1, d2]; G.rollN++; UNDO = []; G.undoN = 0;
   addLog(`🎲 ${G.ps[s].name}: ${sum}`);
   if (sum === 7) {
-    // カラスが来る: 10まい以上持っている人は半分なくす（えらばずに自動）
+    // 盗賊が来る: 10まい以上持っている人は半分なくす（えらばずに自動）
     G.ps.forEach(p => {
       const n = tot(p.hand); if (n < 10) return;
       for (let k = 0; k < Math.floor(n / 2); k++) { const pool = RES.flatMap(r => Array(p.hand[r]).fill(r)); p.hand[pool[Math.floor(Math.random() * pool.length)]]--; }
       addLog(`🌪️ ${p.name} は ${Math.floor(n / 2)}まい なくした`);
     });
-    addLog("🐦‍⬛ カラスが来た！"); G.back = "main"; G.phase = "crow";
+    addLog("🥷 盗賊が来た！"); G.back = "main"; G.phase = "crow";
   } else { produce(sum); G.phase = "main"; }
   return "";
 }
@@ -436,7 +478,7 @@ function build(s, a) {
     if (!afford(p, COST.card)) return "資源がたりません";
     pay(p, COST.card); const c = G.deck.pop();
     if (c === "map") { p.vpC++; addLog(`🗺️ ${p.name} が宝の地図を見つけた（+1点）`); }
-    else { p.newC.push(c); addLog(`${p.name} がふしぎカードを買った`); }
+    else { p.newC.push(c); addLog(`${p.name} がカードを買った`); }
     return "";
   }
   // 2026-11-10: 場所の番号が正しいか（こわれた・いたずらの通信でホストが止まらないように）
@@ -535,7 +577,7 @@ function playCard(s, a) {
   if (G.cardUsed) return "カードは1ターンに1まいだけ";
   const i = p.cards.indexOf(a.c);
   if (i < 0) return "そのカードは使えません（買った番は使えない）";
-  if (a.c === "scare") { G.back = G.phase; G.phase = "crow"; }
+  if (a.c === "knight") { G.back = G.phase; G.phase = "crow"; p.kn = (p.kn || 0) + 1; updArmy(s); }
   else if (a.c === "harvest") {
     if (!Array.isArray(a.r) || a.r.length !== 2 || !a.r.every(r => RES.includes(r))) return "資源を2つえらんでね";
     a.r.forEach(r => p.hand[r]++);
@@ -557,28 +599,34 @@ function applyAct(s, a) {
   const p = G.ps[s];
   switch (G.phase) {
     case "setup": {
+      // 2026-11-12: 自分が置いた村と道は「決定」するまで ↶ で置き直せる（ほかの人が置いたものはもどせない）
+      if (a.k === "undo") return undo(s);
+      if (G.su.step === "ok") {
+        if (a.k !== "setupok") return "「決定」か「やり直し」をえらんでね";
+        UNDO = []; G.undoN = 0; setupNext(); return "";
+      }
       if (G.su.step === "v") {
         if (a.k !== "build" || a.w !== "vil" || !(Number.isInteger(a.at) && a.at >= 0 && a.at < GEO.verts.length) || !canVil(s, a.at, true)) return "そこには置けません";
+        UNDO.push(JSON.stringify(G)); G.undoN = UNDO.length;
         G.vb[a.at] = { p: s, lv: 1 }; p.vils++; G.su.lastV = a.at; G.su.step = "r";
-        // 2つめの村: まわりの土地の資源を1まいずつもらう
-        if (G.su.i >= G.ps.length) for (const ti of GEO.verts[a.at].h) { const r = resOf(ti); if (r) p.hand[r]++; }
+        // 最後の周の村: まわりの土地の資源を1まいずつもらう
+        if (G.su.i >= G.ps.length * (G.setupN - 1)) for (const ti of GEO.verts[a.at].h) { const r = resOf(ti); if (r) p.hand[r]++; }
+        if (!validRoads(s).length) G.su.step = "ok";   // のばせる道がない（まわりがうまっている）
         return "";
       }
       if (a.k !== "build" || a.w !== "road" || !(Number.isInteger(a.at) && a.at >= 0 && a.at < GEO.edges.length) || !canRoad(s, a.at)) return "村からのびる道をえらんでね";
-      G.er[a.at] = s; p.roads++; G.su.step = "v"; G.su.i++; G.su.lastV = -1;
-      if (G.su.i >= G.su.order.length) { G.phase = "roll"; G.cur = 0; addLog(`じゅんび完了！ ${G.ps[0].name} の番から`); }
-      else G.cur = G.su.order[G.su.i];
-      updRoad(); return "";
+      UNDO.push(JSON.stringify(G)); G.undoN = UNDO.length;
+      G.er[a.at] = s; p.roads++; G.su.step = "ok"; updRoad(); return "";
     }
     case "roll":
       if (a.k === "roll") return doRoll(s);
       if (a.k === "play") return playCard(s, a);
       return "まずサイコロをふろう";
     case "crow": {
-      if (a.k !== "crow" || !(Number.isInteger(a.t) && a.t >= 0 && a.t < GEO.hex.length) || a.t === G.crow) return "カラスは別の土地へ動かしてね";
+      if (a.k !== "crow" || !(Number.isInteger(a.t) && a.t >= 0 && a.t < GEO.hex.length) || a.t === G.crow) return "盗賊は別の土地へ動かしてね";
       G.crow = a.t;
       const vic = [...new Set(GEO.hex[a.t].c.map(v => G.vb[v]).filter(b => b && b.p !== s && tot(G.ps[b.p].hand) > 0).map(b => b.p))];
-      addLog(`🐦‍⬛ ${p.name} がカラスを${TT[G.tiles[a.t].t].name}${G.tiles[a.t].n ? "(" + G.tiles[a.t].n + ")" : ""}へ`);
+      addLog(`🥷 ${p.name} が盗賊を${TT[G.tiles[a.t].t].name}${G.tiles[a.t].n ? "(" + G.tiles[a.t].n + ")" : ""}へ`);
       if (vic.length > 1) { G.phase = "steal"; G.victims = vic; return ""; }
       if (vic.length === 1) steal(s, vic[0]);
       G.phase = G.back; return "";
@@ -607,9 +655,27 @@ function applyAct(s, a) {
   }
   return "？";
 }
+// はじめの村と道: 次の人へ。置ける角がもうない人（小さい島で村が多いとき）は、とばす
+function setupNext() {
+  G.su.step = "v"; G.su.i++; G.su.lastV = -1;
+  while (G.su.i < G.su.order.length && !GEO.verts.some((_, v) => canVil(G.su.order[G.su.i], v, true))) { addLog(`${G.ps[G.su.order[G.su.i]].name} は村を置ける場所がないので、とばします`); G.su.i++; }
+  if (G.su.i >= G.su.order.length) { G.phase = "roll"; G.cur = 0; addLog(`じゅんび完了！ ${G.ps[0].name} の番から`); }
+  else G.cur = G.su.order[G.su.i];
+}
+// だれも点をふやせなくなったか（カードの山がない・村を置ける角がない・町にできる村がない・手もとのカードもない）
+function stalled() {
+  if (G.deck.length || GEO.verts.some((_, v) => canVil(-1, v, true))) return false;
+  return G.ps.every(p => !p.cards.length && !p.newC.length && (p.towns >= LIM.town || !p.vils));
+}
 function checkWin() {
   if (G.phase === "over" || G.phase === "setup") return;
-  if (vp(G.cur) >= TARGET) { G.phase = "over"; G.winner = G.cur; addLog(`🏆 ${G.ps[G.cur].name} の勝ち！`); onOver(); }
+  if (vp(G.cur) >= tgt()) { G.phase = "over"; G.winner = G.cur; addLog(`🏆 ${G.ps[G.cur].name} の勝ち！`); onOver(); return; }
+  // 2026-11-12: 島がうまって、だれも点をふやせない（または 500 ターンをこえた）ときは、点がいちばん多い人の勝ちで終わる
+  if (G.phase === "roll" && (stalled() || G.turnN >= 500)) {
+    G.phase = "over"; G.winner = bestBy(G.ps.map((_, i) => i), i => vp(i) * 100 - i);
+    addLog(G.turnN >= 500 ? "⏱️ 500ターンになったので、点が多い人の勝ち" : "🏝️ 島がうまって、もうだれも点をふやせないので、点が多い人の勝ち");
+    addLog(`🏆 ${G.ps[G.winner].name} の勝ち！`); onOver();
+  }
 }
 
 // ================= CPU =================
@@ -686,7 +752,7 @@ function planTrade(s, g) {
 function cpuRespond(s, o) {
   const p = G.ps[s], d = p.diff;
   if (!afford(p, o.get)) return false;
-  if (d !== "weak" && vp(o.from) >= TARGET - 2) return false;
+  if (d !== "weak" && vp(o.from) >= tgt() - 2) return false;
   const g = goalOf(s), c = COST[g.w] || COST.vil;
   const miss = r => Math.max(0, (c[r] || 0) - p.hand[r]);
   let help = 0, hurt = 0, recv = 0, give = 0;
@@ -710,12 +776,13 @@ function planOffer(s, g) {
 function cpuAction(s) {
   const p = G.ps[s], d = p.diff;
   if (G.phase === "setup") {
+    if (G.su.step === "ok") return { k: "setupok" };
     if (G.su.step === "v") { const c = GEO.verts.map((_, v) => v).filter(v => canVil(s, v, true)); return { k: "build", w: "vil", at: bestBy(c, v => vertVal(s, v) + noise(d)) }; }
     const v0 = G.su.lastV, es = GEO.verts[v0].e.filter(e => canRoad(s, e));
     return { k: "build", w: "road", at: bestBy(es, e => { const E = GEO.edges[e], u = E.a === v0 ? E.b : E.a; return Math.max(0, ...GEO.verts[u].v.filter(w => w !== v0 && canVil(s, w, true)).map(w => vertVal(s, w))) + noise(d); }) };
   }
   if (G.phase === "roll") {
-    if (!G.cardUsed && d !== "weak" && p.cards.includes("scare") && crowOnMe(s)) return { k: "play", c: "scare" };
+    if (!G.cardUsed && d !== "weak" && p.cards.includes("knight") && crowOnMe(s)) return { k: "play", c: "knight" };
     return { k: "roll" };
   }
   if (G.phase === "crow") return { k: "crow", t: cpuCrow(s) };
@@ -732,7 +799,7 @@ function cpuAction(s) {
   if (d === "weak" && Math.random() < 0.12) return { k: "end" };
   const g = goalOf(s);
   if (!G.cardUsed && p.cards.length) {
-    if (p.cards.includes("scare") && (crowOnMe(s) || (d === "strong" && vp(leaderOf(s)) >= TARGET - 3))) return { k: "play", c: "scare" };
+    if (p.cards.includes("knight") && (crowOnMe(s) || (d === "strong" && vp(leaderOf(s)) >= tgt() - 3) || (d !== "weak" && p.kn >= 2))) return { k: "play", c: "knight" };
     if (p.cards.includes("bridge") && p.roads <= LIM.road - 2 && roadPlan(s)) return { k: "play", c: "bridge" };
     if (p.cards.includes("harvest")) { const r = need(p, COST[g.w] || COST.vil); while (r.length < 2) r.push(bestBy(RES, x => -p.hand[x])); return { k: "play", c: "harvest", r: r.slice(0, 2) }; }
   }
@@ -742,7 +809,7 @@ function cpuAction(s) {
   if (spots.length && p.vils < LIM.vil && afford(p, COST.vil)) return { k: "build", w: "vil", at: bestBy(spots, v => vertVal(s, v) + noise(d)) };
   if (g.w === "road" && afford(p, COST.road)) return { k: "build", w: "road", at: g.at };
   if (G.deck.length && afford(p, COST.card) && (g.w === "card" || tot(p.hand) >= (d === "strong" ? 7 : 8))) return { k: "build", w: "card" };
-  // つよい: 長い道ボーナスをねらって、手が多いときは道ものばす
+  // つよい: 最長道をねらって、手が多いときは道ものばす
   if (d === "strong" && p.roads < LIM.road && afford(p, COST.road) && tot(p.hand) >= 7) { const rp = roadPlan(s); if (rp) return { k: "build", w: "road", at: rp.e }; }
   const lim = d === "weak" ? 1 : d === "norm" ? 2 : 4;
   { const po = planOffer(s, g); if (po) return po; }
@@ -752,6 +819,7 @@ function cpuAction(s) {
 // CPU の行動がだめだったときの、かならず通る行動
 function fallbackAct(s) {
   if (G.phase === "setup") {
+    if (G.su.step === "ok") return { k: "setupok" };
     if (G.su.step === "v") return { k: "build", w: "vil", at: GEO.verts.findIndex((_, v) => canVil(s, v, true)) };
     return { k: "build", w: "road", at: GEO.edges.findIndex((_, e) => canRoad(s, e)) };
   }
@@ -794,15 +862,30 @@ let mode = "none";      // none / local（CPU対戦）/ host / client
 let screen = "menu";    // menu / connecting / lobby / game
 let peer = null, hostConn = null, myPid = 0, spectating = false, errMsg = "", hostTries = 0, partyTries = 0;
 const host = { code: "", conns: new Map(), specs: new Map(), nextId: 1, seats: [], playing: false, diff: "norm" };
-let lobbyInfo = { seats: [], specs: [], code: "", diff: "norm" };
+let lobbyInfo = { seats: [], specs: [], code: "", diff: "norm", cfg: CFG_DEF };
 let cpuN = 2, cpuDiff = "norm";
+let cfg = CFG_DEF;
+try { cfg = cleanCfg(JSON.parse(store.get("kaitaku-cfg") || "null")); } catch (e) {}
+function setCfg(k) {   // "ct-10" / "cs-2" / "cz-big"、−／＋ ボタンは "up-target" / "dn-setupN" など
+  const [t, v] = k.split("-"), c = { ...cfg };
+  if (t === "ct") c.target = +v; else if (t === "cs") c.setupN = +v; else if (t === "cz") c.size = v;
+  else if ((t === "up" || t === "dn") && OPT[v] && v !== "size") { const lo = OPT[v][0], hi = v === "target" ? tMax(c.size) : OPT[v][1]; c[v] = Math.min(hi, Math.max(lo, c[v] + (t === "up" ? 1 : -1))); }
+  cfg = cleanCfg(c); store.set("kaitaku-cfg", JSON.stringify(cfg));
+}
+const cfgTxt = c => `勝利点 ${c.target}点 ・ はじめの村 ${c.setupN}こ ・ 島 ${OPT.size[c.size].replace(/（.*/, "")}`;
+// 設定のボタン（attr = "data-a" はメニューと部屋、"data-b" はパーティの待ち合わせ画面）
+const stepper = (attr, key, label, unit) => `<div class="note">${label}</div><div class="stepr"><button ${attr}="dn-${key}" ${cfg[key] <= OPT[key][0] ? "disabled" : ""} aria-label="${label}をへらす">−</button><b>${cfg[key]}${unit}</b><button ${attr}="up-${key}" ${cfg[key] >= (key === "target" ? tMax(cfg.size) : OPT[key][1]) ? "disabled" : ""} aria-label="${label}をふやす">＋</button></div>`;
+const cfgButtons = attr => `${stepper(attr, "target", `勝利点（ふつうは 10 点・この島は ${tMax(cfg.size)} 点まで）`, "点")}${stepper(attr, "setupN", "はじめに置く村（ふつうは 2 こ）", "こ")}
+  <div class="note">島の大きさ</div><div class="seg">${Object.entries(OPT.size).map(([k, t]) => `<button ${attr}="cz-${k}" class="${k === cfg.size ? "on" : ""}">${t}</button>`).join("")}</div>`;
 try { const n = +store.get("kaitaku-cpus"); if (n >= 1 && n <= 3) cpuN = n; const d = store.get("kaitaku-diff"); if (DIFF[d]) cpuDiff = d; } catch (e) {}
 let meName = PARTY ? String(PARTY.name || "ゲスト").slice(0, 12) : "";
 function myName() { if (meName) return meName; return (($("name") && $("name").value) || store.get("kaitaku-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
 function fixName() { meName = ""; meName = myName(); store.set("kaitaku-name", meName); }
 const mySeat = () => G ? G.ps.findIndex(p => !p.bot && p.pid === myPid) : -1;
 let FAST = false, cpuTimer = null, lastWasRoll = false;
-const ui = { mode: null, modal: null, give: null, get: null, picks: [], overSeen: -1, tm: "player", pg: {}, pw: {}, to: [], trade: false, turnKey: null, goKey: "", goAt: 0 };
+const ui = { mode: null, modal: null, give: null, get: null, picks: [], overSeen: -1, tm: "player", pg: {}, pw: {}, to: [], trade: false, turnKey: null, goKey: "", goAt: 0, probMode: false };
+// 確率表示モード（2026-11-12）: 村を置ける角に「まわりの土地の出やすさの合計」を出す。見ている人だけの設定。
+// 試合中ずっと出る。ふだんは出さない（新しい試合はいつも OFF から）
 
 // 状態が変わったあと: ゲストへ送る・描く・CPU を動かす
 function afterChange() {
@@ -842,9 +925,9 @@ function startLocal() {
   for (let i = 0; i < cpuN; i++) seats.push({ name: "CPU-" + "ABC"[i], bot: true, diff: cpuDiff });
   startGame(shuffle(seats));   // 順番はランダム
 }
-function startGame(seats) {
-  G = newGame(seats); screen = "game"; ui.mode = null; ui.modal = null; ui.overSeen = -1; ui.trade = false; ui.turnKey = null; shownRoll = -1; lastWasRoll = false;
-  addLog("島がうまれた！ はじめの村と道を 2 回ずつ置こう");
+function startGame(seats, c = cfg) {
+  G = newGame(seats, c); setBoardGeo(); screen = "game"; ui.mode = null; ui.modal = null; ui.overSeen = -1; ui.trade = false; ui.turnKey = null; ui.probMode = false; shownRoll = -1; lastWasRoll = false;
+  addLog(`島がうまれた！ はじめの村と道を ${G.setupN} 回ずつ置こう`);
   renderUI(); afterChange();
 }
 
@@ -854,7 +937,7 @@ function sendAll(m) { for (const c of [...host.conns.values(), ...host.specs.val
 function netFail() { errMsg = "オフラインのため通信できません。CPUと対戦で遊べます"; cleanupNet(); mode = "none"; screen = "menu"; renderUI(); }
 function cleanupNet() { try { peer && peer.destroy(); } catch (e) {} peer = null; hostConn = null; host.conns.clear(); host.specs.clear(); host.playing = false; }
 function peerOk() { if (typeof Peer !== "undefined" && !isOffline()) return true; netFail(); return false; }
-function lobbyMsg() { return { t: "lobby", code: host.code, seats: host.seats.map(s => ({ name: s.name, bot: !!s.bot, pid: s.pid })), specs: [...host.specs.values()].map(c => c.pname), diff: host.diff }; }
+function lobbyMsg() { return { t: "lobby", code: host.code, seats: host.seats.map(s => ({ name: s.name, bot: !!s.bot, pid: s.pid })), specs: [...host.specs.values()].map(c => c.pname), diff: host.diff, cfg }; }
 function hostLobby() { lobbyInfo = lobbyMsg(); sendAll(lobbyInfo); renderUI(); }
 function startHost() {
   if (!peerOk()) return;
@@ -954,7 +1037,7 @@ function onMsg(m) {
     if (screen === "game" && G && G.phase !== "over") return;   // 試合中（観戦の人が来たなど）は画面を変えない
     screen = "lobby"; G = null; ui.modal = null; renderUI(); return;
   }
-  if (m.t === "st") { const first = !G || screen !== "game"; G = m.G; if (first) { screen = "game"; ui.mode = null; ui.overSeen = -1; shownRoll = -1; renderUI(); } else render(); return; }
+  if (m.t === "st") { const first = !G || screen !== "game"; G = m.G; GEO = geoFor(G.size || "std"); setBoardGeo(); if (first) { screen = "game"; ui.mode = null; ui.overSeen = -1; ui.probMode = false; shownRoll = -1; renderUI(); } else render(); return; }
   if (m.t === "err") { toast(m.msg); return; }
 }
 function leave() {
@@ -965,21 +1048,22 @@ function leave() {
 // ================= 画面 =================
 let toastT = null;
 function toast(s) { const t = $("toast"); t.textContent = s; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => { t.style.opacity = 0; }, 1800); }
-const RULES_HTML = `<div class="rules">
-<b>目的</b>: 島に道・村・町をつくって、先に <b>${TARGET}点</b> とった人の勝ち！<br>
+const rulesHtml = () => `<div class="rules">
+<b>目的</b>: 島に道・村・町をつくって、先に <b>${tgt()}点</b> とった人の勝ち！（勝利点・はじめの村の数・島の大きさは、はじめる前にえらべる）<br>
 <b>土地と資源</b>: 森🌲＝木材、丘🧱＝レンガ、牧草地🐑＝羊毛、畑🌾＝小麦、山⛰️＝鉄。火山🌋からは何もとれない。<br>
-<b>はじめ</b>: 順番に「村＋道」を2回ずつ置く（2回目は逆の順番）。2つめの村のまわりの資源をもらえる。<br>
+<b>はじめ</b>: 順番に「村＋道」を ${G ? G.setupN : cfg.setupN} 回ずつ置く（往復する順番）。最後に置いた村のまわりの資源をもらえる。置いた村と道は「決定」するまで ↶ で置き直せる。<br>
 <b>自分の番</b>: ①サイコロをふる → 出た数の土地にくっついている村は1まい、町は2まい資源をもらえる（みんな）。<br>
 ②資源を使ってつくる・交換する → ③「おわり」。<br>
-<b>つくる</b>: 道 ${costHtml(COST.road)}／村 ${costHtml(COST.vil)}（1点）／町 ${costHtml(COST.town)}（村を町にする・2点）／ふしぎカード ${costHtml(COST.card)}<br>
+<b>つくる</b>: 道 ${costHtml(COST.road)}／村 ${costHtml(COST.vil)}（1点）／町 ${costHtml(COST.town)}（村を町にする・2点）／カード ${costHtml(COST.card)}<br>
 ・村は自分の道のはしにつくる。となりの角に村や町があるところにはつくれない。<br>
-<b>7が出たら</b>: 🐦‍⬛カラスが来る！ カラスを好きな土地へ動かし、そこに村がある人から1まいもらう。カラスのいる土地は資源が出ない。10まい以上持っている人は半分なくす。<br>
+<b>7が出たら</b>: 🥷盗賊が来る！ 盗賊を好きな土地へ動かし、そこに村がある人から1まいもらう。盗賊のいる土地は資源が出ない。10まい以上持っている人は半分なくす。<br>
 <b>交換</b>: 自分の番に、ほかの人へ「これを出すから、これがほしい」と🤝よびかけられる（まい数は自由）。OKした人の中から1人えらんで交換。銀行とは 4まい→1まい。港⚓にくっついた村・町があれば 3→1 や 2→1。<br>
-<b>ふしぎカード</b>: 👒カカシ（カラスを動かす）・🧺大豊作（2まいもらう）・🌉橋づくり（道2本タダ）・🗺️宝の地図（+1点）。買った番には使えない。1番に1まいだけ。<br>
+<b>カード</b>: ⚔️騎士（盗賊を動かす）・🧺大豊作（2まいもらう）・🌉橋づくり（道2本タダ）・🗺️宝の地図（+1点）。買った番には使えない。1番に1まいだけ。<br>
 <b>やり直し↶</b>: 自分の番のあいだなら、つくったもの・銀行との交換を取り消せる（サイコロ・カード・ほかの人との交換のあとは取り消せない）。<br>
-<b>長い道ボーナス</b>: つながった道が5本以上で、いちばん長い人は +2点。
+<b>最長道</b>: つながった道が5本以上で、いちばん長い人は +2点。<br>
+<b>最大騎士力</b>: 騎士を3回以上使った人のうち、いちばん多く使った人は +2点。
 </div>`;
-const RULES_SHORT = `サイコロで出た数の土地から資源をもらい、道・村(1点)・町(2点)をつくる。先に${TARGET}点で勝ち。7が出たらカラスを動かして1まいもらえる。ほかの人とも自由に交換できる（銀行とは4→1、港なら3→1・2→1）。`;
+const rulesShort = () => `サイコロで出た数の土地から資源をもらい、道・村(1点)・町(2点)をつくる。先に${tgt()}点で勝ち。7が出たら盗賊を動かして1まいもらえる。ほかの人とも自由に交換できる（銀行とは4→1、港なら3→1・2→1）。`;
 
 function renderUI() {
   // パーティ: 始まる前（つないでいる・部屋）は、全部のゲームで同じ待ち合わせ画面（ykgLobby）を使う
@@ -1001,6 +1085,7 @@ function renderMenu() {
   $("menu").innerHTML = `<div class="card">
     <h1>🏝️ カイタク島<small>サイコロで資源をあつめて、島をひらこう</small></h1>
     <label class="note">なまえ</label><input id="name" maxlength="12" value="${esc(store.get("kaitaku-name") || "")}" placeholder="ゲスト">
+    <h3>ルール</h3>${cfgButtons("data-a")}
     <h3>CPUと対戦</h3>
     <div class="note">CPUの数</div>
     <div class="seg">${[1, 2, 3].map(n => `<button data-a="n${n}" class="${n === cpuN ? "on" : ""}">${n}人</button>`).join("")}</div>
@@ -1025,8 +1110,9 @@ function renderLobby() {
       ${L.specs.length ? `<div class="note">観戦: ${L.specs.map(esc).join("、")}</div>` : ""}`;
     if (isHost) h += `<div class="row"><button data-a="addcpu" ${L.seats.length >= 4 ? "disabled" : ""}>CPU を追加</button><button data-a="delcpu" ${L.seats.some(s => s.bot) ? "" : "disabled"}>CPU を減らす</button></div>
       <div class="note">CPUの強さ</div><div class="seg">${Object.entries(DIFF).map(([k, s]) => `<button data-a="hd-${k}" class="${k === host.diff ? "on" : ""}">${s}</button>`).join("")}</div>
+      ${cfgButtons("data-a")}
       <button class="main" data-a="start" ${L.seats.length < 2 ? "disabled" : ""}>スタート</button>${L.seats.length < 2 ? `<div class="note">CPU を入れて 2人以上で始められます</div>` : ""}`;
-    else h += `<div class="note" style="text-align:center">${spectating ? "観戦: " : ""}ホストがスタートするのを待っています…</div>`;
+    else h += `<div class="note" style="text-align:center">${esc(cfgTxt(cleanCfg(L.cfg)))}</div><div class="note" style="text-align:center">${spectating ? "観戦: " : ""}ホストがスタートするのを待っています…</div>`;
   }
   h += `<button data-a="leave">ぬける</button></div>`;
   $("lobby").innerHTML = h;
@@ -1035,28 +1121,30 @@ function renderLobby() {
 let partySet = null, partyGuestSet = null;
 function partyLobbyOpts() {
   const isHost = mode === "host";
-  if (screen === "connecting") return { rules: RULES_SHORT, button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
+  if (screen === "connecting") return { rules: rulesShort(), button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
   const L = lobbyInfo;
   const members = L.seats.map(s => ({ name: s.name, tag: s.pid === 0 ? "ホスト" : s.bot ? "CPU" : "", me: !s.bot && s.pid === myPid })).concat(L.specs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })));
   const status = `${L.seats.length} / 4人` + (L.seats.length < 2 ? "（CPU を入れて 2人以上で始められます）" : "");
   if (!isHost) {
     if (!partyGuestSet) partyGuestSet = document.createElement("div");
-    partyGuestSet.innerHTML = `<div class="yl-sub">CPUの強さ: ${DIFF[L.diff] || "ふつう"}</div>`;
-    return { rules: RULES_SHORT, members, settings: partyGuestSet, button: null, status, wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" };
+    partyGuestSet.innerHTML = `<div class="yl-sub">CPUの強さ: ${DIFF[L.diff] || "ふつう"}</div><div class="yl-sub">${esc(cfgTxt(cleanCfg(L.cfg)))}</div>`;
+    return { rules: rulesShort(), members, settings: partyGuestSet, button: null, status, wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" };
   }
   if (!partySet) {
     partySet = document.createElement("div");
-    partySet.innerHTML = `<div class="yl-row"><button data-b="+">CPU を追加</button><button data-b="-">CPU を減らす</button></div><div class="yl-sub">CPUの強さ</div><div class="yl-row" data-g="d"></div>`;
+    partySet.innerHTML = `<div class="yl-row"><button data-b="+">CPU を追加</button><button data-b="-">CPU を減らす</button></div><div class="yl-sub">CPUの強さ</div><div class="yl-row" data-g="d"></div><div data-g="cfg"></div>`;
     partySet.addEventListener("click", e => {
       const b = e.target.closest("[data-b]"); if (!b || b.disabled || mode !== "host" || host.playing) return;
       const k = b.dataset.b;
       if (k === "+") hostAddCpu(); else if (k === "-") hostDelCpu(); else if (k.startsWith("d-")) { host.diff = k.slice(2); hostLobby(); }
+      else if (/^(c[tsz]|up|dn)-/.test(k)) { setCfg(k); hostLobby(); }
     });
   }
   partySet.querySelector('[data-b="+"]').disabled = L.seats.length >= 4;
   partySet.querySelector('[data-b="-"]').disabled = !L.seats.some(s => s.bot);
+  partySet.querySelector('[data-g="cfg"]').innerHTML = cfgButtons("data-b");
   partySet.querySelector('[data-g="d"]').innerHTML = Object.entries(DIFF).map(([k, s]) => `<button data-b="d-${k}" class="${k === host.diff ? "on" : ""}">${s}</button>`).join("");
-  return { rules: RULES_SHORT, members, settings: partySet, status, button: { label: "スタート", disabled: L.seats.length < 2, onClick: () => hostStart() } };
+  return { rules: rulesShort(), members, settings: partySet, status, button: { label: "スタート", disabled: L.seats.length < 2, onClick: () => hostStart() } };
 }
 
 document.addEventListener("click", e => {
@@ -1065,6 +1153,7 @@ document.addEventListener("click", e => {
   if (a[0] === "n" && /^n\d$/.test(a)) { cpuN = +a[1]; store.set("kaitaku-cpus", cpuN); renderMenu(); keepName(); return; }
   if (a.startsWith("d-")) { cpuDiff = a.slice(2); store.set("kaitaku-diff", cpuDiff); renderMenu(); keepName(); return; }
   if (a.startsWith("hd-")) { host.diff = a.slice(3); hostLobby(); return; }
+  if (/^(c[tsz]|up|dn)-/.test(a)) { setCfg(a); if (mode === "host" && screen === "lobby") hostLobby(); else { renderMenu(); keepName(); } return; }
   switch (a) {
     case "local": startLocal(); break;
     case "host": fixName(); hostTries = 0; startHost(); break;
@@ -1085,19 +1174,47 @@ function keepName() { if (nameDraft != null && $("name")) $("name").value = name
 // ---------------- 盤（SVG） ----------------
 const S = 50;
 // 島をかこむ海（六角形 1 まわり）。盤の外のすき間にもはみ出して描く（その先は木のテーブル）
-const OCEAN = (() => { const o = []; for (let r = -3; r <= 3; r++) for (let q = -3; q <= 3; q++) if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) === 3) o.push({ x: 1.5 * r, y: SQ3 * (q + r / 2) }); return o; })();
+let OCEAN = [], VB = [0, 0, 1, 1], geoR = 0;
 const hexPts = (x, y, k) => [...Array(6)].map((_, i) => { const a = Math.PI / 180 * (60 * i); return ((x + Math.cos(a) * k) * S).toFixed(1) + "," + ((y + Math.sin(a) * k) * S).toFixed(1); }).join(" ");
-const VB = (() => { const xs = GEO.verts.map(v => v.x * S), ys = GEO.verts.map(v => v.y * S), mx = 44, my = 48; return [Math.min(...xs) - mx, Math.min(...ys) - my, Math.max(...xs) - Math.min(...xs) + 2 * mx, Math.max(...ys) - Math.min(...ys) + 2 * my]; })();   // 左右は港が少ししか出ないので余白を小さく
-$("board").setAttribute("viewBox", VB.join(" "));
+// 島の大きさが変わったら、まわりの海と、盤の見える範囲（VB）を作り直す
+function setBoardGeo() {
+  if (GEO.R === geoR) return; geoR = GEO.R; const R = GEO.R + 1;
+  OCEAN = []; for (let r = -R; r <= R; r++) for (let q = -R; q <= R; q++) if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) === R) OCEAN.push({ x: 1.5 * r, y: SQ3 * (q + r / 2) });
+  const xs = GEO.verts.map(v => v.x * S), ys = GEO.verts.map(v => v.y * S), mx = 44, my = 48;   // 左右は港が少ししか出ないので余白を小さく
+  VB = [Math.min(...xs) - mx, Math.min(...ys) - my, Math.max(...xs) - Math.min(...xs) + 2 * mx, Math.max(...ys) - Math.min(...ys) + 2 * my];
+  zoomReset();
+}
+// ---------------- 盤のズーム（2026-11-12）: ＋ − ⤢ ボタン・2 本指でひろげる・マウスのホイール。ズーム中は 1 本指で動かせる ----------------
+const zoom = { k: 1, cx: 0, cy: 0 };
+const curVB = () => { const w = VB[2] / zoom.k, h = VB[3] / zoom.k; return [zoom.cx - w / 2, zoom.cy - h / 2, w, h]; };
+function applyZoom() {
+  zoom.k = Math.min(3, Math.max(1, zoom.k));
+  const w = VB[2] / zoom.k, h = VB[3] / zoom.k;   // はしまで行きすぎないように
+  zoom.cx = Math.min(VB[0] + VB[2] - w / 2, Math.max(VB[0] + w / 2, zoom.cx));
+  zoom.cy = Math.min(VB[1] + VB[3] - h / 2, Math.max(VB[1] + h / 2, zoom.cy));
+  $("board").setAttribute("viewBox", curVB().join(" "));
+  const zb = $("zoomBtns"); if (zb) { zb.querySelector('[data-z="in"]').disabled = zoom.k >= 3; zb.querySelector('[data-z="out"]').disabled = zoom.k <= 1; zb.querySelector('[data-z="fit"]').disabled = zoom.k <= 1; }
+}
+function zoomReset() { zoom.k = 1; zoom.cx = VB[0] + VB[2] / 2; zoom.cy = VB[1] + VB[3] / 2; applyZoom(); }
+// f 倍にする。px, py（画面の位置）があれば、そこを中心に
+function zoomAt(f, px, py) {
+  const b = $("board").getBoundingClientRect(), v = curVB(), sc = Math.min(b.width / v[2], b.height / v[3]);
+  const ox = b.left + (b.width - v[2] * sc) / 2, oy = b.top + (b.height - v[3] * sc) / 2;
+  const ux = px == null ? zoom.cx : v[0] + (px - ox) / sc, uy = py == null ? zoom.cy : v[1] + (py - oy) / sc;
+  const k0 = zoom.k; zoom.k = Math.min(3, Math.max(1, k0 * f)); const r = k0 / zoom.k;
+  zoom.cx = ux + (zoom.cx - ux) * r; zoom.cy = uy + (zoom.cy - uy) * r; applyZoom();
+}
+setBoardGeo();
 $("board").setAttribute("preserveAspectRatio", "xMidYMid meet");
-const CROW_SVG = `<ellipse rx="12" ry="7.5" fill="#111" stroke="#fff" stroke-width="1.5"/><path d="M-6 -2 L-17 -13 L3 -4Z" fill="#222" stroke="#fff" stroke-width="1"/><path d="M-10 2 L-19 7 L-10 6Z" fill="#111"/><circle cx="10" cy="-6" r="6" fill="#111" stroke="#fff" stroke-width="1.5"/><path d="M15 -8 L23 -5 L15 -3Z" fill="#f59e0b"/><circle cx="11" cy="-7.5" r="1.6" fill="#fff"/>`;
+// 盗賊のコマ（黒いコマ）
+const CROW_SVG = `<ellipse cx="0" cy="10" rx="11" ry="4" fill="#0007"/><path d="M-9 10 Q-9 0 -4 -4 L4 -4 Q9 0 9 10 Z" fill="#2b2b2b" stroke="#fff" stroke-width="1.5"/><ellipse cx="0" cy="-5" rx="6.5" ry="2.6" fill="#2b2b2b" stroke="#fff" stroke-width="1.3"/><circle cx="0" cy="-12" r="6" fill="#2b2b2b" stroke="#fff" stroke-width="1.5"/>`;
 const VIL_PATH = "M-8 7 L-8 -2 L0 -10 L8 -2 L8 7 Z";
 const TOWN_PATH = "M-13 8 L-13 -3 L-6 -10 L1 -3 L1 -1 L13 -1 L13 8 Z";
 function highlights() {
   // いま自分がタップできる場所: { v: [], e: [], t: [] }
   const s = mySeat(), o = { v: [], e: [], t: [] };
   if (!G || s < 0 || G.cur !== s || G.phase === "over") return o;
-  if (G.phase === "setup") { if (G.su.step === "v") o.v = GEO.verts.map((_, v) => v).filter(v => canVil(s, v, true)); else o.e = validRoads(s); }
+  if (G.phase === "setup") { if (G.su.step === "v") o.v = GEO.verts.map((_, v) => v).filter(v => canVil(s, v, true)); else if (G.su.step === "r") o.e = validRoads(s); }
   else if (G.phase === "crow") o.t = GEO.hex.map((_, i) => i).filter(i => i !== G.crow);
   else if (G.phase === "main") {
     if (ui.mode === "road") o.e = validRoads(s);
@@ -1127,7 +1244,7 @@ function renderBoard() {
   // 土地
   GEO.hex.forEach((h, i) => {
     const t = G.tiles[i], T = TT[t.t], x = h.x * S, y = h.y * S, isHl = hl.t.includes(i), hit = t.n && t.n === sum && G.rollN && i !== G.crow;
-    s += `<polygon points="${poly(h)}" fill="${T.col}" stroke="${isHl ? "#fff" : hit ? "#ffe066" : "#00000055"}" stroke-width="${isHl || hit ? 4 : 1.5}" ${isHl ? `class="hl" data-t="${i}"` : ""}/>`;
+    s += `<polygon points="${poly(h)}" fill="${T.col}" stroke="${isHl ? "#fff" : "#00000055"}" stroke-width="${isHl ? 4 : 1.5}" ${isHl ? `class="hl" data-t="${i}"` : ""}/>`;
     s += `<text x="${x}" y="${y - 20}" font-size="17" text-anchor="middle" pointer-events="none">${T.ic}</text>`;
     if (t.n) {
       const red = t.n === 6 || t.n === 8, pp = pips(t.n);
@@ -1136,6 +1253,16 @@ function renderBoard() {
         + [...Array(pp)].map((_, k) => `<circle cx="${x + (k - (pp - 1) / 2) * 4}" cy="${y + 16}" r="1.4" fill="${red ? "#c81e1e" : "#333"}"/>`).join("") + `</g>`;
     }
     if (i === G.crow) s += `<g transform="translate(${x + (t.n ? 14 : 0)},${y + (t.n ? -2 : 8)})" pointer-events="none">${CROW_SVG}</g>`;
+  });
+  // 2026-11-12: サイコロで当たった土地を目立たせる。となりの土地に線が隠れないよう、全部の土地のあとに描く。
+  // サイコロが止まった直後の 2.7 秒は、白く光る・金の輪が広がる演出（描き直しても途中から続くように animation-delay をずらす）
+  const hitAge = Date.now() - (ui.hitAt || 0), dl = `style="animation-delay:-${hitAge}ms"`;
+  GEO.hex.forEach((h, i) => {
+    const t = G.tiles[i]; if (!(t.n && t.n === sum && G.rollN && i !== G.crow)) return;
+    const x = h.x * S, y = h.y * S;
+    s += `<g pointer-events="none"><polygon points="${poly(h)}" fill="none" stroke="#fff3a0" stroke-width="10" stroke-opacity=".6" stroke-linejoin="round"/><polygon points="${poly(h)}" fill="none" stroke="#ffc400" stroke-width="4.5" stroke-linejoin="round"/>`
+      + `<circle cx="${x}" cy="${y + 6}" r="18" fill="none" stroke="#ffc400" stroke-width="3.5"/>`
+      + (hitAge < 2700 ? `<polygon points="${poly(h)}" class="hitfx" ${dl}/><circle cx="${x}" cy="${y + 6}" r="17" class="hitring" ${dl}/><circle cx="${x}" cy="${y + 6}" r="17" class="hitring" style="animation-delay:${450 - hitAge}ms"/>` : "") + `</g>`;
   });
   // タップできる土地は上にもう一度（当たり判定）
   for (const i of hl.t) s += `<polygon points="${poly(GEO.hex[i])}" fill="#ffffff22" data-t="${i}"/>`;
@@ -1156,10 +1283,49 @@ function renderBoard() {
     if (!b) return; const [x, y] = P(v);
     s += `<path d="${b.lv === 2 ? TOWN_PATH : VIL_PATH}" transform="translate(${x},${y})" fill="${COLS[b.p]}" stroke="#111" stroke-width="2.2" stroke-linejoin="round"/>`;
   });
-  for (const v of hl.v) { const [x, y] = P(v); s += `<circle cx="${x}" cy="${y}" r="10" fill="#ffffffcc" stroke="#111" stroke-width="2" class="hl" pointer-events="none"/><circle cx="${x}" cy="${y}" r="21" fill="transparent" data-v="${v}"/>`; }
+  // 確率表示モード: 村を置ける角（となりに村・町がない角）ごとに、まわりの土地が出る確率の合計。高いほど赤く大きい
+  const pm = new Map();
+  if (ui.probMode && G.phase !== "over") GEO.verts.forEach((V, v) => { if (!canVil(-1, v, true)) return; const w = V.h.reduce((a, ti) => a + (ti === G.crow ? 0 : pips(G.tiles[ti].n)), 0); if (w) pm.set(v, w); });
+  for (const v of hl.v) { const [x, y] = P(v); s += (pm.has(v) ? "" : `<circle cx="${x}" cy="${y}" r="10" fill="#ffffffcc" stroke="#111" stroke-width="2" class="hl" pointer-events="none"/>`) + `<circle cx="${x}" cy="${y}" r="21" fill="transparent" data-v="${v}"/>`; }
+  if (pm.size) {
+    const ws = [...pm.values()], lo = Math.min(...ws), hi = Math.max(...ws), hv = new Set(hl.v);
+    for (const [v, w] of pm) {
+      const [x, y] = P(v), t = hi > lo ? (w - lo) / (hi - lo) : 1, r = 7 + t * 9;
+      const col = `hsl(${Math.round(52 - t * 52)},${Math.round(85 + t * 10)}%,${Math.round(62 - t * 14)}%)`;   // うすい黄色 → 赤
+      s += `<g pointer-events="none" ${hv.has(v) ? 'class="hl"' : ""}><circle cx="${x}" cy="${y}" r="${r.toFixed(1)}" fill="${col}" stroke="${hv.has(v) ? "#fff" : "#0008"}" stroke-width="${hv.has(v) ? 2.5 : 1.2}"/>`
+        + `<text x="${x}" y="${y + (r > 11 ? 4 : 3)}" font-size="${r > 11 ? 10.5 : 8.5}" font-weight="800" text-anchor="middle" fill="${t > 0.45 ? "#fff" : "#3b2a12"}">${Math.round(w / 36 * 100)}</text></g>`;
+    }
+  }
   $("board").innerHTML = s;
 }
+// ズーム: 指・マウスの動き。動かしたあとのクリックは、置く操作にしない
+const ptrs = new Map(); let pinch0 = null, panFrom = null, dragged = false;
+$("board").addEventListener("pointerdown", e => {
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 1) { panFrom = { x: e.clientX, y: e.clientY, cx: zoom.cx, cy: zoom.cy }; dragged = false; }
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: zoom.k }; dragged = true; }
+});
+$("board").addEventListener("pointermove", e => {
+  if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size >= 2 && pinch0) { const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y); zoomAt(pinch0.k * d / pinch0.d / zoom.k, (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
+  if (panFrom && zoom.k > 1) {
+    const dx = e.clientX - panFrom.x, dy = e.clientY - panFrom.y; if (!dragged && Math.hypot(dx, dy) < 8) return;
+    dragged = true; const v = curVB(), bb = $("board").getBoundingClientRect(), sc = Math.min(bb.width / v[2], bb.height / v[3]);
+    zoom.cx = panFrom.cx - dx / sc; zoom.cy = panFrom.cy - dy / sc; applyZoom();
+  }
+});
+const ptrUp = e => {
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = null;
+  if (!ptrs.size) panFrom = null; else { const q = [...ptrs.values()][0]; panFrom = { x: q.x, y: q.y, cx: zoom.cx, cy: zoom.cy }; }
+};
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) $("board").addEventListener(ev, ptrUp);
+$("board").addEventListener("wheel", e => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
+$("zoomBtns").addEventListener("click", e => {
+  const b = e.target.closest("[data-z]"); if (!b || b.disabled) return;
+  if (b.dataset.z === "in") zoomAt(1.4); else if (b.dataset.z === "out") zoomAt(1 / 1.4); else zoomReset();
+});
 $("board").addEventListener("click", e => {
+  if (dragged) { dragged = false; return; }
   const el = e.target.closest("[data-v],[data-e],[data-t]"); if (!el || !G) return;
   if (el.dataset.t != null) { act({ k: "crow", t: +el.dataset.t }); return; }
   if (el.dataset.e != null) { ui.mode = G.free > 1 ? "road" : null; act({ k: "build", w: "road", at: +el.dataset.e }); return; }
@@ -1198,7 +1364,7 @@ function updDice() {
     if (++k >= 10 || !G) {
       clearInterval(diceT); if (!G) return;
       big.innerHTML = dieHtml(d[0]) + dieHtml(d[1]);
-      setTimeout(() => { if (G && shownRoll === G.rollN) { fin(); flyRes(gains); } }, 420);
+      setTimeout(() => { if (G && shownRoll === G.rollN) { fin(); ui.hitAt = Date.now(); renderBoard(); flyRes(gains); } }, 420);
       return;
     }
     big.innerHTML = dieHtml(1 + Math.floor(Math.random() * 6)) + dieHtml(1 + Math.floor(Math.random() * 6));
@@ -1212,9 +1378,9 @@ function lpos(el) {
   return { x: x + el.offsetWidth / 2, y: y + el.offsetHeight / 2 };
 }
 function tpos(ti) {
-  const bw = $("boardWrap"), W = bw.clientWidth, H = bw.clientHeight, sc = Math.min(W / VB[2], H / VB[3]);
-  const ox = (W - VB[2] * sc) / 2, oy = (H - VB[3] * sc) / 2, h = GEO.hex[ti];
-  return { x: bw.offsetLeft + ox + (h.x * S - VB[0]) * sc, y: bw.offsetTop + oy + (h.y * S - VB[1]) * sc - 10 };
+  const bw = $("boardWrap"), W = bw.clientWidth, H = bw.clientHeight, v = curVB(), sc = Math.min(W / v[2], H / v[3]);   // ズーム中も、見えている位置から
+  const ox = (W - v[2] * sc) / 2, oy = (H - v[3] * sc) / 2, h = GEO.hex[ti];
+  return { x: bw.offsetLeft + ox + (h.x * S - v[0]) * sc, y: bw.offsetTop + oy + (h.y * S - v[1]) * sc - 10 };
 }
 function flyRes(list) {
   if (FAST || !list.length || screen !== "game") return;
@@ -1249,12 +1415,12 @@ function bannerText() {
   const s = mySeat(), cp = G.ps[G.cur], who = `<i class="dot" style="background:${COLS[G.cur]}"></i>${esc(cp.name)}`;
   if (G.phase === "over") return { my: false, h: `🏆 ${esc(G.ps[G.winner].name)} の勝ち！` };
   if (s < 0 || G.cur !== s) {
-    const what = G.phase === "setup" ? "はじめの村と道を置いています" : G.phase === "roll" ? "サイコロをふります" : G.phase === "crow" || G.phase === "steal" ? "カラスを動かしています" : "の番です";
+    const what = G.phase === "setup" ? "はじめの村と道を置いています" : G.phase === "roll" ? "サイコロをふります" : G.phase === "crow" || G.phase === "steal" ? "盗賊を動かしています" : "の番です";
     return { my: false, h: `${spectating || s < 0 ? "観戦中 ・ " : ""}${who} ${what}` };
   }
-  if (G.phase === "setup") return { my: true, h: G.su.step === "v" ? `村を置く角をタップ（${G.su.i < G.ps.length ? "1" : "2"}つめ）` : "村からのびる道をタップ" };
+  if (G.phase === "setup") return { my: true, h: G.su.step === "v" ? `村を置く角をタップ（${Math.floor(G.su.i / G.ps.length) + 1}/${G.setupN}こめ）` : G.su.step === "r" ? "村からのびる道をタップ（↶ で置き直せる）" : "よければ「決定」（↶ で置き直せる）" };
   if (G.phase === "roll") return { my: true, h: "あなたの番！ サイコロをふろう" };
-  if (G.phase === "crow") return { my: true, h: "🐦‍⬛ カラスを置く土地をタップ" };
+  if (G.phase === "crow") return { my: true, h: "🥷 盗賊を置く土地をタップ" };
   if (G.phase === "steal") return { my: true, h: "だれから1まいもらう？" };
   if (G.free > 0) return { my: true, h: `🌉 タダで道をつくれる（あと${G.free}本）` };
   if (ui.mode) return { my: true, h: `${BN[ui.mode]}をつくる場所をタップ` };
@@ -1268,7 +1434,7 @@ function render() {
   if (myTurn && G.phase === "main" && G.free > 0) ui.mode = "road";
   // 人
   $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="vpb">${vp(i)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
-    <div class="st"><span>手札${tot(p.hand)}</span>${nc ? `<span>カード${nc}</span>` : ""}${p.lr ? `<span class="${G.roadHolder === i ? "lr" : ""}">道${p.lr}</span>` : ""}</div></div></div>`; }).join("");
+    <div class="st"><span>手札${tot(p.hand)}</span>${nc ? `<span>カード${nc}</span>` : ""}${p.kn ? `<span class="${G.armyHolder === i ? "lr" : ""}">騎士${p.kn}</span>` : ""}</div><div class="st"><span>村${p.vils}</span><span>町${p.towns}</span><span class="${G.roadHolder === i ? "lr" : ""}">道${p.lr}</span></div></div></div>`; }).join("");
   $("game").classList.toggle("p4", G.ps.length >= 4);
   const bt = bannerText();
   $("ban").className = bt.my ? "my" : ""; $("ban").innerHTML = bt.h;
@@ -1283,15 +1449,17 @@ function render() {
   } else $("hand").innerHTML = `<div class="rc" style="padding:8px;font-size:13px">観戦中: みんなの手は見えません</div>`;
   const nc = me ? me.cards.length + me.newC.length : 0;
   $("cardBd").textContent = nc; $("cardBd").classList.toggle("hidden", !nc);
+  $("side").querySelector('[data-g="prob"]').classList.toggle("on", ui.probMode);   // 確率表示モード中は 確率 ボタンが光る
   // 右下のボタン: [つくる 4つ] / [おわり・ふる] [↶ やり直し] [⇄ 交換]
   const sq = (g, ic, lbl, en, on) => `<button class="sq ${on ? "on" : ""}" data-g="${g}" ${en ? "" : "disabled"}>${ic}<small>${lbl}</small></button>`;
   let r1 = "", r2 = "";
   if (!me) r2 = `<button class="go" data-g="leave">${PARTY ? "ゲーム一覧へ" : "ぬける"}</button>`;
   else if (G.phase === "over") r2 = `<button class="main go" data-g="result">🏆 結果</button>`;   // 2026-11-10: 「盤を見る」で閉じたあとも結果（部屋にもどる）を開き直せる
   else {
-    const inMain = myTurn && G.phase === "main";
+    const inMain = myTurn && G.phase === "main", inSetup = myTurn && G.phase === "setup";
     let go;
-    if (myTurn && G.phase === "roll") go = `<button class="main go" data-g="roll">🎲 ふる</button>`;
+    if (inSetup && G.su.step === "ok") go = `<button class="main go" data-g="setupok">決定 ▶</button>`;
+    else if (myTurn && G.phase === "roll") go = `<button class="main go" data-g="roll">🎲 ふる</button>`;
     else if (inMain && G.free > 0) go = `<button class="go" data-g="nofree">道づくりを<br>やめる</button>`;
     else if (inMain) go = `<button class="main go" data-g="end">おわり ▶</button>`;
     else if (G.offer && G.offer.from !== s && G.offer.resp[s] === null) go = `<button class="go" disabled>交換に<br>返事してね ▶</button>`;
@@ -1299,7 +1467,7 @@ function render() {
     // ボタンが入れかわった直後は押せない（下のクリックで 450ms 無視する）。入れかわったときだけ、ふわっと出す
     const gk = (go.match(/data-g="(\w+)"/) || [])[1] || "";
     if (gk !== ui.goKey) { ui.goKey = gk; ui.goAt = Date.now(); if (gk) go = go.replace('class="main go"', 'class="main go fresh"').replace('class="go"', 'class="go fresh"'); }
-    r2 = go + sq("undo", "↶", "やり直し", inMain && G.undoN > 0) + sq("trade", "⇄", "交換", inMain && !G.free, ui.trade || (G.offer && G.offer.from === s));
+    r2 = go + sq("undo", "↶", "やり直し", (inMain || inSetup) && G.undoN > 0) + sq("trade", "⇄", "交換", inMain && !G.free, ui.trade || (G.offer && G.offer.from === s));
     {
       const ok = inMain && !G.free, can = ok && {
         road: afford(me, COST.road) && me.roads < LIM.road && validRoads(s).length > 0,
@@ -1311,7 +1479,6 @@ function render() {
     }
   }
   $("acts").innerHTML = (r1 ? `<div class="r">${r1}</div>` : "") + `<div class="r">${r2}</div>`;
-  $("log").innerHTML = G.log.slice(-2).map(l => `<div>${esc(l)}</div>`).join("");
   // 勝負がついたら結果を出す（1 回だけ）
   if (G.phase === "over" && ui.overSeen !== G.ver) { ui.overSeen = G.ver; ui.modal = "over"; }
   // 7 のとき、だれからもらうかは、まん中の小窓でえらぶ
@@ -1400,8 +1567,9 @@ $("tradeBox").addEventListener("click", e => {
 $("game").addEventListener("click", e => {
   const b = e.target.closest("[data-g]"); if (!b || b.disabled || !G) return;
   const g = b.dataset.g;
-  if ((g === "roll" || g === "end" || g === "nofree") && Date.now() - ui.goAt < 450) return;   // ふる → おわり の 2 度タップ よけ
+  if ((g === "roll" || g === "end" || g === "nofree" || g === "setupok") && Date.now() - ui.goAt < 450) return;   // ふる → おわり の 2 度タップ よけ
   if (g === "roll") act({ k: "roll" });
+  else if (g === "setupok") act({ k: "setupok" });
   else if (g === "end") { ui.mode = null; ui.trade = false; act({ k: "end" }); }
   else if (g === "nofree") act({ k: "nofree" });
   else if (g === "undo") { ui.mode = null; act({ k: "undo" }); }
@@ -1431,19 +1599,21 @@ function renderModal() {
   if (!k) return;
   const s = mySeat(), me = G && s >= 0 ? G.ps[s] : null, myTurn = G && s >= 0 && G.cur === s;
   let h = "";
-  if (k === "rules") h = `<h2>あそびかた</h2>${RULES_HTML}<button data-m="close">とじる</button>`;
-  else if (k === "menu") h = `<h2>メニュー</h2><button data-m="rules">あそびかた</button><button data-m="prob">サイコロの確率</button><button data-m="log">これまでのできごと</button>
+  if (k === "rules") h = `<h2>あそびかた</h2>${rulesHtml()}<button data-m="close">とじる</button>`;
+  else if (k === "menu") h = `<h2>メニュー</h2><button data-m="rules">あそびかた</button><button data-m="prob">サイコロの確率</button><button data-m="log">ログ</button>
       <button data-m="quit">${PARTY ? "ゲーム一覧へ" : mode === "local" ? "やめてメニューへ" : "部屋をぬける"}</button><button data-m="close">とじる</button>`;
-  else if (k === "log") h = `<h2>できごと</h2><div class="note" style="max-height:50vh;overflow-y:auto">${G.log.slice().reverse().map(l => `<div>${esc(l)}</div>`).join("")}</div><button data-m="close">とじる</button>`;
+  else if (k === "log") h = `<h2>ログ</h2><div class="note" style="max-height:50vh;overflow-y:auto">${G.log.slice().reverse().map(l => `<div>${esc(l)}</div>`).join("")}</div><button data-m="close">とじる</button>`;
   else if (k === "prob") {
-    // 2 こ のサイコロの合計が出る確率と、その数字の土地（✖ はカラスがいて出ない）。あなたの村・町が取れるまい数も
+    // 2 こ のサイコロの合計が出る確率と、その数字の土地（✖ は盗賊がいて出ない）。あなたの村・町が取れるまい数も
     const mine = n => { let c = 0; if (s < 0) return 0; G.tiles.forEach((t, ti) => { if (t.n !== n || ti === G.crow) return; GEO.hex[ti].c.forEach(v => { const b = G.vb[v]; if (b && b.p === s) c += b.lv; }); }); return c; };
-    h = `<h2>🎲 サイコロの確率</h2><div class="note" style="text-align:center">2こ の合計。6 と 8 がいちばん出やすい（7 はカラス）</div>`
+    h = `<h2>🎲 サイコロの確率</h2><button data-m="pmode" class="${ui.probMode ? "on" : ""}">📍 置き場所の確率表示：${ui.probMode ? "ON" : "OFF"}</button>
+      <div class="note" style="text-align:center">ON にすると、村を置ける角に、まわりの土地が出る確率の合計（%）を出します。高いほど赤く大きい丸です。</div>
+      <div class="note" style="text-align:center">2こ の合計。6 と 8 がいちばん出やすい（7 は盗賊）</div>`
       + [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => {
         const w = 6 - Math.abs(7 - n), tl = G.tiles.map((t, ti) => t.n === n ? (ti === G.crow ? "✖" : RI[resOf(ti)]) : "").join(""), m = mine(n);
-        return `<div class="prow ${n === 6 || n === 8 ? "red" : ""}"><span class="pn">${n}</span><span class="pbar"><i style="width:${w / 6 * 100}%"></i></span><span class="pp">${w}/36（${(w / 36 * 100).toFixed(1)}%）</span><span class="ptl">${n === 7 ? "カラス" : tl}${m ? `<b style="letter-spacing:0;color:#5ee07a"> +${m}</b>` : ""}</span></div>`;
+        return `<div class="prow ${n === 6 || n === 8 ? "red" : ""}"><span class="pn">${n}</span><span class="pbar"><i style="width:${w / 6 * 100}%"></i></span><span class="pp">${w}/36（${(w / 36 * 100).toFixed(1)}%）</span><span class="ptl">${n === 7 ? "盗賊" : tl}${m ? `<b style="letter-spacing:0;color:#5ee07a"> +${m}</b>` : ""}</span></div>`;
       }).join("")
-      + `<div class="note">右の絵はその数字の土地（✖ はカラスがいて出ない）。<b style="color:#5ee07a">+数</b> は、出たときにあなたがもらえるまい数。</div><button data-m="close">とじる</button>`;
+      + `<div class="note">右の絵はその数字の土地（✖ は盗賊がいて出ない）。<b style="color:#5ee07a">+数</b> は、出たときにあなたがもらえるまい数。</div><button data-m="close">とじる</button>`;
   } else if (k === "pinfo") {
     const i = ui.pinfo, p = G && G.ps[i];
     if (!p) { ui.modal = null; $("modal").classList.add("hidden"); return; }
@@ -1452,15 +1622,16 @@ function renderModal() {
     const rateTxt = two.map(r => `${RI[r]}2:1`).join(" ") + (two.length && rest.length ? " ・ ほか " : "") + (rest.length ? `${base}:1` : "") + (base === 4 && !two.length ? "（港なし）" : "");
     h = `<h2><i class="dot" style="background:${COLS[i]};width:16px;height:16px"></i> ${esc(p.name)}${p.bot ? " 🤖" : ""}${me2 ? "（あなた）" : ""}</h2>
       <dl class="pinfo" style="margin:0">
-        <dt>点数</dt><dd>${vp(i)}点（${TARGET}点で勝ち）</dd>
-        <dt>うちわけ</dt><dd>村 ${p.vils}×1 ・ 町 ${p.towns}×2${G.roadHolder === i ? " ・ 長い道 +2" : ""}${p.vpC ? ` ・ 宝の地図 +${p.vpC}` : ""}</dd>
+        <dt>点数</dt><dd>${vp(i)}点</dd>
+        <dt>うちわけ</dt><dd>${[`村(1点)×${p.vils}`, `町(2点)×${p.towns}`].concat(G.roadHolder === i ? ["最長道(2点)"] : [], G.armyHolder === i ? ["最大騎士力(2点)"] : [], p.vpC ? [`宝の地図(1点)×${p.vpC}`] : []).join(" ・ ")}</dd>
         <dt>手札</dt><dd>${tot(p.hand)}まい${me2 ? `<br><span style="font-weight:400">${RES.map(r => `${RI[r]}${p.hand[r]}`).join(" ")}</span>` : ""}</dd>
-        <dt>ふしぎカード</dt><dd>持っている ${nc}まい ・ 使った ${p.used || 0}まい</dd>
-        <dt>いちばん長い道</dt><dd>${p.lr}${G.roadHolder === i ? "（長い道ボーナス中）" : ""}</dd>
-        <dt>建てたもの</dt><dd>道 ${p.roads}/${LIM.road} ・ 村 ${p.vils}/${LIM.vil} ・ 町 ${p.towns}/${LIM.town}</dd>
+        <dt>カード</dt><dd>所有数 ${nc}まい ・ 使用済 ${p.used || 0}まい</dd>
+        <dt>騎士</dt><dd>${p.kn || 0}回${G.armyHolder === i ? "（最大騎士力）" : ""}</dd>
+        <dt>最長道</dt><dd>${p.lr}${G.roadHolder === i ? "（最長道ボーナス中）" : ""}</dd>
+        <dt>建設物</dt><dd>道 ${p.roads}/${LIM.road} ・ 村 ${p.vils}/${LIM.vil} ・ 町 ${p.towns}/${LIM.town}</dd>
         <dt>銀行との交換</dt><dd>${rateTxt}</dd>
       </dl>
-      ${me2 ? "" : `<div class="note" style="text-align:center">手札の中身は見えません（合計まい数だけ）</div>`}<button data-m="close">とじる</button>`;
+      <button data-m="close">とじる</button>`;
   } else if (k === "steal") {
     if (!G || G.phase !== "steal") { ui.modal = null; $("modal").classList.add("hidden"); return; }
     h = `<h2>だれから1まいもらう？</h2><div class="stealRow">${G.victims.map(i => `<button class="stb" data-m="steal" data-p="${i}" style="--pc:${COLS[i]}"><b>${esc(G.ps[i].name)}</b><small>${tot(G.ps[i].hand)}まい</small></button>`).join("")}</div>`;
@@ -1468,7 +1639,7 @@ function renderModal() {
     if (!me) { ui.modal = null; $("modal").classList.add("hidden"); return; }
     const canUse = c => myTurn && !G.cardUsed && (G.phase === "main" || (G.phase === "roll" && c !== "bridge"));
     const cnt = {}; me.cards.forEach(c => { cnt[c] = (cnt[c] || 0) + 1; });
-    h = `<h2>🃏 ふしぎカード</h2>` + (Object.keys(cnt).length ? Object.entries(cnt).map(([c, n]) => `<div class="cl"><span class="ci">${CARD[c].ic}</span><div class="cd"><b>${CARD[c].name}</b> ×${n}<br>${CARD[c].txt}</div><button data-m="use" data-c="${c}" ${canUse(c) ? "" : "disabled"}>つかう</button></div>`).join("") : `<div class="note">使えるカードはありません</div>`)
+    h = `<h2>🃏 カード</h2>` + (Object.keys(cnt).length ? Object.entries(cnt).map(([c, n]) => `<div class="cl"><span class="ci">${CARD[c].ic}</span><div class="cd"><b>${CARD[c].name}</b> ×${n}<br>${CARD[c].txt}</div><button data-m="use" data-c="${c}" ${canUse(c) ? "" : "disabled"}>つかう</button></div>`).join("") : `<div class="note">使えるカードはありません</div>`)
       + (me.newC.length ? `<div class="note">買ったばかり（つぎの番から使える）: ${me.newC.map(c => CARD[c].ic + CARD[c].name).join("、")}</div>` : "")
       + (me.vpC ? `<div class="note">🗺️ 宝の地図: ${me.vpC}まい（+${me.vpC}点）</div>` : "")
       + `<div class="note">カードは ${costHtml(COST.card)} で買える。1番に1まいだけ使える。</div><button data-m="close">とじる</button>`;
@@ -1493,6 +1664,7 @@ $("modal").addEventListener("click", e => {
   const m = b.dataset.m;
   if (m === "close") { ui.modal = null; renderModal(); if (G) render(); return; }
   if (m === "rules" || m === "log" || m === "prob") { ui.modal = m; renderModal(); return; }
+  if (m === "pmode") { ui.probMode = !ui.probMode; ui.modal = null; renderModal(); if (G) render(); toast(ui.probMode ? "置き場所の確率表示: ON" : "置き場所の確率表示: OFF"); return; }
   if (m === "quit") { ui.modal = null; renderModal(); if (PARTY || mode === "local" || confirm("部屋をぬけますか？")) leave(); return; }
   if (m === "steal") { ui.modal = null; act({ k: "steal", p: +b.dataset.p }); renderModal(); return; }
   if (m === "use") {
@@ -1503,11 +1675,21 @@ $("modal").addEventListener("click", e => {
   if (m === "pick") { if (ui.picks.length < 2) ui.picks.push(b.dataset.r); renderModal(); return; }
   if (m === "repick") { ui.picks = []; renderModal(); return; }
   if (m === "doharvest") { const r = ui.picks.slice(); ui.modal = null; act({ k: "play", c: "harvest", r }); renderModal(); return; }
-  if (m === "again") { ui.modal = null; const seats = G.ps.map(p => ({ pid: p.pid, name: p.name, bot: p.bot, diff: p.diff })); startGame(shuffle(seats)); return; }
+  if (m === "again") { ui.modal = null; const seats = G.ps.map(p => ({ pid: p.pid, name: p.name, bot: p.bot, diff: p.diff })); startGame(shuffle(seats), { target: G.target, setupN: G.setupN, size: G.size }); return; }
   if (m === "tomenu") { ui.modal = null; leave(); return; }
   if (m === "lobby") { hostBackToLobby(); return; }
 });
 
+// 2026-11-12: スマホのブラウザは、アドレスバーなどで見えている高さが 100vh より小さいことがあり、いちばん下の「ふる」ボタンが画面の外に出ていた。
+// 見えている高さ（visualViewport）にあわせる
+function fitStage() {
+  const vv = window.visualViewport, st = $("stage");
+  st.style.height = Math.round(vv ? vv.height : innerHeight) + "px"; st.style.top = Math.round(vv ? vv.offsetTop : 0) + "px";
+  if (scrollY) scrollTo(0, 0);
+}
+fitStage();
+addEventListener("resize", fitStage); addEventListener("orientationchange", () => setTimeout(fitStage, 200));
+if (window.visualViewport) { visualViewport.addEventListener("resize", fitStage); visualViewport.addEventListener("scroll", fitStage); }
 // ================= はじまり =================
 renderUI();
 if (PARTY) {
@@ -1520,11 +1702,11 @@ try { if ("serviceWorker" in navigator && (location.protocol === "https:" || loc
 
 // テスト用: CPU だけの試合を早送りできる
 window.__dbg = {
-  get G() { return G; }, set G(g) { G = g; }, get mode() { return mode; }, get screen() { return screen; }, get ui() { return ui; }, host, GEO,
+  get G() { return G; }, set G(g) { G = g; }, get mode() { return mode; }, get screen() { return screen; }, get ui() { return ui; }, host, get GEO() { return GEO; }, setCfg, get cfg() { return cfg; }, zoomAt, zoomReset, get zoom() { return zoom; },
   applyAct, cpuAction, cpuStep, cpuRespond, vp, longest, ratio, validVils, validRoads, newGame, render, renderUI, isOffline, mySeat, doAct, act,
   set fast(v) { FAST = !!v; }, get fast() { return FAST; },
   // CPU だけの試合をはじめる（見るだけ）
-  cpuOnly(n = 4, diff = "norm") { clearTimeout(cpuTimer); mode = "local"; myPid = -99; startGame([...Array(n)].map((_, i) => ({ name: "CPU-" + "ABCD"[i], bot: true, diff: Array.isArray(diff) ? diff[i] : diff }))); },
+  cpuOnly(n = 4, diff = "norm", c = cfg) { clearTimeout(cpuTimer); mode = "local"; myPid = -99; startGame([...Array(n)].map((_, i) => ({ name: "CPU-" + "ABCD"[i], bot: true, diff: Array.isArray(diff) ? diff[i] : diff })), c); },
   // CPU の番を、人間の番になるか終わるまで（または max 手）一気に進める
   ff(max = 20000) {
     let k = 0;
