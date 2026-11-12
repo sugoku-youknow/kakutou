@@ -687,11 +687,15 @@ function startDrag(x, y) {
   const U = { x: s2.x - s0.x, y: s2.y - s0.y };
   let det = A.x * U.y - A.y * U.x;
   // ブロックがこちらを向いている（画面上でほとんど長さがない）ときは、上へなぞる = 奥へ押す。上下には動かさない
-  const facing = Math.hypot(A.x, A.y) < 22 || Math.abs(det) < 300;
+  const la = Math.hypot(A.x, A.y), facing = la < 22;
+  // 2026-11-12: 長さ方向と上方向が画面上でほぼ同じ向き（斜め上から見たとき）だと、指の少しの横ぶれで
+  // 押す・引くが大きく逆に出ていた（連立方程式の解が不安定）。2 つの向きの角度が 30° 未満なら、
+  // 指の動きのうち長さ方向の成分だけで押し引きする（上下には動かさない）
+  const skew = Math.abs(det) / ((la * Math.hypot(U.x, U.y)) || 1) < 0.5;
   if (facing) {
     const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.setY(0).normalize();
     A = { x: 0, y: -(Math.sign(fwd.dot(axis)) || 1) * 40 }; det = 0;
-  }
+  } else if (skew) det = 0;
   const off0 = (p.x - o.x) * axis.x + (p.z - o.z) * axis.z;
   drag = { axis, off0, target: off0, ty: facing ? null : p.y, py0: p.y, y0: turnPos[sel].y, A, U, det, sx: x, sy: y };
 }
