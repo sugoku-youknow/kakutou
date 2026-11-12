@@ -53,6 +53,8 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .pl{display:flex;align-items:center;min-width:0;position:absolute;pointer-events:auto;cursor:pointer;width:max-content;max-width:min(42%,210px)}
 .pl.c0{left:2px;top:2px}.pl.c1{right:2px;top:2px}.pl.c2{right:2px;bottom:100px}.pl.c3{left:2px;bottom:4px}
 .pl:active{transform:scale(.96)}
+/* 2026-11-13: 交換の画面をひらいているあいだ、下の 2 人の帯はその上へ持ち上げる（--lift は render で計算） */
+.pl.c2,.pl.c3{translate:0 calc(-1 * var(--lift, 0px));transition:translate .2s}
 .vpb{flex:none;width:34px;height:34px;border-radius:50%;background:#2b1a0e;border:3px solid var(--pc);color:#fff;font-weight:800;font-size:17px;display:grid;place-items:center;box-shadow:0 2px 5px #0009;z-index:1}
 .pi{flex:1;min-width:0;margin-left:-12px;padding:2px 10px 3px 15px;background:linear-gradient(#ffffff26,#0000 45%,#0003),var(--pc);clip-path:polygon(0 0,100% 0,calc(100% - 7px) 50%,100% 100%,0 100%);box-shadow:0 2px 4px #0006}
 .pi .nm{font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1530,7 +1532,16 @@ function render() {
   clearTimeout(ui.cdT);
   if (o && s >= 0 && s !== o.from && o.resp[s] === null && G.ps[o.from].bot) ui.cdT = setTimeout(render, 1000);
   renderTrade(s, me, myTurn);
+  placeAround();
   renderModal();
+}
+// 交換の画面とかさならないよう下の人の帯を持ち上げ、ズームのボタンは右上の人の帯のすぐ下に置く（帯は中身で 2〜3 行になる）
+function placeAround() {
+  const tb = $("tradeBox"), bw = $("boardWrap"), pls = $("pls");
+  let lift = 0;
+  if (!tb.classList.contains("hidden")) { const a = tb.getBoundingClientRect(), b = bw.getBoundingClientRect(); if (a.height) lift = Math.max(0, Math.round(b.bottom - a.top + 6)); }
+  pls.style.setProperty("--lift", lift + "px");
+  const p1 = $("pl1"); $("zoomBtns").style.top = (p1 ? p1.offsetTop + p1.offsetHeight + 8 : 56) + "px";
 }
 // ---------------- 交換の画面（下のまん中） ----------------
 function openTrade() {
