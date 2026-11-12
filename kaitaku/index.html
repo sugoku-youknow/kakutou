@@ -309,11 +309,13 @@ const emptyHand = () => Object.fromEntries(RES.map(r => [r, 0]));
 const BN = { road: "道", vil: "村", town: "町", card: "カード" };
 // 2026-11-13: 道・村・町の上限はなし（置ける場所がある限りつくれる）
 const LIM = { road: Infinity, vil: Infinity, town: Infinity };
+// 2026-11-13: カードは本家と同じ 5 種類（騎士14・勝利点5・街道建設2・発見2・独占2。大きい島は 20・5・3・3・3）
 const CARD = {
   knight: { name: "騎士", ic: "⚔️", txt: "盗賊を好きな土地へ動かして、そこの人から1まいもらう（3回以上使うと最大騎士力をねらえる）" },
-  harvest: { name: "大豊作", ic: "🧺", txt: "好きな資源を2まいもらう" },
-  bridge: { name: "橋づくり", ic: "🌉", txt: "道を2本タダでつくる（サイコロのあと）" },
-  map: { name: "宝の地図", ic: "🗺️", txt: "買ったらすぐ +1点" },
+  bridge: { name: "街道建設", ic: "🌉", txt: "道を2本タダでつくる（サイコロのあと）" },
+  harvest: { name: "発見", ic: "🧺", txt: "銀行から好きな資源を2まいもらう" },
+  mono: { name: "独占", ic: "💰", txt: "資源を1つえらぶと、ほかの全員がその資源をぜんぶあなたにわたす" },
+  vp: { name: "勝利点", ic: "⭐", txt: "持っているだけで +1点（ほかの人には見えない）" },
 };
 const COLS = ["#ef4444", "#3b82f6", "#facc15", "#c084fc"];
 const DIFF = { weak: "よわい", norm: "ふつう", strong: "つよい" };
@@ -375,7 +377,7 @@ function newGame(seats, c) {
   const harbors = kinds.map((k, i) => ({ e: GEO.coast[(off + Math.round(i * step)) % GEO.coast.length], k }));
   // はじめの村と道: 1 周目は順番どおり、2 周目は逆、3 周目はまた順番どおり…
   const n = seats.length, order = [...Array(c.setupN)].flatMap((_, r) => r % 2 ? [...Array(n).keys()].reverse() : [...Array(n).keys()]);
-  const deck = shuffle([...Array(big ? 20 : 14).fill("knight"), "harvest", "harvest", "harvest", "bridge", "bridge", "bridge", "map", "map", "map", "map", "map"]);
+  const k3 = big ? 3 : 2, deck = shuffle([...Array(big ? 20 : 14).fill("knight"), ...Array(5).fill("vp"), ...Array(k3).fill("bridge"), ...Array(k3).fill("harvest"), ...Array(k3).fill("mono")]);
   return {
     tiles, crow: tiles.findIndex(t => t.t === "volcano"), harbors, vb: Array(GEO.verts.length).fill(null), er: Array(GEO.edges.length).fill(-1),
     ps: seats.map((s, i) => ({ name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: emptyHand(), cards: [], newC: [], vpC: 0, used: 0, kn: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
@@ -389,6 +391,8 @@ const pay = (p, c) => RES.forEach(r => { p.hand[r] -= (c[r] || 0); });
 const resOf = ti => TT[G.tiles[ti].t].res;
 function addLog(s) { G.log.push(s); if (G.log.length > 40) G.log.shift(); }
 function vp(i) { const p = G.ps[i]; return p.vils + 2 * p.towns + p.vpC + (G.roadHolder === i ? 2 : 0) + (G.armyHolder === i ? 2 : 0); }
+// 見えている点（勝利点カードは、本人とゲーム終了後にしか見えない）。CPU もほかの人の点はこれで考える
+const pubVp = (i, viewer) => vp(i) - (G.phase === "over" || i === viewer ? 0 : G.ps[i].vpC);
 function canVil(s, v, setup) {
   if (G.vb[v] || GEO.verts[v].v.some(u => G.vb[u])) return false;   // となりの角に村・町があるところには置けない
   return setup || GEO.verts[v].e.some(e => G.er[e] === s);
@@ -485,8 +489,8 @@ function build(s, a) {
     if (!G.deck.length) return "カードがもうありません";
     if (!afford(p, COST.card)) return "資源がたりません";
     pay(p, COST.card); const c = G.deck.pop();
-    if (c === "map") { p.vpC++; addLog(`🗺️ ${p.name} が宝の地図を見つけた（+1点）`); }
-    else { p.newC.push(c); addLog(`${p.name} がカードを買った`); }
+    if (c === "vp") p.vpC++; else p.newC.push(c);   // 勝利点カードはふせたまま持つ（買ってすぐ点になる）
+    addLog(`${p.name} がカードを買った`);
     return "";
   }
   // 2026-11-10: 場所の番号が正しいか（こわれた・いたずらの通信でホストが止まらないように）
@@ -589,13 +593,17 @@ function playCard(s, a) {
   else if (a.c === "harvest") {
     if (!Array.isArray(a.r) || a.r.length !== 2 || !a.r.every(r => RES.includes(r))) return "資源を2つえらんでね";
     a.r.forEach(r => p.hand[r]++);
+  } else if (a.c === "mono") {
+    if (!RES.includes(a.r)) return "資源を1つえらんでね";
+    let n = 0; G.ps.forEach((q, j) => { if (j !== s) { n += q.hand[a.r]; q.hand[a.r] = 0; } });
+    p.hand[a.r] += n; a.n = n;
   } else if (a.c === "bridge") {
     if (G.phase !== "main") return "サイコロのあとで使ってね";
     if (p.roads >= LIM.road || !validRoads(s).length) return "つくれる道がありません";
     G.free = Math.min(2, LIM.road - p.roads);
   } else return "？";
   p.cards.splice(i, 1); G.cardUsed = true; p.used++;
-  addLog(`${CARD[a.c].ic} ${p.name} が「${CARD[a.c].name}」を使った` + (a.c === "harvest" ? ` ${a.r.map(r => RI[r]).join("")}` : ""));
+  addLog(`${CARD[a.c].ic} ${p.name} が「${CARD[a.c].name}」を使った` + (a.c === "harvest" ? ` ${a.r.map(r => RI[r]).join("")}` : a.c === "mono" ? ` ${RI[a.r]}×${a.n}` : ""));
   return "";
 }
 // 1 つの行動を行う。だめならその理由（文字）を返す
@@ -680,7 +688,7 @@ function stalled() {
 }
 function checkWin() {
   if (G.phase === "over" || G.phase === "setup") return;
-  if (vp(G.cur) >= tgt()) { G.phase = "over"; G.winner = G.cur; addLog(`🏆 ${G.ps[G.cur].name} の勝ち！`); onOver(); return; }
+  if (vp(G.cur) >= tgt()) { G.phase = "over"; G.winner = G.cur; const pc = G.ps[G.cur].vpC; if (pc) addLog(`⭐ ${G.ps[G.cur].name} が勝利点カード ${pc}まいを見せた`); addLog(`🏆 ${G.ps[G.cur].name} の勝ち！`); onOver(); return; }
   // 2026-11-12: 島がうまって、だれも点をふやせない（または 500 ターンをこえた）ときは、点がいちばん多い人の勝ちで終わる
   if (G.phase === "roll" && (stalled() || G.turnN >= 500)) {
     G.phase = "over"; G.winner = bestBy(G.ps.map((_, i) => i), i => vp(i) * 100 - i);
@@ -729,14 +737,14 @@ function roadPlan(s) {
 const crowOnMe = s => !!G.tiles[G.crow].n && GEO.hex[G.crow].c.some(v => G.vb[v] && G.vb[v].p === s);
 function leaderOf(s, among) {
   const c = (among || G.ps.map((_, i) => i)).filter(i => i !== s);
-  return bestBy(c, i => vp(i) * 100 + tot(G.ps[i].hand));
+  return bestBy(c, i => pubVp(i, s) * 100 + tot(G.ps[i].hand));
 }
 // 2026-11-13: CPU が盗賊でみんな同じ人（たいてい人間）をねらっていた。全員が「点が同じなら手札が多い人」をトップと見ていたため。
 // ・トップをねらうのは、2 点以上はなれているときだけ（しかも少しだけ）
 // ・さっき盗賊を置かれた・奪われた人は、しばらくねらいにくい（G.rob: 盗賊が動くたびに 0.6 倍にへる）
 // ・奪う相手は、手札の多さでくじびき（つよい CPU だけはいちばん良い相手）
 function clearLeader(s) {
-  const vs = G.ps.map((_, i) => vp(i)), order = vs.map((_, i) => i).sort((a, b) => vs[b] - vs[a]), top = order[0];
+  const vs = G.ps.map((_, i) => pubVp(i, s)), order = vs.map((_, i) => i).sort((a, b) => vs[b] - vs[a]), top = order[0];
   return top !== s && vs[top] - vs[order[1]] >= 2 ? top : -1;
 }
 const robW = p => 1 / (1 + ((G.rob || [])[p] || 0));
@@ -780,7 +788,7 @@ function planTrade(s, g) {
 function cpuRespond(s, o) {
   const p = G.ps[s], d = p.diff;
   if (!afford(p, o.get)) return false;
-  if (d !== "weak" && vp(o.from) >= tgt() - 2) return false;
+  if (d !== "weak" && pubVp(o.from, s) >= tgt() - 2) return false;
   const g = goalOf(s), c = COST[g.w] || COST.vil;
   const miss = r => Math.max(0, (c[r] || 0) - p.hand[r]);
   let help = 0, hurt = 0, recv = 0, give = 0;
@@ -821,14 +829,19 @@ function cpuAction(s) {
     const o = G.offer;
     if (o.resp.some(x => x === null) && Date.now() - o.t < OFFER_WAIT) return { k: "wait" };
     const oks = o.resp.map((x, i) => x === "ok" ? i : -1).filter(i => i >= 0);
-    return oks.length ? { k: "accept", p: bestBy(oks, i => -vp(i)) } : { k: "cancel" };
+    return oks.length ? { k: "accept", p: bestBy(oks, i => -pubVp(i, s)) } : { k: "cancel" };
   }
   if (G.free > 0) { const rp = roadPlan(s); if (rp) return { k: "build", w: "road", at: rp.e }; const vr = validRoads(s); return vr.length ? { k: "build", w: "road", at: vr[Math.floor(Math.random() * vr.length)] } : { k: "nofree" }; }
   if (d === "weak" && Math.random() < 0.12) return { k: "end" };
   const g = goalOf(s);
   if (!G.cardUsed && p.cards.length) {
-    if (p.cards.includes("knight") && (crowOnMe(s) || (d === "strong" && vp(leaderOf(s)) >= tgt() - 3) || (d !== "weak" && p.kn >= 2))) return { k: "play", c: "knight" };
+    if (p.cards.includes("knight") && (crowOnMe(s) || (d === "strong" && pubVp(leaderOf(s), s) >= tgt() - 3) || (d !== "weak" && p.kn >= 2))) return { k: "play", c: "knight" };
     if (p.cards.includes("bridge") && p.roads <= LIM.road - 2 && roadPlan(s)) return { k: "play", c: "bridge" };
+    if (p.cards.includes("mono")) {
+      const want = need(p, COST[g.w] || COST.vil), got = r => G.ps.reduce((n, q, j) => n + (j === s ? 0 : q.hand[r]), 0);
+      const r = bestBy(RES, x => got(x) * (want.includes(x) ? 1.5 : 1));
+      if (got(r) >= (d === "weak" ? 2 : 3)) return { k: "play", c: "mono", r };
+    }
     if (p.cards.includes("harvest")) { const r = need(p, COST[g.w] || COST.vil); while (r.length < 2) r.push(bestBy(RES, x => -p.hand[x])); return { k: "play", c: "harvest", r: r.slice(0, 2) }; }
   }
   const towns = validTowns(s);
@@ -1086,7 +1099,7 @@ const rulesHtml = () => `<div class="rules">
 ・村は自分の道のはしにつくる。となりの角に村や町があるところにはつくれない。<br>
 <b>7が出たら</b>: 🥷盗賊が来る！ 盗賊を好きな土地へ動かし、そこに村がある人から1まいもらう。盗賊のいる土地は資源が出ない。${robLim()}まい以上持っている人は半分なくす${G ? "" : "（大きい島は 12まい以上）"}。<br>
 <b>交換</b>: 自分の番に、ほかの人へ「これを出すから、これがほしい」と🤝よびかけられる（まい数は自由）。OKした人の中から1人えらんで交換。銀行とは 4まい→1まい。港⚓にくっついた村・町があれば 3→1 や 2→1。<br>
-<b>カード</b>: ⚔️騎士（盗賊を動かす）・🧺大豊作（2まいもらう）・🌉橋づくり（道2本タダ）・🗺️宝の地図（+1点）。買った番には使えない。1番に1まいだけ。<br>
+<b>カード</b>（25まい・大きい島は34まい）: ⚔️騎士（盗賊を動かす）・🌉街道建設（道2本タダ）・🧺発見（好きな資源2まい）・💰独占（えらんだ資源をみんなからぜんぶもらう）・⭐勝利点（+1点。ほかの人には見えない）。買った番には使えない。1番に1まいだけ。<br>
 <b>やり直し↶</b>: 自分の番のあいだなら、つくったもの・銀行との交換を取り消せる（サイコロ・カード・ほかの人との交換のあとは取り消せない）。<br>
 <b>最長道</b>: つながった道が5本以上で、いちばん長い人は +2点。<br>
 <b>最大騎士力</b>: 騎士を3回以上使った人のうち、いちばん多く使った人は +2点。
@@ -1493,7 +1506,7 @@ function render() {
   if (!myTurn || G.phase !== "main") ui.mode = null;
   if (myTurn && G.phase === "main" && G.free > 0) ui.mode = "road";
   // 人
-  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="vpb">${vp(i)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
+  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length + p.vpC; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="vpb">${pubVp(i, s)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
     <div class="st"><span>手札${tot(p.hand)}</span>${nc ? `<span>カード${nc}</span>` : ""}${p.kn ? `<span class="${G.armyHolder === i ? "lr" : ""}">騎士${p.kn}</span>` : ""}</div><div class="st"><span>村${p.vils}</span><span>町${p.towns}</span><span class="${G.roadHolder === i ? "lr" : ""}">道${p.lr}</span></div></div></div>`; }).join("");
   $("game").classList.toggle("p4", G.ps.length >= 4);
   const bt = bannerText();
@@ -1506,9 +1519,9 @@ function render() {
   // 手もと（下のトレイ）
   if (me) {
     $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc" id="hc-${r}" style="--rc:${RCOL[r]}"><div class="ic">${RI[r]}</div><b>${me.hand[r]}</b>${RN[r]}${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
-      + `<div class="rc cards" data-g="cards"><div class="ic">🃏</div><b>${me.cards.length + me.newC.length}</b>カード</div>`;
+      + `<div class="rc cards" data-g="cards"><div class="ic">🃏</div><b>${me.cards.length + me.newC.length + me.vpC}</b>カード</div>`;
   } else $("hand").innerHTML = `<div class="rc" style="padding:8px;font-size:13px">観戦中: みんなの手は見えません</div>`;
-  const nc = me ? me.cards.length + me.newC.length : 0;
+  const nc = me ? me.cards.length + me.newC.length + me.vpC : 0;
   $("cardBd").textContent = nc; $("cardBd").classList.toggle("hidden", !nc);
   $("side").querySelector('[data-g="prob"]').classList.toggle("on", ui.probMode);   // 確率表示モード中は 確率 ボタンが光る
   // 右下のボタン: [つくる 4つ] / [おわり・ふる] [↶ やり直し] [⇄ 交換]
@@ -1687,13 +1700,13 @@ function renderModal() {
   } else if (k === "pinfo") {
     const i = ui.pinfo, p = G && G.ps[i];
     if (!p) { ui.modal = null; $("modal").classList.add("hidden"); return; }
-    const me2 = i === s, nc = p.cards.length + p.newC.length;
+    const me2 = i === s, nc = p.cards.length + p.newC.length + p.vpC;
     const two = RES.filter(r => ratio(i, r) === 2), rest = RES.filter(r => ratio(i, r) !== 2), base = rest.length ? ratio(i, rest[0]) : 0;
     const rateTxt = two.map(r => `${RI[r]}2:1`).join(" ") + (two.length && rest.length ? " ・ ほか " : "") + (rest.length ? `${base}:1` : "") + (base === 4 && !two.length ? "（港なし）" : "");
     h = `<h2><i class="dot" style="background:${COLS[i]};width:16px;height:16px"></i> ${esc(p.name)}${p.bot ? " 🤖" : ""}${me2 ? "（あなた）" : ""}</h2>
       <dl class="pinfo" style="margin:0">
-        <dt>点数</dt><dd>${vp(i)}点</dd>
-        <dt>うちわけ</dt><dd>${[`村(1点)×${p.vils}`, `町(2点)×${p.towns}`].concat(G.roadHolder === i ? ["最長道(2点)"] : [], G.armyHolder === i ? ["最大騎士力(2点)"] : [], p.vpC ? [`宝の地図(1点)×${p.vpC}`] : []).join(" ・ ")}</dd>
+        <dt>点数</dt><dd>${pubVp(i, s)}点</dd>
+        <dt>うちわけ</dt><dd>${[`村(1点)×${p.vils}`, `町(2点)×${p.towns}`].concat(G.roadHolder === i ? ["最長道(2点)"] : [], G.armyHolder === i ? ["最大騎士力(2点)"] : [], p.vpC && (i === s || G.phase === "over") ? [`勝利点カード(1点)×${p.vpC}`] : []).join(" ・ ")}</dd>
         <dt>手札</dt><dd>${tot(p.hand)}まい${me2 ? `<br><span style="font-weight:400">${RES.map(r => `${RI[r]}${p.hand[r]}`).join(" ")}</span>` : ""}</dd>
         <dt>カード</dt><dd>所有数 ${nc}まい ・ 使用済 ${p.used || 0}まい</dd>
         <dt>騎士</dt><dd>${p.kn || 0}回${G.armyHolder === i ? "（最大騎士力）" : ""}</dd>
@@ -1711,13 +1724,17 @@ function renderModal() {
     const cnt = {}; me.cards.forEach(c => { cnt[c] = (cnt[c] || 0) + 1; });
     h = `<h2>🃏 カード</h2>` + (Object.keys(cnt).length ? Object.entries(cnt).map(([c, n]) => `<div class="cl"><span class="ci">${CARD[c].ic}</span><div class="cd"><b>${CARD[c].name}</b> ×${n}<br>${CARD[c].txt}</div><button data-m="use" data-c="${c}" ${canUse(c) ? "" : "disabled"}>つかう</button></div>`).join("") : `<div class="note">使えるカードはありません</div>`)
       + (me.newC.length ? `<div class="note">買ったばかり（つぎの番から使える）: ${me.newC.map(c => CARD[c].ic + CARD[c].name).join("、")}</div>` : "")
-      + (me.vpC ? `<div class="note">🗺️ 宝の地図: ${me.vpC}まい（+${me.vpC}点）</div>` : "")
+      + (me.vpC ? `<div class="cl"><span class="ci">⭐</span><div class="cd"><b>勝利点</b> ×${me.vpC}<br>持っているだけで +${me.vpC}点（ほかの人には見えない）</div></div>` : "")
       + `<div class="note">カードは ${costHtml(COST.card)} で買える。1番に1まいだけ使える。</div><button data-m="close">とじる</button>`;
   } else if (k === "harvest") {
     h = `<h2>🧺 大豊作</h2><div class="note">好きな資源を2まいえらぼう（同じのを2回でもOK）</div>
       <div class="g4">${RES.map(r => `<button data-m="pick" data-r="${r}" ${ui.picks.length >= 2 ? "disabled" : ""}><span class="ic">${RI[r]}</span>${RN[r]}</button>`).join("")}</div>
       <div style="text-align:center;font-size:28px;min-height:36px">${ui.picks.map(r => RI[r]).join(" ")}</div>
       <button class="main" data-m="doharvest" ${ui.picks.length === 2 ? "" : "disabled"}>もらう</button><button data-m="repick">えらびなおす</button><button data-m="close">やめる</button>`;
+  } else if (k === "mono") {
+    h = `<h2>💰 独占</h2><div class="note">資源を1つえらぶと、ほかの全員がその資源をぜんぶあなたにわたします</div>
+      <div class="g4">${RES.map(r => `<button data-m="domono" data-r="${r}"><span class="ic">${RI[r]}</span>${RN[r]}</button>`).join("")}</div>
+      <button data-m="close">やめる</button>`;
   } else if (k === "over") {
     const order = G.ps.map((p, i) => i).sort((a, b) => (b === G.winner) - (a === G.winner) || vp(b) - vp(a));
     h = `<h2>🏆 ${esc(G.ps[G.winner].name)} の勝ち！</h2>` + order.map(i => `<div class="rank ${i === G.winner ? "win" : ""}"><i class="dot" style="background:${COLS[i]}"></i><span style="flex:1">${esc(G.ps[i].name)}${i === s ? "（あなた）" : ""}</span><b>${vp(i)}点</b></div>`).join("")
@@ -1730,7 +1747,7 @@ function renderModal() {
   if (k === "menu" && window.YkgSfx) box.insertBefore(sfxBtn(), box.querySelector('[data-m="close"]'));   // 音のオン・オフ
 }
 $("modal").addEventListener("click", e => {
-  if (e.target.id === "modal" && ui.modal !== "harvest" && ui.modal !== "steal") { ui.modal = null; renderModal(); return; }
+  if (e.target.id === "modal" && ui.modal !== "harvest" && ui.modal !== "mono" && ui.modal !== "steal") { ui.modal = null; renderModal(); return; }
   const b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
   const m = b.dataset.m;
   if (m === "close") { ui.modal = null; renderModal(); if (G) render(); return; }
@@ -1741,10 +1758,12 @@ $("modal").addEventListener("click", e => {
   if (m === "use") {
     const c = b.dataset.c;
     if (c === "harvest") { ui.modal = "harvest"; ui.picks = []; renderModal(); return; }
+    if (c === "mono") { ui.modal = "mono"; renderModal(); return; }
     ui.modal = null; act({ k: "play", c }); renderModal(); return;
   }
   if (m === "pick") { if (ui.picks.length < 2) ui.picks.push(b.dataset.r); renderModal(); return; }
   if (m === "repick") { ui.picks = []; renderModal(); return; }
+  if (m === "domono") { ui.modal = null; act({ k: "play", c: "mono", r: b.dataset.r }); renderModal(); return; }
   if (m === "doharvest") { const r = ui.picks.slice(); ui.modal = null; act({ k: "play", c: "harvest", r }); renderModal(); return; }
   if (m === "again") { ui.modal = null; const seats = G.ps.map(p => ({ pid: p.pid, name: p.name, bot: p.bot, diff: p.diff })); startGame(shuffle(seats), { target: G.target, setupN: G.setupN, size: G.size }); return; }
   if (m === "tomenu") { ui.modal = null; leave(); return; }
