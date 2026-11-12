@@ -482,6 +482,9 @@ function frame() {
     drawBalls();
     drawDragLines();
     if (network.isHost) updateHud(game.counts);
+  } else if (game.phase === 'countdown' && game.config) {
+    drawBoard();   // 2026-11-12: カウントダウン中も盤面と玉（はじめの位置）を見せる（前は真っ白だった）
+    drawBalls();
   }
   requestAnimationFrame(frame);
 }
@@ -489,6 +492,7 @@ requestAnimationFrame(frame);
 
 // ---- ゲームの段階変化に応じて画面を切り替える ---------------------------
 game.onPhaseChange = (phase) => {
+  if (phase === 'countdown' || phase === 'ended') drags.clear();   // 2026-11-12: 試合の終わり・始まりに、つかんでいた玉を放す（次の試合でつかめなくなるのを防ぐ）
   if (phase === 'countdown') {
     showScreen('game');
     resizeCanvas();

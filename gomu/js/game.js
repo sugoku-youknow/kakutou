@@ -135,6 +135,8 @@ export class Game {
     this.innerOpen = false;
     this.teams = Array.isArray(teams) && teams.length === playerCount ? teams : null;
     this._gone = null;
+    this.engine = null;         // 2026-11-12: 前の試合の玉を消す（カウントダウン中は ballDefs の位置で描く）
+    this.bodiesById = null;
     this.timeLeftMs = timeLimitMs(playerCount);
     this.renderPositions.clear();
     this.targetPositions.clear();
@@ -214,14 +216,18 @@ export class Game {
       // チーム戦はチームの合計で決める（勝った陣地 = そのチームの陣地ぜんぶ）
       const sides = this.teams ? this.teamTotals(counts) : counts;
       const zonesOf = (k) => (this.teams ? this.teams.flatMap((t, z) => (t === k ? [z] : [])) : [k]);
+      // 2026-11-12: 抜けた人（チームなら全員抜けたチーム）の陣地は、勝ちにもサドンデスにも数えない
+      const goneZones = new Set([...(this._gone || [])].map((id) => this.zoneAssignment.get(id)));
+      const live = (k) => zonesOf(k).some((z) => !goneZones.has(z));
       // 決着: 陣地の玉が 0 になった人（チーム）の勝ち
-      const empty = sides.flatMap((c, k) => (c === 0 ? zonesOf(k) : []));
+      const empty = sides.flatMap((c, k) => (c === 0 && live(k) ? zonesOf(k) : []));
       if (empty.length) { this._declareWinners(empty, counts); return; }
       // 時間切れ: いちばん少ない人（チーム）の勝ち。同点ならサドンデス
       if (elapsed >= limit) {
-        const min = Math.min(...sides);
-        const leaders = sides.flatMap((c, k) => (c === min ? zonesOf(k) : []));
-        if (sides.filter((c) => c === min).length === 1) { this._declareWinners(leaders, counts); return; }
+        const liveSides = sides.map((c, k) => (live(k) ? c : Infinity));
+        const min = Math.min(...liveSides);
+        const leaders = liveSides.flatMap((c, k) => (c === min ? zonesOf(k) : []));
+        if (liveSides.filter((c) => c === min).length === 1) { this._declareWinners(leaders, counts); return; }
         if (!this.sudden) { this.sudden = true; suddenAt = now; }
         else if (now - suddenAt >= SUDDEN_MS) { this._declareWinners(leaders, counts); return; }
       }
@@ -263,9 +269,9 @@ export class Game {
     this.onCounts(c);
   }
 
-  // 途中で抜けた人: 遊ぶ人が 1 人になったら、その人の勝ち
+  // 途中で抜けた人: 遊ぶ人が 1 人になったら、その人の勝ち（2026-11-12: カウントダウン中に抜けたときも同じ）
   playerLeft(peerId) {
-    if (!this.network.isHost || this.phase !== 'playing' || !this.zoneAssignment.has(peerId)) return;
+    if (!this.network.isHost || (this.phase !== 'playing' && this.phase !== 'countdown') || !this.zoneAssignment.has(peerId)) return;
     this._gone = this._gone || new Set();
     this._gone.add(peerId);
     const left = [...this.zoneAssignment.entries()].filter(([id]) => !this._gone.has(id));

@@ -210,3 +210,21 @@ body.party .app-header { padding-top: 56px; }
 .bp-row { align-items: center; }
 .bp-val { flex: 1 1 0; text-align: center; font-weight: 800; font-size: 1.05rem; }
 #ykgLobby .bp-val { color: #e5e7eb; }
+/* 2026-11-12: スマホで「おまかせ」がつぶれて縦書きになっていた → ボタンは中身の幅のまま横書き */
+.bp-row .seg-btn { flex: 0 0 auto; min-width: 44px; min-height: 44px; padding: 10px 12px; white-space: nowrap; }
+.bp-row .bp-val { min-width: 2.5em; white-space: nowrap; }
+/* 2026-11-12: プレイヤー名の入力欄（部屋コードの欄とそろえる） */
+#input-player-name {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 2px solid #cfc4a4;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: #fff;
+  color: var(--panel-ink);
+}
+#input-player-name:focus, .join-row input:focus { outline: none; border-color: var(--accent); }

@@ -3195,10 +3195,13 @@ function hostTick() {
       game.wt = game.win >= 0 ? tgOf(game.win) : 0;          // 勝ったチーム（チームなしなら 0）
       const winners = game.win < 0 ? [] : game.wt ? slots.filter(i => game.p[i].lk && game.p[i].tg === game.wt) : [game.win];   // チーム戦は、落ちていた仲間も含めて全員の勝ち数が増える
       winners.forEach(i => game.p[i].w++);
-      game.ph = winners.some(i => game.p[i].w >= game.wr) ? "match" : "round";
-      if (game.ph === "match" && PARTY && role === "host" && !solo) {   // パーティの成績（CPU は数えない）
+      // 規定の勝ち数に届いた、または次のラウンドを戦う人が 1 つの陣営だけ（相手が全員抜けた）なら、試合はここで決着（同じ陣営どうしでラウンドを繰り返さない）
+      game.ph = winners.some(i => game.p[i].w >= game.wr) || (winners.length && sidesOf(readySlots()) < 2) ? "match" : "round";
+      if (game.ph === "match" && PARTY && role === "host" && !solo) {   // パーティの成績（CPU は数えない。負けは、途中で抜けた相手も含む）
         const human = i => game.p[i] && !game.p[i].cpu && (i === 0 || game.p[i].c);
-        partyReport(winners.filter(human).map(partyNameOf), slots.filter(i => human(i) && game.p[i].lk && !winners.includes(i)).map(partyNameOf));
+        const losers = [];
+        for (let i = 0; i < MAX_PLAYERS; i++) { const p = game.p[i]; if (p && !p.cpu && p.lk && !winners.includes(i) && sideOf(i) !== sideOf(game.win)) losers.push(i); }
+        partyReport(winners.filter(human).map(partyNameOf), losers.map(partyNameOf));
       }
 
       game.tm = game.ph === "match" ? 360 : 120;
@@ -3207,7 +3210,7 @@ function hostTick() {
   } else if (game.ph === "round") {
     game.tm--;
     if (game.tm <= 0) {
-      if (readySlots().length < 2) { toLobby(); return; }
+      if (readySlots().length < 2 || sidesOf(readySlots()) < 2) { toLobby(); return; }   // 相手の陣営がいなくなった: 同じ陣営どうしの決着を繰り返さず、ロビーへ
       startRound();
     }
   } else if (game.ph === "match") {
@@ -4589,7 +4592,7 @@ const Sfx = (() => {
     tick(urgent) { const f = urgent ? 1180 : 880; tone(f, f, 0.07, "square", 0.07); },
     // 決着の落下音（ko）と重ならないよう、少し遅らせて鳴らす
     roundEnd(win) { (win ? [523, 659, 784] : [392, 330, 262]).forEach((f, i) => tone(f, f, 0.15, "triangle", 0.18, 0.45 + i * 0.11)); },
-    matchEnd() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, f, 0.17, "triangle", 0.18, 0.45 + i * 0.12)); },
+    matchEnd(win) { (win ? [523, 659, 784, 1047, 784, 1047] : [523, 440, 392, 330, 294, 262]).forEach((f, i) => tone(f, f, 0.17, "triangle", 0.18, 0.45 + i * 0.12)); },   // 負けた側は下がっていく曲
     siren() { tone(260, 520, 0.45, "sawtooth", 0.10); tone(520, 260, 0.45, "sawtooth", 0.10, 0.45); },
     rumble() { noise(0.6, 0.22, "lowpass", 260, 70); tone(70, 40, 0.5, "sine", 0.25); },
     // スキル
@@ -5027,6 +5030,13 @@ function koFx(p) {                                 // 場外に落ちた瞬間: 
 
 // 試合の状態の変わり目（カウントダウン・残り時間・サドンデス・脱落）から鳴らす音と演出。全員が自分の画面で同じ状態を見て出す
 const fxPrev = { ph: "", sec: -1, rt: -1, rtRaw: -1, sd: 0, al: [false, false, false, false] };
+// 決着が自分にとってどうだったか: 1 = 勝ち（勝ったチームの仲間も） / 0 = 観戦・戦っていない（勝ちの音を鳴らす） / -1 = 負け・引き分け
+function myOutcome() {
+  if (game.win < 0) return -1;
+  const me = game.p[myId];
+  if (!me || !me.lk || spectating) return 0;
+  return (game.wt ? tgOf(myId) === game.wt : myId === game.win) ? 1 : -1;
+}
 let fxBannerT = 99, fxGoT = 0, fxSdT = 0, fxLateT = 0;   // 見出しが出てからのフレーム / 「GO!」・「サドンデス！」の表示の残り / 「ラストスパート！」の表示の残り（約 3 秒）
 function fxPhase(dt) {
   fxBannerT += dt; fxGoT = Math.max(0, fxGoT - dt); fxSdT = Math.max(0, fxSdT - dt); fxLateT = Math.max(0, fxLateT - dt);
@@ -5037,8 +5047,8 @@ function fxPhase(dt) {
   else if (prevRt > LATE_FRAMES && game.rt <= LATE_FRAMES && game.rt > LATE_FRAMES - 120 && !training) { fxLateT = 180; Sfx.lastSpurt(); shake(3); }
   if (game.ph !== fxPrev.ph) {
     if (game.ph === "play" && fxPrev.ph === "count") { Sfx.beep(true); fxGoT = 40; fxBannerT = 0; }
-    else if (game.ph === "round") { Sfx.roundEnd(game.win >= 0); fxBannerT = 0; }   // チーム戦でも、決着の音は同じ
-    else if (game.ph === "match") { Sfx.matchEnd(); fxBannerT = 0; }
+    else if (game.ph === "round") { Sfx.roundEnd(myOutcome() >= 0); fxBannerT = 0; }   // 勝った側（チームの仲間も）は勝ちの音、負けた側と引き分けは負けの音
+    else if (game.ph === "match") { Sfx.matchEnd(myOutcome() >= 0); fxBannerT = 0; }
     if (game.ph === "count") fxPrev.sec = -1;
     if (fxPrev.ph === "lobby" && game.ph !== "count") fxPrev.sd = game.sd;   // 途中参加のとき、過去の節目の音を鳴らさない
     fxPrev.ph = game.ph;

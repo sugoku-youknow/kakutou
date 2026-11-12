@@ -26,7 +26,7 @@
     --attack:#e0435a;
     --good:#5fd98a;
   }
-  html, body { height: 100%; margin: 0; padding: 0; }
+  html, body { height: 100%; margin: 0; padding: 0; background:var(--bg); color:var(--text); }   /* 2026-11-12: メニューの下が白くならないように */
   #app, #app *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   #app{
     background:var(--bg);
@@ -121,30 +121,19 @@
   .hpsetter-label{ font-size:12px; font-weight:700; color:#16202c; }
   .setting-panel{ margin:18px auto 0; max-width:420px; padding:14px; border:1px solid var(--line); border-radius:10px; background:var(--panel-2); }
   .battle-setting-panel{ margin-top:10px; background:#fff; border:2px solid #16202c; }
-  /* 準備画面のホスト操作はレイアウトの流れから切り離す。
-     チャージ枠が何段になっても位置が押し下げられない。 */
+  /* 2026-11-12: 準備画面のスタートボタンと設定は、前は画面に浮かせていたが、スマホで相手のチャージ・自分の欄・説明に重なった。
+     自分の欄の中にふつうに並べる（長くなったら画面ごとスクロールする） */
   .ready-start-float{
-    position:absolute;
-    z-index:50;
-    top:32%;
-    left:50%;
-    width:min(600px, calc(100% - 32px));
-    transform:translate(-50%, -50%);
-    pointer-events:auto;
+    width:100%; max-width:600px;
   }
   .ready-start-float .abtn{
     width:100%; box-sizing:border-box;
-    padding:48px 8px;
+    padding:22px 8px;
     box-shadow:0 4px 14px rgba(0,0,0,.18);
   }
   .host-ready-settings{
-    position:fixed;
-    z-index:60;
-    left:50%;
-    bottom:14px;
-    width:min(520px, calc(100% - 32px));
-    transform:translateX(-50%);
-    margin:0;
+    width:100%; max-width:520px;
+    margin:4px auto 0;
     box-shadow:0 6px 20px rgba(0,0,0,.25);
   }
   .setting-row{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:8px 0; }
@@ -169,7 +158,7 @@
   .duel-wrap{
     display:flex; flex-direction:column;
     border:none; border-radius:0; overflow:hidden;
-    flex:1;
+    flex:1 0 auto;   /* 中身が画面より長いときは縮めず（切れずに）、画面ごとスクロールする */
   }
   .duel-half{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -177,6 +166,7 @@
   }
   .duel-half.opp{ background:#ffd7dd; }
   .duel-half.me{ background:#d6f0fb; }
+  #app.mode-duel.has-back .duel-half.opp{ padding-top:calc(env(safe-area-inset-top) + 50px); }   /* 左上の戻るボタンと相手の名前が重ならないように */
 
   .namebox, .hpbox-outer, .actionbox{
     width:100%; max-width:600px;
@@ -311,6 +301,7 @@
   @keyframes sfx-result{0%,100%{opacity:1}}
   @keyframes sfx-shake{0%{transform:translate(0,0)}25%{transform:translate(-8px,5px)}50%{transform:translate(7px,-6px)}75%{transform:translate(-5px,-4px)}100%{transform:translate(4px,3px)}}
   body.ykg-spec #app button, body.ykg-spec #app [data-move]{pointer-events:none;opacity:.75}
+  body.ykg-spec #app.mode-duel{ padding-bottom:calc(env(safe-area-inset-bottom) + 44px); }   /* 下の観戦バーで説明が隠れないように */
   #ykgSpecBar{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);text-align:center;font-size:13px;font-weight:700;background:rgba(62,201,214,.92);color:#06222a}
   #ykgBack{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:50;font:inherit;font-size:13px;font-weight:700;padding:7px 12px;border-radius:99px;border:1px solid #232a38;background:rgba(18,22,31,.92);color:#e8ecf4}
 </style>
@@ -469,6 +460,7 @@
   }
   function startCpuBattle(level){
     cpu.on = true; cpu.level = Math.max(0, Math.min(2, level|0)); ui.cpuLevel = cpu.level;
+    oppLeft = false;
     role = 'host';
     conn = makeCpuConn();
     cpuHist = [];
@@ -623,6 +615,7 @@
   // 2026-11-06: ゲストの選択は通信のぶん遅れて届くので、締め切りのあと GUEST_GRACE_MS だけ待ってから結果を出す（ホストの選択は締め切りで止める）
   var GUEST_GRACE_MS = 150, REVEAL_MS = 900;   // REVEAL_MS: 両者の手を見せる時間（1400 → 900。テンポよく）
   var hostLocalClosed = false, graceTimer = null, resolveTimer = null;
+  var oppLeft = false;   // 2026-11-12: 相手との接続が切れた（負けではない。再戦はしない）
 
   function clearRoundTimer(){
     if(roundTimeout){ clearTimeout(roundTimeout); roundTimeout = null; }
@@ -905,6 +898,41 @@
 
   // ---------- navigation ----------
   function goHome(){ if(PARTY){ toGames(); return; } ui.screen='home'; render(); }
+  // 2026-11-12: 対戦の途中の時計・演出をすべて止めて、対戦の中身を消す
+  function clearBattle(){
+    clearRoundTimer(); stopTimerBarAnimation();
+    if(graceTimer){ clearTimeout(graceTimer); graceTimer = null; }
+    if(resolveTimer){ clearTimeout(resolveTimer); resolveTimer = null; }
+    resetSpecialAnimation(); resetNormalResultAnimation();
+    state = null; reveal = null; myMove = null; roundClosed = false; hostLocalClosed = false;
+    hostPending = { p1:null, p2:null }; lastSentStatus = null; oppLeft = false;
+  }
+  // 部屋（通信）をたたんでホームへ（待ち画面・接続中・相手が抜けたあと）
+  function leaveRoom(){
+    var p = peer, c = conn;
+    conn = null; peer = null; role = null;
+    clearBattle();
+    try { if(c && c.close) c.close(); } catch(e){}
+    try { if(p){ if(p.removeAllListeners) p.removeAllListeners(); p.destroy(); } } catch(e){}
+    goHome();
+  }
+  // ホスト: 相手が抜けたあと、同じ部屋（同じコード）で次の相手を待つ
+  function backToWait(){
+    if(role !== 'host' || PARTY || !peer || peer.destroyed){ leaveRoom(); return; }
+    conn = null;
+    clearBattle();
+    ui.screen = 'battle-wait';
+    render();
+  }
+  // 相手との接続が切れた（ホスト・ゲスト共通）: 勝ち負けは付けずに終わりにする
+  function onOppLeft(){
+    oppLeft = true;
+    clearRoundTimer(); stopTimerBarAnimation();
+    if(graceTimer){ clearTimeout(graceTimer); graceTimer = null; }
+    if(resolveTimer){ clearTimeout(resolveTimer); resolveTimer = null; }
+    reveal = null;
+    if(state && (state.status === 'playing' || state.status === 'ready')){ state.status = 'finished'; state.winner = null; }
+  }
   function goCreate(){
     ui.screen='mode-select';
     render();
@@ -954,11 +982,9 @@
       conn.on('close', function(){
         if(c.__replaced || conn !== c) return;   // つなぎ直しで入れかえた古いつながり
         if(PARTY && !state){ partyGuestName = null; render(); return; }   // パーティの待ち合わせ中: 相手が抜けただけ（始まっていない）
-        // 相手が抜けた: ラウンドを止めて終わりにする（いつまでも自動バリアで続かないように）
-        clearRoundTimer(); stopTimerBarAnimation();
-        if(graceTimer){ clearTimeout(graceTimer); graceTimer = null; }
-        if(resolveTimer){ clearTimeout(resolveTimer); resolveTimer = null; }
-        if(state && state.status === 'playing'){ state.status = 'finished'; state.winner = null; }
+        // 相手が抜けた: ラウンドを止めて終わりにする（いつまでも自動バリアで続かないように）。負けにはしない
+        if(!state){ if(!PARTY && ui.screen !== 'battle-wait'){ conn = null; ui.screen = 'battle-wait'; render(); } return; }
+        onOppLeft();
         showToast('相手との接続が切れました' + (PARTY ? '（ゲーム一覧へ戻ります）' : ''), 3000);
         if(PARTY) setTimeout(toGames, 2500);
       });
@@ -1135,6 +1161,7 @@
     if(!code){ showToast('部屋コードを入力してください'); return; }
 
     role = 'guest';
+    oppLeft = false;
     clockSyncReady = false;
     clockSyncPending = null;
     hostClockOffset = 0;
@@ -1157,10 +1184,14 @@
       c.on('data', function(msg){ handleGuestData(msg); });
       c.on('close', function(){
         if(PARTY){ if(conn === c && c.__opened) toGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ
+        if(conn !== c) return;   // 自分で部屋を出た（leaveRoom）
+        // 2026-11-12: 対戦を止めて「メニューへ戻る」を出す（前は戻る手段がなかった）
+        if(state) onOppLeft(); else { var p0 = peer; conn = null; peer = null; role = null; try { if(p0){ if(p0.removeAllListeners) p0.removeAllListeners(); p0.destroy(); } } catch(e){} ui.screen = 'join'; }
         showToast('相手との接続が切れました', 3000);
       });
       c.on('error', function(err){
         if(PARTY) return;   // パーティ: 下の時間切れで探し直す
+        if(conn !== c) return;   // 自分で部屋を出た（leaveRoom）
         console.error(err);
         showToast('接続に失敗しました。コードを確認してください', 3500);
         ui.screen = 'join';
@@ -1468,6 +1499,7 @@
 
   function requestRestart(){
     if(spectating) return;
+    if(oppLeft && !cpu.on) return;   // 相手がいないので再戦はしない（相手が抜けたときのボタンを使う）
     if(role === 'host'){
       doRestart();
     } else {
@@ -1491,6 +1523,7 @@
   function render(){
     if(PARTY) partyLobby();
     app.classList.remove('mode-duel');
+    app.classList.remove('has-back');
     if(ui.screen === 'home'){
       app.innerHTML =
         (ui.toast ? '<div class="toast">'+esc(ui.toast)+'</div>' : '') +
@@ -1566,8 +1599,10 @@
             '<p class="muted">' + (PARTY ? 'パーティの相手が入ると自動でバトルが始まります。' : 'このコードを友人に共有してください。参加すると自動でバトルが始まります。') + '</p>' +
             '<div class="footer-actions"><button class="link" id="btnCopy">コードをコピー</button></div>' +
           '</div>' +
+          '<div class="footer-actions"><button class="link" id="btnWaitBack">← 部屋を閉じて戻る</button></div>' +
         '</div>';
       document.getElementById('btnCopy').addEventListener('click', copyCode);
+      document.getElementById('btnWaitBack').addEventListener('click', leaveRoom);   // 2026-11-12: 待ち画面から戻れるように
       return;
     }
 
@@ -1594,7 +1629,10 @@
     if(ui.screen === 'joining'){
       app.innerHTML =
         (ui.toast ? '<div class="toast">'+esc(ui.toast)+'</div>' : '') +
-        '<div class="wrap"><div class="card center"><p class="muted">' + (PARTY ? (spectating ? '観戦: バトルが始まるのを待っています…' : 'ホストがモードを選ぶのを待っています…') : '接続しています…') + '</p></div></div>';
+        '<div class="wrap"><div class="card center"><p class="muted">' + (PARTY ? (spectating ? '観戦: バトルが始まるのを待っています…' : 'ホストがモードを選ぶのを待っています…') : '接続しています…') + '</p></div>' +
+          (PARTY ? '' : '<div class="footer-actions"><button class="link" id="btnJoinBack">← やめて戻る</button></div>') +
+        '</div>';
+      var jb = document.getElementById('btnJoinBack'); if(jb) jb.addEventListener('click', leaveRoom);   // 2026-11-12: 接続中から戻れるように
       return;
     }
 
@@ -1611,6 +1649,7 @@
     var lastLog = state.log[state.log.length-1];
 
     app.classList.add('mode-duel');
+    if(PARTY || cpu.on) app.classList.add('has-back');   // 左上に「← 一覧」「← やめる」が出る
 
     // action box contents (mirrors around the divider)
     var oppActionHtml, myActionHtml;
@@ -1640,13 +1679,9 @@
     if(cpu.on && !PARTY) html += '<button id="btnCpuQuit" style="position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:70;font:inherit;font-size:13px;font-weight:700;padding:7px 12px;border-radius:99px;border:1px solid #232a38;background:rgba(18,22,31,.92);color:#e8ecf4">← やめる</button>';
     if(spectating){ var sbar = document.getElementById('ykgSpecBar'); if(sbar) sbar.textContent = state.cpuSeat ? '観戦中（CPU と対戦している人の視点です。操作はできません）' : '観戦中（ゲストの視点で表示しています。操作はできません）'; }
 
-    // スタートボタンはプレイヤー情報の通常レイアウトから切り離して固定。
-    // ホスト・ゲストのどちらも、チャージ枠が何段になっても位置が押し下げられない。
-    if(state.status === 'ready' && !state.ready[myKey]){
-      html += '<div class="ready-start-float">' +
+    var startHtml = (state.status === 'ready' && !state.ready[myKey]) ? '<div class="ready-start-float">' +
         '<div class="abtn startbtn" id="btnStart"><span class="tt">▶ スタート</span></div>' +
-      '</div>';
-    }
+      '</div>' : '';   // 2026-11-12: 自分の欄の中（名前の下）に出す
 
     html += '<div class="duel-wrap">' +
         '<div class="duel-half opp">' +
@@ -1660,7 +1695,7 @@
           '<div class="actionbox '+(reveal?ACTIONS[moveAction(reveal[myKey])].cls:(myMove?ACTIONS[moveAction(myMove)].cls:''))+'">' + myActionHtml + '</div>' +
           (state.showMyCharge !== false ? '<div class="pipsrow">' + pipsHtml(me.charge) + '</div>' : '') +
           (state.showMyHp !== false ? '<div class="hpbox-outer"><div class="hpbox-fill" style="width:'+Math.round(me.hp/state.hpSetting*100)+'%"></div><div class="hpbox-num">'+me.hp+' / '+state.hpSetting+'</div></div>' : '') +
-          '<div class="namebox">'+esc(me.name)+'</div>';
+          '<div class="namebox">'+esc(me.name)+'</div>' + startHtml;
 
     if(state.status === 'ready'){
       html += '<div class="actions">';
@@ -1756,7 +1791,18 @@
 
     html += '<div class="meta-line">' + (state.mode === 'custom' ? 'カスタマイズモード' : '通常モード') + ' ・ ROUND ' + state.round + (lastLog ? ' ・ ' + esc(lastLog.text) : '') + '</div>';
 
-    if(state.status === 'finished'){
+    if(state.status === 'finished' && oppLeft && !cpu.on){
+      // 2026-11-12: 相手が抜けた。勝ち負けが決まる前なら負けにしない。再戦は出さず、待ち画面（ホスト）かメニューへ
+      var leftTitle = (state.winner === 'p1' || state.winner === 'p2' || state.winner === 'draw')
+        ? (state.winner === 'draw' ? '引き分け！' : (state.winner === myKey ? 'あなたの勝利！' : 'あなたの敗北…')) : '相手が退出しました';
+      html += '<div class="card center">' +
+        '<h2 style="margin:0 0 8px">' + leftTitle + '</h2>' +
+        '<p class="muted" style="margin:0 0 8px">相手との接続が切れました' + (PARTY ? '（ゲーム一覧へ戻ります）' : '') + '</p>' +
+        (PARTY ? '' :
+          (role === 'host' ? '<button class="btn primary" id="btnBackWait" style="margin-top:8px">同じ部屋で次の相手を待つ</button>' : '') +
+          '<div class="footer-actions"><button class="link" id="btnLeaveRoom">メニューへ戻る</button></div>') +
+      '</div>';
+    } else if(state.status === 'finished'){
       var title = state.winner === 'draw' ? '引き分け！' : (state.winner === myKey ? 'あなたの勝利！' : 'あなたの敗北…');
       html += '<div class="card center">' +
         '<h2 style="margin:0 0 8px">' + title + '</h2>' +
@@ -1836,6 +1882,10 @@
     if(leaveCpuBtn) leaveCpuBtn.addEventListener('click', leaveCpu);
     var cpuQuitBtn = document.getElementById('btnCpuQuit');
     if(cpuQuitBtn) cpuQuitBtn.addEventListener('click', leaveCpu);
+    var backWaitBtn = document.getElementById('btnBackWait');
+    if(backWaitBtn) backWaitBtn.addEventListener('click', backToWait);
+    var leaveRoomBtn = document.getElementById('btnLeaveRoom');
+    if(leaveRoomBtn) leaveRoomBtn.addEventListener('click', leaveRoom);
 
     var specialBtn = document.getElementById('btnSpecial');
     if(specialBtn) specialBtn.addEventListener('click', useSpecialWin);

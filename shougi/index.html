@@ -497,6 +497,7 @@
     <div class="big" id="winText">勝利</div>
     <p>玉を取ったチームの勝ちです。</p>
     <button id="playAgain">もう一度遊ぶ</button>
+    <button id="overlayMenuBtn" style="background:transparent;color:var(--accent);border:1px solid var(--accent);margin-top:8px;">メニューへ</button>
   </div>
 </div>
 
@@ -577,7 +578,7 @@
     dropSelection = null;  // {owner, type}
     gameOver = false;
     winnerColor = null;
-    lastMovedForPromotionOffer = null;
+    promoOffers = [];
     overlayEl.classList.remove('show');
     dropHint.classList.remove('show');
     statusEl.textContent='';
@@ -784,13 +785,18 @@
     p.promoted = promoted;
     p.cooldownUntil = now()+cooldownFor(p.type);
     board[dr][dc]=p;
-    selected=null;
-    lastMovedForPromotionOffer = (!promoted && canPromote(p.type) && (inZone(p.owner,dr)||inZone(p.owner,sr))) ? {r:dr,c:dc} : null;
+    // 2026-11-12: 動いた駒・取られた駒を選んでいたときだけ選択を外す（前は誰が指しても自分の選択が消えていた）
+    if(selected && ((selected.r===sr&&selected.c===sc) || (selected.r===dr&&selected.c===dc))) selected=null;
+    // 「成る？」は指した人ごとに持つ（前は 1 つだけで、ほかの人が指すと消えていた）。動いた駒・取られた駒の分だけ消す
+    promoOffers = promoOffers.filter(o=>!(o.r===sr&&o.c===sc) && !(o.r===dr&&o.c===dc));
+    if(!promoted && canPromote(p.type) && (inZone(p.owner,dr)||inZone(p.owner,sr))) promoOffers.push({r:dr, c:dc, owner:p.owner, by:actionBy});
     renderAll();
     checkKingCapture();
   }
 
-  let lastMovedForPromotionOffer=null;
+  let promoOffers=[];   // {r,c,owner,by}  by = 指した人（'local' / 'host' / ゲストの id / 'cpu'）
+  let actionBy='local';
+  function myBy(){ return (netActive && colorAssigned) ? (isHost ? 'host' : myId()) : 'local'; }
 
   function checkKingCapture(){
     let senteKing=false, goteKing=false;
@@ -806,7 +812,10 @@
     if(!gameOver && isHost && netActive && PARTY){   // 先手 = ホスト、後手 = ゲスト
       // 2026-11-09: チーム戦になったので、その側に座っている人の名前を全部入れる。CPU は成績に入れない
       const side = col => (col==='sente' ? [PARTY.name] : []).concat(allRemotes().filter(c=>c.__seat===col).map(remoteName));
-      partyReport(side(winner), side(otherColor(winner)));
+      // 2026-11-12: 負けた側の人が抜けたまま（つなぎ直していない）で、その側にもう人がいないときは成績に入れない
+      // （抜けた人の玉を取っただけの勝ちになるため。CPU だけが相手のときは今までどおり記録する）
+      const loser = otherColor(winner);
+      if(!(lostSeats.includes(loser) && !side(loser).length)) partyReport(side(winner), side(loser));
     }
     gameOver=true;
     winnerColor=winner;
@@ -840,6 +849,7 @@
   function performDrop(owner,type,r,c){
     board[r][c] = {type, owner, promoted:false, cooldownUntil: now()+cooldownFor(type)};
     hands[owner][type]--;
+    if(dropSelection && dropSelection.owner===owner && dropSelection.type===type && !hands[owner][type]){ dropSelection=null; dropHint.classList.remove('show'); }   // 味方が最後の 1 枚を打った
     renderAll();
     checkKingCapture();
   }
@@ -847,9 +857,7 @@
   function performPromote(r,c){
     const p = board[r][c];
     if(p){ p.promoted = true; }
-    if(lastMovedForPromotionOffer && lastMovedForPromotionOffer.r===r && lastMovedForPromotionOffer.c===c){
-      lastMovedForPromotionOffer=null;
-    }
+    promoOffers = promoOffers.filter(o=>!(o.r===r&&o.c===c));
     renderAll();
   }
 
@@ -910,10 +918,13 @@
 
   /* 修正3: 「成る」UIの中身を画像化し、対象マスの直上に配置する */
   function updatePromotePrompt(){
-    if(lastMovedForPromotionOffer){
-      const {r,c} = lastMovedForPromotionOffer;
+    const me = myBy();
+    for(let i=promoOffers.length-1;i>=0;i--){   // 自分が指した、まだ有効な「成る？」のうち新しいもの
+      const o = promoOffers[i];
+      if(o.by!==me) continue;
+      const {r,c} = o;
       const p = board[r] && board[r][c];
-      if(p && isMine(p.owner)){
+      if(p && p.owner===o.owner && !p.promoted && canPromote(p.type) && isMine(p.owner)){
         const key = p.type;
         const promotedKey = '+' + key;
         const baseGlyph = KANJI[key];
@@ -1114,13 +1125,12 @@
     return false;
   }
   function cpuApply(color,a){
-    const prevOffer = lastMovedForPromotionOffer;
-    if(!applyActionAsHost(a, color)) return false;
+    if(!applyActionAsHost(a, color, 'cpu')) return false;
     if(a.kind==='move'){
       const p=board[a.dr] && board[a.dr][a.dc];
-      if(p && p.owner===color && !p.promoted && lastMovedForPromotionOffer && lastMovedForPromotionOffer.r===a.dr && lastMovedForPromotionOffer.c===a.dc) p.promoted=true;
-      // 人の「成る？」の表示は消さない（CPU の手で上書きされないように）
-      lastMovedForPromotionOffer = (prevOffer && !(prevOffer.r===a.dr && prevOffer.c===a.dc) && board[prevOffer.r][prevOffer.c]) ? prevOffer : null;
+      const mine = o => o.by==='cpu' && o.r===a.dr && o.c===a.dc;
+      if(p && p.owner===color && !p.promoted && promoOffers.some(mine)) p.promoted=true;
+      promoOffers = promoOffers.filter(o=>!mine(o));   // 人の「成る？」はそのまま
       renderAll();
     }
     if(netActive && isHost) broadcastSync();
@@ -1202,7 +1212,9 @@
 
   let onlineMode = false;   // 2026-11-09: 部屋を作る・入るを始めたら true（「メニューへ」を隠す）
   function showScreen(name){
-    const mb = document.getElementById('menuBtn'); if(mb) mb.style.display = onlineMode ? 'none' : '';
+    // 2026-11-12: パーティでないオンライン対局にも「退出する」を出す（前はボタンがなく、ホストが抜けるとゲストが出られなかった）。パーティは左上の「← 一覧」
+    const mb = document.getElementById('menuBtn'); if(mb){ mb.style.display = PARTY ? 'none' : ''; mb.textContent = onlineMode ? '退出する' : 'メニューへ'; }
+    const om = document.getElementById('overlayMenuBtn'); if(om){ om.style.display = PARTY ? 'none' : ''; om.textContent = onlineMode ? '退出する' : 'メニューへ'; }
     lobbyScreen.classList.toggle('active', name==='lobby');
     battleScreen.classList.toggle('active', name==='battle');
     if(name==='battle'){
@@ -1391,8 +1403,9 @@
     updateNetStatus(1);
   }
 
-  function applyActionAsHost(action, actorColor){
+  function applyActionAsHost(action, actorColor, by){
     const requireActor = actorColor !== undefined;
+    actionBy = by || (netActive && colorAssigned ? 'host' : 'local');   // 「成る？」を誰に出すか
     if((gameOver || (netActive && !matchStarted)) && action.kind !== 'restart') return false;   // 2026-11-06: 決着後・開始前の操作は受けない
     switch(action.kind){
       case 'move': {
@@ -1423,10 +1436,10 @@
       }
       case 'decline-promote': {
         const {r,c} = action;
-        if(!lastMovedForPromotionOffer || lastMovedForPromotionOffer.r!==r || lastMovedForPromotionOffer.c!==c) return false;
-        const p = board[r] && board[r][c];
-        if(requireActor && p && p.owner!==actorColor) return false;
-        lastMovedForPromotionOffer = null;
+        const i = promoOffers.findIndex(o=>o.r===r && o.c===c && o.by===actionBy);
+        if(i<0) return false;
+        if(requireActor && promoOffers[i].owner!==actorColor) return false;
+        promoOffers.splice(i,1);
         renderAll();
         return true;
       }
@@ -1467,7 +1480,7 @@
       hands: JSON.parse(JSON.stringify(hands)),
       gameOver,
       winner: winnerColor,
-      promoOffer: lastMovedForPromotionOffer ? {r:lastMovedForPromotionOffer.r, c:lastMovedForPromotionOffer.c} : null,
+      promoOffers: promoOffers.map(o=>({r:o.r, c:o.c, owner:o.owner, by:o.by})),
       matchStarted,
       readyState: {sente:readyState.sente, gote:readyState.gote},
       readyIds: [...readyIds],
@@ -1478,6 +1491,7 @@
 
   function applySyncState(state){
     const wasMatchStarted = matchStarted;
+    const prevSel = selected && board[selected.r] && board[selected.r][selected.c];
     board = state.board.map(row=>row.map(p=>{
       if(!p) return null;
       return {type:p.type, owner:p.owner, promoted:p.promoted, cooldownUntil: now2ms(p.remain)};
@@ -1485,10 +1499,16 @@
     hands = state.hands;
     gameOver = state.gameOver;
     winnerColor = state.winner;
-    selected = null;
-    dropSelection = null;
-    dropHint.classList.remove('show');
-    lastMovedForPromotionOffer = state.promoOffer;
+    // 2026-11-12: 自分の選択は、その駒が動いた・取られた・使えなくなったときだけ外す（前は誰かが指すたびに消えていた）
+    if(selected){
+      const q = board[selected.r] && board[selected.r][selected.c];
+      if(gameOver || !prevSel || !q || q.owner!==prevSel.owner || q.type!==prevSel.type || isCooling(q) || !isMine(q.owner)) selected = null;
+    }
+    if(dropSelection && (gameOver || !hands[dropSelection.owner] || !hands[dropSelection.owner][dropSelection.type])){
+      dropSelection = null;
+      dropHint.classList.remove('show');
+    }
+    promoOffers = Array.isArray(state.promoOffers) ? state.promoOffers : [];
     if(typeof state.matchStarted==='boolean') matchStarted = state.matchStarted;
     if(state.readyState) readyState = {sente:!!state.readyState.sente, gote:!!state.readyState.gote};
     countdownUntil = state.countdownRemain>0 ? now()+state.countdownRemain : 0;
@@ -1528,7 +1548,7 @@
       if(isHost){
         const seat = from ? from.__seat : 'gote';
         if(!seat) return;   // 観戦の人は動かせない
-        const applied = applyActionAsHost(data.action, seat);
+        const applied = applyActionAsHost(data.action, seat, from ? from.peer : undefined);
         if(applied) broadcastSync();
       }
       return;
@@ -1779,6 +1799,7 @@
       });
       conn.on('close', ()=>{
         if(PARTY && conn === c && colorAssigned){ toGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ
+        if(conn === c && colorAssigned){ setBattleStatus('ホストとの接続が切れました。「退出する」でメニューへ戻れます'); return; }   // 2026-11-12: 待ち続けないように
         updateNetStatus(0);
       });
       conn.on('error', (err)=>{
@@ -1830,7 +1851,14 @@
     showScreen('battle');
   }
   function backToMenu(){
-    if(onlineMode) return;
+    if(onlineMode){
+      if(PARTY) return;   // パーティは「← 一覧」で戻る
+      const connected = isHost ? allRemotes().length > 0 : !!(conn && conn.open);
+      if(connected && !confirm('部屋から退出しますか？' + (isHost ? '（相手との接続も切れます）' : ''))) return;
+      try { if(peer) peer.destroy(); } catch(e){}
+      location.href = location.pathname;   // 通信の状態をまるごと片づけるため、部屋番号なしで開き直す
+      return;
+    }
     cpus = [];
     myColor = null;
     init();
@@ -1861,6 +1889,7 @@
   bindSeg('cpuModeSeg', v => { cpuMode = v; });
   document.getElementById('cpuBtn').addEventListener('click', startCpuGame);
   document.getElementById('menuBtn').addEventListener('click', backToMenu);
+  document.getElementById('overlayMenuBtn').addEventListener('click', backToMenu);
 
   createRoomBtn.addEventListener('click', ()=>{ roomCreator=true; createRoom(); });
   connectBtn.addEventListener('click', ()=>{ roomCreator=false; connectRoom(); });

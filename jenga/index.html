@@ -20,7 +20,8 @@
   #c { position:fixed; inset:0; width:100%; height:100%; touch-action:none; display:block; }
   #ui { position:fixed; inset:0; pointer-events:none; }
   #ui .p { pointer-events:auto; }
-  .screen { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 16px; background:rgba(16,19,27,.78); pointer-events:auto; overflow-y:auto; }
+  .screen { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding:24px 16px; background:rgba(16,19,27,.78); pointer-events:auto; overflow-y:auto; }
+  .screen > * { margin-top:auto; margin-bottom:auto; flex-shrink:0; }   /* 入るときは真ん中、画面より高いときは上から並べてスクロールできるように（center だと上が切れる） */
   .card { width:100%; max-width:380px; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 16px; }
   h1 { margin:0 0 4px; font-size:28px; letter-spacing:.06em; text-align:center; }
   .lead { margin:0 0 18px; text-align:center; color:var(--sub); font-size:13px; }
@@ -427,7 +428,11 @@ function physStep() {
     for (const b of bodies) { const v = b.linvel(), w = b.angvel(); mv = Math.max(mv, Math.hypot(v.x, v.y, v.z), Math.hypot(w.x, w.y, w.z) * 0.5); }
     quietT = mv < 0.08 ? quietT + DT : 0;
     if ((phaseT > 0.8 && quietT > 0.6) || phaseT > 8) {
-      if (!checkFallen()) { phase = "wait"; send({ t: "end", d: snapshot() }); renderUI(); return; }
+      if (!checkFallen()) {
+        // 置いたブロックがタワーの上に乗っていない（テーブルに落ちた・横に置いた）ときは番を終えず、もう一度上へ運んで置き直す
+        if (levelOf(held) < Math.max(1, towerInfo(held).top)) { toast("タワーの上に置いてください"); liftHeld(); return; }
+        phase = "wait"; send({ t: "end", d: snapshot() }); renderUI(); return;
+      }
     }
   }
   if ((phase === "pull" || phase === "carry" || phase === "place" || phase === "settle") && checkFallen()) {
@@ -450,15 +455,20 @@ function checkFallen() {
 }
 function extract() {
   held = sel; setHighlight(sel, false); sel = -1; drag = null;
+  navigator.vibrate?.(30);
+  liftHeld();
+}
+// 持っているブロック（held）を、タワーの上の置き場まで運ぶ状態にする（抜いたとき・上に置けなかったときの置き直し）
+function liftHeld() {
   const b = bodies[held];
-  b.setGravityScale(1, true); b.setLinearDamping(0); b.setAngularDamping(0);
+  b.setGravityScale(1, true); b.setLinearDamping(0); b.setAngularDamping(0); b.lockRotations(false, true);
   b.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
   cols[held].setSensor(true);      // 運んでいる間はほかのブロックにぶつからない
   const info = placeInfo(held);
   const k = info.free.includes(1) ? 1 : info.free[0];
   place = { info, k, pose: slotPose(info, k) };
   cam.goal = Math.min(LEVELS * BH + 8, place.pose.surf - 0.5);   // 上の置き場が見えるように
-  phase = "carry"; phaseT = 0; navigator.vibrate?.(30);
+  phase = "carry"; phaseT = 0;
   renderUI();
 }
 const hoverY = () => place.pose.surf + BH * 1.5 + heights[held] / 2;   // 運んできたブロックを浮かせる高さ
@@ -595,6 +605,8 @@ function cpuTick() {
     } else if (cpu.st === "back" && drag) {   // キツい: そっと止めて、そのまま手を離す（押し戻すとタワーをまた引きずるので戻さない。人も「キツい」と思ったらそこでやめる）
       cpu.v = Math.max(0, cpu.v - CPU_ACC * 3 * DT); cpu.off += cpu.sg * cpu.v * DT; drag.target = cpu.off;   // 止めるのは速めに（止まるまでに押しすぎないように）
       if (cpu.v <= 0) { cpu.st = "let"; cpu.t = 0; }
+    } else if ((cpu.st === "push" || cpu.st === "back") && !drag) {   // 念のため: 指（drag）がなくなったら、手を離して選び直す（止まったままにしない）
+      cpu.st = "let"; cpu.t = 0;
     } else if (cpu.st === "let") {
       if (cpu.t > 0.3) { releaseSel(); cpu.st = "think"; cpu.t = P.think * 0.4; renderUI(); }
     }
@@ -693,7 +705,7 @@ canvas.addEventListener("pointerdown", e => {
     else gesture = { type: "orbit", hit, moved: 0, lx: e.clientX, ly: e.clientY };
     cam.goal = null;
   } else if (ptrs.size === 2) {
-    drag = null;
+    if (isMine()) drag = null;   // CPU の番の drag は CPU の指なので、2本指で拡大しても消さない（消すと CPU が止まる）
     const [a, b] = [...ptrs.values()];
     gesture = { type: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y), dist0: cam.dist, ty0: cam.ty, my0: (a.y + b.y) / 2 };
   }
@@ -707,7 +719,7 @@ canvas.addEventListener("pointermove", e => {
     gesture.lx = e.clientX; gesture.ly = e.clientY; gesture.moved += Math.abs(dx) + Math.abs(dy);
     cam.yaw -= dx * 0.009;
     cam.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, cam.pitch + dy * 0.006));
-  } else if (gesture.type === "push" && drag) {
+  } else if (gesture.type === "push" && drag && isMine()) {
     // 指の動き = s ×（ブロックの長さ方向 1 の画面上の長さ）+ v ×（上 1 の画面上の長さ）を解いて、両方とも指とぴったり同じに動かす
     const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
     let s, v = 0;
@@ -715,7 +727,7 @@ canvas.addEventListener("pointermove", e => {
     else s = (dx * drag.A.x + dy * drag.A.y) / (drag.A.x * drag.A.x + drag.A.y * drag.A.y);
     drag.target = Math.max(-BL - 0.5, Math.min(BL + 0.5, drag.off0 + s));
     if (drag.ty != null) drag.ty = Math.max(drag.y0 - LIFT_MAX, Math.min(drag.y0 + LIFT_MAX, drag.py0 + v));
-  } else if (gesture.type === "move" && phase === "place") {
+  } else if (gesture.type === "move" && phase === "place" && isMine()) {
     const h = planeHit(e.clientX, e.clientY, gesture.plane);
     if (h) {
       place.tx = gesture.t0.x + h.x - gesture.h0.x; place.tz = gesture.t0.z + h.z - gesture.h0.z;
@@ -747,8 +759,8 @@ function pointerEnd(e) {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId);
   if (gesture?.type === "orbit" && gesture.moved < 10 && gesture.hit >= 0 && ptrs.size === 0) tapBlock(gesture.hit);
-  if (gesture?.type === "push") drag = null;
-  if (gesture?.type === "move" && phase === "place") { const p = bodies[held].translation(); place.tx = p.x; place.ty = p.y; place.tz = p.z; }
+  if (gesture?.type === "push" && isMine()) drag = null;   // 自分の番に押していた指が、CPU の番になってから離れても CPU の指は消さない
+  if (gesture?.type === "move" && phase === "place" && isMine()) { const p = bodies[held].translation(); place.tx = p.x; place.ty = p.y; place.tz = p.z; }
   if (ptrs.size === 1) { const p = [...ptrs.values()][0]; gesture = { type: "orbit", hit: -1, moved: 99, lx: p.x, ly: p.y }; }
   else if (ptrs.size === 0) gesture = null;
 }
@@ -835,6 +847,7 @@ function hostStart() {
   } else if (mode === "local" && !ps.some(p => p.cpu)) ord.sort((a, b) => a - b);   // 1台で交代は 1番から
   host.seed = (Math.random() * 2 ** 31) | 0; host.ps = ps;   // 途中から入る観戦の人にも同じタワーを作ってもらう
   bcast({ t: "start", seed: host.seed, players: ps, order: ord, diff, teams: tm });
+  host.turnD = snapshot();   // 番の始めのタワー（番の人が途中で抜けたら、ここへ戻して次の人へ）
   bcast({ t: "turn", cur: ord[0], d: null, n: 0 });
 }
 function hostHandle(from, m) {
@@ -846,7 +859,7 @@ function hostHandle(from, m) {
   if (from !== cur) return;
   if (m.t === "snap") { if (!freshSnap(from, m)) return; host.last = m.d; bcast(m, from); }
   else if (m.t === "end") {
-    host.last = m.d; host.n++; host.turnI = (host.turnI + 1) % order.length;
+    host.last = host.turnD = m.d; host.n++; host.turnI = (host.turnI + 1) % order.length;
     bcast({ t: "turn", cur: order[host.turnI], d: m.d, n: host.n });
   } else if (m.t === "fall") {
     host.playing = false;
@@ -870,7 +883,8 @@ function hostDrop(id) {
   // 2人未満、またはチーム戦で片方のチームがいなくなったら終わり（ホストと CPU が残っていれば続ける）
   if (nextOrder.length < 2 || (teamMode && new Set(nextOrder.map(teamOf)).size < 2)) { host.playing = false; bcast({ t: "over", loser: -1, left: id, d: host.last, n: host.n }); return; }
   host.turnI %= nextOrder.length;
-  if (wasCur) bcast({ t: "turn", cur: nextOrder[host.turnI], d: host.last, n: host.n });
+  // 番の人が途中で抜けたら、その番はなかったことにする（抜きかけ・持ち上げたままの途中の形を渡すと、次の人の番の始めに崩れて次の人の負けになる）
+  if (wasCur) { host.last = host.turnD; bcast({ t: "turn", cur: nextOrder[host.turnI], d: host.turnD, n: host.n }); }
 }
 
 function onMsg(m) {

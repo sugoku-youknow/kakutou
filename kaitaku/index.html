@@ -90,6 +90,9 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 #acts .sq small{font-size:9px;font-weight:800;margin-top:1px}
 #acts .sq.on{background:linear-gradient(#ffe08a,#f6b93b);box-shadow:0 0 0 2px #fff,0 0 10px #ffd54a}
 #acts .go{height:56px;min-width:96px;padding:0 10px;font-size:15px;line-height:1.15}
+/* ふる → おわり など、同じ場所のボタンが入れかわったときは少しのあいだ押せない（2 度タップで番が終わらないように）。ふわっと出して見せる */
+#acts .go.fresh{animation:goIn .45s ease-out}
+@keyframes goIn{from{opacity:.25;transform:scale(.92)}to{opacity:1;transform:none}}
 /* たて持ち: 盤は画面はばいっぱい。下に手札トレイ、その下にボタン 2 段（つくる 4 つ / おわり・やり直し・交換） */
 @media (orientation:portrait){
   #boardWrap{top:47px;left:0;right:0;bottom:180px}
@@ -502,6 +505,8 @@ function undo(s) {
   if (!UNDO.length) return "やり直せることがありません";
   const g = JSON.parse(UNDO.pop());
   g.log = G.log; g.ver = G.ver; g.offerN = G.offerN; g.offN = G.offN; g.offer = null;
+  // とっておいた後にぬけた人は、CPU のまま（人にもどすと、その人の番で止まってしまう）
+  g.ps.forEach((p, i) => { p.bot = G.ps[i].bot; p.diff = G.ps[i].diff; });
   G = g; G.undoN = UNDO.length;
   addLog(`↩️ ${G.ps[s].name} がやり直した`); return "";
 }
@@ -777,7 +782,7 @@ function myName() { if (meName) return meName; return (($("name") && $("name").v
 function fixName() { meName = ""; meName = myName(); store.set("kaitaku-name", meName); }
 const mySeat = () => G ? G.ps.findIndex(p => !p.bot && p.pid === myPid) : -1;
 let FAST = false, cpuTimer = null, lastWasRoll = false;
-const ui = { mode: null, modal: null, give: null, get: null, picks: [], overSeen: -1, tm: "player", pg: {}, pw: {}, to: [], trade: false, turnKey: null };
+const ui = { mode: null, modal: null, give: null, get: null, picks: [], overSeen: -1, tm: "player", pg: {}, pw: {}, to: [], trade: false, turnKey: null, goKey: "", goAt: 0 };
 
 // 状態が変わったあと: ゲストへ送る・描く・CPU を動かす
 function afterChange() {
@@ -1270,6 +1275,9 @@ function render() {
     else if (inMain) go = `<button class="main go" data-g="end">おわり ▶</button>`;
     else if (G.offer && G.offer.from !== s && G.offer.resp[s] === null) go = `<button class="go" disabled>交換に<br>返事してね ▶</button>`;
     else go = `<button class="go" disabled>${myTurn ? "盤をタップ" : "まってね…"}</button>`;
+    // ボタンが入れかわった直後は押せない（下のクリックで 450ms 無視する）。入れかわったときだけ、ふわっと出す
+    const gk = (go.match(/data-g="(\w+)"/) || [])[1] || "";
+    if (gk !== ui.goKey) { ui.goKey = gk; ui.goAt = Date.now(); if (gk) go = go.replace('class="main go"', 'class="main go fresh"').replace('class="go"', 'class="go fresh"'); }
     r2 = go + sq("undo", "↶", "やり直し", inMain && G.undoN > 0) + sq("trade", "⇄", "交換", inMain && !G.free, ui.trade || (G.offer && G.offer.from === s));
     {
       const ok = inMain && !G.free, can = ok && {
@@ -1366,6 +1374,7 @@ $("tradeBox").addEventListener("click", e => {
 $("game").addEventListener("click", e => {
   const b = e.target.closest("[data-g]"); if (!b || b.disabled || !G) return;
   const g = b.dataset.g;
+  if ((g === "roll" || g === "end" || g === "nofree") && Date.now() - ui.goAt < 450) return;   // ふる → おわり の 2 度タップ よけ
   if (g === "roll") act({ k: "roll" });
   else if (g === "end") { ui.mode = null; ui.trade = false; act({ k: "end" }); }
   else if (g === "nofree") act({ k: "nofree" });

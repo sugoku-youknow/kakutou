@@ -99,6 +99,7 @@ h1 small{display:block;font-size:12px;letter-spacing:0;opacity:.6;font-weight:40
 h2{margin:0 0 10px;font-size:20px;text-align:center}
 .rules{font-size:13px;line-height:1.6;background:#0f1628;border-radius:12px;padding:8px 12px;margin:10px 0}
 .rules b{color:#ffd400}
+details.rd{margin-top:14px}details.rd summary{cursor:pointer;font-size:13px;font-weight:700;padding:6px 0;color:#ffd400}details.rd .rules{margin-top:4px}
 label{font-size:12px;opacity:.7}
 .row{display:flex;gap:8px;margin-top:8px}
 .in{width:100%;background:#0b1120;border:1px solid #334;border-radius:10px;padding:10px;color:#fff;font-size:16px}
@@ -679,6 +680,12 @@ function sendHost(m) {
 
 // ---------- ホスト側 ----------
 function hostLobby() {
+  // 2026-11-12: パーティで始まったあと・満員で来て観戦になった人（自分で観戦を選んだ人はのぞく）は、部屋にもどったら遊ぶ人に入れる
+  if (!host.playing) for (const [id, c] of [...host.specs]) {
+    if (c.wantSpec || 1 + host.conns.size + host.bots >= MAX_PLAYERS) continue;
+    host.specs.delete(id); c.spec = false; host.conns.set(id, c); c.seen = performance.now();
+    try { c.send({ t: "welcome", you: id }); } catch (e) {}
+  }
   lobbyPs = [{ id: 0, name: myName() }];
   for (const [id, c] of host.conns) lobbyPs.push({ id, name: c.pname });
   for (let i = 0; i < host.bots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABCDEFGH"[i], bot: true });
@@ -1165,7 +1172,7 @@ function startHost() {
       if (m && m.t === "hello") {
         // パーティ: 観戦を選んだ人・始まったあとに来た人・満員のときの人は観戦（遊ぶ人の数に入らない。動き回って見られる）
         if (PARTY && (m.spec || host.playing || lobbyPs.length >= MAX_PLAYERS)) {
-          const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12); conn.spec = true;
+          const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12); conn.spec = true; conn.wantSpec = !!m.spec;
           host.specs.set(id, conn); conn.send({ t: "welcome", you: id, spec: 1 });
           if (host.playing && G) conn.send(startMsg()); else hostLobby();
           return;
@@ -1425,6 +1432,7 @@ function startView(m) {
   teamMode = !!m.team;
   if (mode === "client") STAGE = makeStage(m.stage, seed, ps.length);   // 2026-11-09: ホストが選んだステージを同じシードで作る
   buildStage();
+  reveal = false;   // 2026-11-12: 札を作る前に戻す（前の試合の「残り1分」のままだと、次の試合の最初から物かげの向こうの数字が見えていた）
   for (const p of ps) {
     const y = groundAt(p.x, p.z, p.y || 0);
     const v = { ...p, y, tx: p.x, tz: p.z, tyaw: p.yaw, alive: p.alive !== false };
@@ -1434,7 +1442,7 @@ function startView(m) {
   const mine = view.get(myId);
   if (mine) { me.x = mine.x; me.z = mine.z; me.y = mine.y; me.vy = 0; me.yaw = mine.yaw; me.pitch = 0; }
   lastAtk = -99; screen = "game"; lastMine = ""; hostSeen = performance.now();
-  timeLeft = TIME_LIMIT; reveal = false; lastStQ = 0;
+  timeLeft = TIME_LIMIT; lastStQ = 0;
   toast("おでこの数字を覚えて、素因数を打ち込もう！");
 }
 
@@ -1791,7 +1799,15 @@ function recheckSize() { for (const ms of [50, 250, 600, 1200]) setTimeout(resiz
 addEventListener("orientationchange", recheckSize);
 try { window.screen.orientation?.addEventListener?.("change", recheckSize); } catch (e) {}
 try { window.visualViewport?.addEventListener("resize", recheckSize); } catch (e) {}
-document.addEventListener("visibilitychange", () => { if (!document.hidden) recheckSize(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  recheckSize();
+  // 2026-11-12: ほかのアプリから戻ったとき、止まっていた間を「応答なし」と数えない（つながったままなら、そのまま続けられる）
+  const t = performance.now(); hostSeen = t;
+  for (const c of host.conns.values()) c.seen = t;
+});
+// 2026-11-12: ゲスト → ホストへ 2 秒ごとの「いるよ」（画面が裏で描き直しが止まっていても、タイマーが動く間は切られないように）
+setInterval(() => { if (mode === "client" && screen === "game" && hostConn?.open) { try { hostConn.send({ t: "ka" }); } catch (e) {} } }, 2000);
 setInterval(() => {   // 念のため: 大きさがずれていたら直す
   if (updateRot() || Math.abs(renderer.getSize(new THREE.Vector2()).x - VW) > 2) resize();
 }, 700);
@@ -1925,7 +1941,7 @@ function renderUI() {
   if (screen === "menu") {
     const off = isOffline();   // オフライン: 部屋をつくる・入るは出さない（2026-11-09）
     previewStage(practiceStage, practiceBots + 1);
-    h = `<div class="card"><h1>素因数バトル<small>おでこの数字を素因数分解して打ち込め</small></h1>${RULES}
+    h = `<div class="card"><h1>素因数バトル<small>おでこの数字を素因数分解して打ち込め</small></h1>
       <label>なまえ</label><input id="name" class="in" maxlength="12" value="${esc(store.get("soinsu-name") || "")}" placeholder="ゲスト">
       ${off ? `<div class="note">📴 オフライン: CPUとの練習だけ遊べます</div>` : `<button class="btn" data-a="host">部屋をつくる</button>
       <div class="row"><input id="code" class="in" inputmode="numeric" maxlength="4" placeholder="部屋番号（4けた）" value="${esc(urlRoom)}"><button class="btn sub" style="width:40%;margin-top:0" data-a="join">入る</button></div>`}
@@ -1935,6 +1951,7 @@ function renderUI() {
       <div class="seg">${["個人戦", "チーム戦"].map((s, i) => `<button class="${+practiceTeam === i ? "on" : ""}" data-a="pt-${i}">${s}</button>`).join("")}</div>
       ${practiceTeam ? `<div class="note">チーム戦: あなたは赤チーム。CPUは青・赤に分かれる</div>` : ""}
       <button class="btn sub" data-a="practice">CPUと練習する</button></div>
+      <details class="rd"><summary>ルール・遊び方</summary>${RULES}</details>
       <div class="row" style="margin-top:14px"><button class="btn sub" style="margin-top:0" data-a="layout">ボタン配置を変える</button><button class="btn sub" style="margin-top:0" data-a="sound">足音：${soundOn ? "ON" : "OFF"}</button></div>
       ${window.IN_HUB ? `<button class="btn sub" data-a="games">← ゲーム一覧へ（you know games）</button>` : ""}
       ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}</div>`;
@@ -2044,7 +2061,7 @@ function frame(nowMs) {
       sendT = 0;
       sendHost({ t: "pos", x: +me.x.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(3), y: +me.y.toFixed(2) });
     }
-    if (mode === "client" && nowMs - hostSeen > 10000) { errMsg = "ホストとの接続が切れました"; leave(); return; }
+    if (mode === "client" && performance.now() - hostSeen > 30000) { errMsg = "ホストとの接続が切れました"; leave(); return; }
     // 見た目
     camera.position.set(me.x, me.y + EYE, me.z); camera.rotation.set(me.pitch, me.yaw, 0);
     const fov = zoomed ? 22 : 70;
@@ -2134,7 +2151,7 @@ function hostTick(dt) {
   if (!G.over && left <= 0) checkOver(true);
   // 応答のない相手を切る（タブを閉じた・電波が切れた）
   const realMs = performance.now();
-  if (mode === "host") for (const [id, c] of [...host.conns]) if (realMs - (c.seen || realMs) > 10000) { hostDrop(id); try { c.close(); } catch (e) {} }
+  if (mode === "host") for (const [id, c] of [...host.conns]) if (realMs - (c.seen || realMs) > 30000) { hostDrop(id); try { c.close(); } catch (e) {} }
 }
 renderUI();
 requestAnimationFrame(frame);
@@ -2147,6 +2164,10 @@ if (PARTY) {
   back.addEventListener("click", () => { if (confirm("ゲーム一覧へ戻りますか？" + (PARTY.role === "host" ? "（みんなも一覧へ戻ります）" : ""))) toGames(); });
   document.body.appendChild(back);
   partyBack = back;   // 待ち合わせ画面のあいだは隠す（待ち合わせ画面に自分の「← 一覧」がある）
+  // 2026-11-12: 全画面・横向きの固定は、画面にさわったときしかできない。パーティでは最初にさわったときに横向きにする
+  //（iPhone のように固定できないときは、これまでどおり縦のまま回して表示する）
+  const firstTap = () => { for (const ev of ["touchend", "click"]) document.removeEventListener(ev, firstTap, true); goLandscape(); };
+  for (const ev of ["touchend", "click"]) document.addEventListener(ev, firstTap, true);
   if (isOffline()) { errMsg = "オフラインのためパーティに入れません。CPUと練習で遊べます"; renderUI(); }   // 2026-11-09
   else if (PARTY.role === "host") startHost(); else joinRoom(PARTY.code);
 }
