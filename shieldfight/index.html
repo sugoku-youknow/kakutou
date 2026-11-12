@@ -317,7 +317,7 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=6"></script>
+<script src="../party-beacon.js?v=7"></script>
 <script>
 "use strict";
 // LINE の中のブラウザ（アプリ内ブラウザ）は、全画面にも横画面にもできない。LINE は URL に openExternalBrowser=1 が付いていると、
@@ -3801,6 +3801,7 @@ function closeLayoutEditor() {
   commitEdit();
   editing = false; editLayout = null; document.body.classList.remove("editing");
   applyLayout(); uiKey = ""; renderUI();
+  if (window.ykgLobby && ykgLobby.active) ykgLobby.show();   // パーティの待ち合わせ画面から開いたときは、そこへ戻る
 }
 function resetLayout() {                      // この向きの配置を、標準の並びに戻す
   editing = false; applyLayout(); document.body.classList.remove("customlayout");
@@ -4752,8 +4753,13 @@ addEventListener("offline", () => { if (uiKey === "title") { uiKey = ""; renderU
 // パーティの待ち合わせ画面（全部のゲームで同じ構図。party-beacon.js）。ホストがスタートを押すと、みんなキャラ選びへ進む（2026-11-07）
 if (PARTY && window.ykgLobby && !isOffline()) {
   const rules = "盾が外れた隙を突いて、相手をステージから落とす対戦ゲーム。\nスタートのあと、それぞれキャラを選びます。";
-  if (PARTY.role === "host") ykgLobby.open({ title: "シールドファイト", rules, button: { label: "スタート", onClick: () => ykgLobby.closeAll() } });
-  else ykgLobby.open({ title: "シールドファイト", rules, wait: PARTY.spec ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" });
+  // 自分の設定（2026-11-13）: パーティではタイトル画面を飛ばすので、操作ボタンの配置と音はここで変える
+  const mine = [
+    ...(coarseMq.matches || landForce === "1" ? [{ label: "操作ボタンの配置", onClick: () => { ykgLobby.hide(); openLayoutEditor(); } }] : []),
+    { label: () => Sfx.muted ? "🔇 音：オフ" : "🔊 音：オン", onClick: () => { Sfx.init(); Sfx.setMuted(!Sfx.muted); paintMute(); Sfx.beep(false); } },
+  ];
+  if (PARTY.role === "host") ykgLobby.open({ title: "シールドファイト", rules, mine, button: { label: "スタート", onClick: () => ykgLobby.closeAll() } });
+  else ykgLobby.open({ title: "シールドファイト", rules, mine, wait: PARTY.spec ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" });
 }
 // Chrome がインストールできると判断したら、タイトル画面に「アプリとして入れる」ボタンを出す（押すと Chrome の確認が出る）
 let installEvt = null;

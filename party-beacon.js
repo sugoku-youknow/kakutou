@@ -123,7 +123,7 @@
   const inParty = !!(party && party.code != null && /[?&]party=1/.test(location.search));
   if (!inParty) {
     window.ykgToGames = () => { location.href = "../"; };
-    window.ykgLobby = { open() {}, update() {}, close() {}, closeAll() {}, active: false };
+    window.ykgLobby = { open() {}, update() {}, close() {}, closeAll() {}, hide() {}, show() {}, active: false };
     return;
   }
 
@@ -154,7 +154,11 @@
   // ゲームは ykgLobby.open({...}) で出し、update({...}) で中身を変え、試合が始まったら close() で閉じる。
   //   rules: 遊び方の文 / settings: 設定の要素（HTMLElement）か HTML の文字列 / members: [{ name, tag, me }]（省略するとパーティの合図の通り道で集めた人）
   //   button: { label, onClick, disabled }（null なら wait の文を出す） / wait: ボタンがないときの文 / status: 小さい補足の文
-  const lobbyState = { opts: null, el: null, started: false, remoteStarted: false, members: [] };
+  //   mine: 自分だけの設定（ホストもゲストも押せる）。[{ label: 文字 か () => 文字, onClick }]（2026-11-13）
+  //     パーティではゲームのタイトル画面を飛ばすので、ボタン配置・足音などはここから変える。音のオン・オフ（ykg-sfx.js）は自動で入る。
+  //   hide() / show(): 設定画面（ボタン配置など）を開くあいだだけ、待ち合わせ画面を隠す
+  const lobbyState = { opts: null, el: null, started: false, remoteStarted: false, members: [], hidden: false };
+  let sfxToggle = null;
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   function lobbyCss() {
     if (document.getElementById("ykgLobbyCss")) return;
@@ -187,6 +191,8 @@
 #ykgLobby .yl-main{display:block;width:100%;font:inherit;font-size:19px;font-weight:800;border:0;border-radius:14px;padding:16px;background:#f0b25a;color:#2a1a05}
 #ykgLobby .yl-main:disabled{background:#2a3142;color:#9aa3b5}
 #ykgLobby .yl-wait{text-align:center;font-size:16px;color:#9aa3b5;padding:16px 0}
+#ykgLobby .yl-mine{display:flex;gap:8px;flex-wrap:wrap}
+#ykgLobby .yl-mine button{flex:1 1 140px;font:inherit;font-weight:700;font-size:15px;border:0;border-radius:12px;padding:11px 8px;background:#2a3142;color:#e5e7eb;min-height:44px}
 #ykgLobby .yl-status{text-align:center;font-size:13px;color:#9aa3b5;margin-top:8px;min-height:1em}`;
     document.head.appendChild(st);
   }
@@ -204,7 +210,8 @@
       el.innerHTML = `<div class="yl-top"><button class="yl-back">← 一覧</button><div class="yl-title"></div><div class="yl-code">パーティ<b></b></div></div>
         <div class="yl-body"><div class="yl-card"><h3>参加者</h3><div class="yl-members"></div></div>
           <div class="yl-card yl-rulescard"><h3>遊び方</h3><div class="yl-rules"></div></div>
-          <div class="yl-card yl-setcard"><h3>設定</h3><div class="yl-settings"></div></div></div>
+          <div class="yl-card yl-setcard"><h3>設定</h3><div class="yl-settings"></div></div>
+          <div class="yl-card yl-minecard"><h3>自分の設定</h3><div class="yl-mine"></div></div></div>
         <div class="yl-bottom"><div class="yl-act"></div><div class="yl-status"></div></div>`;
       el.querySelector(".yl-back").onclick = () => {
         if (!isHost || confirm("ゲーム一覧へ戻りますか？（みんなも一覧へ戻ります）")) window.ykgToGames();
@@ -221,6 +228,18 @@
     el.querySelector(".yl-setcard").style.display = o.settings ? "" : "none";
     if (o.settings instanceof HTMLElement) { if (set.firstChild !== o.settings) { set.innerHTML = ""; set.appendChild(o.settings); } }
     else set.innerHTML = o.settings || "";
+    // 自分の設定（ゲームから渡されたボタン + 音のオン・オフ）
+    const mine = el.querySelector(".yl-mine"), items = Array.isArray(o.mine) ? o.mine : [];
+    mine.innerHTML = "";
+    items.forEach(it => {
+      const b = document.createElement("button"); b.type = "button";
+      b.textContent = typeof it.label === "function" ? it.label() : it.label;
+      b.onclick = () => { try { it.onClick && it.onClick(); } finally { if (lobbyState.opts) renderLobby(); } };
+      mine.appendChild(b);
+    });
+    if (window.YkgSfx && !sfxToggle) sfxToggle = window.YkgSfx.toggleButton("");
+    if (sfxToggle) mine.appendChild(sfxToggle);
+    el.querySelector(".yl-minecard").style.display = mine.children.length ? "" : "none";
     const act = el.querySelector(".yl-act");
     if (o.button) {
       let b = act.querySelector(".yl-main");
@@ -229,18 +248,20 @@
       b.onclick = () => { if (!b.disabled && o.button.onClick) o.button.onClick(); };
     } else act.innerHTML = `<div class="yl-wait">${esc(o.wait || "ホストがスタートするのを待っています…")}</div>`;
     el.querySelector(".yl-status").textContent = o.status || "";
-    el.style.display = "flex";
+    el.style.display = lobbyState.hidden ? "none" : "flex";
   }
   window.ykgLobby = {
     get active() { return !!lobbyState.opts; },
     open(opts) {
       if (!isHost && lobbyState.remoteStarted) return;   // ホストがもう始めている（途中から来た人）
-      lobbyState.opts = Object.assign({}, opts || {});
+      lobbyState.opts = Object.assign({}, opts || {}); lobbyState.hidden = false;
       if (isHost && lobbyState.started) { lobbyState.started = false; toGuests({ t: "members", list: defaultMembers(), started: false }); }
       renderLobby();
     },
     update(opts) { if (!lobbyState.opts) return; Object.assign(lobbyState.opts, opts || {}); renderLobby(); },
-    close() { lobbyState.opts = null; if (lobbyState.el) lobbyState.el.style.display = "none"; },
+    close() { lobbyState.opts = null; lobbyState.hidden = false; if (lobbyState.el) lobbyState.el.style.display = "none"; },
+    hide() { lobbyState.hidden = true; if (lobbyState.el) lobbyState.el.style.display = "none"; },
+    show() { lobbyState.hidden = false; if (lobbyState.opts) renderLobby(); },
     // ホスト: 自分の画面を閉じて、ゲストの待ち合わせ画面も閉じる（ゲームの通信で「始まった」を送らないゲーム用）
     closeAll() { this.close(); if (isHost) { lobbyState.started = true; toGuests({ t: "lobby-close" }); } },
   };

@@ -151,7 +151,7 @@ table.res td:last-child{text-align:right}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=6"></script>
+<script src="../party-beacon.js?v=7"></script>
 <script src="../ykg-sfx.js?v=1"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
 <script type="module">
@@ -1079,7 +1079,8 @@ function onMsg(m) {
     case "welcome": myId = m.spec ? -1 : m.you; spectating = !!m.spec; return;
     case "reject": errMsg = m.why; cleanupNet(); screen = "menu"; break;
     case "lobby":
-      lobbyPs = m.ps; lobbySpecs = m.specs || []; host.code = m.code; screen = "lobby"; overInfo = null; clearGame();
+      lobbyPs = m.ps; lobbySpecs = m.specs || []; host.code = m.code; overInfo = null;
+      if (screen === "layout") layoutBack = "lobby"; else { screen = "lobby"; clearGame(); }   // ボタン配置の編集中は、部屋の知らせで編集画面を閉じない（終わったら部屋へ戻る）
       if (mode === "client") { host.stage = STAGES[m.stage] ? m.stage : "random"; host.team = !!m.team; }
       previewStage(host.stage, lobbyPs.length);
       break;
@@ -1750,7 +1751,10 @@ function updLayBar() {
   if (r) r.value = Math.round(LAY[editSel].s * 100);
   if (p) p.textContent = Math.round(LAY[editSel].s * 100) + "%";
 }
+// パーティでは待ち合わせ画面（部屋）から開くので、終わったら元の画面へ戻る（2026-11-13）
+let layoutBack = "menu";
 function enterLayout() {
+  if (screen !== "layout") layoutBack = PARTY ? screen : "menu";
   screen = "layout"; goLandscape();
   $("pad").classList.remove("hidden"); $("item").classList.remove("hidden"); $("item").dataset.k = ""; $("itemi").textContent = "🔭"; $("itemt").textContent = "アイテム";
   $("ptname").textContent = "→ 相手"; $("pdisp").textContent = "2×3";
@@ -1759,7 +1763,7 @@ function enterLayout() {
   renderUI();
 }
 function exitLayout() {
-  saveLayout(); screen = "menu";
+  saveLayout(); screen = PARTY ? layoutBack : "menu";
   if (selId == null) $("pad").classList.add("hidden");
   $("item").classList.add("hidden");
   $("feed").innerHTML = ""; lastMine = ""; renderUI();
@@ -1897,10 +1901,15 @@ const TEAM_RULE = "チーム戦は相手チームを全員たおしたら勝ち�
 const stageSeg = (cur, pre) => `<div class="seg">${Object.entries(STAGES).map(([k, s]) => `<button class="${k === cur ? "on" : ""}" data-a="${pre}-${k}">${s}</button>`).join("")}</div><div class="note" style="margin-top:2px">${STAGE_NOTE[cur] || ""}</div>`;
 // パーティの待ち合わせ画面の中身（ホストの設定: CPU の数）
 let partyBack = null, partySet = null;
+// パーティの待ち合わせ画面の「自分の設定」（タイトル画面を飛ばすので、ここで変えられるように）
+const partyMine = () => [
+  { label: "ボタン配置を変える", onClick: () => enterLayout() },
+  { label: () => `足音：${soundOn ? "ON" : "OFF"}`, onClick: () => { soundOn = !soundOn; store.set("soinsu-sound", soundOn ? "1" : "0"); } },
+];
 function partyLobbyOpts() {
-  const isHost = mode === "host";
+  const isHost = mode === "host", mine = partyMine();
   const rules = "おでこの数字を素因数分解して打ち込み、相手を倒す。\n制限時間 3分（残り1分で物かげの向こうの数字も見える）。時間切れは数字がいちばん小さい人の勝ち。間違えると 2.5 秒打ち込めない。";
-  if (screen === "connecting") return { rules, button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
+  if (screen === "connecting") return { rules, mine, button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
   const members = lobbyPs.map(p => ({ name: p.name, tag: [p.id === 0 ? "ホスト" : p.bot ? "CPU" : "", host.team ? TEAM_NAME[p.tm] + "チーム" : ""].filter(Boolean).join(" "), me: p.id === myId }))
     .concat(lobbySpecs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })));
   const status = `${lobbyPs.length} / ${MAX_PLAYERS}人` + (lobbyPs.length < 2 ? "（CPU を含めて 2人以上で始められます）" : !teamsReady() ? "（チーム戦は赤と青に1人以上ずつ）" : "");
@@ -1913,7 +1922,7 @@ function partyLobbyOpts() {
     }
     const me2 = lobbyPs.find(p => p.id === myId);
     partyGuestSet.innerHTML = `<div class="yl-sub">${esc(info)}</div>` + (host.team && me2 && !spectating ? `<div class="yl-row" style="margin-top:8px"><button data-b="tm" style="background:${TEAM_CSS[me2.tm]};color:#fff">あなたは${TEAM_NAME[me2.tm]}チーム（押すと変える）</button></div>` : "");
-    return { rules, members, settings: partyGuestSet, button: null, status, wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" };
+    return { rules, members, mine, settings: partyGuestSet, button: null, status, wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" };
   }
   if (!partySet) {
     partySet = document.createElement("div");
@@ -1936,7 +1945,7 @@ function partyLobbyOpts() {
   partySet.querySelector('[data-g="tm"]').innerHTML = ["個人戦", "チーム戦"].map((s, i) => `<button data-b="tm-${i}" class="${+host.team === i ? "on" : ""}">${s}</button>`).join("");
   // チーム戦: 名前のボタンを押すと、その人のチームが変わる
   partySet.querySelector('[data-g="who"]').innerHTML = host.team ? lobbyPs.map(p => `<button data-b="sw-${p.id}" style="background:${TEAM_CSS[p.tm]};color:#fff;flex:0 1 auto">${esc(p.name)}</button>`).join("") : "";
-  return { rules, members, settings: partySet, status, button: { label: "スタート", disabled: lobbyPs.length < 2 || !teamsReady(), onClick: () => { if (teamsReady()) { hostStart(); renderUI(); } } } };
+  return { rules, members, mine, settings: partySet, status, button: { label: "スタート", disabled: lobbyPs.length < 2 || !teamsReady(), onClick: () => { if (teamsReady()) { hostStart(); renderUI(); } } } };
 }
 let partyGuestSet = null;
 function renderUI() {
