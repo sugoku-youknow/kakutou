@@ -450,9 +450,9 @@ function doRoll(s) {
   G.dice = [d1, d2]; G.rollN++; UNDO = []; G.undoN = 0;
   addLog(`🎲 ${G.ps[s].name}: ${sum}`);
   if (sum === 7) {
-    // 盗賊が来る: 10まい以上持っている人は半分なくす（えらばずに自動）
+    // 盗賊が来る: 10まい以上（大きい島は 12まい以上）持っている人は半分なくす（えらばずに自動）
     G.ps.forEach(p => {
-      const n = tot(p.hand); if (n < 10) return;
+      const n = tot(p.hand); if (n < robLim()) return;
       for (let k = 0; k < Math.floor(n / 2); k++) { const pool = RES.flatMap(r => Array(p.hand[r]).fill(r)); p.hand[pool[Math.floor(Math.random() * pool.length)]]--; }
       addLog(`🌪️ ${p.name} は ${Math.floor(n / 2)}まい なくした`);
     });
@@ -460,6 +460,8 @@ function doRoll(s) {
   } else { produce(sum); G.phase = "main"; }
   return "";
 }
+// 7 で半分なくすまい数（2026-11-13: 大きい島は 12 まい以上から）
+const robLim = () => G && G.size === "big" ? 12 : 10;
 function steal(s, v) {
   const p = G.ps[v], pool = RES.flatMap(r => Array(p.hand[r]).fill(r));
   if (!pool.length) return;
@@ -1057,7 +1059,7 @@ const rulesHtml = () => `<div class="rules">
 ②資源を使ってつくる・交換する → ③「おわり」。<br>
 <b>つくる</b>: 道 ${costHtml(COST.road)}／村 ${costHtml(COST.vil)}（1点）／町 ${costHtml(COST.town)}（村を町にする・2点）／カード ${costHtml(COST.card)}<br>
 ・村は自分の道のはしにつくる。となりの角に村や町があるところにはつくれない。<br>
-<b>7が出たら</b>: 🥷盗賊が来る！ 盗賊を好きな土地へ動かし、そこに村がある人から1まいもらう。盗賊のいる土地は資源が出ない。10まい以上持っている人は半分なくす。<br>
+<b>7が出たら</b>: 🥷盗賊が来る！ 盗賊を好きな土地へ動かし、そこに村がある人から1まいもらう。盗賊のいる土地は資源が出ない。${robLim()}まい以上持っている人は半分なくす${G ? "" : "（大きい島は 12まい以上）"}。<br>
 <b>交換</b>: 自分の番に、ほかの人へ「これを出すから、これがほしい」と🤝よびかけられる（まい数は自由）。OKした人の中から1人えらんで交換。銀行とは 4まい→1まい。港⚓にくっついた村・町があれば 3→1 や 2→1。<br>
 <b>カード</b>: ⚔️騎士（盗賊を動かす）・🧺大豊作（2まいもらう）・🌉橋づくり（道2本タダ）・🗺️宝の地図（+1点）。買った番には使えない。1番に1まいだけ。<br>
 <b>やり直し↶</b>: 自分の番のあいだなら、つくったもの・銀行との交換を取り消せる（サイコロ・カード・ほかの人との交換のあとは取り消せない）。<br>
