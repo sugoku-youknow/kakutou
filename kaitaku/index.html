@@ -284,7 +284,7 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.f
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
 // 2026-11-12: 勝利点（ふつうは 10）・はじめに置く村の数・島の大きさは、はじめる前にえらべる（G.target / G.setupN / G.size）
-// 勝利点・はじめの村は −／＋ で 1 ずつ（2026-11-12）。村は 1 人 5 つまでなので、はじめの村は 4 こまで
+// 勝利点・はじめの村は −／＋ で 1 ずつ（2026-11-12）。はじめの村は、島がすぐうまらないよう 4 こまで
 // 勝利点の上限: ふつうの島は 12、大きい島は 15。それより大きいと、4 人だと島がうまって、だれも点をふやせず終わらないことがある
 const OPT = { target: [3, 15], setupN: [1, 4], size: { std: "ふつう（19マス）", big: "大きい（37マス）" } };
 const CFG_DEF = { target: 10, setupN: 2, size: "std" };
@@ -307,7 +307,8 @@ const TT = {
 const COST = { road: { wood: 1, brick: 1 }, vil: { wood: 1, brick: 1, sheep: 1, wheat: 1 }, town: { wheat: 2, ore: 3 }, card: { sheep: 1, wheat: 1, ore: 1 } };
 const emptyHand = () => Object.fromEntries(RES.map(r => [r, 0]));
 const BN = { road: "道", vil: "村", town: "町", card: "カード" };
-const LIM = { road: 15, vil: 5, town: 4 };
+// 2026-11-13: 道・村・町の上限はなし（置ける場所がある限りつくれる）
+const LIM = { road: Infinity, vil: Infinity, town: Infinity };
 const CARD = {
   knight: { name: "騎士", ic: "⚔️", txt: "盗賊を好きな土地へ動かして、そこの人から1まいもらう（3回以上使うと最大騎士力をねらえる）" },
   harvest: { name: "大豊作", ic: "🧺", txt: "好きな資源を2まいもらう" },
@@ -412,8 +413,10 @@ function ratio(s, r) {
 }
 // いちばん長い道（ほかの人の村・町のところで切れる）
 function longest(s) {
-  let best = 0; const used = new Set();
+  // 2026-11-13: 道の上限がなくなったので、輪がたくさんある道でも止まらないよう、さがす手数に上限（20 万）をつける
+  let best = 0, steps = 0; const used = new Set();
   const dfs = v => {
+    if (++steps > 200000) return;
     best = Math.max(best, used.size);
     const b = G.vb[v]; if (used.size && b && b.p !== s) return;
     for (const e of GEO.verts[v].e) {
@@ -1695,7 +1698,7 @@ function renderModal() {
         <dt>カード</dt><dd>所有数 ${nc}まい ・ 使用済 ${p.used || 0}まい</dd>
         <dt>騎士</dt><dd>${p.kn || 0}回${G.armyHolder === i ? "（最大騎士力）" : ""}</dd>
         <dt>最長道</dt><dd>${p.lr}${G.roadHolder === i ? "（最長道ボーナス中）" : ""}</dd>
-        <dt>建設物</dt><dd>道 ${p.roads}/${LIM.road} ・ 村 ${p.vils}/${LIM.vil} ・ 町 ${p.towns}/${LIM.town}</dd>
+        <dt>建設物</dt><dd>道 ${p.roads} ・ 村 ${p.vils} ・ 町 ${p.towns}</dd>
         <dt>銀行との交換</dt><dd>${rateTxt}</dd>
       </dl>
       <button data-m="close">とじる</button>`;
