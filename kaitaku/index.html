@@ -1305,9 +1305,16 @@ function renderBoard() {
       + `<circle cx="${mx}" cy="${my}" r="9" fill="#fff" class="hl" pointer-events="none"/><circle cx="${mx}" cy="${my}" r="20" fill="transparent" data-e="${e}"/>`;
   }
   // 村・町
+  // 2026-11-13: 確率表示モードのときは、建てた村・町の中にも、その角の確率（まわりの土地が出る確率の合計 %）を出す。
+  // 数字が読めるよう、そのあいだはアイコンを大きくする（色・大きさは確率では変えない）
+  const big = ui.probMode && G.phase !== "over", ks = big ? 1.55 : 1;
   G.vb.forEach((b, v) => {
     if (!b) return; const [x, y] = P(v);
-    s += `<path d="${b.lv === 2 ? TOWN_PATH : VIL_PATH}" transform="translate(${x},${y})" fill="${COLS[b.p]}" stroke="#111" stroke-width="2.2" stroke-linejoin="round"/>`;
+    s += `<path d="${b.lv === 2 ? TOWN_PATH : VIL_PATH}" transform="translate(${x},${y}) scale(${ks})" fill="${COLS[b.p]}" stroke="#111" stroke-width="${big ? 1.6 : 2.2}" stroke-linejoin="round"/>`;
+    if (big) {
+      const w = GEO.verts[v].h.reduce((a, ti) => a + (ti === G.crow ? 0 : pips(G.tiles[ti].n)), 0);
+      s += `<text x="${x + (b.lv === 2 ? 2 : 0)}" y="${y + 7.5}" font-size="11" font-weight="900" text-anchor="middle" fill="#fff" stroke="#000" stroke-width="2.8" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${Math.round(w / 36 * 100)}</text>`;
+    }
   });
   // 確率表示モード: 村を置ける角（となりに村・町がない角）ごとに、まわりの土地が出る確率の合計。高いほど赤く大きい
   const pm = new Map();
