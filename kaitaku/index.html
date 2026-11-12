@@ -42,29 +42,33 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 #stage{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;pointer-events:none;z-index:10}
 #stage>*{pointer-events:auto}
 #stage>#toast{pointer-events:none}
-#game{position:absolute;top:0;bottom:env(safe-area-inset-bottom);left:env(safe-area-inset-left);right:env(safe-area-inset-right);overflow:hidden}
-#top{position:absolute;top:3px;left:6px;right:6px;height:44px;display:flex}
-#pls{flex:1;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;min-width:0;max-width:900px;margin:0 auto}
-/* 人の帯: 丸い点数バッジ + その人の色のリボン（名前・手札・カード・道の長さ） */
-.pl{display:flex;align-items:center;min-width:0;position:relative}
+#game{position:absolute;top:env(safe-area-inset-top);bottom:env(safe-area-inset-bottom);left:env(safe-area-inset-left);right:env(safe-area-inset-right);overflow:hidden}
+/* 2026-11-12: 人は盤の四すみに（上のまん中はスマホのカメラと重なるので使わない）。タップでくわしく */
+#pls{position:absolute;inset:0;pointer-events:none;z-index:3}
+/* 人: 丸い点数バッジ + その人の色のリボン（名前・手札・カード・道の長さ） */
+.pl{display:flex;align-items:center;min-width:0;position:absolute;pointer-events:auto;cursor:pointer;width:max-content;max-width:min(42%,210px)}
+.pl.c0{left:2px;top:2px}.pl.c1{right:2px;top:2px}.pl.c2{right:2px;bottom:100px}.pl.c3{left:2px;bottom:4px}
+.pl:active{transform:scale(.96)}
 .vpb{flex:none;width:34px;height:34px;border-radius:50%;background:#2b1a0e;border:3px solid var(--pc);color:#fff;font-weight:800;font-size:17px;display:grid;place-items:center;box-shadow:0 2px 5px #0009;z-index:1}
 .pi{flex:1;min-width:0;margin-left:-12px;padding:2px 10px 3px 15px;background:linear-gradient(#ffffff26,#0000 45%,#0003),var(--pc);clip-path:polygon(0 0,100% 0,calc(100% - 7px) 50%,100% 100%,0 100%);box-shadow:0 2px 4px #0006}
 .pi .nm{font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000,0 0 3px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pi .st{display:flex;gap:5px;white-space:nowrap;font-size:11px;color:#fff;background:#0007;border-radius:5px;padding:0 4px;width:max-content;max-width:100%;overflow:hidden}
+.pi .st{display:flex;flex-wrap:wrap;column-gap:6px;white-space:nowrap;font-size:11px;color:#fff;background:#0007;border-radius:5px;padding:0 4px;width:max-content;max-width:100%;overflow:hidden}
 .pi .st .lr{color:var(--acc);font-weight:800}
 .pl.cur .vpb{border-color:#ffd54a;box-shadow:0 0 0 2px #ffd54a,0 0 12px #ffd54a}
 .pl.cur::after{content:"";position:absolute;left:12px;bottom:-7px;border:5px solid transparent;border-top-color:#ffd54a}
-#side{position:absolute;left:5px;top:54px;display:flex;flex-direction:column;gap:6px;z-index:4}
+#side{position:absolute;left:5px;top:4px;display:flex;flex-direction:column;gap:6px;z-index:4}
 #side button{width:40px;height:40px;min-height:0;padding:0;font-size:18px;border-radius:9px;color:#2a1a05;background:linear-gradient(#f3b84f,#c9822a);border-bottom:3px solid #7a4a14;position:relative;box-shadow:0 2px 4px #0007}
+#side .pr{font-size:12px;font-weight:800;line-height:1}
 #side .bd{position:absolute;right:-5px;top:-5px;min-width:18px;background:#c0392b;color:#fff;font-size:11px;line-height:18px;border-radius:9px;padding:0 4px}
-#boardWrap{position:absolute;top:47px;bottom:56px;left:48px;right:4px;overflow:hidden}
+#boardWrap{position:absolute;top:4px;bottom:56px;left:48px;right:4px;overflow:hidden}
 #board{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation;overflow:visible}
-#ban{position:absolute;top:50px;left:50%;transform:translateX(-50%);max-width:min(64%,560px);padding:4px 14px;border-radius:99px;background:var(--panel);font-size:13px;font-weight:700;z-index:4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px;pointer-events:none;box-shadow:0 2px 6px #0007}
+#ban{position:absolute;top:6px;left:50%;transform:translateX(-50%);max-width:min(40%,420px);padding:4px 14px;border-radius:99px;background:var(--panel);font-size:13px;font-weight:700;z-index:4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px;pointer-events:none;box-shadow:0 2px 6px #0007}
 #ban:empty{display:none}
 #ban.my{background:var(--acc);color:#2a1a05}
 #bigDice{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;gap:16px;z-index:6;pointer-events:none}
 #bigDice .die{width:64px;height:64px;padding:8px;border-radius:12px;box-shadow:0 6px 16px #000a}
 #log{position:absolute;left:52px;bottom:58px;max-width:42%;font-size:12px;line-height:1.4;color:#fff;text-shadow:0 1px 2px #000,0 0 4px #000;pointer-events:none;z-index:2}
+#game.p4 #log{bottom:104px}
 #log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.7}
 #log div:last-child{opacity:1}
 /* 手札: 下の赤茶のトレイに資源カード */
@@ -95,18 +99,19 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 @keyframes goIn{from{opacity:.25;transform:scale(.92)}to{opacity:1;transform:none}}
 /* たて持ち: 盤は画面はばいっぱい。下に手札トレイ、その下にボタン 2 段（つくる 4 つ / おわり・やり直し・交換） */
 @media (orientation:portrait){
-  #boardWrap{top:47px;left:0;right:0;bottom:180px}
-  /* アイコンは ≡ だけを右上に（あそびかた・できごとはメニューから、カードは手札の 🃏 から） */
-  #side{top:5px;left:auto;right:5px}
+  #boardWrap{top:4px;left:0;right:0;bottom:180px}
+  /* アイコンは ≡ と 確率 だけを上のまん中に（四すみは人。あそびかた・できごとはメニューから、カードは手札の 🃏 から） */
+  #side{top:4px;left:50%;transform:translateX(-50%);flex-direction:row}
   #side button{width:40px;height:40px}
-  #side button:not(:first-child){display:none}
-  #top{right:52px}
-  #pls{gap:4px}
+  #side button:not(:first-child):not(.pr){display:none}
+  .pl{max-width:calc(50% - 48px)}
+  .pl.c2{bottom:4px}
   .vpb{width:28px;height:28px;font-size:14px;border-width:2px}
   .pi{margin-left:-9px;padding:2px 7px 3px 11px}
   .pi .nm{font-size:11px}
-  #ban{top:51px;max-width:calc(100% - 96px)}
+  #ban{top:50px;max-width:calc(100% - 96px)}
   #log{left:8px;bottom:182px;max-width:72%}
+  #game.p4 #log{bottom:228px}
   #hand{left:6px;right:6px;bottom:116px;max-width:none}
   .rc{font-size:10px}.rc .ic{font-size:18px}.rc b{font-size:16px}
   #corner{left:6px;right:6px;bottom:4px;align-items:stretch}
@@ -171,6 +176,12 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .tc .hc{position:absolute;left:3px;bottom:2px;font-size:12px;font-weight:800;background:#000a;color:#fff;border-radius:5px;padding:0 4px;line-height:1.3}
 .tc .rt{position:absolute;left:2px;top:1px;font-size:9px;font-weight:800;color:#b45309}
 .tc .sel{position:absolute;right:-6px;top:-8px;min-width:22px;background:#2f9a48;color:#fff;font-size:13px;font-weight:800;border-radius:11px;padding:0 5px;border:2px solid #fff;line-height:18px}
+#tradeBox .tcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+#tradeBox .tcol .tc{flex:none;width:100%}
+#tradeBox .pm{display:flex;gap:3px}
+#tradeBox .pm button{flex:1;min-width:0;height:30px;min-height:0;padding:0;font-size:18px;font-weight:800;border-radius:7px;background:#475569;color:#fff}
+#tradeBox .pm button:disabled{opacity:.3}
+#tradeBox .who .av.tx2{font-size:11px;font-weight:800;color:#fff}
 #tradeBox .tbar{display:flex;align-items:center;gap:7px;margin-top:5px}
 #tradeBox .sp{flex:1}
 #tradeBox .pc{width:30px;height:30px;min-height:0;padding:0;border-radius:50%;border:3px solid #fff;background:var(--pc)}
@@ -200,6 +211,17 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .cl .cd{flex:1;font-size:13px;line-height:1.4}
 .cl .cd b{font-size:15px}
 .cl button{flex:none}
+/* サイコロの確率・人のくわしい情報 */
+.prow{display:flex;align-items:center;gap:8px;font-size:13px}
+.prow .pn{width:26px;text-align:right;font-weight:800;font-size:18px}
+.prow.red .pn{color:#ff8a7a}
+.pbar{flex:1;height:14px;background:var(--deep);border-radius:7px;overflow:hidden;min-width:40px}
+.pbar i{display:block;height:100%;background:var(--acc)}
+.prow.red .pbar i{background:#e0533f}
+.prow .pp{width:92px;text-align:right;color:var(--sub);font-variant-numeric:tabular-nums}
+.prow .ptl{width:64px;font-size:14px;letter-spacing:-2px;white-space:nowrap;overflow:hidden}
+.pinfo{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px;background:var(--deep);border-radius:12px;padding:10px 12px}
+.pinfo dt{color:var(--sub)}.pinfo dd{margin:0;font-weight:700}
 .rank{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:var(--deep);font-size:16px}
 .rank.win{background:#5a4512}
 #toast{position:fixed;left:50%;top:40%;transform:translateX(-50%);background:rgba(0,0,0,.85);padding:10px 18px;border-radius:12px;font-size:15px;transition:opacity .3s;opacity:0;pointer-events:none;z-index:60;max-width:90%;text-align:center}
@@ -210,10 +232,9 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 <div id="lobby" class="scr hidden"></div>
 <div id="stage">
 <div id="game" class="hidden">
-  <div id="top"><div id="pls"></div></div>
-  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="bigDice"></div></div>
+  <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="bigDice"></div><div id="pls"></div></div>
   <div id="ban"></div>
-  <div id="side"><button data-g="menu" aria-label="メニュー">≡</button><button data-g="rules" aria-label="あそびかた">📖</button><button data-g="log" aria-label="できごと">📜</button><button data-g="cards" aria-label="ふしぎカード">🃏<span class="bd hidden" id="cardBd"></span></button></div>
+  <div id="side"><button data-g="menu" aria-label="メニュー">≡</button><button class="pr" data-g="prob" aria-label="サイコロの確率">確率</button><button data-g="rules" aria-label="あそびかた">📖</button><button data-g="log" aria-label="できごと">📜</button><button data-g="cards" aria-label="ふしぎカード">🃏<span class="bd hidden" id="cardBd"></span></button></div>
   <div id="log"></div>
   <div id="hand"></div>
   <div id="corner"><div id="dice"></div><div id="acts"></div></div>
@@ -457,9 +478,9 @@ function trade(s, a) {
 }
 // ---- プレイヤーどうしの交換（2026-11-11）----
 // 番の人が「出す・ほしい」を出す → ほかの人が OK／ことわる → 番の人が OK した人から 1 人えらぶと交換。
-// 提案は 1 ターンに 5 回まで。番の人がほかのこと（つくる・銀行と交換・おわり など）をしたら、提案は消える。
+// 2026-11-12: 提案の回数の上限はなし（CPU は自分の番に 1 回だけ）。番の人がほかのこと（つくる・銀行と交換・おわり など）をしたら、提案は消える。
 // 2026-11-11: CPU の提案に人が気づかないと、その間ずっと次の人がサイコロをふれなかった（20 秒）。8 秒にして、のこり秒数を見せる
-const OFFER_MAX = 5, OFFER_WAIT = 8000;   // CPU の提案は、人の返事を最大 8 秒待つ（返事がなければ「ことわった」あつかい）
+const OFFER_WAIT = 8000;   // CPU の提案は、人の返事を最大 8 秒待つ（返事がなければ「ことわった」あつかい）
 const amtStr = o => RES.filter(r => o[r]).map(r => RI[r] + o[r]).join("");
 function cleanAmt(o) {
   if (!o || typeof o !== "object") return null;
@@ -469,7 +490,6 @@ function cleanAmt(o) {
 }
 function offer(s, a) {
   const p = G.ps[s];
-  if (G.offN >= OFFER_MAX) return `提案は1ターンに${OFFER_MAX}回まで`;
   const give = cleanAmt(a.give), get = cleanAmt(a.get);
   if (!give || !get) return "出す資源とほしい資源をえらんでね";
   if (RES.some(r => give[r] && get[r])) return "同じ資源を出してもらうことはできません";
@@ -1247,8 +1267,9 @@ function render() {
   if (!myTurn || G.phase !== "main") ui.mode = null;
   if (myTurn && G.phase === "main" && G.free > 0) ui.mode = "road";
   // 人
-  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length; return `<div class="pl ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" style="--pc:${COLS[i]}"><div class="vpb">${vp(i)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}</div>
-    <div class="st"><span>✋${tot(p.hand)}</span>${nc ? `<span>🃏${nc}</span>` : ""}${p.lr ? `<span class="${G.roadHolder === i ? "lr" : ""}">🛤️${p.lr}</span>` : ""}</div></div></div>`; }).join("");
+  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="vpb">${vp(i)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
+    <div class="st"><span>手札${tot(p.hand)}</span>${nc ? `<span>カード${nc}</span>` : ""}${p.lr ? `<span class="${G.roadHolder === i ? "lr" : ""}">道${p.lr}</span>` : ""}</div></div></div>`; }).join("");
+  $("game").classList.toggle("p4", G.ps.length >= 4);
   const bt = bannerText();
   $("ban").className = bt.my ? "my" : ""; $("ban").innerHTML = bt.h;
   renderBoard(); updDice();
@@ -1324,40 +1345,45 @@ function renderTrade(s, me, myTurn) {
   const box = $("tradeBox");
   if (!(ui.trade && me && myTurn && G.phase === "main" && !G.free)) { ui.trade = false; box.classList.add("hidden"); box.innerHTML = ""; return; }
   box.classList.remove("hidden");
-  const o = G.offer, who = (av, bg, lbl) => `<div class="who"><div class="av" style="background:${bg}">${av}</div>${lbl}</div>`;
+  const o = G.offer, who = (av, bg, lbl, t) => `<div class="who"><div class="av ${t ? "tx2" : ""}" style="background:${bg}">${av}</div>${lbl}</div>`;
   if (o && o.from === s) {
-    const st = { null: "⏳ 考え中", ok: "⭕ OK", no: "❌ ことわった", cant: "✋ 持っていない" };
+    const st = { null: "⏳ 考え中", ok: "⭕ OK", no: "❌ ことわった", cant: "資源がたりない" };
     box.innerHTML = `<div class="tt">交換のよびかけ中</div>`
       + `<div class="tsum">${RES.filter(r => o.give[r]).map(r => cardHtml(r) + `<b class="m">−${o.give[r]}</b>`).join("")}<span>⇄</span>${RES.filter(r => o.get[r]).map(r => cardHtml(r) + `<b class="p">+${o.get[r]}</b>`).join("")}</div>`
       + G.ps.map((q, i) => i === s || o.resp[i] === "skip" ? "" : `<div class="tst"><i class="dot" style="background:${COLS[i]}"></i><b>${esc(q.name)}</b><span>${st[o.resp[i]]}</span><button data-x="accept" data-p="${i}" ${o.resp[i] === "ok" ? "" : "disabled"}>交換する</button></div>`).join("")
       + `<div class="tbar"><span class="sp"></span><button class="tx no" data-x="cancel" aria-label="とりけす">⇤</button><button class="tx" data-x="close" aria-label="とじる">▾</button></div>`;
     return;
   }
-  const bank = ui.tm === "bank", left = OFFER_MAX - G.offN;
+  const bank = ui.tm === "bank";
+  // 2026-11-12: プレイヤーとの交換は、それぞれの資源の下の − ＋ で数を決める
+  const pm = (k, r, cm, cp) => bank ? "" : `<div class="pm"><button data-x="dec" data-k="${k}" data-r="${r}" ${cm ? "" : "disabled"} aria-label="${RN[r]}をへらす">−</button><button data-x="inc" data-k="${k}" data-r="${r}" ${cp ? "" : "disabled"} aria-label="${RN[r]}をふやす">＋</button></div>`;
   const top = RES.map(r => {
     const n = bank ? (ui.get === r ? 1 : 0) : (ui.pw[r] || 0);
-    return `<button class="tc ${n ? "on" : ""}" data-x="w" data-r="${r}" style="--rc:${RCOL[r]}" ${bank && ui.give === r ? "disabled" : ""}>${RI[r]}${n ? `<span class="sel" ${bank ? "" : `data-minus="pw"`} data-r="${r}">${n}</span>` : ""}</button>`;
+    return `<div class="tcol"><button class="tc ${n ? "on" : ""}" data-x="w" data-r="${r}" style="--rc:${RCOL[r]}" ${bank && ui.give === r ? "disabled" : ""}>${RI[r]}${n ? `<span class="sel">${n}</span>` : ""}</button>${pm("pw", r, n > 0, n < 19)}</div>`;
   }).join("");
   const bot = RES.map(r => {
     const x = ratio(s, r), n = bank ? (ui.give === r ? x : 0) : (ui.pg[r] || 0), dim = bank ? me.hand[r] < x : !me.hand[r];
-    return `<button class="tc ${n ? "on" : ""} ${dim ? "dim" : ""}" data-x="g" data-r="${r}" style="--rc:${RCOL[r]}">${RI[r]}<span class="hc">${me.hand[r]}</span>${bank && x < 4 ? `<span class="rt">${x}:1</span>` : ""}${n ? `<span class="sel" ${bank ? "" : `data-minus="pg"`} data-r="${r}">${n}</span>` : ""}</button>`;
+    return `<div class="tcol"><button class="tc ${n ? "on" : ""} ${dim ? "dim" : ""}" data-x="g" data-r="${r}" style="--rc:${RCOL[r]}">${RI[r]}<span class="hc">${me.hand[r]}</span>${bank && x < 4 ? `<span class="rt">${x}:1</span>` : ""}${n ? `<span class="sel">${n}</span>` : ""}</button>${pm("pg", r, n > 0, n < me.hand[r])}</div>`;
   }).join("");
-  const ok = bank ? !!(ui.give && ui.get && ui.give !== ui.get) : RES.some(r => ui.pg[r]) && RES.some(r => ui.pw[r]) && ui.to.length > 0 && left > 0;
+  const ok = bank ? !!(ui.give && ui.get && ui.give !== ui.get) : RES.some(r => ui.pg[r]) && RES.some(r => ui.pw[r]) && ui.to.length > 0;
   const hint = bank ? "下で出す資源、上でもらう資源をえらんでね（港があれば少なくてすむ）"
-    : left > 0 ? "上にほしい資源、下に出す資源をタップ。緑の数字をタップすると1まいへらせる" : "このターンはもうよびかけられません";
+    : "上の段にほしい資源、下の段に出す資源。それぞれの − ＋ で数を決めてね";
   const pcs = bank ? "" : G.ps.map((q, i) => i === s ? "" : `<button class="pc ${ui.to.includes(i) ? "" : "off"}" data-x="to" data-p="${i}" style="--pc:${COLS[i]}" aria-label="${esc(q.name)}"></button>`).join("");
   box.innerHTML = `<div class="tt">${bank ? "銀行・港と交換" : "プレイヤーと交換"}</div><div class="th">${hint}</div>
     <div class="trow">${who(bank ? "🏛️" : "👥", "#64748b", bank ? "もらう" : "ほしい")}${top}</div>
-    <div class="trow">${who("✋", COLS[s], "出す")}${bot}</div>
+    <div class="trow">${who("あなた", COLS[s], "出す", 1)}${bot}</div>
     <div class="tbar">${pcs}<span class="sp"></span><button class="tab ${bank ? "" : "on"}" data-x="tm" data-v="player" aria-label="プレイヤーと">👤</button><button class="tab bk ${bank ? "on" : ""}" data-x="tm" data-v="bank" aria-label="銀行・港と">🏛️</button><span class="sp"></span><button class="tx no" data-x="close" aria-label="とじる">⇤</button><button class="tx ok" data-x="ok" ${ok ? "" : "disabled"} aria-label="${bank ? "交換する" : "よびかける"}">✓</button></div>`;
 }
 $("tradeBox").addEventListener("click", e => {
   if (!G) return; const s = mySeat(), me = G.ps[s]; if (!me) return;
-  const mi = e.target.closest("[data-minus]");
-  if (mi) { const k = mi.dataset.minus, r = mi.dataset.r; ui[k][r] = Math.max(0, (ui[k][r] || 0) - 1); render(); return; }
   const b = e.target.closest("[data-x]"); if (!b || b.disabled) return;
   const x = b.dataset.x, r = b.dataset.r, bank = ui.tm === "bank";
-  if (x === "w") { if (bank) ui.get = ui.get === r ? null : r; else { ui.pw[r] = (ui.pw[r] || 0) + 1; ui.pg[r] = 0; } }
+  if (x === "dec") { const k = b.dataset.k; ui[k][r] = Math.max(0, (ui[k][r] || 0) - 1); }
+  else if (x === "inc") {
+    if (b.dataset.k === "pg") { if ((ui.pg[r] || 0) >= me.hand[r]) { toast(`${RN[r]}はもう出せません`); return; } ui.pg[r] = (ui.pg[r] || 0) + 1; ui.pw[r] = 0; }
+    else { ui.pw[r] = Math.min(19, (ui.pw[r] || 0) + 1); ui.pg[r] = 0; }
+  }
+  else if (x === "w") { if (bank) ui.get = ui.get === r ? null : r; else { ui.pw[r] = (ui.pw[r] || 0) + 1; ui.pg[r] = 0; } }
   else if (x === "g") {
     if (bank) { if (me.hand[r] < ratio(s, r)) { toast(`${RN[r]}が${ratio(s, r)}まい いります`); return; } ui.give = ui.give === r ? null : r; if (ui.get === ui.give) ui.get = null; }
     else { if ((ui.pg[r] || 0) >= me.hand[r]) { toast(`${RN[r]}はもう出せません`); return; } ui.pg[r] = (ui.pg[r] || 0) + 1; ui.pw[r] = 0; }
@@ -1381,7 +1407,8 @@ $("game").addEventListener("click", e => {
   else if (g === "undo") { ui.mode = null; act({ k: "undo" }); }
   else if (g === "trade") { if (ui.trade) ui.trade = false; else { ui.mode = null; openTrade(); } render(); }
   else if (g === "cards") openModal("cards");
-  else if (g === "menu" || g === "rules" || g === "log") openModal(g);
+  else if (g === "menu" || g === "rules" || g === "log" || g === "prob") openModal(g);
+  else if (g === "pinfo") { ui.pinfo = +b.dataset.p; openModal("pinfo"); }
   else if (g === "leave") leave();
   else if (g === "result") openModal("over");
   else if (g.startsWith("b-")) {
@@ -1405,10 +1432,36 @@ function renderModal() {
   const s = mySeat(), me = G && s >= 0 ? G.ps[s] : null, myTurn = G && s >= 0 && G.cur === s;
   let h = "";
   if (k === "rules") h = `<h2>あそびかた</h2>${RULES_HTML}<button data-m="close">とじる</button>`;
-  else if (k === "menu") h = `<h2>メニュー</h2><button data-m="rules">あそびかた</button><button data-m="log">これまでのできごと</button>
+  else if (k === "menu") h = `<h2>メニュー</h2><button data-m="rules">あそびかた</button><button data-m="prob">サイコロの確率</button><button data-m="log">これまでのできごと</button>
       <button data-m="quit">${PARTY ? "ゲーム一覧へ" : mode === "local" ? "やめてメニューへ" : "部屋をぬける"}</button><button data-m="close">とじる</button>`;
   else if (k === "log") h = `<h2>できごと</h2><div class="note" style="max-height:50vh;overflow-y:auto">${G.log.slice().reverse().map(l => `<div>${esc(l)}</div>`).join("")}</div><button data-m="close">とじる</button>`;
-  else if (k === "steal") {
+  else if (k === "prob") {
+    // 2 こ のサイコロの合計が出る確率と、その数字の土地（✖ はカラスがいて出ない）。あなたの村・町が取れるまい数も
+    const mine = n => { let c = 0; if (s < 0) return 0; G.tiles.forEach((t, ti) => { if (t.n !== n || ti === G.crow) return; GEO.hex[ti].c.forEach(v => { const b = G.vb[v]; if (b && b.p === s) c += b.lv; }); }); return c; };
+    h = `<h2>🎲 サイコロの確率</h2><div class="note" style="text-align:center">2こ の合計。6 と 8 がいちばん出やすい（7 はカラス）</div>`
+      + [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => {
+        const w = 6 - Math.abs(7 - n), tl = G.tiles.map((t, ti) => t.n === n ? (ti === G.crow ? "✖" : RI[resOf(ti)]) : "").join(""), m = mine(n);
+        return `<div class="prow ${n === 6 || n === 8 ? "red" : ""}"><span class="pn">${n}</span><span class="pbar"><i style="width:${w / 6 * 100}%"></i></span><span class="pp">${w}/36（${(w / 36 * 100).toFixed(1)}%）</span><span class="ptl">${n === 7 ? "カラス" : tl}${m ? `<b style="letter-spacing:0;color:#5ee07a"> +${m}</b>` : ""}</span></div>`;
+      }).join("")
+      + `<div class="note">右の絵はその数字の土地（✖ はカラスがいて出ない）。<b style="color:#5ee07a">+数</b> は、出たときにあなたがもらえるまい数。</div><button data-m="close">とじる</button>`;
+  } else if (k === "pinfo") {
+    const i = ui.pinfo, p = G && G.ps[i];
+    if (!p) { ui.modal = null; $("modal").classList.add("hidden"); return; }
+    const me2 = i === s, nc = p.cards.length + p.newC.length;
+    const two = RES.filter(r => ratio(i, r) === 2), rest = RES.filter(r => ratio(i, r) !== 2), base = rest.length ? ratio(i, rest[0]) : 0;
+    const rateTxt = two.map(r => `${RI[r]}2:1`).join(" ") + (two.length && rest.length ? " ・ ほか " : "") + (rest.length ? `${base}:1` : "") + (base === 4 && !two.length ? "（港なし）" : "");
+    h = `<h2><i class="dot" style="background:${COLS[i]};width:16px;height:16px"></i> ${esc(p.name)}${p.bot ? " 🤖" : ""}${me2 ? "（あなた）" : ""}</h2>
+      <dl class="pinfo" style="margin:0">
+        <dt>点数</dt><dd>${vp(i)}点（${TARGET}点で勝ち）</dd>
+        <dt>うちわけ</dt><dd>村 ${p.vils}×1 ・ 町 ${p.towns}×2${G.roadHolder === i ? " ・ 長い道 +2" : ""}${p.vpC ? ` ・ 宝の地図 +${p.vpC}` : ""}</dd>
+        <dt>手札</dt><dd>${tot(p.hand)}まい${me2 ? `<br><span style="font-weight:400">${RES.map(r => `${RI[r]}${p.hand[r]}`).join(" ")}</span>` : ""}</dd>
+        <dt>ふしぎカード</dt><dd>持っている ${nc}まい ・ 使った ${p.used || 0}まい</dd>
+        <dt>いちばん長い道</dt><dd>${p.lr}${G.roadHolder === i ? "（長い道ボーナス中）" : ""}</dd>
+        <dt>建てたもの</dt><dd>道 ${p.roads}/${LIM.road} ・ 村 ${p.vils}/${LIM.vil} ・ 町 ${p.towns}/${LIM.town}</dd>
+        <dt>銀行との交換</dt><dd>${rateTxt}</dd>
+      </dl>
+      ${me2 ? "" : `<div class="note" style="text-align:center">手札の中身は見えません（合計まい数だけ）</div>`}<button data-m="close">とじる</button>`;
+  } else if (k === "steal") {
     if (!G || G.phase !== "steal") { ui.modal = null; $("modal").classList.add("hidden"); return; }
     h = `<h2>だれから1まいもらう？</h2><div class="stealRow">${G.victims.map(i => `<button class="stb" data-m="steal" data-p="${i}" style="--pc:${COLS[i]}"><b>${esc(G.ps[i].name)}</b><small>${tot(G.ps[i].hand)}まい</small></button>`).join("")}</div>`;
   } else if (k === "cards") {
@@ -1439,7 +1492,7 @@ $("modal").addEventListener("click", e => {
   const b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
   const m = b.dataset.m;
   if (m === "close") { ui.modal = null; renderModal(); if (G) render(); return; }
-  if (m === "rules" || m === "log") { ui.modal = m; renderModal(); return; }
+  if (m === "rules" || m === "log" || m === "prob") { ui.modal = m; renderModal(); return; }
   if (m === "quit") { ui.modal = null; renderModal(); if (PARTY || mode === "local" || confirm("部屋をぬけますか？")) leave(); return; }
   if (m === "steal") { ui.modal = null; act({ k: "steal", p: +b.dataset.p }); renderModal(); return; }
   if (m === "use") {
