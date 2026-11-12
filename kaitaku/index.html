@@ -468,7 +468,7 @@ function steal(s, v) {
   const p = G.ps[v], pool = RES.flatMap(r => Array(p.hand[r]).fill(r));
   if (!pool.length) return;
   const r = pool[Math.floor(Math.random() * pool.length)];
-  p.hand[r]--; G.ps[s].hand[r]++;
+  p.hand[r]--; G.ps[s].hand[r]++; if (G.rob) G.rob[v] += 0.5;
   addLog(`${G.ps[s].name} が ${p.name} から1まいもらった`);
 }
 function endTurn() {
@@ -630,6 +630,9 @@ function applyAct(s, a) {
     case "crow": {
       if (a.k !== "crow" || !(Number.isInteger(a.t) && a.t >= 0 && a.t < GEO.hex.length) || a.t === G.crow) return "盗賊は別の土地へ動かしてね";
       G.crow = a.t;
+      // だれがねらわれたかをおぼえる（CPU が同じ人ばかりねらわないように）
+      G.rob = (G.rob || G.ps.map(() => 0)).map(x => x * 0.6);
+      new Set(GEO.hex[a.t].c.map(v => G.vb[v]).filter(b => b && b.p !== s).map(b => b.p)).forEach(q => { G.rob[q] += 1; });
       const vic = [...new Set(GEO.hex[a.t].c.map(v => G.vb[v]).filter(b => b && b.p !== s && tot(G.ps[b.p].hand) > 0).map(b => b.p))];
       addLog(`🥷 ${p.name} が盗賊を${TT[G.tiles[a.t].t].name}${G.tiles[a.t].n ? "(" + G.tiles[a.t].n + ")" : ""}へ`);
       if (vic.length > 1) { G.phase = "steal"; G.victims = vic; return ""; }
@@ -725,15 +728,32 @@ function leaderOf(s, among) {
   const c = (among || G.ps.map((_, i) => i)).filter(i => i !== s);
   return bestBy(c, i => vp(i) * 100 + tot(G.ps[i].hand));
 }
+// 2026-11-13: CPU が盗賊でみんな同じ人（たいてい人間）をねらっていた。全員が「点が同じなら手札が多い人」をトップと見ていたため。
+// ・トップをねらうのは、2 点以上はなれているときだけ（しかも少しだけ）
+// ・さっき盗賊を置かれた・奪われた人は、しばらくねらいにくい（G.rob: 盗賊が動くたびに 0.6 倍にへる）
+// ・奪う相手は、手札の多さでくじびき（つよい CPU だけはいちばん良い相手）
+function clearLeader(s) {
+  const vs = G.ps.map((_, i) => vp(i)), order = vs.map((_, i) => i).sort((a, b) => vs[b] - vs[a]), top = order[0];
+  return top !== s && vs[top] - vs[order[1]] >= 2 ? top : -1;
+}
+const robW = p => 1 / (1 + ((G.rob || [])[p] || 0));
 function cpuCrow(s) {
-  const d = G.ps[s].diff, lead = leaderOf(s); let best = -1, bs = -Infinity;
+  const d = G.ps[s].diff, lead = d === "weak" ? -1 : clearLeader(s); let best = -1, bs = -Infinity;
   GEO.hex.forEach((h, i) => {
     if (i === G.crow) return;
-    const pp = pips(G.tiles[i].n); let sc = d === "weak" ? Math.random() * 4 : Math.random() * 0.3;
-    for (const v of h.c) { const b = G.vb[v]; if (!b) continue; if (b.p === s) sc -= pp * b.lv * 3 + 2; else sc += pp * b.lv * (b.p === lead && d !== "weak" ? 2 : 1) + (tot(G.ps[b.p].hand) ? 1 : 0); }
+    const pp = pips(G.tiles[i].n); let sc = Math.random() * (d === "weak" ? 4 : 1.5);
+    for (const v of h.c) { const b = G.vb[v]; if (!b) continue; if (b.p === s) sc -= pp * b.lv * 3 + 2; else sc += (pp * b.lv * (b.p === lead ? 1.5 : 1) + (tot(G.ps[b.p].hand) ? 1 : 0)) * robW(b.p); }
     if (sc > bs) { bs = sc; best = i; }
   });
   return best;
+}
+function cpuVictim(s) {
+  const d = G.ps[s].diff, lead = d === "weak" ? -1 : clearLeader(s);
+  const w = G.victims.map(i => (tot(G.ps[i].hand) + 1) * (i === lead ? 1.5 : 1) * robW(i));
+  if (d === "strong") return G.victims[w.indexOf(Math.max(...w))];
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  for (let k = 0; k < w.length; k++) { r -= w[k]; if (r <= 0) return G.victims[k]; }
+  return G.victims[0];
 }
 const need = (p, c) => RES.filter(r => p.hand[r] < (c[r] || 0));
 const missCnt = (p, c) => RES.reduce((n, r) => n + Math.max(0, (c[r] || 0) - p.hand[r]), 0);
@@ -791,7 +811,7 @@ function cpuAction(s) {
     return { k: "roll" };
   }
   if (G.phase === "crow") return { k: "crow", t: cpuCrow(s) };
-  if (G.phase === "steal") return { k: "steal", p: d === "weak" ? G.victims[0] : leaderOf(s, G.victims) };
+  if (G.phase === "steal") return { k: "steal", p: cpuVictim(s) };
   // main
   if (G.offer && G.offer.from === s) {
     // 自分の提案: 人の返事を待ってから、OK した中でいちばん点の低い人とする
