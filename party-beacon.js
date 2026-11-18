@@ -19,7 +19,8 @@
       iceServers: [
         { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
         { urls: "stun:stun.cloudflare.com:3478" },
-        { urls: ["turn:eu-0.turn.peerjs.com:3478", "turn:us-0.turn.peerjs.com:3478"], username: "peerjs", credential: "peerjsp" },
+        // 中継（直接つながらないときだけ使う）。日本から近いアメリカを先に（2026-11-18。前はヨーロッパが先で、往復が 200ms 以上長くなりえた）
+        { urls: ["turn:us-0.turn.peerjs.com:3478", "turn:eu-0.turn.peerjs.com:3478"], username: "peerjs", credential: "peerjsp" },
       ],
       sdpSemantics: "unified-plan",
     };

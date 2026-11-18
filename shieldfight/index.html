@@ -317,7 +317,7 @@
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="../party-beacon.js?v=7"></script>
+<script src="../party-beacon.js?v=8"></script>
 <script>
 "use strict";
 // LINE の中のブラウザ（アプリ内ブラウザ）は、全画面にも横画面にもできない。LINE は URL に openExternalBrowser=1 が付いていると、
@@ -3272,14 +3272,32 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.nc > 0) o.nc = p.nc;                                  // 敵のタバコでスピード −1 の残り
   if (p.dr > 0) o.dr = p.dr;                                  // 注射器で画面が揺れる残り（揺れるのは本人の画面だけ）
   if (p.st > 0) o.st = p.st;                                  // 臭い息で動けない残り（見た目用）
+  // 2026-11-18: いつもの値（0・盾が満タン・生きていない）は送らない。参加者は、ないものをいつもの値として読む（readEnt）。
+  // 4 人で 1 回 1.3KB → 1 パケット（約 1.2KB）に収まる大きさへ。分かれて届くと、どちらかが落ちただけでその回が丸ごとなくなる
+  for (const k of ZERO_KEYS) if (!o[k]) delete o[k];
+  if (o.sh === 1) delete o.sh;
   return o;
+}
+const ZERO_KEYS = ["a", "ak", "s", "al", "bf", "hf", "sk", "sg", "gh", "bz", "cn", "fz", "iv", "ks", "gt", "dz", "rw", "gs", "hd"];
+// 名前・チーム・準備などはほとんど変わらないので、変わったときに続けて 8 回と、30 回に 1 回だけ送る（つながった人が増えたときも 8 回）
+const metaSig = [], metaLeft = [0, 0, 0, 0];
+let metaConnN = -1;
+function metaOf(p, i, inGame) {
+  const m = { w: p.w, c: p.c ? 1 : 0, n: p.n, tg: p.tg | 0, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, km: p.km, lv: p.lv };
+  if (inGame) m.ch = p.ch;
+  const sig = JSON.stringify(m);
+  if (sig !== metaSig[i]) { metaSig[i] = sig; metaLeft[i] = 8; }
+  if (metaLeft[i] > 0) { metaLeft[i]--; return m; }
+  return snapQ % 30 === 0 ? m : null;
 }
 function snapshot() {
   const inGame = game.ph !== "lobby";         // キャラは試合が始まるまで他のプレイヤーに送らない
+  const cn = conns.filter(c => c && c.open).length + specConns.length;
+  if (cn !== metaConnN) { metaConnN = cn; metaLeft.fill(8); }
   const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, wt: game.wt | 0, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr, st: game.st | 0, stT: game.stT | 0, ss: game.ss,
-    p: game.p.map(p => p ? Object.assign(serEnt(p),
-      { w: p.w, c: p.c ? 1 : 0, n: p.n, tg: p.tg | 0, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, kc: p.kc, km: p.km, am: p.am, amT: p.amT, lv: p.lv },
-      inGame ? { ch: p.ch } : null, inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
+    p: game.p.map((p, i) => p ? Object.assign(serEnt(p),
+      metaOf(p, i, inGame), p.kc ? { kc: p.kc } : null, chOf(p).id === "archer" ? { am: p.am, amT: p.amT } : null,
+      inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
     pj: game.pj.filter(b => !b.dead).map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 || b.k === 4 || b.k === 7 ? Math.round(b.pw * 10) : b.k === 5 ? b.lv * 10 : b.k === 6 ? b.dir * 10 : b.k === 8 ? b.pw * 10 : 0, b.own].concat(b.k === 8 && b.dm ? [b.dm] : [])),   // 飛ばした傘は、9 番目に削られた %   // 魔法（k: 5）は、7 番目に段階 × 10
     fl: game.fl.map(f => f.air ? [r1(f.x), r1(f.y), f.t, f.big ? 1 : 0, 1, r1(f.vy)] : [r1(f.x), r1(f.y), f.t, f.big ? 1 : 0]),   // 落ちている花は、5 番目が 1、6 番目が縦の速さ
@@ -3291,7 +3309,7 @@ function snapshot() {
     cg: game.cg.map(c => [r1(c.x), r1(c.y), c.t]),
     bc: game.bc.map(c => [r1(c.x), r1(c.y), r1(c.w), r1(c.h), c.d, c.t]) };                                         // ヤニ猫の臭い息の雲                                                                // タバコ
   const fresh = evq.splice(0);                // 前回の送信以降に起きた効果音・演出のきっかけ
-  evHist.push(fresh); if (evHist.length > 6) evHist.shift();   // 直近 6 回ぶん（約 0.1 秒）
+  evHist.push(fresh); if (evHist.length > 3) evHist.shift();   // 直近 3 回ぶん（約 0.05 秒。2026-11-18 に 6 → 3。大きさを減らす）
   evTotal += fresh.length;
   const ev = [].concat(...evHist);
   if (ev.length) s.ev = ev;
@@ -3324,18 +3342,20 @@ function hostLoop() {
   if (n > 0) {
     if (conns.some(c => c && c.open) || specConns.length) {
       const snap = snapshot(), str = JSON.stringify(snap);   // 文字にするのは 1 回だけ（全員に同じものを送る）
+      // 2026-11-18: 送り待ちは 2 回ぶんまで（前は 32KB = 約 0.25 秒ぶんたまるまで送っていて、回線が混むと古い位置が遅れて届いた）。たまっている相手には今回は送らない
+      const qMax = 2 * str.length + 1000;
       for (const sp of specConns) {   // 観戦の人
         if (!sp.c.open) continue;
-        if (uchOpen(sp.u) && str.length < 16000) { if (sp.u.bufferedAmount < 32000) { try { sp.u.send(str); } catch (e) {} } }
+        if (uchOpen(sp.u) && str.length < 16000) { if (sp.u.bufferedAmount < qMax) { try { sp.u.send(str); } catch (e) {} } }
         else { try { sp.c.send(snap); } catch (e) {} }
       }
       for (let i = 0; i < MAX_PLAYERS; i++) {
         const c = conns[i], f = fastConns[i], u = uchs[i];
         if (!c || !c.open) continue;
-        if (uchOpen(u) && str.length < 16000) { if (u.bufferedAmount < 32000) { try { u.send(str); } catch (e) {} } }   // 落としてよい通り道（詰まっている間は、その回を送らない）
+        if (uchOpen(u) && str.length < 16000) { if (u.bufferedAmount < qMax) { try { u.send(str); } catch (e) {} } }   // 落としてよい通り道（詰まっている間は、その回を送らない）
         else if (f && f.open && str.length < 60000) {
           // 送り切れずにたまっている（回線が詰まっている）参加者には、今回は送らない。次の新しいものが届けば足りるので、たまったぶんの遅れを増やさない
-          if ((f.dataChannel && f.dataChannel.bufferedAmount > 32000) || f.bufferSize > 0) continue;
+          if ((f.dataChannel && f.dataChannel.bufferedAmount > qMax) || f.bufferSize > 0) continue;
           f.send(str);
         } else c.send(snap);
       }
@@ -3600,8 +3620,9 @@ function readEnt(p, n) {                                     // スナップシ�
     if (!b.length || curTk > b[b.length - 1][0]) b.push([curTk, n.x, n.y]);
     while (b.length > 2 && curTk - b[0][0] > 120) b.shift();
   }
-  p.f = n.f; p.a = n.a; p.ak = n.ak | 0; p.s = n.s; p.al = !!n.al; p.bf = n.bf; p.hf = n.hf;
-  p.sh = n.sh; p.sbk = n.sk; p.sg = n.sg;
+  const z = v => v === undefined ? 0 : v;                    // 送られてこない = いつもの値（0）。2026-11-18
+  p.f = n.f; p.a = z(n.a); p.ak = n.ak | 0; p.s = z(n.s); p.al = !!n.al; p.bf = z(n.bf); p.hf = z(n.hf);
+  p.sh = n.sh === undefined ? 1 : n.sh; p.sbk = z(n.sk); p.sg = z(n.sg);
   p.gh = n.gh | 0; p.bz = n.bz | 0; p.cn = n.cn | 0; p.fz = n.fz | 0; p.iv = n.iv | 0; p.ks = n.ks | 0; p.gt = n.gt | 0; p.dz = n.dz | 0;
   p.rw = n.rw | 0; p.gs = n.gs | 0; p.hd = n.hd | 0; p.rp = n.rp || null;
   p.fm = n.fm | 0; p.slw = n.slw | 0; p.wl = n.wl || null;
@@ -3642,7 +3663,8 @@ function applySnapshot(s) {
     let p = game.p[i];
     if (!p) { p = game.p[i] = newPlayer(); p.x = n.x; p.y = n.y; }
     readEnt(p, n);
-    p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.tg = n.tg | 0; p.rd = !!n.rd; p.lk = !!n.lk; p.kc = n.kc | 0; p.km = n.km | 0; p.am = n.am === undefined ? arrowMax() : n.am | 0; p.amT = n.amT | 0; p.lv = n.lv | 0; p.own = i;
+    if (n.c !== undefined) { p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.tg = n.tg | 0; p.rd = !!n.rd; p.lk = !!n.lk; p.km = n.km | 0; p.lv = n.lv | 0; }   // 名前など: 届いたときだけ（ふだんは送らない）
+    p.kc = n.kc | 0; p.am = n.am === undefined ? arrowMax() : n.am | 0; p.amT = n.amT | 0; p.own = i;
     p.wk = n.wk || [0, 0, 0]; p.wkm = n.wkm || [0, 0, 0]; p.wm = n.wm | 0;
     const cn = s.cl[i];
     if (!cn) game.cl[i] = null;
