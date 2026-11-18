@@ -45,14 +45,13 @@
   .how { font-size:13px; line-height:1.6; color:#cfd5e2; margin:0; padding-left:18px; }
   .how b { color:#fff; }
   .small { font-size:12px; color:var(--sub); margin-top:6px; }
-  #rotate { position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:#10131b; z-index:50; text-align:center; font-size:18px; font-weight:800; }
-  #rotate .ph { width:60px; height:96px; border:4px solid #fff; border-radius:12px; animation:rot 1.6s infinite; }
-  @keyframes rot { 0%,30% { transform:rotate(0); } 60%,100% { transform:rotate(-90deg); } }
-  @media (orientation:portrait) { #rotate { display:flex; } }
+  /* 画面が縦のまま（自動回転オフ）でも横向きで遊べるように、JS が #app を 90° 回して横長に置く。#app の中の fixed は #app が基準になる */
+  #app { position:fixed; left:0; top:0; width:100vw; height:100vh; overflow:hidden; transform-origin:0 0; }
   [hidden] { display:none !important; }
 </style>
 </head>
 <body>
+<div id="app">
 <canvas id="c"></canvas>
 <canvas id="ov"></canvas>
 <div id="hud"><div class="score">
@@ -89,6 +88,7 @@
         <div class="lab">試合</div>
         <div class="seg" data-k="games"><button data-v="1">1ゲーム</button><button data-v="3">3ゲーム(2本先取)</button></div>
         <button class="main" id="start">はじめる</button>
+        <button class="flipBtn" hidden>⟲ 画面の上下を反対にする</button>
         <div class="seg" style="margin-top:8px" id="titleBtns"><button id="toGames">← ゲーム一覧</button></div>
       </div>
     </div>
@@ -102,6 +102,7 @@
     <div class="seg" data-k="move"><button data-v="stick">スティック</button><button data-v="direct">ダイレクト</button></div>
     <button class="main" id="resume">つづける</button>
     <div id="menuSnd"></div>
+    <button class="flipBtn" hidden>⟲ 画面の上下を反対にする</button>
     <button id="quit">タイトルへ</button>
   </div>
 </div>
@@ -115,7 +116,7 @@
   </div>
 </div>
 
-<div id="rotate"><div class="ph"></div>スマホを横向きにしてね</div>
+</div>
 
 <script src="../ykg-sfx.js?v=1"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
@@ -367,8 +368,43 @@ function poseChar(ch, dt) {
 // ===== 画面の大きさ =====
 const ov = $("ov"), octx = ov.getContext("2d");
 let W = 1, H = 1;
+// 縦画面のとき（スマホの自動回転がオフで横に持っている）は、ゲーム全体を 90° 回して横長に表示する。
+// rotDir: 1 = 時計回りに回す（スマホの上を左に倒して持つ）、-1 = 反時計回り（上を右に倒す）。
+// 傾きセンサーが使えればそれで自動で決め、使えないときは「上下を反対にする」ボタンで切り替える。
+let rotDir = +(store.get("pp-rotdir") || 1) === -1 ? -1 : 1, rotOn = false;
+function applyRot() {
+  const app = $("app"), sw = innerWidth, sh = innerHeight;
+  rotOn = sh > sw;
+  document.querySelectorAll(".flipBtn").forEach(b => b.hidden = !rotOn);
+  if (!rotOn) { app.style.width = sw + "px"; app.style.height = sh + "px"; app.style.transform = ""; W = sw; H = sh; return; }
+  W = sh; H = sw;
+  app.style.width = W + "px"; app.style.height = H + "px";
+  app.style.transform = rotDir === 1 ? "rotate(90deg) translateY(-100%)" : "rotate(-90deg) translateX(-100%)";
+}
+// 画面の座標（clientX/Y）→ ゲームの横長の座標
+function toLocal(e) {
+  if (!rotOn) return { x: e.clientX, y: e.clientY };
+  return rotDir === 1 ? { x: e.clientY, y: innerWidth - e.clientX } : { x: innerHeight - e.clientY, y: e.clientX };
+}
+function setRotDir(d) {
+  if (d === rotDir) return;
+  rotDir = d; store.set("pp-rotdir", String(d));
+  moveP.id = null; swP.id = null;
+  applyRot();
+}
+// 傾きセンサー: 縦画面のまま横に倒したとき、どちらの端が下かを見る（Android はそのまま、iPhone は許可が要る）
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+addEventListener("devicemotion", e => {
+  const g = e.accelerationIncludingGravity; if (!g || g.x == null || !rotOn) return;
+  const ax = IOS ? -g.x : g.x;   // + なら右の端が上
+  if (ax > 6) setRotDir(1); else if (ax < -6) setRotDir(-1);
+});
+function askMotion() {
+  try { if (window.DeviceMotionEvent && DeviceMotionEvent.requestPermission) DeviceMotionEvent.requestPermission().catch(() => {}); } catch (e) {}
+}
+document.querySelectorAll(".flipBtn").forEach(b => b.addEventListener("click", () => setRotDir(-rotDir)));
 function resize() {
-  W = innerWidth; H = innerHeight;
+  applyRot();
   renderer.setSize(W, H, false);
   camera.aspect = W / H;
   camera.fov = W / H > 1.6 ? 46 : 54;
@@ -676,26 +712,28 @@ const DIRECT_K = () => 2.8 / (W * 0.5);   // ダイレクト: 指 1px で何 m �
 ov.addEventListener("pointerdown", e => {
   if (st.phase === "title" || st.paused) return;
   e.preventDefault();
-  if (e.clientX < W * 0.45) {
+  const q = toLocal(e);
+  if (q.x < W * 0.45) {
     if (moveP.id !== null) return;
-    Object.assign(moveP, { id: e.pointerId, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, bx: P.pos.x, bz: P.pos.z });
+    Object.assign(moveP, { id: e.pointerId, sx: q.x, sy: q.y, x: q.x, y: q.y, bx: P.pos.x, bz: P.pos.z });
   } else {
     if (swP.id !== null) return;
-    Object.assign(swP, { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }], cool: 0, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
+    Object.assign(swP, { id: e.pointerId, pts: [{ x: q.x, y: q.y, t: performance.now() }], cool: 0, x: q.x, y: q.y, sx: q.x, sy: q.y });
   }
   try { ov.setPointerCapture(e.pointerId); } catch (err) {}
 });
 ov.addEventListener("pointermove", e => {
-  if (e.pointerId === moveP.id) { moveP.x = e.clientX; moveP.y = e.clientY; return; }
+  const q = toLocal(e);
+  if (e.pointerId === moveP.id) { moveP.x = q.x; moveP.y = q.y; return; }
   if (e.pointerId !== swP.id) return;
   const now = performance.now();
-  swP.x = e.clientX; swP.y = e.clientY;
-  swipeTrail.push({ x: e.clientX, y: e.clientY, t: now });
+  swP.x = q.x; swP.y = q.y;
+  swipeTrail.push({ x: q.x, y: q.y, t: now });
   if (now < swP.cool) return;
-  if (swP.cool) { swP.cool = 0; swP.pts = []; swP.sx = e.clientX; swP.sy = e.clientY; }
-  swP.pts.push({ x: e.clientX, y: e.clientY, t: now });
+  if (swP.cool) { swP.cool = 0; swP.pts = []; swP.sx = q.x; swP.sy = q.y; }
+  swP.pts.push({ x: q.x, y: q.y, t: now });
   while (swP.pts.length > 2 && now - swP.pts[0].t > 260) swP.pts.shift();
-  const f = swP.pts[0], L = Math.hypot(e.clientX - f.x, e.clientY - f.y);
+  const f = swP.pts[0], L = Math.hypot(q.x - f.x, q.y - f.y);
   if (L >= H * 0.17) fireSwipe(now);
 });
 function endPointer(e) {
@@ -870,7 +908,7 @@ function toTitle() {
   ball.p.set(0, TH + 0.4, 0); ball.v.set(0, 0, 0);
   resetPositions();
 }
-$("start").onclick = startMatch;
+$("start").onclick = () => { askMotion(); startMatch(); };
 $("again").onclick = startMatch;
 $("toTitle").onclick = toTitle;
 $("quit").onclick = toTitle;
