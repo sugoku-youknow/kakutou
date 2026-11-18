@@ -31,6 +31,9 @@
   /* 画面の向きの切り替えボタン（シールドファイトと同じ形）。タイトル・ポーズの上にも出す */
   #rot { position:fixed; left:calc(62px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); z-index:20; width:44px; height:44px; padding:0; margin:0; border-radius:50%; background:rgba(255,255,255,.16); line-height:0; }
   #rot svg { width:22px; height:22px; }
+  /* キャラの移動速度（×1〜×5）。押すたびに ×1 → ×2 → … → ×5 → ×1。細かくはポーズ画面のスライダー */
+  #spd { position:fixed; left:calc(114px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); z-index:20; width:44px; height:44px; padding:0; margin:0; border-radius:50%; background:rgba(255,255,255,.16); color:#fff; font-size:13px; font-weight:900; }
+  input[type=range].spdR { width:100%; margin:4px 0 0; padding:0; accent-color:var(--blue); }
   #pause { position:fixed; left:calc(10px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); width:44px; height:44px; border-radius:12px; border:0; background:rgba(10,12,18,.7); color:#fff; font-size:20px; font-weight:900; }
   .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; padding:16px; background:rgba(12,14,20,.82); overflow-y:auto; }
   .screen > * { margin-top:auto; margin-bottom:auto; flex-shrink:0; }
@@ -68,6 +71,7 @@
 <div id="hint"></div>
 <button id="pause" data-nosfx hidden>Ⅱ</button>
 <button id="rot" type="button" aria-label="画面の向きの切り替え" hidden></button>
+<button id="spd" type="button" aria-label="キャラの移動速度（押すと切り替え）" data-nosfx hidden></button>
 
 <div class="screen" id="title">
   <div class="card">
@@ -91,6 +95,8 @@
         <div class="lab">体の動かし方</div>
         <div class="seg" data-k="move"><button data-v="stick">スティック</button><button data-v="direct">ダイレクト</button></div>
         <div class="small" id="moveDesc"></div>
+        <div class="lab">キャラの移動速度 <b class="spdV"></b>（今の速さの 1〜5 倍。試合中も変えられる）</div>
+        <input type="range" class="spdR" min="1" max="5" step="0.1">
         <div class="lab">CPUのつよさ</div>
         <div class="seg" data-k="cpu"><button data-v="0">よわい</button><button data-v="1">ふつう</button><button data-v="2">つよい</button></div>
         <div class="lab">試合</div>
@@ -118,6 +124,8 @@
     <h2>ポーズ</h2>
     <div class="lab">体の動かし方</div>
     <div class="seg" data-k="move"><button data-v="stick">スティック</button><button data-v="direct">ダイレクト</button></div>
+    <div class="lab">キャラの移動速度 <b class="spdV"></b>（今の速さの 1〜5 倍。試合中も変えられる）</div>
+    <input type="range" class="spdR" min="1" max="5" step="0.1">
     <button class="main" id="resume">つづける</button>
     <div id="menuSnd"></div>
     <button id="quit">タイトルへ</button>
@@ -270,12 +278,26 @@ function shotOutcome(p0, v, w, serve) {
 
 // ===== 設定 =====
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
-const cfg = Object.assign({ move: "stick", cpu: "1", games: "1" }, (() => { try { return JSON.parse(store.get("pp-cfg") || "{}"); } catch (e) { return {}; } })());
+const cfg = Object.assign({ move: "stick", cpu: "1", games: "1", speed: 1 }, (() => { try { return JSON.parse(store.get("pp-cfg") || "{}"); } catch (e) { return {}; } })());
+cfg.speed = Math.max(1, Math.min(5, +cfg.speed || 1));   // キャラの移動速度の倍率（1〜5）
 const MOVE_DESC = {
   stick: "左の指をおいた所がスティックの中心。倒した方向に走る",
   direct: "左の指を動かした分だけ、体もそのまま同じように動く",
 };
+// キャラの移動速度（1〜5 倍）。タイトル・ポーズのスライダー、試合中のボタン、パーティの待ち合わせの 3 か所から変えられる
+function setSpeed(v) {
+  cfg.speed = Math.round(Math.max(1, Math.min(5, +v || 1)) * 10) / 10; store.set("pp-cfg", JSON.stringify(cfg)); refreshSpd();
+  if (window.ykgLobby && ykgLobby.active && typeof partyUi === "function") partyUi();
+}
+function refreshSpd() {
+  document.querySelectorAll(".spdV").forEach(e => e.textContent = "×" + cfg.speed.toFixed(1));
+  document.querySelectorAll(".spdR").forEach(e => { if (+e.value !== cfg.speed) e.value = cfg.speed; });
+  $("spd").textContent = "×" + (Number.isInteger(cfg.speed) ? cfg.speed : cfg.speed.toFixed(1));
+}
+document.querySelectorAll(".spdR").forEach(e => e.addEventListener("input", () => setSpeed(e.value)));
+$("spd").addEventListener("click", () => { $("spd").blur(); setSpeed(Math.floor(cfg.speed + 1e-6) >= 5 ? 1 : Math.floor(cfg.speed + 1e-6) + 1); });
 function refreshSeg() {
+  refreshSpd();
   document.querySelectorAll(".seg[data-k]").forEach(s => s.querySelectorAll("button").forEach(b => b.classList.toggle("on", cfg[s.dataset.k] === b.dataset.v)));
   $("moveDesc").textContent = MOVE_DESC[cfg.move];
 }
@@ -545,7 +567,7 @@ function serverFor() {
 function newPoint(sv) {
   st.server = sv != null ? sv : serverFor();
   st.phase = "serve"; st.serveT = 0; st.rallyT = 0; st.hits = 0;
-  cpuPlan = null; st.lob = false; st.smash = false; st.hold = false; st.over = false; st.gameWin = -1; st.tossed = false; st.tossT = 0;
+  cpuPlan = null; st.lob = false; st.smash = false; st.hold = false; st.over = false; st.gameWin = -1; st.tossed = false; st.tossT = 0; st.missWait = 0;
   if (ON) ON.claimed = -1;
   ball.v.set(0, 0, 0); ball.w.set(0, 0, 0);
   trailPts.length = 0;
@@ -635,7 +657,7 @@ function onBallEvent(type, side) {
   const h = st.hitter, r = 1 - h;
   if (type === "floor") {
     if (st.serveStage === 1) point(r, st.netTouched ? "ネット" : "アウト");
-    else if (st.bounced) point(h, h === 0 ? "ナイス！" : "とれなかった…");
+    else if (st.bounced) { if (h === 1) missLater(h); else point(h, h === 0 ? "ナイス！" : "とれなかった…"); }   // 受ける側（自分）は、床について少しの間は、まだ打てる
     else point(r, st.netTouched ? "ネット" : "アウト");
     return;
   }
@@ -646,12 +668,15 @@ function onBallEvent(type, side) {
   }
   if (side === h) { point(r, st.netTouched ? "ネット" : "自分のコート"); return; }
   if (!st.bounced) { st.bounced = true; if (r === 1 && !ON) planCpu(); return; }
-  point(h, h === 0 ? "ナイス！" : "とれなかった…");   // 2 バウンド
+  if (h === 1) missLater(h); else point(h, h === 0 ? "ナイス！" : "とれなかった…");   // 2 バウンド（受ける側は、少しの間は、まだ打てる）
 }
+// 「落ちた」の判定は少しだけ待つ（2026-11-20）: 落ちる瞬間に打っても、落ちた判定が先に来て点が入らないように、床につく・2 バウンドしたあと 0.22 秒（ボールの時間）は、まだ打てる。打てなければ、あとで失点
+const MISS_GRACE = 0.22;
+function missLater(winner) { if (!st.missWait) { st.missWait = MISS_GRACE; st.missWinner = winner; } }
 
 // ボールを打ち出す（hitter: 0 自分 / 1 CPU）
 function launch(hitter, p0, v, w, serve, kind, remote) {
-  ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w); st.hold = false; st.tossed = false;
+  ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w); st.hold = false; st.tossed = false; st.missWait = 0;
   if (ON && ON.role !== 2 && !remote) sendShot(p0, v, w, serve, kind);
   st.lob = kind === "lob"; st.smash = kind === "smash";   // ひょろひょろの山なり球 / スマッシュ
   hitFx(p0, v, w, kind, hitter === 0);
@@ -681,8 +706,8 @@ function predictY(planeZ) {
 //   （前回転が残る → 上にはねて長くなる、下回転が残る → 下に落ちてネット、横回転が残る → 横にそれる）。
 // 回転を打ち消していれば、打った球は基本的に台に入る（ねらう場所は回転の向きで決まる）。
 // 相手の球の回転がラケットに与える影響（SINF 倍）を大きくした（2026-11-19 夜）: 下回転の球に打ち消しきれない上回転で打つと、球は下に落ちる（ネット）など
-const SINF = 1.5;
-const KV = 0.8, KH = 0.7, E_DEAD = 0.6;   // 残った回転で打球がずれる強さ（1 m/s 残ると何 m ずれるか）。E_DEAD 以下の弱い回転は気にしなくていい
+const SINF = 1.3;   // 2026-11-20: ネット・通りすぎが多いので、1.5 → 1.3 / KV 0.8 → 0.55 / KH 0.7 → 0.5 / E_DEAD 0.6 → 0.8 にやわらげた
+const KV = 0.55, KH = 0.5, E_DEAD = 0.8;   // 残った回転で打球がずれる強さ（1 m/s 残ると何 m ずれるか）。E_DEAD 以下の弱い回転は気にしなくていい
 const faceN = who => V(0, 0, who === 0 ? 1 : -1);
 const surfaceVel = (w, n) => V().crossVectors(w, n).multiplyScalar(R / SK);
 const spinFromBrush = (b, n) => V().crossVectors(n, b).multiplyScalar(SK / R);
@@ -736,10 +761,22 @@ function makeShot(who, p0, brushGame, serve, mv) {
   //   前回転が残る（表面が下へ）→ 長くなってオーバー / 下回転が残る（表面が上へ）→ 短くなってネット / 横回転 → 横へ
   //   打つ人から見た横: 自分は +x が右、CPU は -x が右
   const el = e.length(), ef = el > E_DEAD ? (el - E_DEAD) / el : 0;
-  depth = Math.max(0.3, depth - e.y * ef * (e.y > 0 ? KV * 1.8 : KV));   // 下回転が残ると短くなる（ネットまでの距離が短いので強め）
-  tx += -e.x * ef * KH;
+  // 低い位置（しゃがんで打つ）ほど、回転の残りによるずれをやわらげる（低い球は、ただでさえ打ちにくいので）
+  const lowK = clamp(0.4 + p0.y, 0.4, 1);
+  depth = Math.max(0.3, depth - e.y * ef * lowK * (e.y > 0 ? KV * 1.8 : KV));   // 下回転が残ると短くなる（ネットまでの距離が短いので強め）
+  tx += -e.x * ef * lowK * KH;
   tx = clamp(tx, -0.68, 0.68);
   let v = solveShot(p0, tx, sg * depth, T, w, serve);
+  // 回転の残りが小さい〜中くらいなら、ネットにかかる・台を通りすぎる（長すぎる）ことがないように、弾道を直す。大きく残したときだけ、ミスになる
+  if (!serve && el < 2.2) {
+    for (let k = 0; k < 6; k++) {
+      const o = shotOutcome(p0, v, w, false);
+      if (o === "in") break;
+      if (o === "fault") { T *= 1.12; depth += 0.04; }               // ネットにかかる・手前に落ちる → 高く、ゆっくり
+      else { depth = Math.max(0.35, depth - 0.12); T *= 1.04; }       // 通りすぎる → 浅く
+      v = solveShot(p0, tx, sg * depth, T, w, false);
+    }
+  }
   // サーブは、まず自分の台ではねてからネットをこえる。低い位置から打つとネットにかかるので、下向きの速さを強くして高くはねさせる
   if (serve) for (const vy0 of [-0.8, -2, -3.4, -4.8, -6.2]) {
     v = solveShot(p0, tx, sg * depth, T, w, true, vy0);
@@ -864,10 +901,11 @@ function checkPlayerHit() {
   const z = playerZone();
   if (ball.v.z <= 0) return;
   const vz = Math.max(ball.v.z, 1.0), u = ball.p.z - z.c.z;
-  if (u < -Math.max(0.3, vz * 0.1)) return;                   // まだ来ていない
+  const low = ball.p.y < 0.6;                                  // 低い球（しゃがんで打つ）は、打ちにくいので、早めから・横にも広く届く
+  if (u < -Math.max(low ? 0.55 : 0.3, vz * (low ? 0.16 : 0.1))) return;   // まだ来ていない
   if (u > 1.1 + vz * 0.06) { st.pTried = true; return; }      // 通りすぎた（空振り）
   const dx = ball.p.x - z.c.x, dy = ball.p.y - z.c.y;
-  if (!(Math.abs(dx) <= 0.7 && dy >= -1.05 && dy <= (st.lob ? 1.7 : 0.85))) return;
+  if (!(Math.abs(dx) <= (low ? 0.85 : 0.7) && dy >= -1.05 && dy <= (st.lob ? 1.7 : 0.85))) return;
   const brush = brushFromFinger();
   if (brush.length() < 0.05) return;   // 指が止まっている・ふれていない
   st.pTried = true;
@@ -1021,7 +1059,7 @@ const moveP = { id: null, sx: 0, sy: 0, x: 0, y: 0, bx: 0, bz: 0 };
 const swP = { id: null, pts: [], x: 0, y: 0, sx: 0, sy: 0 };
 const keys = {};
 const swipeTrail = [];
-const DIRECT_K = () => 2.8 / (W * 0.5);   // ダイレクト: 指 1px で何 m 動くか（画面の左半分 ≒ 2.8 m）
+const DIRECT_K = () => 2.8 * cfg.speed / (W * 0.5);   // ダイレクト: 指 1px で何 m 動くか（画面の左半分 ≒ 2.8 m）
 ov.addEventListener("pointerdown", e => {
   if (st.phase === "title" || st.paused || (ON && ON.role === 2)) return;
   e.preventDefault();
@@ -1078,7 +1116,7 @@ function updatePlayer(dt) {
     }
     if (keys.a || keys.arrowleft) ix -= 1; if (keys.d || keys.arrowright) ix += 1;
     if (keys.w || keys.arrowup) iz -= 1; if (keys.s || keys.arrowdown) iz += 1;
-    P.pos.x += ix * 3.2 * dt; P.pos.z += iz * 3.2 * dt;
+    P.pos.x += ix * 3.2 * cfg.speed * dt; P.pos.z += iz * 3.2 * cfg.speed * dt;
     stickDir = V(ix, 0, iz);
   }
   // コート全体を動ける（2026-11-19 夜）。台（と、その分の余白）の中にだけは入れず、ふちにそってすべる
@@ -1095,7 +1133,7 @@ function updatePlayer(dt) {
   }
   P.vel.subVectors(P.pos, prev).divideScalar(Math.max(dt, 1e-4));
   // 動いている向き（スティックはたおした向き、ダイレクトは実際の動き）。ごく短い間の平均にして、打つ瞬間に使う
-  { const iv = stickDir || V(P.vel.x / 3.2, 0, P.vel.z / 3.2); if (iv.length() > 1) iv.normalize();
+  { const iv = stickDir || V(P.vel.x / (3.2 * cfg.speed), 0, P.vel.z / (3.2 * cfg.speed)); if (iv.length() > 1) iv.normalize();
     P.mv.lerp(iv, 1 - Math.exp(-(dt / TS) / 0.08)); }
   P.hand = playerZone().fh ? 1 : -1;
   // 右の指の位置でラケットが動く（構え）
@@ -1135,6 +1173,7 @@ function update(dt, rdt) {
     while (t > 1e-6) { if (st.hold) break; const h = Math.min(SUB, t); t -= h; stepBall(ball, h, onBallEvent); if (ON) checkHold(); }
     if (st.phase === "rally" && !st.hold) {
       st.rallyT += dt;
+      if (st.missWait > 0) { st.missWait -= dt * BTS; if (st.missWait <= 0) { st.missWait = 0; point(st.missWinner, ""); } }
       // 止まった・遠くへ行った
       if (st.rallyT > 5 || Math.abs(ball.p.z) > 7 || Math.abs(ball.p.x) > 5) {
         const h = st.hitter;
@@ -1146,6 +1185,7 @@ function update(dt, rdt) {
 }
 const camPos = V(0, 1.9, HL + 2.6), camLook = V(0, 0.8, -0.8);
 function render(rdt) {
+  if ($("spd").hidden !== $("pause").hidden) $("spd").hidden = $("pause").hidden;   // 試合中だけ出す（ポーズボタンと同じ）
   poseChar(P, rdt); poseChar(C, rdt);
   ballMesh.position.copy(ball.p);
   const tnow = performance.now() * 0.001, wob = st.lob && (st.phase === "rally" || st.phase === "dead");
@@ -1170,7 +1210,7 @@ function render(rdt) {
     // ボールを追う（低い球・高い球のどちらも画面に入るように、見る先をボールのほうへ寄せ、低いときはカメラも少し下げる）
     const b = ball.p;
     tl.x = lerp(tl.x, b.x * 0.85, 0.6); tl.y = lerp(tl.y, Math.max(0.2, b.y * 0.85), 0.6); tl.z = lerp(tl.z, clamp(b.z * 0.75, -2.2, 1.6), 0.5);
-    tp.x += (b.x - P.pos.x * 0.7) * 0.45; tp.y -= clamp((1.0 - b.y) * 0.8, 0, 0.75) + P.crouch * 0.25;
+    tp.x += (b.x - P.pos.x * 0.7) * 0.45; tp.y -= clamp((1.0 - b.y) * 0.5, 0, 0.45) + P.crouch * 0.1;
   }
   const following = st.phase === "rally" || (st.phase === "serve" && st.tossed);
   const k = 1 - Math.pow(following ? 0.00004 : 0.002, rdt);   // ボールを追うときは、すばやく
@@ -1316,7 +1356,7 @@ function partyMembers() {
 }
 function partyLobbyOpts() {
   const rules = "回転で勝負する3D卓球の1対1。右の指を、ボールが来た瞬間にすばやくはじくほど強い回転。\n相手の回転が残ると、球がオーバー・ネット・横にそれてミスになる。タイミングを大きく外すと山なり球になり、山なり球にだけスマッシュが打てる。";
-  const mine = [{ label: () => "体の動かし方: " + (cfg.move === "stick" ? "スティック" : "ダイレクト"), onClick: () => { cfg.move = cfg.move === "stick" ? "direct" : "stick"; store.set("pp-cfg", JSON.stringify(cfg)); refreshSeg(); moveP.id = null; } }];
+  const mine = [{ label: () => "移動速度: ×" + cfg.speed.toFixed(1) + "（押すと切り替え）", onClick: () => setSpeed(Math.floor(cfg.speed + 1e-6) >= 5 ? 1 : Math.floor(cfg.speed + 1e-6) + 1) }, { label: () => "体の動かし方: " + (cfg.move === "stick" ? "スティック" : "ダイレクト"), onClick: () => { cfg.move = cfg.move === "stick" ? "direct" : "stick"; store.set("pp-cfg", JSON.stringify(cfg)); refreshSeg(); moveP.id = null; } }];
   const isHost = ON && ON.role === 0;
   if (!ON || !ON.ready) return { rules, mine, members: partyMembers(), button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
   if (!isHost) return { rules, mine, members: partyMembers(), button: null, wait: ON.role === 2 ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…", status: `試合: ${ON.need > 1 ? "3ゲーム（2本先取）" : "1ゲーム"}` };
