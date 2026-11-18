@@ -67,7 +67,7 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 #side{position:absolute;left:5px;top:4px;display:flex;flex-direction:column;gap:6px;z-index:4}
 #side button{width:40px;height:40px;min-height:0;padding:0;font-size:18px;border-radius:9px;color:#2a1a05;background:linear-gradient(#f3b84f,#c9822a);border-bottom:3px solid #7a4a14;position:relative;box-shadow:0 2px 4px #0007}
 #side .pr{font-size:12px;font-weight:800;line-height:1}
-#side .pm{font-size:10px;line-height:1.05}
+#side .pm{width:auto;padding:0 9px;font-size:13px;white-space:nowrap}   /* 2026-11-18: 上の「確率」はなくし（メニューから見られる）、置場確率を横長 1 行に */
 #side button.on{background:linear-gradient(#ff8a7a,#e0533f);color:#fff;box-shadow:0 0 0 2px #fff,0 2px 4px #0007}
 .pi .st+.st{margin-top:1px}
 #side .bd{position:absolute;right:-5px;top:-5px;min-width:18px;background:#c0392b;color:#fff;font-size:11px;line-height:18px;border-radius:9px;padding:0 4px}
@@ -119,7 +119,7 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
   #side{gap:5px}
   #side button{width:38px}
   /* 上のまん中に ≡・確率・ログ の 3 つがならぶので、人の帯はそのぶん細く。下のまん中はサイコロ */
-  .pl{max-width:calc(50% - 86px)}
+  .pl{max-width:calc(50% - 82px)}
   .pl.c2{bottom:4px}
   .vpb{width:28px;height:28px;font-size:14px;border-width:2px}
   .pi{margin-left:-9px;padding:2px 7px 3px 11px}
@@ -271,7 +271,7 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 <div id="game" class="hidden">
   <div id="boardWrap"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg><div id="bigDice"></div><div id="pls"></div></div>
   <div id="ban"></div>
-  <div id="side"><button data-g="menu" aria-label="メニュー">≡</button><button class="pr" data-g="prob" aria-label="サイコロの確率">確率</button><button class="pr pm" data-g="pmode" aria-label="置き場所の確率表示">置場<br>確率</button><button data-g="rules" aria-label="あそびかた">📖</button><button class="pr lg" data-g="log" aria-label="ログ">ログ</button><button data-g="cards" aria-label="カード">🃏<span class="bd hidden" id="cardBd"></span></button></div>
+  <div id="side"><button data-g="menu" aria-label="メニュー">≡</button><button class="pr pm" data-g="pmode" aria-label="置き場所の確率表示">置場確率</button><button data-g="rules" aria-label="あそびかた">📖</button><button class="pr lg" data-g="log" aria-label="ログ">ログ</button><button data-g="cards" aria-label="カード">🃏<span class="bd hidden" id="cardBd"></span></button></div>
   <div id="hand"></div>
   <div id="corner"><div id="dice"></div><div id="acts"></div></div>
   <div id="offerBox" class="hidden"></div>
