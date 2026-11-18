@@ -423,38 +423,25 @@ function nodeAt(x, z, mask) {
 loadMap("plaza");
 
 // ================= 動きの計算（ホスト・CPU・自分の戦車で同じもの） =================
-// 戦車（2026-11-19 作り直し）: スティックを倒した向きへ、そのまま進む（倒した量で速さが変わる）。
-// 車体はあとから進む向きへまわる（見た目だけ。後ろ向きのほうが近ければバックの向き）。
-// 性能: スピード = 最高速度 / かそく = 進む向きの速さが変わる速さ / まがりやすさ・すべりにくさ = 向きを変えるときの速さ（低いと少し流れる）
+// 戦車: スティックの向きへ車体をまわしながら進む（後ろ向きのほうが近ければバック）。
+// 横すべりは「すべりにくさ」で消える（低いと曲がるときに流れる）
 function driveTank(t, mx, mz, dt) {
-  const st = t.st;
-  let mag = Math.min(1, Math.hypot(mx, mz));
-  if (mag < 0.12) mag = 0;
-  const ux = mag ? mx / Math.hypot(mx, mz) : 0, uz = mag ? mz / Math.hypot(mx, mz) : 0;
-  const tx = ux * mag * st.spd, tz = uz * mag * st.spd;   // めざす速度
-  const sp = Math.hypot(t.vx, t.vz);
-  // 今の速度の向きに沿った成分（加速・減速）と、横の成分（向きを変える）を別の速さで近づける
-  const dx = tx - t.vx, dz = tz - t.vz;
-  let ax, az;
-  if (sp > .05) {
-    const fx = t.vx / sp, fz = t.vz / sp, along = dx * fx + dz * fz, side = -dx * fz + dz * fx;
-    const accA = (mag ? 1 : 1.4) * st.acc, accS = 6 + st.turn * 1.3 + st.grip * .45;
-    const a1 = clamp(along, -accA * dt, accA * dt), s1 = clamp(side, -accS * dt, accS * dt);
-    ax = a1 * fx - s1 * fz; az = a1 * fz + s1 * fx;
-  } else {
-    const l = Math.hypot(dx, dz), m = Math.min(l, st.acc * dt);
-    ax = l ? dx / l * m : 0; az = l ? dz / l * m : 0;
+  const st = t.st, mag = Math.min(1, Math.hypot(mx, mz));
+  let thr = 0;
+  if (mag > 0.12) {
+    const want = Math.atan2(mz, mx);
+    let d = angDiff(want, t.h), rev = false;
+    if (Math.abs(d) > PI * 0.62) { d = angDiff(want + PI, t.h); rev = true; }
+    t.h = angDiff(t.h + clamp(d, -st.turn * dt, st.turn * dt), 0);
+    thr = mag * Math.max(0, Math.cos(d)) * (rev ? -0.85 : 1);
   }
-  t.vx += ax; t.vz += az;
+  const fx = Math.cos(t.h), fz = Math.sin(t.h);
+  let vF = t.vx * fx + t.vz * fz, vL = -t.vx * fz + t.vz * fx;
+  const target = thr * st.spd, rate = (thr === 0 ? 1.3 : 1) * st.acc;
+  vF += clamp(target - vF, -rate * dt, rate * dt);
+  vL *= Math.exp(-st.grip * dt);
+  t.vx = vF * fx - vL * fz; t.vz = vF * fz + vL * fx;
   t.x += t.vx * dt; t.z += t.vz * dt;
-  // 車体の向き（見た目）
-  const vs = Math.hypot(t.vx, t.vz);
-  if (vs > .3) {
-    const want = Math.atan2(t.vz, t.vx);
-    let d = angDiff(want, t.h);
-    if (Math.abs(d) > PI * .62) d = angDiff(want + PI, t.h);
-    t.h = angDiff(t.h + clamp(d, -(st.turn * 2.2) * dt, (st.turn * 2.2) * dt), 0);
-  }
   collideWalls(t, TANK_R);
 }
 function collideWalls(o, r) {
@@ -1624,7 +1611,7 @@ function groundAt(cx, cy) {
   ray.setFromCamera({ x: cx / VW * 2 - 1, y: -(cy / VH) * 2 + 1 }, camera);
   return ray.ray.intersectPlane(aimPlane, hitP) ? [hitP.x, hitP.z] : null;
 }
-const PATH_MAX = 16;
+const PATH_MAX = 22;
 function drawStart(id, cx, cy) { const p = groundAt(cx, cy); IN.draw = { id, pts: p ? [p] : [], len: 0 }; }
 function drawMove(cx, cy) {
   const d = IN.draw, p = groundAt(cx, cy); if (!d || !p) return;
@@ -1667,7 +1654,7 @@ function stickGeo(id) { const L = layOf(id); return { cx: L.x * VW, cy: L.y * VH
 function knob(id, s) { $(id).firstElementChild.style.transform = s ? `translate(${s.dx * STICK}px,${s.dy * STICK}px)` : ""; }
 function setStick(s, x, y) { let dx = (x - s.ox) / s.r, dy = (y - s.oy) / s.r; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } s.dx = dx; s.dy = dy; s.dist = Math.hypot(x - s.ox, y - s.oy); }
 // バイパー系（タッチ）: 右のスティックを倒すと、戦車からカーソルが動いて弾道をえがく。はなすと発射
-const CUR_SPEED = 7;
+const CUR_SPEED = 15;   // 2026-11-19: 7 → 15（倒した向きへすばやく動いて、自由にえがけるように）
 const curMesh = new THREE.Mesh(new THREE.TorusGeometry(.22, .04, 8, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
 curMesh.rotation.x = PI / 2; curMesh.renderOrder = 11; curMesh.visible = false; scene.add(curMesh);
 function cursorTick(dt) {
