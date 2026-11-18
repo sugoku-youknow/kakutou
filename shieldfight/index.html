@@ -4766,7 +4766,7 @@ function lockOrientation(land) {
   try { const r = screen.orientation.lock(land ? "landscape" : "portrait"); if (r && r.catch) r.catch(() => {}); } catch (e) {}
 }
 rotBtn.onclick = () => {
-  rotBtn.blur(); fsAutoDone = true;
+  rotBtn.blur(); fsAutoDone = true; landAutoDone = true;
   const toLand = window.innerHeight > window.innerWidth;     // いまが縦なら横へ、横なら縦へ
   if (fsNow() || standalone) { lockOrientation(toLand); return; }
   try {
@@ -4774,7 +4774,16 @@ rotBtn.onclick = () => {
     if (r && r.then) r.then(() => lockOrientation(toLand), () => {}); else setTimeout(() => lockOrientation(toLand), 300);
   } catch (e) {}
 };
-["fullscreenchange", "webkitfullscreenchange"].forEach(ev => document.addEventListener(ev, () => { paintFs(); cam.init = false; }));
+// 開いたらすぐ横画面にする（2026-11-18）: インストールしたアプリ（Android）なら読み込んだ瞬間に横へ固定。ブラウザでは全画面のときしか固定できないので、
+// 最初に画面のどこかに触れたときに全画面にして横へ固定する。そのあとは縦横の切り替えボタンで変えられる。iPhone はこの機能がないので、スマホを横にしてもらう
+let landAutoDone = false;
+function autoLand() {
+  if (landAutoDone || !canLock || !coarseMq.matches) return;
+  if (standalone || fsNow()) { landAutoDone = true; lockOrientation(true); }
+}
+autoLand();
+document.addEventListener("pointerdown", () => { autoFs(); autoLand(); }, { capture: true, passive: true });
+["fullscreenchange", "webkitfullscreenchange"].forEach(ev => document.addEventListener(ev, () => { paintFs(); cam.init = false; if (fsNow()) autoLand(); }));
 paintFs();
 // アプリとしてのインストール: サービスワーカー（sw.js）を登録する（Chrome がインストールできると判断するのに必要）。https か localhost のときだけ
 try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("../sw.js").catch(() => {}); } catch (e) {}
