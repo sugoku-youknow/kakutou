@@ -79,6 +79,8 @@
           <li><b>右の指</b>：ボールがラケットに来た<b>瞬間の指のスライド</b>の向きと速さで回転が決まる（ボールが体の近くにある間に指をすべらせると打つ）
             <br>↑上＝<b>前回転</b>（速く深い・低く伸びる）／↓下＝<b>下回転</b>（遅く短い・止まる）
             <br>←→横＝<b>横回転</b>（こすった向きに曲がる・横に跳ねる）。速くこするほど強い回転</li>
+          <li><b>引き付けて打てる</b>（カット戦法）：台から離れて、低い球をぎりぎりまで待ってから打っていい。ただし<b>タイミングを大きく外す</b>と、球が高く<b>ひょろひょろ</b>の山なりになる
+            <br>山なり球が来たときだけ、指を<b>すばやくはじく</b>と<b>スマッシュ</b>で決められる</li>
           <li>打った球は基本的に入る。でも<b>相手の回転が残るとミス</b>（前回転→オーバー、下回転→ネット、横回転→横へ）</li>
           <li>右上のボールの<b>矢印と同じ向きにこする</b>と、相手の回転を打ち消せる。</li>
         </ul>
@@ -213,11 +215,17 @@ function solveShot(p0, tx, tz, T, w, serve) {
   const v = serve
     ? V((tx - p0.x) / T, -0.8, (tz - p0.z) / T)
     : V((tx - p0.x) / T, (TH + R - p0.y + 0.5 * G * T * T) / T, (tz - p0.z) / T);
-  for (let i = 0; i < 18; i++) {   // 強い回転でも落ち先が合うように、多めに繰り返す（2026-11-19）
+  let gain = 0.9, best = null;   // 強い回転でも発散しないように、誤差が増えたらゲインを下げ、いちばんよかった解を返す
+  for (let i = 0; i < 26; i++) {
     const r = flightSim(p0, v, w, serve ? 1 : 0);
-    v.x += (tx - r.x) / Math.max(r.t, 0.3) * 0.9; v.z += (tz - r.z) / Math.max(r.t, 0.3) * 0.9;
-    if (!serve) v.y += (T - r.t) * G * 0.45;
+    const err = Math.hypot(tx - r.x, tz - r.z) + (serve ? 0 : Math.abs(T - r.t) * 0.3);
+    if (!best || err < best.err) best = { v: v.clone(), err }; else gain *= 0.6;
+    const k = gain / Math.max(r.t, 0.3);
+    v.x += (tx - r.x) * k; v.z += (tz - r.z) * k;
+    if (!serve) v.y += (T - r.t) * G * 0.5 * gain;
+    if (v.length() > 16) v.multiplyScalar(16 / v.length());
   }
+  v.copy(best.v);
   return v;
 }
 // 打った球がどこで終わるか（ネット・アウトの判定に使う）
@@ -458,9 +466,9 @@ addEventListener("resize", resize); resize();
 // ===== 試合の状態 =====
 const ball = { p: V(0, 1, HL + 0.3), v: V(), w: V() };
 const LV = [
-  { name: "よわい", move: 2.0, react: 0.32, tMin: 0.78, tMax: 1.0, err: 0.15, spin: 40, aimW: 0.45, dMin: 0.55, dMax: 1.0, reach: 0.45, spinU: 1.0, cancel: 0.32 },
-  { name: "ふつう", move: 2.8, react: 0.2, tMin: 0.6, tMax: 0.88, err: 0.09, spin: 70, aimW: 0.58, dMin: 0.6, dMax: 1.15, reach: 0.5, spinU: 1.6, cancel: 0.52 },
-  { name: "つよい", move: 3.6, react: 0.1, tMin: 0.46, tMax: 0.72, err: 0.055, spin: 100, aimW: 0.66, dMin: 0.75, dMax: 1.22, reach: 0.56, spinU: 2.3, cancel: 0.72 },
+  { name: "よわい", move: 2.0, react: 0.32, tMin: 0.78, tMax: 1.0, err: 0.15, spin: 40, aimW: 0.45, dMin: 0.55, dMax: 1.0, reach: 0.45, spinU: 1.0, cancel: 0.32, lob: 0.07, smash: 0.4, smashRet: 0.05 },
+  { name: "ふつう", move: 2.8, react: 0.2, tMin: 0.6, tMax: 0.88, err: 0.09, spin: 70, aimW: 0.58, dMin: 0.6, dMax: 1.15, reach: 0.5, spinU: 1.6, cancel: 0.52, lob: 0.04, smash: 0.65, smashRet: 0.15 },
+  { name: "つよい", move: 3.6, react: 0.1, tMin: 0.46, tMax: 0.72, err: 0.055, spin: 100, aimW: 0.66, dMin: 0.75, dMax: 1.22, reach: 0.56, spinU: 2.3, cancel: 0.72, lob: 0.02, smash: 0.9, smashRet: 0.35 },
 ];
 let lv = LV[1];
 const st = {
@@ -494,7 +502,7 @@ function serverFor() {
 function newPoint() {
   st.server = serverFor();
   st.phase = "serve"; st.serveT = 0; st.rallyT = 0; st.hits = 0;
-  cpuPlan = null;
+  cpuPlan = null; st.lob = false; st.smash = false;
   ball.v.set(0, 0, 0); ball.w.set(0, 0, 0);
   trailPts.length = 0;
   hint(st.server === 0 ? "右の指をすべらせてサーブ（向きと速さで回転）" : "");
@@ -577,8 +585,10 @@ function onBallEvent(type, side) {
 }
 
 // ボールを打ち出す（hitter: 0 自分 / 1 CPU）
-function launch(hitter, p0, v, w, serve) {
+function launch(hitter, p0, v, w, serve, kind) {
   ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w);
+  st.lob = kind === "lob"; st.smash = kind === "smash";   // ひょろひょろの山なり球 / スマッシュ
+  if (st.smash) smashFx(p0);
   st.phase = "rally"; st.hitter = hitter; st.bounced = false; st.netTouched = false;
   st.serveStage = serve ? 1 : 0; st.rallyT = 0; st.hits++; st.pTried = false;
   Sfx.knock(); if (hitter === 0) Sfx.vibrate(15);
@@ -626,9 +636,10 @@ function makeShot(who, p0, brushGame, serve) {
   const topN = clamp(uOut.y / 3, -1, 1), sideN = clamp(Math.abs(uOut.x) / 3, 0, 1);
   const sg = who === 0 ? -1 : 1;
   let depth, T;
-  if (serve) { depth = topN >= 0 ? lerp(0.75, 1.1, topN) : lerp(0.75, 0.5, -topN); T = topN >= 0 ? lerp(0.75, 0.55, topN) : lerp(0.75, 0.9, -topN); }
-  else { depth = topN >= 0 ? lerp(0.9, 1.15, topN) : lerp(0.9, 0.6, -topN); T = topN >= 0 ? lerp(0.8, 0.52, topN) : lerp(0.82, 1.0, -topN); }
-  T += sideN * 0.08;
+  // 山なりにならないように、ボールが台に落ちるまでの時間 T を短く（低くて速い弾道）にする（2026-11-19）
+  if (serve) { depth = topN >= 0 ? lerp(0.75, 1.1, topN) : lerp(0.75, 0.5, -topN); T = topN >= 0 ? lerp(0.6, 0.42, topN) : lerp(0.6, 0.72, -topN); }
+  else { depth = topN >= 0 ? lerp(0.9, 1.15, topN) : lerp(0.9, 0.6, -topN); T = topN >= 0 ? lerp(0.54, 0.36, topN) : lerp(0.56, 0.72, -topN); }
+  T += sideN * 0.05 + Math.max(0, Math.abs(p0.z) - 2.0) * 0.1;   // 遠くから打つ（カット）ときは、飛ぶ時間を少し長く
   let tx = clamp(-uOut.x * 0.2 + (Math.random() - 0.5) * 0.12, -0.6, 0.6);
   // 残った回転で、ねらいがずれる（ずれる向きは当たる面の表面の動きの反対）
   //   前回転が残る（表面が下へ）→ 長くなってオーバー / 下回転が残る（表面が上へ）→ 短くなってネット / 横回転 → 横へ
@@ -636,20 +647,40 @@ function makeShot(who, p0, brushGame, serve) {
   const el = e.length(), ef = el > E_DEAD ? (el - E_DEAD) / el : 0;
   depth = Math.max(-0.05, depth - e.y * ef * (e.y > 0 ? KV * 1.8 : KV));   // 下回転が残ると短くなる（ネットまでの距離が短いので強め）
   tx += -e.x * ef * KH;
-  const v = solveShot(p0, tx, sg * depth, T, w, serve);
+  let v = solveShot(p0, tx, sg * depth, T, w, serve);
+  // 基本的に球は入る: 相手の回転が残ったせい（わざとずらした）でなければ、入らない打ち方は回転を少し弱めて・飛ぶ時間を長くして入れる
+  if (ef === 0) {
+    for (let k = 1; k <= 6 && shotOutcome(p0, v, w, serve) !== "in"; k++) {
+      w.multiplyScalar(0.85);
+      v = solveShot(p0, tx, sg * depth, T * (1 + 0.07 * k), w, serve);
+    }
+    if (shotOutcome(p0, v, w, serve) !== "in") { w.set(0, 0, 0); v = solveShot(p0, tx, sg * depth, T * 1.5, w, serve); }   // それでも入らない無理な打点は、回転なしで入れる
+  }
   return { v, w, e: e.length(), uIn: uLen, canceled, uOut };
 }
 // 指の速さ（画面の高さ/秒）→ こする速さ b（m/s）。遅いとブロック（回転なし）
 function brushFromFinger() {
   const pts = swP.pts, now = performance.now();
-  let f = null;
-  for (let i = pts.length - 1; i >= 0; i--) { if (now - pts[i].t > 140) break; f = pts[i]; }
   const l = pts[pts.length - 1];
-  if (!f || !l || l === f || l.t - f.t < 8 || now - l.t > 160) return V();
-  const vx = (l.x - f.x) / (l.t - f.t) * 1000 / H, vy = (l.y - f.y) / (l.t - f.t) * 1000 / H;
-  const sp = Math.hypot(vx, vy), mag = clamp((sp - 0.4) * 1.0, 0, 3.5);
-  if (mag <= 0) return V();
-  return V(vx / sp * mag, -vy / sp * mag, 0);
+  if (!l || now - l.t > 160) return V();
+  // 直近 0.14 秒の中で、いちばん速かった区間（20 ms 以上はなれた 2 点）の向きと速さを使う。
+  // ゆっくりなぞると弱い回転、指をはじく（すばやく払う）と強い回転（2026-11-19）
+  let best = null;
+  for (let i = pts.length - 1; i > 0; i--) {
+    if (now - pts[i].t > 140) break;
+    for (let j = i - 1; j >= 0; j--) {
+      const dt = pts[i].t - pts[j].t;
+      if (dt < 20) continue;
+      if (dt > 90) break;
+      const vx = (pts[i].x - pts[j].x) / dt * 1000 / H, vy = (pts[i].y - pts[j].y) / dt * 1000 / H, sp = Math.hypot(vx, vy);
+      if (!best || sp > best.sp) best = { vx, vy, sp };
+      break;
+    }
+  }
+  if (!best) return V();
+  const t = clamp((best.sp - 0.5) / 6, 0, 1), mag = 3.5 * Math.pow(t, 1.25);
+  if (mag <= 0.02) return V();
+  return V(best.vx / best.sp * mag, -best.vy / best.sp * mag, 0);
 }
 function spinName(parts, mag) {
   const a = [];
@@ -660,6 +691,47 @@ function spinName(parts, mag) {
 }
 function powerDots(w) { const n = clamp(Math.round(w.length() / 35), 0, 5); return "●".repeat(n) + "○".repeat(5 - n); }
 
+// ===== 山なり球（ひょろひょろ）とスマッシュ（2026-11-19）=====
+// タイミングを大きく外して打つと、球は高く上がってゆっくり落ちる「ひょろひょろ」の山なり球になる。
+// 山なり球が来たときだけ、すばやくはじくとスマッシュ（低くて超速い球）が打てる。ふつうの球にはスマッシュは打てない。
+function makeLob(who, p0) {
+  const sg = who === 0 ? -1 : 1, far = Math.max(0, Math.abs(p0.z) - 2) * 0.1;
+  const w = spinFromBrush(V((Math.random() - 0.5) * 0.8, -0.3 - Math.random() * 0.5, 0), faceN(who));   // 弱い下回転
+  let res;
+  for (let k = 0; k < 4; k++) {
+    const depth = lerp(0.45, 1.0, Math.random()), tx = (Math.random() - 0.5) * 0.9, T = 0.95 + Math.random() * 0.2 + far;
+    const v = solveShot(p0, tx, sg * depth, T, w, false);
+    res = { v, w, kind: "lob" };
+    if (shotOutcome(p0, v, w, false) === "in") break;
+  }
+  return res;
+}
+function makeSmash(who, p0, brushGame) {
+  const sg = who === 0 ? -1 : 1;
+  const w = spinFromBrush(toPhys(V(brushGame.x * 0.3, 1.0, 0)), faceN(who));   // 少しだけ前回転
+  const tx = clamp(brushGame.x * 0.18, -0.6, 0.6) * (who === 0 ? 1 : -1) + (Math.random() - 0.5) * 0.15;
+  let res;
+  for (const T of [0.26, 0.32, 0.4, 0.5, 0.62]) {
+    const depth = lerp(1.0, 1.25, Math.random());
+    const v = solveShot(p0, tx, sg * depth, T, w, false);
+    res = { v, w, kind: "smash" };
+    if (shotOutcome(p0, v, w, false) === "in") break;
+  }
+  return res;
+}
+// スマッシュの演出: 当たった所にリングが広がり、画面がぴかっとする
+const fxList = [];
+const flashEl = document.createElement("div");
+flashEl.style.cssText = "position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s;z-index:5";
+$("app").appendChild(flashEl);
+function smashFx(p) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.085, 40), new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  m.position.copy(p); scene.add(m); fxList.push({ m, t: 0 });
+  flashEl.style.transition = "none"; flashEl.style.opacity = "0.55";
+  setTimeout(() => { flashEl.style.transition = "opacity .3s"; flashEl.style.opacity = "0"; }, 40);
+  Sfx.hit(); Sfx.vibrate([30, 20, 60]);
+}
+
 // 自分のラケットの届く範囲（フォア／バックは自動で切り替え）
 function playerZone() {
   const fh = ball.p.x >= P.pos.x - 0.06;
@@ -668,25 +740,26 @@ function playerZone() {
 // ボールがラケットの面まで来た瞬間に打つ。右の指がふれていれば、その瞬間の指のスライドで回転が決まる
 function checkPlayerHit() {
   if (st.phase !== "rally" || st.hitter !== 1 || !st.bounced || st.serveStage === 1 || st.pTried) return;
-  // ボールが届く範囲（ラケットの面の 0.3 m 手前〜0.15 m 後ろ）にある間に、右の指をすべらせたときだけ打つ。
-  // 指を動かさなければ打たない（勝手に打ち返さない。2026-11-19）。届く範囲は広め
+  // 右の指をすべらせた瞬間に打つ（指が止まっていれば打たない）。
+  // 引き付けて打てる（カットマンのように台から離れて、低い球をぎりぎりまで待って打つ）: ラケットの面から 0.45 m 後ろまでは「ちょうどいいタイミング」。
+  // それより遅い（0.45〜0.7 m 後ろ）と大きなタイミングミスで、ひょろひょろの山なり球になる。
   const z = playerZone();
-  // 速い球でも打てるように、届く幅は球の速さに合わせて広げる（約 0.12 秒ぶん手前から）
-  if (ball.v.z <= 0 || ball.p.z < z.c.z - Math.max(0.3, ball.v.z * 0.14)) return;
-  if (ball.p.z > z.c.z + 0.15 + ball.v.z * 0.05) { st.pTried = true; return; }   // 通りすぎた（空振り）
+  if (ball.v.z <= 0) return;
+  const vz = Math.max(ball.v.z, 1.0), u = ball.p.z - z.c.z;
+  if (u < -Math.max(0.3, vz * 0.1)) return;                   // まだ来ていない
+  if (u > 0.7 + vz * 0.05) { st.pTried = true; return; }      // 通りすぎた（空振り）
   const dx = ball.p.x - z.c.x, dy = ball.p.y - z.c.y;
-  if (!(Math.abs(dx) <= 0.68 && dy >= -0.55 && dy <= 0.85)) return;
+  if (!(Math.abs(dx) <= 0.68 && dy >= -0.95 && dy <= (st.lob ? 1.7 : 0.85))) return;
   const brush = brushFromFinger();
   if (brush.length() < 0.05) return;   // 指が止まっている・ふれていない
   st.pTried = true;
-  const p0 = ball.p.clone();
-  const s = makeShot(0, p0, brush, false);
+  const p0 = ball.p.clone(), late = u > 0.45;
+  let s;
+  if (st.lob && brush.length() >= 2.0) s = makeSmash(0, p0, brush);     // 山なり球をはじいた → スマッシュ
+  else if (late) s = makeLob(0, p0);                                    // 大きくタイミングを外した → 山なり球
+  else s = makeShot(0, p0, brush, false);
   P.swingT = 0; P.swingKind = brush.y < -0.3 ? "cut" : "drive"; P.swingDir = brush.x >= 0 ? -1 : 1;
-  launch(0, p0, s.v, s.w, false);
-  const name = brush.length() < 0.05 ? "ブロック" : spinName(spinParts(s.w, s.v), s.w.length());
-  let note = "";
-  if (s.uIn > 0.5) note = s.e <= E_DEAD ? "・回転を打ち消した！" : s.canceled > 0.3 ? "・少し打ち消した" : "・相手の回転が残った…";
-  shotLabel(name + " " + powerDots(s.w) + note, s.e > E_DEAD && s.uIn > 0.5 ? "#ffc27a" : "#9fd0ff");
+  launch(0, p0, s.v, s.w, false, s.kind);
   Sfx.shot();
 }
 function playerServe(brush) {
@@ -747,7 +820,7 @@ function updateCpu(dt) {
       cpuPlan.done = true;
       const dx = Math.abs(ball.p.x - rc.x), dy = ball.p.y - rc.y;
       // ぎりぎり間に合った球は、空振りすることもある
-      const whiff = clamp((cpuPlan.rush - 0.8) * 0.6, 0, 0.6);
+      const whiff = st.smash ? 1 - lv.smashRet : clamp((cpuPlan.rush - 0.8) * 0.6, 0, 0.6);   // スマッシュはほとんど返せない
       if (dx < lv.reach && dy > -0.38 && dy < 0.6 && Math.random() >= whiff) cpuHit();
     }
   }
@@ -771,9 +844,15 @@ function cpuHit() {
   const brush = cpuBrush(), ul = uIn.length();
   if (ul > 1e-3) { const al = brush.dot(uIn) / ul; if (al < 0) brush.addScaledVector(uIn, -al / ul); }   // 矢印と逆向きにはこすらない
   brush.addScaledVector(uIn, c);
-  const s = makeShot(1, p0, brush, false);
+  // 山なり球が来たら、スマッシュで決めにくる。タイミングを大きく外したときは、こちらも山なり球になる
+  const rush = (cpuPlan && cpuPlan.rush) || 0;
+  const lobP = lv.lob + clamp(rush - 0.85, 0, 0.6) * 0.5 + clamp(ul - 2.2, 0, 2) * 0.06;
+  let s;
+  if (st.lob && Math.random() < lv.smash) s = makeSmash(1, p0, V((Math.random() - 0.5) * 3, 2.5, 0));
+  else if (!st.lob && Math.random() < lobP) s = makeLob(1, p0);
+  else s = makeShot(1, p0, brush, false);
   C.swingT = 0; C.swingKind = brush.y < -0.3 ? "cut" : "drive"; C.swingDir = 1;
-  launch(1, p0, s.v, s.w, false);
+  launch(1, p0, s.v, s.w, false, s.kind);
 }
 function cpuServe() {
   const p0 = serveBallPos(1);
@@ -851,7 +930,7 @@ function updatePlayer(dt) {
     P.pos.x += ix * 3.2 * dt; P.pos.z += iz * 3.2 * dt;
   }
   // 台の後ろだけでなく、台の横にも動ける（2026-11-19）。台（と、その分の余白）の中には入れず、ふちにそってすべる。相手側へは行かない
-  P.pos.x = clamp(P.pos.x, -3.0, 3.0); P.pos.z = clamp(P.pos.z, 0.15, HL + 2.4);
+  P.pos.x = clamp(P.pos.x, -3.0, 3.0); P.pos.z = clamp(P.pos.z, 0.15, HL + 3.3);
   const BX = HW + 0.3, BZ = HL + 0.25;
   if (Math.abs(P.pos.x) < BX && P.pos.z < BZ) {
     if (prev.z >= BZ - 1e-3) P.pos.z = BZ;                              // 後ろから来た: 台の手前で止まる
@@ -904,6 +983,12 @@ const camPos = V(0, 1.9, HL + 2.6), camLook = V(0, 0.8, -0.8);
 function render(rdt) {
   poseChar(P, rdt); poseChar(C, rdt);
   ballMesh.position.copy(ball.p);
+  const tnow = performance.now() * 0.001, wob = st.lob && (st.phase === "rally" || st.phase === "dead");
+  if (wob) { ballMesh.position.x += Math.sin(tnow * 22) * 0.035; ballMesh.position.y += Math.sin(tnow * 17 + 1) * 0.03; }   // ひょろひょろ
+  ballMesh.scale.setScalar(wob ? 1 + Math.sin(tnow * 14) * 0.12 : 1);
+  ballMesh.material.emissive.setHex(wob ? 0x4a7a2a : st.smash ? 0x8a5a10 : 0x332a10);
+  trail.material.color.setHex(wob ? 0x9bff7a : st.smash ? 0xffc040 : 0xffe8a0);
+  for (let i = fxList.length - 1; i >= 0; i--) { const f = fxList[i]; f.t += rdt; const k = f.t / 0.35; f.m.scale.setScalar(1 + k * 9); f.m.material.opacity = Math.max(0, 1 - k); f.m.lookAt(camera.position); if (k >= 1) { scene.remove(f.m); fxList.splice(i, 1); } }
   const overTable = Math.abs(ball.p.x) <= HW && Math.abs(ball.p.z) <= HL && ball.p.y >= TH;
   ballShadow.position.set(ball.p.x, overTable ? TH + 0.002 : 0.003, ball.p.z);
   ballShadow.material.opacity = 0.45 * clamp(1 - (ball.p.y - (overTable ? TH : 0)) * 0.6, 0.15, 1);
@@ -911,11 +996,11 @@ function render(rdt) {
   if (st.phase === "rally" || st.phase === "dead") { trailPts.push(ball.p.clone()); if (trailPts.length > TRAIL) trailPts.shift(); }
   else trailPts.length = 0;
   const arr = trailGeo.attributes.position.array;
-  for (let i = 0; i < TRAIL; i++) { const p = trailPts[Math.max(0, trailPts.length - 1 - i)] || ball.p; arr[i * 3] = p.x; arr[i * 3 + 1] = p.y; arr[i * 3 + 2] = p.z; }
+  for (let i = 0; i < TRAIL; i++) { const p = trailPts[Math.max(0, trailPts.length - 1 - i)] || ball.p; arr[i * 3] = p.x + (wob ? Math.sin(i * 0.9 + tnow * 20) * 0.04 : 0); arr[i * 3 + 1] = p.y; arr[i * 3 + 2] = p.z; }
   trailGeo.attributes.position.needsUpdate = true;
   // カメラ: 自分の後ろから
   const tp = st.phase === "title" ? V(2.6, 2.2, HL + 2.6) : V(P.pos.x * 0.7 + 0.2, 2.5, P.pos.z + 1.7);
-  const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.3, 0.55, -0.85);
+  const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.3, 0.55 + (st.lob ? clamp((ball.p.y - 1.8) * 0.3, 0, 0.7) : 0), -0.85);
   const k = 1 - Math.pow(0.002, rdt);
   camPos.lerp(tp, k); camLook.lerp(tl, k);
   camera.position.copy(camPos); camera.lookAt(camLook);
@@ -1018,7 +1103,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && !st
 toTitle();
 
 // 動作確認用
-window.__pp = { st, ball, P, C, cfg, stepBall, makeShot, playerServe, surfaceVel, faceN, swP, toPhys, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
+window.__pp = { st, ball, P, C, cfg, stepBall, brushFromFinger, makeLob, makeSmash, shotOutcome, launch, makeShot, playerServe, surfaceVel, faceN, swP, toPhys, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
 </script>
 </body>
 </html>
