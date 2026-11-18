@@ -557,6 +557,8 @@ const hwC = hw => Math.min(1, hw / HW_MAX), hwR = c => 8 + 12 * c, hwV = c => 7 
 // CF（2026-10-18）: ムーンサルトは、体の前 CF_REACH の敵を真上へ蹴り上げる（盾・騎士のカウンターの構えは効かない）。約 CF_LIFT px 浮き、CF_STUN フレーム動けない。CF_DMG % がたまる。
 // 自分は CF_FLIP フレームかけて宙返りする（少し浮く）。パッシブ: 空中で通常攻撃の根元（体に近い CF_ROOT px）が当たるとクリティカル（威力と吹っ飛ばしが CF_CRIT 倍、ヒットストップはふつうの CF_HS 倍）
 const CF_REACH = 44, CF_LIFT = 268, CF_STUN = 60, CF_DMG = 8, CF_FLIP = 18, CF_ROOT = 14, CF_CRIT = 2, CF_HS = 1.2;
+// 2026-11-18: 蹴り上げた相手は動けるが、着地するまで盾が使えない（nsh）。CF_STUN は使わなくなった。根元のクリティカルは、威力 CF_CRIT 倍・吹っ飛ばし CF_CRIT_KB 倍
+const CF_CRIT_KB = 1.75;
 // スパッタリー（2026-10-24）: 地上で左右を押しながらジャンプボタンを押すと、その方向へステップ（STEP_F フレームで STEP_V × STEP_F px。その間は盾なし）。
 // 続けて 2 回まで。1 回目のあと STEP_CHAIN フレーム 2 回目を出さなければ数え直し、2 回目のあとは STEP_CD フレームの間ステップできない（ジャンプになる）。人は左右＋ジャンプ、CPU は頭脳が決める（aiStp）
 const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
@@ -568,7 +570,10 @@ const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
 // 敵は傘をすり抜けられない（壁のように押し返す。透過中などの当たらない人は通れる）。敵の攻撃（近接・飛び道具・爆風）で UMB_DMG_MAX % ぶん削られると壊れる（1 回の攻撃で UMB_DMG_HIT %、爆風は UMB_DMG_BLAST %）。
 // 飛ばしたあとは UMB_REGEN フレームで新しい傘が生える（それまでの攻撃ボタンはふつうの通常攻撃）。傘を壊された（開いた傘・飛ばした傘とも）ときは、UMB_BREAK_LOCK フレームの間は新しい傘が生えない
 const UMB_H = 90, UMB_W = 16, UMB_LAUNCH = 75, UMB_HP = 5, UMB_REGEN = 300, UMB_FRAC = 0.35, UMB_TICK = 30, UMB_SLOW = 0.7;
-const UMB_V = 7 / 3 * 0.7, UMB_LIFE = 480, UMB_SHOT = 0.7;   // 2026-10-25 に速さを 0.7 倍（約 1.63）、残る時間を 4 → 8 秒に
+const UMB_V = 7 / 3 * 0.7 * 0.5, UMB_LIFE = 480, UMB_SHOT = 0.7;   // 2026-10-25 に速さを 0.7 倍（約 1.63）、残る時間を 4 → 8 秒に。2026-11-18 に速さをさらに半分（約 0.82）
+// 2026-11-18: 飛ばした傘は連続ヒット。触れている敵に UMB_MULTI_GAP ごとに UMB_MULTI_DMG % の小さな当たり（短く動けない。盾を構えて傘を向いていれば効かない）を UMB_MULTI_N - 1 回、
+// 最後の 1 回は UMB_SHOT 倍でふつうに当たる（盾で受けられる）。そのあと UMB_TICK で、また連続ヒットが始まる
+const UMB_MULTI_N = 5, UMB_MULTI_GAP = 8, UMB_MULTI_DMG = 2;
 const UMB_DMG_MAX = 30, UMB_DMG_HIT = 10, UMB_DMG_BLAST = 15, UMB_BREAK_LOCK = 480;
 // ウルトラショット: 大きなインクの塊（半径 US_R）を真横へ撃つ。最初に当たった敵（手下・クロスボウ）か、射程 US_RANGE の終わりで爆発（半径 US_BLAST、盾は効かない）
 const US_V = 9, US_R = 22, US_RANGE = 700, US_BLAST = 90, US_KNOCK = 1.1, US_LIFT = 7;
@@ -647,23 +652,23 @@ const CHARS = [
     auto: "ステージにタバコが出る（3秒ごと、3本まで）。口のタバコは5秒で吸い切り、なくなると禁断症状（全性能-2・1秒に5%のダメージ）。吸っている間に拾うと5本までストックでき、吸い切ると次に火がつく。敵も拾って消せる" },
   // 26〜28 体目（必ず末尾に足す）
   { id: "vamp", name: "吸血鬼", A: 3, D: 1, S: 4, tag: "盾ごと噛みついて、相手の%を吸い取る",
-    skill: { name: "吸血", cd: 7, text: "前の敵に0.5秒噛みつく（盾・カウンター無視。吹っ飛ばさない）。8%＋相手の%の20%を吸い取り、同じだけ自分の%が回復する" },
+    skill: { name: "吸血", cd: 7, cdText: "7秒（空振りは2秒。途中で攻撃されて止められたらなし）", text: "前へダッシュして敵をつかみ、0.5秒噛みつく（盾・カウンター無視。吹っ飛ばさない）。8%＋相手の%の20%を吸い取り、同じだけ自分の%が回復する" },
     auto: "吸血鬼の羽: 二段ジャンプで羽を広げ、スピード6の地上ジャンプと同じ高さまで跳ぶ。落ちるのがゆっくり（0.6倍）" },
   { id: "hadou", name: "波動士", A: 2, D: 2, S: 2, tag: "波動をためて撃つ。追い込まれるほど強くなる",
     skill: { name: "波動弾", cd: 0, cdText: "撃ったあと1.5秒", text: "押すと頭の上で波動をため始め、もう一度押すと撃つ。ためるほど、また自分の%が多いほど大きく速い（最大3秒）。ためている波動は触れた敵に当たり続ける。動くなどでためが止まっても、ため量は残り、押すと再開" },
-    auto: "波動の力: 自分の%が20%増えるごとに、全性能が+1（なめらかに上がる）" },
+    auto: "波動の力: 自分の%が20%増えるごとに、攻撃とスピードが+1（なめらかに上がる。防御は変わらない）" },
   { id: "gambler", name: "勝負師", A: 2, D: 1, S: 3, tag: "出目しだいのハンマーで勝負する",
     skill: { name: "ハンマー", cd: 4, text: "1〜5がランダムに出るハンマーで殴る。1:自分に20% 2:通常攻撃 3:攻撃＋自分の%を8回復 4:盾を壊し1秒拘束＋10% 5:盾を壊し2倍で吹っ飛ばす" } },
   // 29 体目（必ず末尾に足す）
   { id: "cf", name: "CF", A: 3, D: 2, S: 4, tag: "蹴り上げて、空中攻撃の根元でクリティカル",
-    skill: { name: "ムーンサルト", cd: 4, text: "宙返りして前の敵を真上に蹴り上げる（盾・カウンター無視）。相手は約250px浮いて1秒動けない" },
-    auto: "空中で通常攻撃の根元（体に近い14px）が当たるとクリティカル: 2倍の威力と吹っ飛ばし、光ってヒットストップ" },
+    skill: { name: "ムーンサルト", cd: 4, text: "宙返りして前の敵を真上に蹴り上げる（盾・カウンター無視）。相手は約250px浮き、着地するまで盾が使えない（動くことはできる）" },
+    auto: "空中で通常攻撃の根元（体に近い14px）が当たるとクリティカル: 2倍の威力と1.75倍の吹っ飛ばし、光ってヒットストップ" },
   // 30 体目（必ず末尾に足す）
   { id: "splat", name: "スパッタリー", A: 2, D: 2, S: 3, atk: 5, tag: "ステップで動き回り、短い射程を2倍の速さで撃つ",
     skill: { name: "サメライド", cd: 8, text: "サメに乗って前へ進み、ぶつかった敵を攻撃する。進み終わるとインクを撒き散らして爆発する（爆発は盾が効かない）" },
     auto: "地上で左右＋ジャンプで、その方向へ素早くステップ（続けて2回まで。2回目のあと少し使えない）。通常攻撃は射程が短いが、2倍の速さで撃てる" },
   // 31 体目（必ず末尾に足す）
-  { id: "camp", name: "キャンピングシェルター", A: 2, D: 3, S: 1, tag: "大きな傘で守りながら押し込み、傘を飛ばす",
+  { id: "camp", name: "キャンピングシェルター", A: 2, D: 3, S: 2, tag: "大きな傘で守りながら押し込み、傘を飛ばす",
     skill: { name: "ウルトラショット", cd: 10, text: "大きなインクの塊を撃つ。敵に当たるか遠くまで飛ぶと爆発する（盾は効かない）" },
     auto: "攻撃ボタンで前に大きな傘を開く（押している間ずっと）。傘は前からの攻撃を防ぎ、触れた敵の盾を削る。1.25秒開くと傘が前へ飛んでいき、5秒で新しい傘が生える" },
 ];
@@ -673,7 +678,7 @@ const baseStat = (p, k) => { if (p.isClone) return CLONE_STATS[k]; const c = chO
 // 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる
 // ラストスパート中は、なおの攻撃・防御・スピードが +2（分身には付かない）
 const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, baseStat(p, k) + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0) + (!p.isClone && chOf(p).id === "nao" && late() ? LATE_NAO_BONUS : 0)
-  + (p.ub > 0 ? UP_BONUS : 0) - (k === "S" && p.nc > 0 ? CIG_SLOW_BY : 0) - (withdrawn(p) ? CIG_WD_BY : 0) + (!p.isClone && chOf(p).id === "hadou" ? (p.dm || 0) / HADOU_PER : 0) + (p.ybs ? p.ybs[k === "A" ? 0 : k === "D" ? 1 : 2] : 0)));   // ybs: ヤク猫の注射器で上がっている数（攻撃・防御・スピード）   // ub: 注射器・タバコの強化 / nc: 敵のタバコを拾ってスピードが下がっている
+  + (p.ub > 0 ? UP_BONUS : 0) - (k === "S" && p.nc > 0 ? CIG_SLOW_BY : 0) - (withdrawn(p) ? CIG_WD_BY : 0) + (!p.isClone && k !== "D" && chOf(p).id === "hadou" ? (p.dm || 0) / HADOU_PER : 0) + (p.ybs ? p.ybs[k === "A" ? 0 : k === "D" ? 1 : 2] : 0)));   // ybs: ヤク猫の注射器で上がっている数（攻撃・防御・スピード）   // ub: 注射器・タバコの強化 / nc: 敵のタバコを拾ってスピードが下がっている
 const effA = p => statOf(p, "A");
 const effD = p => statOf(p, "D");
 const effS = p => statOf(p, "S");
@@ -854,7 +859,7 @@ function newPlayer() {
            hw: 0, hwr: 0, hwh: [], hmN: 0, hmT: 0,     // … / 勝負師: 出目の吹き出しを出す残り
            um: 0, umR: 0, umHp: UMB_HP, umh: [], aiUm: 0,   // キャンピングシェルター: 傘を開いている長さ（0 = 閉じている）/ 新しい傘が生えるまで / 傘の耐久 / 触れて当てた敵と次に当たれるまで（ホストだけ）/ CPU が攻撃ボタンを押し続ける残り
            sp: 0, spD: 1, spN: 0, spW: 0, spC: 0, spU: 0, srT: 0, srHit: [], srCar: [], aiStp: 0,   // スパッタリー: ステップの残り / 向き / 続けて出した回数 / 2 回目を出せる残り / 使えない残り / ジャンプボタンを離すまで地上ジャンプしない / サメライドの残り / 当てた相手・押している相手（ホストだけ）/ CPU のステップの指示
-           vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
+           vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0, nsh: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
            ub: 0, nc: 0, dr: 0, st: 0, cw: 0, cs: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
            yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
@@ -941,7 +946,7 @@ const bombsOf = p => game.pj.filter(b => b.k === 0 && b.own === p.own);         
 // 盾が効く状態か（振っている・吹っ飛び中・盾が壊れている・動けない・弓をためている・つかみに行っている・つかまれている間は外れる）
 function shieldUp(p) {
   const c = chOf(p);
-  if (c.noShield || p.isClone) return false;                      // 盾なしのキャラと、コペルニウムの分身は、盾を持たない
+  if (c.noShield || p.isClone || p.nsh) return false;             // 盾なしのキャラと、コペルニウムの分身は、盾を持たない。nsh: CF に蹴り上げられて、まだ着地していない
   if (p.a > 0 || p.s > 0 || p.sbk > 0 || p.fz > 0 || p.gr > 0 || p.hd > 0 || p.mb > 0) return false;   // mb: 魔法で拘束されている
   if (p.bt > 0 || p.wb > 0 || p.yk > 0 || p.msT > 0 || p.sp > 0 || p.srT > 0 || p.um > 0) return false;   // 傘を開いている間は、盾の代わりに傘で受ける   // … / スパッタリーのステップ・サメライドの間   // … / CF のムーンサルト（宙返り）の間             // 盾を投げている / 糸で動いている / 糸で引き寄せられている
   if (p.ks > 0 && c.skill && c.skill.openShield) return false;
@@ -974,7 +979,7 @@ function spawn(p, slot, n, battle) {
   p.yr = 0; p.yrc = 0; p.yry = 0; p.yrvy = 0; p.yrg = false;
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
-  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0; p.hmT = 0; p.vbT = 0; p.vbTgt = null; p.wgT = 0;
+  p.nsh = 0; p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0; p.hmT = 0; p.vbT = 0; p.vbTgt = null; p.wgT = 0;
   p.sp = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
   p.um = 0; p.umR = 0; p.umHp = UMB_HP; p.umh = []; p.aiUm = 0;   // キャンピングシェルター
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
@@ -1107,8 +1112,8 @@ function useSkill(p) {                       // 押した瞬間に発動する�
     const mine = cbsOf(p);
     while (mine.length >= xbowMax()) removeCb(mine.shift());
     placeCb(p);
-  } else if (id === "vamp") {                  // 吸血: 空振りならクールタイムは短い
-    if (!vampBite(p)) { p.kc = Math.round(VAMP_WHIFF * cdMul()); emit("sk", ecx(p), ecy(p), p.ch); return true; }
+  } else if (id === "vamp") {                  // 吸血（2026-11-18 から）: レスラーと同じく前へダッシュしてつかみ、つかんだら噛みつく（grabStep → startBite）。空振りならクールタイムは短い
+    p.gr = 1; p.grT = null; p.grH = 0; p.grD = 0; p.f0 = p.f; p.s = 0;
   } else if (id === "cf") {                    // ムーンサルト: 当たっても外れても、クールタイムは同じ
     cfMoonsault(p);
   } else if (id === "camp") {                  // ウルトラショット: 傘は閉じる。少し後ろへ下がる
@@ -1213,7 +1218,7 @@ function respawn(p) {                        // 残機で復活: いちばん上
   p.rwHit = []; p.tl = []; p.rw = 0; p.rwN = 0; p.rwE = null; p.rwPath = null; releaseGrab(p); p.hd = 0; stopWeb(p); p.slw = 0;
   p.bt = 0; game.pj = game.pj.filter(b => !(b.k === 2 && b.own === p.own));                    // 投げていた盾（何枚あっても）は消えて、手元に戻る
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.mb = 0; p.mbv = null;                                                    // 魔法使い: ためと詠唱は取り消し（魔法書の耐久はそのまま）
-  p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmT = 0; p.wgT = 0; p.sp = 0; p.spN = 0; p.spC = 0; p.srT = 0; p.um = 0; p.umR = 0; p.umHp = UMB_HP;   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
+  p.nsh = 0; p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmT = 0; p.wgT = 0; p.sp = 0; p.spN = 0; p.spC = 0; p.srT = 0; p.um = 0; p.umR = 0; p.umHp = UMB_HP;   // 注射器・タバコの効果も消える。蓄積ダメージも 0 から
 
   for (const cb of cbsOf(p)) removeCb(cb);                                                       // クロス使い: 置いたクロスボウは（2 台あっても）全部消える
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;                                                       // ゴブG: 背中のゴブリンは投げ直し、召喚の続きは取り消し。投げた槍と手下は消える
@@ -1323,6 +1328,7 @@ function releaseGrab(p) {                     // つかみをやめる（つか�
 // 侍の居合斬り・槍兵の突進突き（構えから突進の終わりまで）も同じ。攻撃をリセットする前に呼ぶ
 function grabBroken(t) {
   if (t.gr > 0 && !t.grT) t.kc = 0;
+  if (t.vbT > 0) t.kc = 0;                    // 吸血鬼: 噛みついている途中で止められても、クールタイムなし（2026-11-18）
   if (t.a > 0 && (t.ak === 1 || (t.ak === 3 && t.a <= ATKS[3].dashTo))) t.kc = 0;
 }
 // おくれたんの花で動けない（土下座の）相手は、殴られても飛ばされるだけで、残りの時間は動けないまま（花→攻撃→落ちた先の花… とつなげられる）。
@@ -1357,6 +1363,7 @@ function grabStep(p, inp) {                   // 前へダッシュしながら�
       const d = Math.abs(ecx(e) - ecx(p));
       if (d < bd) { bd = d; best = e; }
     }
+    if (best && chOf(p).id === "vamp" && !p.isClone) { p.gr = 0; startBite(p, best); return; }   // 吸血鬼: つかんだら噛みつく（無敵にはならない）
     if (best) {                               // つかんだ: 盾もカウンターも関係ない。ここから投げるまで、レスラーは無敵（untouchable）
       grabBroken(best); releaseGrab(best); freeBind(best);
       best.hd = 2; best.a = 0; best.ak = 0; best.cd = 0; best.ks = 0; best.cn = 0; best.cnHit = true; best.s = 0; best.fz = 0; best.dz = 0; best.vx = best.vy = 0; best.ground = false; best.mc = 0; stopWeb(best);
@@ -1365,7 +1372,10 @@ function grabStep(p, inp) {                   // 前へダッシュしながら�
       return;
     }
   }
-  if (p.gr > GRAB_OFF) { p.gr = 0; p.fz = GRAB_WHIFF; }      // 空振り: しばらく動けず、盾も外れる
+  if (p.gr > GRAB_OFF) {                                     // 空振り: しばらく動けず、盾も外れる
+    p.gr = 0; p.fz = GRAB_WHIFF;
+    if (chOf(p).id === "vamp") { p.kc = Math.min(p.kc, Math.round(VAMP_WHIFF * cdMul())); emit("vbx", ecx(p) + p.f * 30, p.y + 22 * szOf(p), p.f); }   // 吸血鬼の空振りは、クールタイムが短い
+  }
 }
 function throwGrab(p, t) {
   const dir = p.grD || -(p.f0 || p.f);
@@ -1415,24 +1425,13 @@ function magicHit(b, o, e, dir) {
 }
 
 // ---- 吸血鬼: 吸血 ----
-// 体の前（少し体に食い込むところから VAMP_REACH 先まで）・体の高さに重なる、いちばん近い敵に噛みつく。盾もカウンターの構えも効かない。当たれば true
-function vampBite(p) {
-  const sz = szOf(p), front = p.f > 0 ? p.x + pwOf(p) : p.x;
-  const x0 = p.f > 0 ? front - 6 : front - VAMP_REACH * sz, x1 = x0 + VAMP_REACH * sz + 6, y0 = p.y + 6 * sz, y1 = p.y + phOf(p) - 6 * sz;
-  let t = null, bd = 1e9;
-  for (const e of ents()) {
-    if (ally(e.own, p.own) || !e.al || untouchable(e)) continue;
-    if (hbR(e) < x0 || hbL(e) > x1 || e.y > y1 || e.y + phOf(e) < y0) continue;
-    const d = Math.abs(ecx(e) - ecx(p)); if (d < bd) { bd = d; t = e; }
-  }
-  p.vx += p.f * 4;                                             // 少し踏み込む
-  if (!t) { emit("vbx", front + p.f * 18, p.y + 22 * sz, p.f); return false; }
+// 吸血鬼がダッシュでつかんだ敵に噛みつく（盾もカウンターの構えも効かない）
+function startBite(p, t) {
   // 噛みつく: 相手は VAMP_BITE フレーム動けない（体は吸血鬼の前に寄せる）。吹っ飛ばさない。% は biteStep で少しずつ移す
   grabBroken(t); releaseGrab(t); stopWeb(t); freeBind(t);
   t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.mc = 0; t.s = 0; t.fz = 0; t.vx = t.vy = 0; t.hd = VAMP_BITE + 4;
   p.vbT = VAMP_BITE; p.vbTgt = t; p.vbAmt = Math.round(VAMP_BASE + VAMP_PCT * (t.dm || 0)); p.a = 0; p.vx = 0;
   emit("vb", ecx(t), ecy(t), p.f, p.vbAmt);
-  return true;
 }
 // 噛みついている間（毎フレーム）: 相手を前に寄せたまま、VAMP_TICK ごとに % を少しずつ移す。終わる・相手が離れた（殴られた等）ら放す
 function biteStep(p) {
@@ -1495,7 +1494,7 @@ function cfMoonsault(p) {
   if (!t) { emit("ms", front + p.f * 16, p.y + 20 * sz, p.f, 0); return; }
   grabBroken(t); releaseGrab(t); stopWeb(t); freeBind(t);
   t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.mc = 0; t.fz = 0; t.dz = 0; t.hd = 0;
-  t.vx = 0; t.vy = -jumpVel(CF_LIFT); t.s = CF_STUN; t.ground = false; t.hf = 12;
+  t.vx = 0; t.vy = -jumpVel(CF_LIFT); t.s = 0; t.nsh = 1; t.ground = false; t.hf = 12;   // 動けるが、着地するまで盾なし
   addDmg(t, CF_DMG);
   emit("ms", ecx(t), t.y + phOf(t), p.f, 1);
 }
@@ -1779,6 +1778,15 @@ function killMinion(m, hit) {                // hit: 殴られて消えた（な
 }
 // 長方形に重なる、持ち主が違う手下とクロスボウを壊す（手下は 1 発で消え、クロスボウは 1 回削れる）。done に入っているクロスボウには当てず、当てたら done に入れる（同じ攻撃で何度も削らない）。
 // noMinion: 手下を壊さない（手下どうしの斬り用）/ cbPad: クロスボウに対してだけ、長方形の下側を広げる幅（矢・槍は細いので、同じ足場のクロスボウの上を通り抜けないように。手下には効かない）。何か当たれば true
+// 飛ばした傘の連続ヒットの 1 回（最後の 1 回以外）: 盾を構えて傘のほうを向いていれば効かない。それ以外は少し % がたまり、短く動けない（吹っ飛ばない。壁で押される）
+function umbMultiHit(o, e, side) {
+  if (e.cn > 0 || (shieldUp(e) && e.f === -side)) return;
+  grabBroken(e); releaseGrab(e); stopWeb(e);
+  e.a = 0; e.ak = 0; e.cd = 0; e.ks = 0; e.mc = 0;
+  addDmg(e, UMB_MULTI_DMG);
+  e.s = Math.max(e.s, UMB_MULTI_GAP + 2); e.vx = 0; e.hf = 6;
+  emit("h", ecx(e), ecy(e), side, 0.2);
+}
 // 飛ばした傘に攻撃が当たった: amt % 削り、UMB_DMG_MAX で壊れる。壊れたら持ち主はしばらく新しい傘を出せない
 function hurtUmbrella(b, amt) {
   b.dm = (b.dm || 0) + amt;
@@ -2135,7 +2143,7 @@ function physics(p, inp, neutral) {
   if (p.vy >= 0) {
     for (const pl of platforms()) {               // 上にある台から調べる。上からは乗れて、下からは通り抜ける
       if (prevBottom <= pl.y + 0.01 + (pl.mv ? 4 : 0) && p.y + hh >= pl.y && p.x + ww > pl.x && p.x < pl.x + pl.w) {   // 浮島は上下に動くので、少し余裕を見る
-        p.y = pl.y - hh; p.vy = 0; p.ground = true; p.dj = 0; break;
+        p.y = pl.y - hh; p.vy = 0; p.ground = true; p.dj = 0; p.nsh = 0; break;
       }
     }
   }
@@ -2254,7 +2262,7 @@ function strike(att, t, o) {
   if (t.cn > 0 && att.al) { counterHit(t, att); return; }
   if (umbrellaBlock(att, t, o)) return;                      // キャンピングシェルターの傘（前からの攻撃）
   const open = !shieldUp(t) || t.f !== -o.dir;               // 盾がない・外れている・背後から → 盾は効かない
-  if (open) { knock(att, t, o.frac, o.dir, o.cap); impact("h", att, t, o.frac, o.dir); return; }
+  if (open) { knock(att, t, o.frac, o.dir, o.cap, o.dmf ? DMG_BASE * atkMul(effA(att)) * defMul(effD(t)) * o.dmf * dzMul(t) : undefined); impact("h", att, t, o.frac, o.dir); return; }   // dmf: たまる % だけ別の倍率（CF のクリティカル）
   if (o.breaker) {                                           // 居合斬り: 盾を壊すだけで、吹っ飛ばしはしない
     breakShield(t); impact("k", att, t, 0, o.dir); return;
   }
@@ -2282,7 +2290,7 @@ function resolveHits(list) {
       else if (!p.isClone && !p.ground && chOf(p).id === "cf" && !(hx0 + (p.f > 0 ? CF_ROOT * sz : reach) < hbL(t) || hx0 + (p.f > 0 ? 0 : reach - CF_ROOT * sz) > hbR(t))) {
         // CF の空中攻撃の根元（体に近い CF_ROOT px）が当たった: クリティカル（2 倍の威力と吹っ飛ばし。盾で受けられたらふつうの盾の削り）
         const s0 = t.s;
-        strike(p, t, { dir: p.f, frac: CF_CRIT, cap: CF_CRIT, recoil: true });
+        strike(p, t, { dir: p.f, frac: CF_CRIT_KB, cap: CF_CRIT, dmf: CF_CRIT, recoil: true });
         if (t.s > 0 && t.s !== s0) { game.hs = Math.max(game.hs, Math.round(CF_HS * (8 + 3 * CF_CRIT))); emit("crit", ecx(t), ecy(t), p.f); }
       }
       else strike(p, t, { dir: p.f, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker });
@@ -2380,7 +2388,10 @@ function updateProjectiles(list) {
         const side = Math.sign(ecx(e) - b.x) || dir;          // 壁: いる側へ押し出す（傘に向かう勢いは止める）
         if (side > 0) { e.x += xb - hbL(e); if (e.vx < 0) e.vx = 0; } else { e.x -= hbR(e) - xa; if (e.vx > 0) e.vx = 0; }
         if (b.hit.some(q => q[0] === e)) continue;
-        b.hit.push([e, UMB_TICK]);
+        if (!b.mh) b.mh = [];                                  // [相手, 今の連続ヒットで当てた回数]
+        let m = b.mh.find(q => q[0] === e); if (!m) b.mh.push(m = [e, 0]);
+        if (++m[1] < UMB_MULTI_N) { b.hit.push([e, UMB_MULTI_GAP]); if (o) umbMultiHit(o, e, side); continue; }
+        m[1] = 0; b.hit.push([e, UMB_TICK]);                  // 最後の 1 回: ふつうに当てて飛ばす
         if (o) strike(o, e, { dir: side, frac: UMB_SHOT, recoil: false });   // 押している向き（後ろから触れた敵は後ろへ）
       }
       if (!b.hitO) b.hitO = [];
@@ -2773,7 +2784,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "camp": return face && Math.abs(dyFeet) < 40 && gap > 60 && gap < 600 && c.um === 0 ? KEY.k : 0;                     // 前の敵へウルトラショット
     case "splat": return g && face && sameLevel && gap > 30 && gap < 260 ? KEY.k : 0;                                         // 前の敵へサメで突っ込む（爆発は盾が効かない）
     case "cf": return g && face && gap < CF_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 && t.ground ? KEY.k : 0;              // 地上の敵を蹴り上げる（盾を構えていても）
-    case "vamp": return face && gap < VAMP_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 ? KEY.k : 0;                    // 噛みつける距離（盾を構えた相手にも）
+    case "vamp": return face && gap < GRAB_REACH + 90 && Math.abs(dyFeet) < 40 && t.s === 0 && t.a === 0 ? KEY.k : 0;       // ダッシュで噛みつける距離（盾を構えた相手にも）
     case "gambler": return face && sameLevel && gap < ATKS[4].reach - 8 ? KEY.k : 0;                                         // ハンマーが届く距離
     case "hadou": {                                                                                                     // 魔法使いと同じく、狙った長さまでためて、敵が射線にいたら撃つ
       if (!c.hw) { if (!g || gap > HW_RANGE) return 0; c.aiHw = [20, 40, 60, 90, 180][Math.floor(Math.random() * 5)]; return KEY.k; }
@@ -2957,7 +2968,7 @@ function aiThink(c, owner, pls, B) {
   const sgn = Math.sign(tcx - ccx) || c.f, tpl = platformUnder(t), pl = platformUnder(c);
   const sd = (cwid + tw) / 2, gap = Math.abs(tcx - ccx) - sd;                          // gap: 体のふちどうしの距離
   // 2.5) CF: 蹴り上げた（吹っ飛び中で空中の）敵の真下へ行って跳び、体が重なるくらいの近さで空中攻撃（根元のクリティカル）を当てる
-  if (id === "cf" && !t.ground && t.s > 0 && Math.abs(tcx - ccx) < 160 && t.y < c.y + 20) {
+  if (id === "cf" && !t.ground && (t.s > 0 || t.nsh) && Math.abs(tcx - ccx) < 160 && t.y < c.y + 20) {
     steer(tcx - sgn * (cwid / 2 + 6));
     const dy = (t.y + th / 2) - (c.y + phOf(c) / 2);
     if (c.ground && dy < -60) inp |= KEY.u;
@@ -4218,7 +4229,7 @@ function paintSelect() {
     STATS.map((s, k) => `<div class="st-r"><span class="nm" style="color:${s.color}">${s.label}</span>${barHtml(vals[k], s.color)}</div>`).join("") +
     `<div class="skl">${c.skill
       ? `<b>スキル「${esc(c.skill.name)}」</b>（クールタイム ${esc(c.skill.cdText || c.skill.cd + "秒")}${c.skill.hold ? "・ためて発動" : ""}）<br>${esc(c.skill.text)}`
-      : "スキルなし"}${c.auto ? `<br><b>自動の能力</b><br>${esc(c.auto)}` : ""}${traits}</div>`;
+      : "スキルなし"}${c.auto ? `<br><b>パッシブスキル</b><br>${esc(c.auto)}` : ""}${traits}</div>`;
 }
 // チームを選ぶボタン（なし・赤・青・緑・黄）。id: 入れ物の id / cur: 今のチーム
 const teamSeg = (id, cur) => `<span class="seg team" id="${id}">${TEAM_NAMES.map((nm, t) => `<button type="button" data-v="${t}"${t === cur ? ' class="on"' : ""}${t ? ` style="color:${TEAM_COLORS[t]}"` : ""}>${nm}</button>`).join("")}</span>`;
@@ -5352,7 +5363,7 @@ function drawPlayer(p, i, me, now) {
   // レスラー: つかみに行く腕 / 持ち上げている腕
   const gs = grabState(p);
   if (gs && p.al) {
-    cx.fillStyle = "#fdba74";
+    cx.fillStyle = chd.id === "vamp" ? "#e2e8f0" : "#fdba74";   // 吸血鬼は白い手
     if (gs === 1) { const ax = p.f > 0 ? p.x + PLW : p.x - 18; cx.fillRect(ax, p.y + 20, 18, 6); cx.fillRect(ax, p.y + 34, 18, 6); }
     else {
       cx.fillRect(p.x + 4, p.y - 14, 6, 18); cx.fillRect(p.x + PLW - 10, p.y - 14, 6, 18);
