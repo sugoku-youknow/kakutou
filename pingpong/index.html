@@ -75,7 +75,7 @@
         <h1>🏓 ゆび卓球</h1>
         <p class="lead">回転で勝負する3D卓球。2本の指で体とラケットを動かして、CPUと11点勝負。</p>
         <ul class="how">
-          <li><b>左の指</b>：体を動かす（左右・前後）</li>
+          <li><b>左の指</b>：体を動かす（台の後ろも横も動ける）</li>
           <li><b>右の指</b>：ボールがラケットに来た<b>瞬間の指のスライド</b>の向きと速さで回転が決まる（ボールが体の近くにある間に指をすべらせると打つ）
             <br>↑上＝<b>前回転</b>（速く深い・低く伸びる）／↓下＝<b>下回転</b>（遅く短い・止まる）
             <br>←→横＝<b>横回転</b>（こすった向きに曲がる・横に跳ねる）。速くこするほど強い回転</li>
@@ -133,7 +133,10 @@ const Sfx = window.YkgSfx || new Proxy({}, { get: () => () => {} });
 // ===== 台とボール =====
 const TL = 2.74, TW = 1.525, TH = 0.76, NETH = 0.1525, R = 0.02, G = 9.8;
 const HL = TL / 2, HW = TW / 2;
-const KM = 0.0045;   // 回転で曲がる強さ（マグヌス効果）
+// 回転の強さ（2026-11-19）: 本物の卓球のドライブは毎秒100回転前後（約 600〜900 rad/s）。
+// ゲームの中の「こする速さ」の計算（打ち消し・ずれ）はこれまでの単位のまま、実際の回転 ω だけ SK 倍にする。
+const SK = 5;
+const KM = 0.0026;   // 回転で曲がる強さ（マグヌス効果）。本物くらい（強い回転で 10〜15 m/s² 曲がる）
 const KD = 0.11;     // 空気の抵抗
 const TS = 0.64;     // ゲームの時間の速さ（本物よりゆっくり。2026-11-19 打ちやすく 0.72 → 0.64）
 const SUB = 1 / 240;
@@ -158,12 +161,12 @@ function integrate(b, h) {
 function tableBounce(b) {
   const hl = Math.hypot(b.v.x, b.v.z) || 1, dx = b.v.x / hl, dz = b.v.z / hl;
   const top = dz * b.w.x - dx * b.w.z;   // (up × v̂)·ω … 前回転なら +
-  b.v.y = -b.v.y * 0.88 * clamp(1 - top * 0.0016, 0.72, 1.18);
+  b.v.y = -b.v.y * 0.88 * clamp(1 - top / SK * 0.0024, 0.68, 1.22);
   b.v.x *= 0.88; b.v.z *= 0.88;
   // 前回転・下回転: 表面の動きで前後に押される（R·ω の 45%）
-  b.v.x += 0.45 * R * -b.w.z; b.v.z += 0.45 * R * b.w.x;
+  b.v.x += 0.45 * R * -b.w.z * 1.4 / SK; b.v.z += 0.45 * R * b.w.x * 1.4 / SK;
   // 横回転（縦の軸の回転）: 曲がる向き（ω_y·(up × v̂) = (v̂z, 0, −v̂x)·ω_y）へ横に跳ねる
-  const k = 0.0065 * b.w.y;
+  const k = 0.0065 * b.w.y * 1.2 / SK;
   b.v.x += k * dz; b.v.z += -k * dx;
   b.w.x *= 0.8; b.w.z *= 0.8; b.w.y *= 0.9;   // 回転ははねたあとも大部分が残る
 }
@@ -210,9 +213,9 @@ function solveShot(p0, tx, tz, T, w, serve) {
   const v = serve
     ? V((tx - p0.x) / T, -0.8, (tz - p0.z) / T)
     : V((tx - p0.x) / T, (TH + R - p0.y + 0.5 * G * T * T) / T, (tz - p0.z) / T);
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 18; i++) {   // 強い回転でも落ち先が合うように、多めに繰り返す（2026-11-19）
     const r = flightSim(p0, v, w, serve ? 1 : 0);
-    v.x += (tx - r.x) / T * 0.9; v.z += (tz - r.z) / T * 0.9;
+    v.x += (tx - r.x) / Math.max(r.t, 0.3) * 0.9; v.z += (tz - r.z) / Math.max(r.t, 0.3) * 0.9;
     if (!serve) v.y += (T - r.t) * G * 0.45;
   }
   return v;
@@ -455,9 +458,9 @@ addEventListener("resize", resize); resize();
 // ===== 試合の状態 =====
 const ball = { p: V(0, 1, HL + 0.3), v: V(), w: V() };
 const LV = [
-  { name: "よわい", move: 2.0, react: 0.32, tMin: 0.78, tMax: 1.0, err: 0.15, spin: 40, aimW: 0.45, dMin: 0.55, dMax: 1.0, reach: 0.45, spinU: 1.4, cancel: 0.32 },
-  { name: "ふつう", move: 2.8, react: 0.2, tMin: 0.6, tMax: 0.88, err: 0.09, spin: 70, aimW: 0.58, dMin: 0.6, dMax: 1.15, reach: 0.5, spinU: 2.1, cancel: 0.52 },
-  { name: "つよい", move: 3.6, react: 0.1, tMin: 0.46, tMax: 0.72, err: 0.055, spin: 100, aimW: 0.66, dMin: 0.75, dMax: 1.22, reach: 0.56, spinU: 2.8, cancel: 0.72 },
+  { name: "よわい", move: 2.0, react: 0.32, tMin: 0.78, tMax: 1.0, err: 0.15, spin: 40, aimW: 0.45, dMin: 0.55, dMax: 1.0, reach: 0.45, spinU: 1.0, cancel: 0.32 },
+  { name: "ふつう", move: 2.8, react: 0.2, tMin: 0.6, tMax: 0.88, err: 0.09, spin: 70, aimW: 0.58, dMin: 0.6, dMax: 1.15, reach: 0.5, spinU: 1.6, cancel: 0.52 },
+  { name: "つよい", move: 3.6, react: 0.1, tMin: 0.46, tMax: 0.72, err: 0.055, spin: 100, aimW: 0.66, dMin: 0.75, dMax: 1.22, reach: 0.56, spinU: 2.3, cancel: 0.72 },
 ];
 let lv = LV[1];
 const st = {
@@ -593,8 +596,8 @@ function launch(hitter, p0, v, w, serve) {
 // 回転を打ち消していれば、打った球は基本的に台に入る（ねらう場所は回転の向きで決まる）。
 const KV = 0.7, KH = 0.6, E_DEAD = 0.7;   // 残った回転で打球がずれる強さ（1 m/s 残ると何 m ずれるか）。E_DEAD 以下の弱い回転は気にしなくていい
 const faceN = who => V(0, 0, who === 0 ? 1 : -1);
-const surfaceVel = (w, n) => V().crossVectors(w, n).multiplyScalar(R);
-const spinFromBrush = (b, n) => V().crossVectors(n, b).divideScalar(R);
+const surfaceVel = (w, n) => V().crossVectors(w, n).multiplyScalar(R / SK);
+const spinFromBrush = (b, n) => V().crossVectors(n, b).multiplyScalar(SK / R);
 // 回転を「前回転・横回転」に分ける。top: + 前回転 / - 下回転（進む向きに対して）、
 // side: 曲がる向き（自分の画面で + 右 / - 左。ω_y で曲がる向きは ω_y·(up × v̂) = ω_y·(v̂z, 0, −v̂x) の x）
 function spinParts(w, v) {
@@ -668,8 +671,9 @@ function checkPlayerHit() {
   // ボールが届く範囲（ラケットの面の 0.3 m 手前〜0.15 m 後ろ）にある間に、右の指をすべらせたときだけ打つ。
   // 指を動かさなければ打たない（勝手に打ち返さない。2026-11-19）。届く範囲は広め
   const z = playerZone();
-  if (ball.v.z <= 0 || ball.p.z < z.c.z - 0.3) return;
-  if (ball.p.z > z.c.z + 0.15) { st.pTried = true; return; }   // 通りすぎた（空振り）
+  // 速い球でも打てるように、届く幅は球の速さに合わせて広げる（約 0.12 秒ぶん手前から）
+  if (ball.v.z <= 0 || ball.p.z < z.c.z - Math.max(0.3, ball.v.z * 0.14)) return;
+  if (ball.p.z > z.c.z + 0.15 + ball.v.z * 0.05) { st.pTried = true; return; }   // 通りすぎた（空振り）
   const dx = ball.p.x - z.c.x, dy = ball.p.y - z.c.y;
   if (!(Math.abs(dx) <= 0.68 && dy >= -0.55 && dy <= 0.85)) return;
   const brush = brushFromFinger();
@@ -846,7 +850,13 @@ function updatePlayer(dt) {
     if (keys.w || keys.arrowup) iz -= 1; if (keys.s || keys.arrowdown) iz += 1;
     P.pos.x += ix * 3.2 * dt; P.pos.z += iz * 3.2 * dt;
   }
-  P.pos.x = clamp(P.pos.x, -1.9, 1.9); P.pos.z = clamp(P.pos.z, HL + 0.25, HL + 2.4);
+  // 台の後ろだけでなく、台の横にも動ける（2026-11-19）。台（と、その分の余白）の中には入れず、ふちにそってすべる。相手側へは行かない
+  P.pos.x = clamp(P.pos.x, -3.0, 3.0); P.pos.z = clamp(P.pos.z, 0.15, HL + 2.4);
+  const BX = HW + 0.3, BZ = HL + 0.25;
+  if (Math.abs(P.pos.x) < BX && P.pos.z < BZ) {
+    if (prev.z >= BZ - 1e-3) P.pos.z = BZ;                              // 後ろから来た: 台の手前で止まる
+    else P.pos.x = (prev.x >= 0 ? 1 : -1) * BX;                         // 横から来た: 台のふちで止まる
+  }
   // ダイレクトで端にぶつかったら、指の基準をずらして「指と体が同じ動き」を保つ
   if (moveP.id !== null && cfg.move === "direct") {
     const k = DIRECT_K();
@@ -904,8 +914,8 @@ function render(rdt) {
   for (let i = 0; i < TRAIL; i++) { const p = trailPts[Math.max(0, trailPts.length - 1 - i)] || ball.p; arr[i * 3] = p.x; arr[i * 3 + 1] = p.y; arr[i * 3 + 2] = p.z; }
   trailGeo.attributes.position.needsUpdate = true;
   // カメラ: 自分の後ろから
-  const tp = st.phase === "title" ? V(2.6, 2.2, HL + 2.6) : V(P.pos.x * 0.5 + 0.25, 2.5, P.pos.z + 1.7);
-  const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.2, 0.55, -0.85);
+  const tp = st.phase === "title" ? V(2.6, 2.2, HL + 2.6) : V(P.pos.x * 0.7 + 0.2, 2.5, P.pos.z + 1.7);
+  const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.3, 0.55, -0.85);
   const k = 1 - Math.pow(0.002, rdt);
   camPos.lerp(tp, k); camLook.lerp(tl, k);
   camera.position.copy(camPos); camera.lookAt(camLook);
@@ -913,7 +923,7 @@ function render(rdt) {
   // 右上のボールのアップ（同じ画面の右上に小さく描く）
   if (st.phase !== "title" && st.phase !== "over") {
     const wl = ball.w.length();
-    if (wl > 0.5) { _q.setFromAxisAngle(_ax.copy(ball.w).divideScalar(wl), Math.min(wl * 0.09, 16) * rdt); closeBall.quaternion.premultiply(_q); }
+    if (wl > 0.5 * SK) { _q.setFromAxisAngle(_ax.copy(ball.w).divideScalar(wl), Math.min(wl / SK * 0.09, 16) * rdt); closeBall.quaternion.premultiply(_q); }
     const r = closeRect(), y = H - r.y - r.s;
     renderer.setScissorTest(true);
     renderer.setViewport(r.x, y, r.s, r.s); renderer.setScissor(r.x, y, r.s, r.s);
@@ -958,8 +968,8 @@ function drawCloseUp() {
   octx.strokeStyle = "rgba(255,255,255,.4)"; octx.lineWidth = 2;
   octx.beginPath(); octx.roundRect ? octx.roundRect(r.x, r.y, r.s, r.s, 10) : octx.rect(r.x, r.y, r.s, r.s); octx.stroke();
   const ux = -ball.w.y, uy = ball.w.x, um = Math.hypot(ux, uy), wl = ball.w.length();
-  if (um > 12) {
-    const len = clamp(um / 150, 0.3, 1) * r.s * 0.78, dx = ux / um, dy = uy / um;
+  if (um > 12 * SK) {
+    const len = clamp(um / (150 * SK), 0.3, 1) * r.s * 0.78, dx = ux / um, dy = uy / um;
     const x0 = cx - dx * len / 2, y0 = cy - dy * len / 2, x1 = cx + dx * len / 2, y1 = cy + dy * len / 2;
     octx.lineCap = "round"; octx.lineJoin = "round";
     for (const [col, lw] of [["rgba(0,0,0,.55)", 10], ["#ffd23f", 5]]) {
@@ -1008,7 +1018,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && !st
 toTitle();
 
 // 動作確認用
-window.__pp = { st, ball, P, C, cfg, makeShot, playerServe, surfaceVel, faceN, swP, toPhys, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
+window.__pp = { st, ball, P, C, cfg, stepBall, makeShot, playerServe, surfaceVel, faceN, swP, toPhys, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
 </script>
 </body>
 </html>
