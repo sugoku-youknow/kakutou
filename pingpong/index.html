@@ -153,7 +153,7 @@ const HL = TL / 2, HW = TW / 2;
 // 回転の強さ（2026-11-19）: 本物の卓球のドライブは毎秒100回転前後（約 600〜900 rad/s）。
 // ゲームの中の「こする速さ」の計算（打ち消し・ずれ）はこれまでの単位のまま、実際の回転 ω だけ SK 倍にする。
 const SK = 5;
-const KM = 0.0026;   // 回転で曲がる強さ（マグヌス効果）。本物くらい（強い回転で 10〜15 m/s² 曲がる）
+const KM = 0.0010;   // 回転で曲がる強さ（マグヌス効果）。本物くらい（強い回転で 10〜15 m/s² 曲がる）
 const KD = 0.11;     // 空気の抵抗
 const TS = 0.64;     // ゲームの時間の速さ（本物よりゆっくり。2026-11-19 打ちやすく 0.72 → 0.64）
 const SUB = 1 / 240;
@@ -176,15 +176,18 @@ function integrate(b, h) {
 // 台ではねる。回転の向きと強さで、はね方が変わる（2026-11-19 強めた）
 //   前回転: 低く、前へ伸びる / 下回転: 高めに、止まる（強いと手前に戻る） / 横回転: 曲がる向きへ横に跳ねる
 function tableBounce(b) {
-  const hl = Math.hypot(b.v.x, b.v.z) || 1, dx = b.v.x / hl, dz = b.v.z / hl;
+  const hl0 = Math.hypot(b.v.x, b.v.z) || 1, dx = b.v.x / hl0, dz = b.v.z / hl0;
   const top = dz * b.w.x - dx * b.w.z;   // (up × v̂)·ω … 前回転なら +
-  b.v.y = -b.v.y * 0.88 * clamp(1 - top / SK * 0.0024, 0.68, 1.22);
+  b.v.y = -b.v.y * 0.88 * clamp(1 - top / SK * 0.0012, 0.8, 1.12);
   b.v.x *= 0.88; b.v.z *= 0.88;
-  // 前回転・下回転: 表面の動きで前後に押される（R·ω の 45%）
-  b.v.x += 0.45 * R * -b.w.z * 1.4 / SK; b.v.z += 0.45 * R * b.w.x * 1.4 / SK;
-  // 横回転（縦の軸の回転）: 曲がる向き（ω_y·(up × v̂) = (v̂z, 0, −v̂x)·ω_y）へ横に跳ねる
-  const k = 0.0065 * b.w.y * 1.2 / SK;
+  // 前回転・下回転: 表面の動きで前後に押される（回転の影響は弱め）
+  b.v.x += 0.45 * R * -b.w.z * 0.8 / SK; b.v.z += 0.45 * R * b.w.x * 0.8 / SK;
+  // 横回転: 曲がる向きへ少しだけ横に跳ねる（上限つき）
+  const k = clamp(0.0065 * b.w.y * 0.6 / SK, -0.4, 0.4);
   b.v.x += k * dz; b.v.z += -k * dx;
+  // 下回転でも、進んでいた向きにはかならず進み続ける（自分の台のほうへ戻ってこない）
+  const along = b.v.x * dx + b.v.z * dz, minAlong = hl0 * 0.88 * 0.55;
+  if (along < minAlong) { b.v.x += (minAlong - along) * dx; b.v.z += (minAlong - along) * dz; }
   b.w.x *= 0.8; b.w.z *= 0.8; b.w.y *= 0.9;   // 回転ははねたあとも大部分が残る
 }
 // 1 ステップ進める。ev(type, side) で「台・ネット・床」に当たったことを知らせる
@@ -367,10 +370,10 @@ function makeChar(shirt) {
   const skin = mat(0xf1c7a3), dark = mat(0x22252e), sh = mat(shirt);
   const add = (m, x, y, z) => { m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
   const legs = [add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.78), dark), -0.1, 0.39, 0), add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.78), dark), 0.1, 0.39, 0)];
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.2), dark), 0, 0.82, 0);
+  const hip = add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.2), dark), 0, 0.82, 0);
   const torso = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.32, 4, 10), sh), 0, 1.16, 0);
   const head = add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), skin), 0, 1.58, 0);
-  add(new THREE.Mesh(new THREE.SphereGeometry(0.125, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x2a1c14)), 0, 1.6, 0.01);
+  const hair = add(new THREE.Mesh(new THREE.SphereGeometry(0.125, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x2a1c14)), 0, 1.6, 0.01);
   const lArm = add(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.5), sh), -0.24, 1.12, -0.06);
   lArm.rotation.set(-0.5, 0, 0.25);
   // 右腕は肩からラケットまで毎回のばす（+z 方向に長さ 1 の棒）
@@ -385,7 +388,7 @@ function makeChar(shirt) {
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.004; g.add(shadow);
   scene.add(g);
-  return { g, arm, racket, legs, torso, head, pos: V(), vel: V(), walk: 0, swingT: 9, swingDir: 1, swingKind: "drive", hand: 1, fing: V() };
+  return { g, arm, racket, legs, torso, head, hip, hair, lArm, crouch: 0, pos: V(), vel: V(), walk: 0, swingT: 9, swingDir: 1, swingKind: "drive", hand: 1, fing: V() };
 }
 const P = makeChar(0x2f7fe0);   // 自分（カメラの前で台が見えなくならないように、半分すける）
 P.g.traverse(o => { if (o.isMesh && o.material && !o.material.length && o !== P.g.children[P.g.children.length - 1]) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; } });
@@ -401,9 +404,15 @@ function poseChar(ch, dt) {
   ch.walk += dt * sp * 9;
   const sw = Math.sin(ch.walk) * Math.min(1, sp) * 0.5;
   ch.legs[0].rotation.x = sw; ch.legs[1].rotation.x = -sw;
+  // かがむ姿勢（低い球を追うとき）: 腰を落として、体を前にたおし、ひざを曲げる（足を縮める）
+  const cr = clamp(ch.crouch || 0, 0, 1);
+  for (const lg of ch.legs) { lg.scale.y = 1 - 0.5 * cr; lg.position.y = 0.39 * (1 - 0.5 * cr); }
+  ch.hip.position.y = 0.82 - 0.38 * cr; ch.torso.position.y = 1.16 - 0.42 * cr; ch.torso.rotation.x = 0.55 * cr;
+  ch.head.position.y = 1.58 - 0.46 * cr; ch.head.position.z = -0.08 * cr; ch.hair.position.y = 1.6 - 0.46 * cr; ch.hair.position.z = 0.01 - 0.08 * cr;
+  ch.lArm.position.y = 1.12 - 0.42 * cr; ch.arm.position.y = 1.32 - 0.42 * cr;
   // ラケット
   const hand = ch.hand;   // 1 = フォア（右）, -1 = バック（左）
-  const rest = hand > 0 ? V(0.4, 1.0, -0.22) : V(-0.26, 1.0, -0.34);
+  const rest = hand > 0 ? V(0.4, 1.0 - 0.55 * cr, -0.22 - 0.1 * cr) : V(-0.26, 1.0 - 0.55 * cr, -0.34 - 0.1 * cr);
   let rot = V(hand > 0 ? -0.2 : 0.2, hand > 0 ? -0.35 : 0.5, 0);
   const s = ch.swingT / 0.24;
   if (s < 1) {
@@ -528,7 +537,7 @@ function serverFor() {
 function newPoint(sv) {
   st.server = sv != null ? sv : serverFor();
   st.phase = "serve"; st.serveT = 0; st.rallyT = 0; st.hits = 0;
-  cpuPlan = null; st.lob = false; st.smash = false; st.hold = false; st.over = false; st.gameWin = -1;
+  cpuPlan = null; st.lob = false; st.smash = false; st.hold = false; st.over = false; st.gameWin = -1; st.tossed = false; st.tossT = 0;
   if (ON) ON.claimed = -1;
   ball.v.set(0, 0, 0); ball.w.set(0, 0, 0);
   trailPts.length = 0;
@@ -634,10 +643,10 @@ function onBallEvent(type, side) {
 
 // ボールを打ち出す（hitter: 0 自分 / 1 CPU）
 function launch(hitter, p0, v, w, serve, kind, remote) {
-  ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w); st.hold = false;
+  ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w); st.hold = false; st.tossed = false;
   if (ON && ON.role !== 2 && !remote) sendShot(p0, v, w, serve, kind);
   st.lob = kind === "lob"; st.smash = kind === "smash";   // ひょろひょろの山なり球 / スマッシュ
-  if (st.smash) smashFx(p0);
+  hitFx(p0, v, w, kind, hitter === 0);
   st.phase = "rally"; st.hitter = hitter; st.bounced = false; st.netTouched = false;
   st.serveStage = serve ? 1 : 0; st.rallyT = 0; st.hits++; st.pTried = false;
   Sfx.knock(); if (hitter === 0 && !(ON && ON.role === 2)) Sfx.vibrate(15);
@@ -653,7 +662,7 @@ function launch(hitter, p0, v, w, serve, kind, remote) {
 // 相手の球の u と同じ向きにこすると、その分だけ回転を打ち消せる。打ち消せずに残った分 e が打球をずらす
 //   （前回転が残る → 上にはねて長くなる、下回転が残る → 下に落ちてネット、横回転が残る → 横にそれる）。
 // 回転を打ち消していれば、打った球は基本的に台に入る（ねらう場所は回転の向きで決まる）。
-const KV = 0.7, KH = 0.6, E_DEAD = 0.7;   // 残った回転で打球がずれる強さ（1 m/s 残ると何 m ずれるか）。E_DEAD 以下の弱い回転は気にしなくていい
+const KV = 0.45, KH = 0.4, E_DEAD = 1.0;   // 残った回転で打球がずれる強さ（1 m/s 残ると何 m ずれるか）。E_DEAD 以下の弱い回転は気にしなくていい
 const faceN = who => V(0, 0, who === 0 ? 1 : -1);
 const surfaceVel = (w, n) => V().crossVectors(w, n).multiplyScalar(R / SK);
 const spinFromBrush = (b, n) => V().crossVectors(n, b).multiplyScalar(SK / R);
@@ -694,7 +703,7 @@ function makeShot(who, p0, brushGame, serve) {
   //   前回転が残る（表面が下へ）→ 長くなってオーバー / 下回転が残る（表面が上へ）→ 短くなってネット / 横回転 → 横へ
   //   打つ人から見た横: 自分は +x が右、CPU は -x が右
   const el = e.length(), ef = el > E_DEAD ? (el - E_DEAD) / el : 0;
-  depth = Math.max(-0.05, depth - e.y * ef * (e.y > 0 ? KV * 1.8 : KV));   // 下回転が残ると短くなる（ネットまでの距離が短いので強め）
+  depth = Math.max(0.3, depth - e.y * ef * (e.y > 0 ? KV * 1.8 : KV));   // 下回転が残ると短くなる（ネットまでの距離が短いので強め）
   tx += -e.x * ef * KH;
   let v = solveShot(p0, tx, sg * depth, T, w, serve);
   // サーブは、まず自分の台ではねてからネットをこえる。低い位置から打つとネットにかかるので、下向きの速さを強くして高くはねさせる
@@ -732,7 +741,7 @@ function brushFromFinger() {
     }
   }
   if (!best) return V();
-  const t = clamp((best.sp - 0.5) / 6, 0, 1), mag = 3.5 * Math.pow(t, 1.25);
+  const t = clamp((best.sp - 0.3) / 3.0, 0, 1), mag = 3.5 * Math.pow(t, 0.9);
   if (mag <= 0.02) return V();
   return V(best.vx / best.sp * mag, -best.vy / best.sp * mag, 0);
 }
@@ -778,12 +787,33 @@ const fxList = [];
 const flashEl = document.createElement("div");
 flashEl.style.cssText = "position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s;z-index:5";
 $("app").appendChild(flashEl);
-function smashFx(p) {
-  const m = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.085, 40), new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
-  m.position.copy(p); scene.add(m); fxList.push({ m, t: 0 });
-  flashEl.style.transition = "none"; flashEl.style.opacity = "0.55";
-  setTimeout(() => { flashEl.style.transition = "opacity .3s"; flashEl.style.opacity = "0"; }, 40);
-  Sfx.hit(); Sfx.vibrate([30, 20, 60]);
+// 打ったときのエフェクト（2026-11-19）: 球の打ち出し方向にリングが広がり、火花が飛ぶ。色 = 回転の種類、大きさ = 回転の強さ。
+//   前回転 = オレンジ / 下回転 = 水色 / 横回転 = 黄緑 / 回転なし = 白 / スマッシュ = 金（さらに画面がぴかっとして揺れる）
+function spinColor(w, v) {
+  if (w.length() < 40 * SK / 5) return 0xffffff;
+  const sp = spinParts(w, v);
+  if (Math.abs(sp.side) > Math.abs(sp.top)) return 0x7dff7a;
+  return sp.top >= 0 ? 0xff8a2a : 0x5ad1ff;
+}
+const ringGeo = new THREE.RingGeometry(0.05, 0.085, 40), sparkGeo = new THREE.SphereGeometry(0.012, 6, 5);
+let shake = 0;
+function hitFx(p, v, w, kind, mine) {
+  const col = kind === "smash" ? 0xffd23f : spinColor(w, v), power = clamp(w.length() / (SK * 3.5), 0.15, 1);
+  const size = (kind === "smash" ? 1.6 : 0.7 + power * 0.9) * (mine ? 1 : 0.7);
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  ring.position.copy(p); ring.lookAt(V().copy(p).add(v)); scene.add(ring); fxList.push({ m: ring, t: 0, life: 0.35, ring: true, size });
+  const n = kind === "smash" ? 18 : 8 + Math.round(power * 8), dir = V().copy(v).normalize();
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, depthWrite: false }));
+    m.position.copy(p); scene.add(m);
+    const sp = (1.2 + Math.random() * 2.2) * (0.6 + power * 0.8) * (mine ? 1 : 0.7), vel = V((Math.random() - 0.5) * 2, (Math.random() - 0.3) * 2, (Math.random() - 0.5) * 2).multiplyScalar(0.5).addScaledVector(dir, 1.2).multiplyScalar(sp * 0.5);
+    fxList.push({ m, t: 0, life: 0.45, vel });
+  }
+  if (kind === "smash") {
+    flashEl.style.transition = "none"; flashEl.style.opacity = "0.55";
+    setTimeout(() => { flashEl.style.transition = "opacity .3s"; flashEl.style.opacity = "0"; }, 40);
+    Sfx.hit(); Sfx.vibrate([30, 20, 60]); shake = Math.max(shake, 0.07);
+  } else if (mine) { shake = Math.max(shake, 0.012 + power * 0.025); if (power > 0.5) Sfx.hit(); }
 }
 
 // 自分のラケットの届く範囲（フォア／バックは自動で切り替え）
@@ -795,29 +825,60 @@ function playerZone() {
 function checkPlayerHit() {
   if (st.phase !== "rally" || st.hitter !== 1 || !st.bounced || st.serveStage === 1 || st.pTried) return;
   // 右の指をすべらせた瞬間に打つ（指が止まっていれば打たない）。
-  // 引き付けて打てる（カットマンのように台から離れて、低い球をぎりぎりまで待って打つ）: ラケットの面から 0.45 m 後ろまでは「ちょうどいいタイミング」。
-  // それより遅い（0.45〜0.7 m 後ろ）と大きなタイミングミスで、ひょろひょろの山なり球になる。
+  // ボールが落ちる（床につく）ぎりぎりまで打てる。キャラクターの位置とボールの位置がラケットの届く範囲に合っていれば、かならず相手に返る。
+  // ラケットの面から 0.8 m 後ろまでが「ちょうどいいタイミング」。それより遅い（0.8〜1.1 m 後ろ）と、大きなタイミングミスで山なり球になる。
   const z = playerZone();
   if (ball.v.z <= 0) return;
   const vz = Math.max(ball.v.z, 1.0), u = ball.p.z - z.c.z;
   if (u < -Math.max(0.3, vz * 0.1)) return;                   // まだ来ていない
-  if (u > 0.7 + vz * 0.05) { st.pTried = true; return; }      // 通りすぎた（空振り）
+  if (u > 1.1 + vz * 0.06) { st.pTried = true; return; }      // 通りすぎた（空振り）
   const dx = ball.p.x - z.c.x, dy = ball.p.y - z.c.y;
-  if (!(Math.abs(dx) <= 0.68 && dy >= -0.95 && dy <= (st.lob ? 1.7 : 0.85))) return;
+  if (!(Math.abs(dx) <= 0.7 && dy >= -1.05 && dy <= (st.lob ? 1.7 : 0.85))) return;
   const brush = brushFromFinger();
   if (brush.length() < 0.05) return;   // 指が止まっている・ふれていない
   st.pTried = true;
-  const p0 = ball.p.clone(), late = u > 0.45;
+  const p0 = ball.p.clone(), late = u > 0.8;
   let s;
-  if (st.lob && brush.length() >= 2.0) s = makeSmash(0, p0, brush);     // 山なり球をはじいた → スマッシュ
+  if (st.lob && ball.p.y >= TH) s = makeSmash(0, p0, brush);            // 山なり球は、台の上の高さならいつ打ってもスマッシュ
   else if (late) s = makeLob(0, p0);                                    // 大きくタイミングを外した → 山なり球
   else s = makeShot(0, p0, brush, false);
   P.swingT = 0; P.swingKind = brush.y < -0.3 ? "cut" : "drive"; P.swingDir = brush.x >= 0 ? -1 : 1;
   launch(0, p0, s.v, s.w, false, s.kind);
   Sfx.shot();
 }
+// トスから始めるサーブ（2026-11-19）: 右の指を上にはじくとボールを投げ上げる。はじいたベクトル（向き・速さ）でトスの向き・高さが変わる。
+// 落ちてくるボールがラケットの届く範囲にあるときに、もう一度すべらせると打つ（回転は、そのときのスライドで決まる）。
+// トスしたボールが何にも当たらずに落ちたら、手にもどって、やりなおせる。
+function doToss(b) {
+  const my = clamp(b.y, 0, 3.5), mx = clamp(b.x, -3.5, 3.5);
+  const p = serveBallPos(0), v = V(mx * 0.3, 1.6 + 0.75 * my, -0.12 * my);
+  st.tossed = true; st.tossT = 0; ball.p.copy(p); ball.v.copy(v); ball.w.set(0, 0, 0);
+  swP.pts = [];   // はじいた指の動きは、トスに使い切る（そのまま打球にならないように）
+  P.swingT = 0; P.swingKind = "drive"; P.swingDir = 1;
+  Sfx.shot();
+  if (ON && ON.role !== 2) bcast({ t: "toss", p: arr3(wv(p)), v: arr3(wv(v)) });
+}
+function applyToss(m) {
+  if (st.phase !== "serve") return;
+  st.tossed = true; st.tossT = 0; ball.p.copy(wv(fromArr(m.p))); ball.v.copy(wv(fromArr(m.v))); ball.w.set(0, 0, 0);
+}
+// トスしたボールの動き（重力だけ）。落ちたら手にもどる
+function stepToss(dt) {
+  st.tossT += dt;
+  ball.v.y -= G * dt; ball.p.addScaledVector(ball.v, dt);
+  if (ball.p.y < TH + 0.03) { st.tossed = false; st.tossT = 0; }
+}
+function checkServe() {
+  if (st.phase !== "serve" || st.server !== 0 || st.paused || (ON && ON.role === 2)) return;
+  const b = brushFromFinger();
+  if (b.length() < 0.05) return;
+  if (!st.tossed) { if (st.serveT > 0.25 && b.y >= 0.5 && b.y >= Math.abs(b.x) * 0.5) doToss(b); return; }
+  if (st.tossT < 0.3) return;
+  const c = playerZone().c, d = V().subVectors(ball.p, c);
+  if (Math.abs(d.x) <= 0.75 && d.y >= -0.6 && d.y <= 1.0 && Math.abs(d.z) <= 0.8) playerServe(b);
+}
 function playerServe(brush) {
-  const p0 = serveBallPos(0);
+  const p0 = st.tossed ? ball.p.clone() : serveBallPos(0);
   const s = makeShot(0, p0, brush, true);
   P.swingT = 0; P.swingKind = brush.y < -0.3 ? "cut" : "drive"; P.swingDir = brush.x >= 0 ? -1 : 1;
   launch(0, p0, s.v, s.w, true);
@@ -826,8 +887,7 @@ function playerServe(brush) {
 }
 function serveBallPos(who) {
   const b = who === 0 ? P : C, sgn = who === 0 ? 1 : -1;
-  const bob = Math.abs(Math.sin(st.serveT * 3.2)) * 0.18;
-  return V(clamp(b.pos.x + 0.22 * sgn, -HW * 0.9, HW * 0.9), TH + 0.2 + bob, sgn * Math.max(Math.abs(b.pos.z) - 0.3, HL + 0.06));
+  return V(clamp(b.pos.x + 0.22 * sgn, -HW * 0.9, HW * 0.9), TH + 0.22, sgn * Math.max(Math.abs(b.pos.z) - 0.3, HL + 0.06));
 }
 
 // ===== CPU =====
@@ -865,6 +925,8 @@ function updateCpu(dt) {
   C.pos.add(d); C.vel.copy(d).divideScalar(Math.max(dt, 1e-4));
   C.pos.x = clamp(C.pos.x, -1.9, 1.9); C.pos.z = clamp(C.pos.z, -HL - 2.4, -HL - 0.25);
   C.hand = ball.p.x <= C.pos.x + 0.06 ? 1 : -1;
+  { const incoming = st.phase === "rally" && st.hitter === 0 && ball.v.z < 0 && Math.abs(ball.p.z - C.pos.z) < 2.4;
+    C.crouch += ((incoming ? clamp((1.0 - ball.p.y) / 0.9, 0, 1) : 0) - C.crouch) * Math.min(1, dt * 9 / TS); }
   C.swingT += dt;
 
   // 打つ
@@ -879,7 +941,10 @@ function updateCpu(dt) {
     }
   }
   // サーブ
-  if (st.phase === "serve" && st.server === 1 && st.serveT > 1.2) cpuServe();
+  if (st.phase === "serve" && st.server === 1) {
+    if (!st.tossed && st.serveT > 0.9) { st.tossed = true; st.tossT = 0; ball.p.copy(serveBallPos(1)); ball.v.set((Math.random() - 0.5) * 0.4, 2.7 + Math.random() * 0.6, 0.1); ball.w.set(0, 0, 0); C.swingT = 0.1; }
+    else if (st.tossed && st.tossT > 0.35 && ball.v.y < 0 && ball.p.y < TH + 0.45) cpuServe();
+  }
 }
 // CPU のこする向き: 前回転が多め、ときどき下回転・横回転。強いほど回転も強い
 function cpuBrush() {
@@ -909,7 +974,7 @@ function cpuHit() {
   launch(1, p0, s.v, s.w, false, s.kind);
 }
 function cpuServe() {
-  const p0 = serveBallPos(1);
+  const p0 = st.tossed ? ball.p.clone() : serveBallPos(1);
   ball.v.set(0, 0, 0); ball.w.set(0, 0, 0);
   const brush = cpuBrush();
   const s = makeShot(1, p0, brush, true);
@@ -945,11 +1010,8 @@ ov.addEventListener("pointermove", e => {
   swipeTrail.push({ x: q.x, y: q.y, t: now });
   swP.pts.push({ x: q.x, y: q.y, t: now });
   while (swP.pts.length > 2 && now - swP.pts[0].t > 200) swP.pts.shift();
-  // サーブ: 指をすばやくすべらせたら、その向きと速さの回転で打つ
-  if (st.phase === "serve" && st.server === 0 && st.serveT > 0.25 && !st.paused) {
-    const b = brushFromFinger();
-    if (b.length() > 0.5) playerServe(b);
-  }
+  // サーブ: 上にはじいてトス → 落ちてくるボールを、もう一度すべらせて打つ
+  checkServe();
   // 打つ瞬間を逃さないように、指が動いたときにも当たりを調べる
   if (!st.paused) checkPlayerHit();
 });
@@ -1000,8 +1062,13 @@ function updatePlayer(dt) {
   // 右の指の位置でラケットが動く（構え）
   if (swP.id !== null) P.fing.set(clamp((swP.x - swP.sx) * 0.0016, -0.22, 0.22), clamp(-(swP.y - swP.sy) * 0.0014, -0.2, 0.22), 0);
   else P.fing.multiplyScalar(0.8);
+  // 低い球がとんでくるときは、かがんで追う（高さ 1.0 m で立ち、床すれすれで深くかがむ）
+  { const incoming = st.phase === "rally" && st.hitter === 1 && ball.v.z > 0 && Math.abs(ball.p.z - P.pos.z) < 2.4;
+    const target = incoming ? clamp((1.0 - ball.p.y) / 0.9, 0, 1) : 0;
+    P.crouch += (target - P.crouch) * Math.min(1, dt * 9 / TS); }
   P.swingT += dt;
   checkPlayerHit();
+  checkServe();
   sendPos(performance.now());
 }
 
@@ -1019,7 +1086,8 @@ function update(dt, rdt) {
   else { updatePlayer(dt); updateCpu(dt); }
   if (st.phase === "serve") {
     st.serveT += dt;
-    ball.p.copy(serveBallPos(st.server));
+    if (st.tossed) stepToss(dt);
+    if (!st.tossed) { ball.p.copy(serveBallPos(st.server)); ball.v.set(0, 0, 0); }
   } else {
     let t = dt;
     while (t > 1e-6) { if (st.hold) break; const h = Math.min(SUB, t); t -= h; stepBall(ball, h, onBallEvent); if (ON) checkHold(); }
@@ -1042,8 +1110,8 @@ function render(rdt) {
   if (wob) { ballMesh.position.x += Math.sin(tnow * 22) * 0.035; ballMesh.position.y += Math.sin(tnow * 17 + 1) * 0.03; }   // ひょろひょろ
   ballMesh.scale.setScalar(wob ? 1 + Math.sin(tnow * 14) * 0.12 : 1);
   ballMesh.material.emissive.setHex(wob ? 0x4a7a2a : st.smash ? 0x8a5a10 : 0x332a10);
-  trail.material.color.setHex(wob ? 0x9bff7a : st.smash ? 0xffc040 : 0xffe8a0);
-  for (let i = fxList.length - 1; i >= 0; i--) { const f = fxList[i]; f.t += rdt; const k = f.t / 0.35; f.m.scale.setScalar(1 + k * 9); f.m.material.opacity = Math.max(0, 1 - k); f.m.lookAt(camera.position); if (k >= 1) { scene.remove(f.m); fxList.splice(i, 1); } }
+  trail.material.color.setHex(wob ? 0x9bff7a : st.smash ? 0xffc040 : (st.phase === "rally" ? spinColor(ball.w, ball.v) : 0xffe8a0));
+  for (let i = fxList.length - 1; i >= 0; i--) { const f = fxList[i]; f.t += rdt; const k = f.t / f.life; if (f.ring) f.m.scale.setScalar(1 + k * 6 * f.size); else f.m.position.addScaledVector(f.vel, rdt); f.m.material.opacity = Math.max(0, 1 - k); if (k >= 1) { scene.remove(f.m); f.m.material.dispose(); fxList.splice(i, 1); } }
   const overTable = Math.abs(ball.p.x) <= HW && Math.abs(ball.p.z) <= HL && ball.p.y >= TH;
   ballShadow.position.set(ball.p.x, overTable ? TH + 0.002 : 0.003, ball.p.z);
   ballShadow.material.opacity = 0.45 * clamp(1 - (ball.p.y - (overTable ? TH : 0)) * 0.6, 0.15, 1);
@@ -1055,10 +1123,17 @@ function render(rdt) {
   trailGeo.attributes.position.needsUpdate = true;
   // カメラ: 自分の後ろから
   const tp = st.phase === "title" ? V(2.6, 2.2, HL + 2.6) : V(P.pos.x * 0.7 + 0.2, 2.5, P.pos.z + 1.7);
-  const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.3, 0.55 + (st.lob ? clamp((ball.p.y - 1.8) * 0.3, 0, 0.7) : 0), -0.85);
+  const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.3, 0.55, -0.85);
+  if (st.phase === "rally" || st.phase === "dead" || (st.phase === "serve" && st.tossed)) {
+    // ボールを追う（低い球・高い球のどちらも画面に入るように、見る先をボールのほうへ寄せ、低いときはカメラも少し下げる）
+    const b = ball.p;
+    tl.x = lerp(tl.x, b.x * 0.85, 0.6); tl.y = lerp(tl.y, Math.max(0.2, b.y * 0.85), 0.6); tl.z = lerp(tl.z, clamp(b.z * 0.75, -2.2, 1.6), 0.5);
+    tp.x += (b.x - P.pos.x * 0.7) * 0.2; tp.y -= clamp((1.0 - b.y) * 0.6, 0, 0.55);
+  }
   const k = 1 - Math.pow(0.002, rdt);
   camPos.lerp(tp, k); camLook.lerp(tl, k);
   camera.position.copy(camPos); camera.lookAt(camLook);
+  if (shake > 0.002) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake *= Math.pow(0.0008, rdt); } else shake = 0;
   renderer.render(scene, camera);
   // 右上のボールのアップ（同じ画面の右上に小さく描く）
   if (st.phase !== "title" && st.phase !== "over") {
@@ -1351,6 +1426,7 @@ function onNet(m, c) {
     case "np": applyNp(m); return;
     case "pt": applyPt(m); return;
     case "over": if (st.phase === "dead" || st.phase === "rally") finish(); return;
+    case "toss": applyToss(m); return;
     case "stop": matchStop("ホストが始めるのを待っています…"); return;
   }
 }
@@ -1373,7 +1449,7 @@ function applyPt(m) {
 function remoteChar(i) { return ON.role === 2 ? (i === 0 ? P : C) : C; }
 function applyPos(m) {
   const p = wv(V(m.x, 0, m.z)), ch = remoteChar(m.i);
-  ch.tgt = p; ch.hand = m.hd; ch.fing.set(m.fx, m.fy, m.fz);
+  ch.tgt = p; ch.hand = m.hd; ch.crouch = m.cr || 0; ch.fing.set(m.fx, m.fy, m.fz);
 }
 function applyShot(m) {
   if (st.phase !== "rally" && st.phase !== "serve") return;
@@ -1388,7 +1464,7 @@ function sendPos(now) {
   if (!ON || ON.role === 2 || st.phase === "title" || now - ON.lastPos < 50) return;
   ON.lastPos = now;
   const p = wv(P.pos);
-  bcast({ t: "pos", i: wid(0), x: R3(p.x), z: R3(p.z), hd: P.hand, fx: R3(P.fing.x), fy: R3(P.fing.y), fz: R3(P.fing.z) }, true);
+  bcast({ t: "pos", i: wid(0), cr: R3(P.crouch), x: R3(p.x), z: R3(p.z), hd: P.hand, fx: R3(P.fing.x), fy: R3(P.fing.y), fz: R3(P.fing.z) }, true);
 }
 // 相手（観戦は両方）の体をなめらかに動かす
 function updateRemote(dt, rdt) {
