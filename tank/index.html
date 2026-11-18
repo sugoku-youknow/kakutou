@@ -857,6 +857,7 @@ function hostTick(dt) {
     if (!go) for (const t of all) {
       if (!t.alive || Math.hypot(t.x - m.x, t.z - m.z) > MINE_TRIG) continue;
       if (t.id === m.ow) continue;   // 2026-11-19: 自分の地雷には反応しない
+      const ow = G.tanks.get(m.ow); if (G.team && ow && ow.tm === t.tm) continue;   // チームメイトの地雷にも反応しない
       if (G.time - m.t0 > MINE_ARM) { go = true; break; }
     }
     if (go) explode(m);
@@ -1398,9 +1399,9 @@ function syncMines(list) {
     seen.add(m.id);
     let o = S.mines.get(m.id);
     if (!o) {
-      o = { ...m, mesh: new THREE.Group(), mine: m.ow === myId };
-      // 2026-11-19: 自分の地雷は緑（あんぜん）、相手の地雷は赤（きけん）。ふちの輪も同じ色
-      const base = o.mine ? 0x35c46a : 0xe0453a;
+      // 2026-11-19: 地雷は、置いた人の戦車と同じ色（チーム戦では、そのチームの色合い）
+      const own = S.tanks.get(m.ow), base = own ? own.color : 0xe0453a;
+      o = { ...m, mesh: new THREE.Group(), base };
       part(cyl(.17, .19, .06, 18), mat(base), o.mesh, 0, .03, 0);
       part(cyl(.1, .1, .02, 14), mat(0x222222), o.mesh, 0, .065, 0);
       const ring = new THREE.Mesh(geo("mring", () => new THREE.TorusGeometry(.23, .018, 6, 24)), new THREE.MeshBasicMaterial({ color: base })); ring.rotation.x = PI / 2; ring.position.y = .02; o.mesh.add(ring);
@@ -1736,12 +1737,12 @@ const RULES = `<div class="rules">
 ・<b>PC</b>: WASDで移動、マウスでねらってクリックで発射、スペースで地雷<br>
 ・弾は<b>壁で跳ね返る</b>。<b>1発当たるとやられる</b>（自分の弾でも！）<br>
 ・弾どうしがぶつかると、威力に関係なく<b>両方消える</b><br>
-・地雷（1人2個まで）: 10秒たつか、<b>相手の</b>戦車が近づくか弾が当たると爆発。まわりの戦車・木箱・弾をふきとばす。<b>自分の地雷には近づいても反応しない</b>（色: 自分の地雷は緑、相手の地雷は赤）<br>
+・地雷（1人2個まで）: 10秒たつか、<b>相手の</b>戦車が近づくか弾が当たると爆発。まわりの戦車・木箱・弾をふきとばす。<b>自分とチームメイトの地雷には近づいても反応しない</b>。地雷は置いた人の戦車と同じ色<br>
 ・木箱は弾2発か地雷で壊れる<br>
 ・最後まで残った人（チーム）がラウンドの勝ち。<b>3本先取</b>。1ラウンド90秒（時間切れは引き分け）<br>
 ・バトルの前とラウンドの合間に、弾・機体・タイヤを変えられる（全員が準備OKを押すと次のバトルが始まる）<br>
 ・スティックと地雷ボタンの位置・大きさは「ボタンの配置を変える」で変えられる<br>
-・チーム戦: 味方の弾には当たらない（地雷は当たる）</div>`;
+・チーム戦: 味方の弾には当たらない。味方の地雷には近づいても反応しないが、爆発には巻き込まれる</div>`;
 const segH = (opts, cur, pre) => `<div class="seg">${opts.map(([k, s]) => `<button class="${k === cur ? "on" : ""}" data-a="${pre}-${k}">${s}</button>`).join("")}</div>`;
 let partySet = null, partyGuestSet = null, sfxBtn = null;
 const partyMine = () => [{ label: "🎮 ボタンの配置を変える", onClick: () => enterLayout() }];
@@ -2141,7 +2142,7 @@ function updateView(dt) {
   const blink = Math.floor(performance.now() / 120) % 2 === 0;
   for (const m of S.mines.values()) {
     const on = m.bl ? blink : Math.floor(performance.now() / 600) % 2 === 0;
-    m.lamp.material.color.setHex(m.mine ? (on ? 0x70ff9a : 0x144026) : (on ? 0xff3030 : 0x441010));
+    m.lamp.material.color.setHex(on ? lighten(m.base, .6) : darken(m.base, .6));
   }
   for (let i = fxList.length - 1; i >= 0; i--) {
     const f = fxList[i]; f.t += dt; const k = Math.min(1, f.t / f.life);
@@ -2189,6 +2190,8 @@ if (new URLSearchParams(location.search).has("debug")) window.__tank = {
   },
   fireAt(x, z) { const t = G && G.tanks.get(myId); return t ? hostFire(myId, Math.atan2(z - t.z, x - t.x)) : false; },
   mine(id) { return hostMine(id == null ? myId : id); },
+  warp(id, x, z) { const t = G && G.tanks.get(id); if (t) { t.x = x; t.z = z; t.vx = t.vz = 0; } },
+  tm() { return G && [...G.tanks.values()].map(t => [t.id, t.tm]); },
   grid(i, j) { return grid[j * MW + i]; },
   view() { return { mode, screen, phase: S.phase, tleft: S.tleft, tanks: [...S.tanks.values()].map(t => [t.name, t.alive, +t.x.toFixed(1), +t.z.toFixed(1)]), bullets: S.bullets.size, pred: S.pred.size, mines: S.mines.size, card: ($("screen").innerText || "").slice(0, 80) }; },
   state() { return G && { phase: G.phase, round: host.match && host.match.round, tleft: G.tleft.toFixed(1), tanks: [...G.tanks.values()].map(t => [t.name, t.alive, +t.x.toFixed(1), +t.z.toFixed(1)]), bullets: G.bullets.length, kinds: G.bullets.map(b => PARTS.g[b.ty].id).join(), bpos: G.bullets.map(b => [PARTS.g[b.ty].id, +b.x.toFixed(2), +b.z.toFixed(2)]), mines: G.mines.length, score: host.match && [...host.match.score], over: !!overInfo }; },
