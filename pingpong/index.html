@@ -76,11 +76,11 @@
         <p class="lead">回転で勝負する3D卓球。2本の指で体とラケットを動かして、CPUと11点勝負。</p>
         <ul class="how">
           <li><b>左の指</b>：体を動かす（左右・前後）</li>
-          <li><b>右の指</b>：ボールがラケットに来た<b>瞬間の指のスライド</b>の向きと速さで回転が決まる（体の近くに来れば自動で当たる）
+          <li><b>右の指</b>：ボールがラケットに来た<b>瞬間の指のスライド</b>の向きと速さで回転が決まる（ボールが体の近くにある間に指をすべらせると打つ）
             <br>↑上＝<b>前回転</b>（速く深い・低く伸びる）／↓下＝<b>下回転</b>（遅く短い・止まる）
             <br>←→横＝<b>横回転</b>（こすった向きに曲がる・横に跳ねる）。速くこするほど強い回転</li>
           <li>打った球は基本的に入る。でも<b>相手の回転が残るとミス</b>（前回転→オーバー、下回転→ネット、横回転→横へ）</li>
-          <li>右上のボールの<b>矢印と同じ向きにこする</b>と、相手の回転を打ち消せる。指を動かさないとブロック（回転なし）</li>
+          <li>右上のボールの<b>矢印と同じ向きにこする</b>と、相手の回転を打ち消せる。</li>
         </ul>
       </div>
       <div>
@@ -665,15 +665,16 @@ function playerZone() {
 // ボールがラケットの面まで来た瞬間に打つ。右の指がふれていれば、その瞬間の指のスライドで回転が決まる
 function checkPlayerHit() {
   if (st.phase !== "rally" || st.hitter !== 1 || !st.bounced || st.serveStage === 1 || st.pTried) return;
-  // 打ちやすく（2026-11-19）: ラケットの面の 0.3 m 手前から届く範囲に入ったら打つ。届く範囲も広げた。
-  // 右の指がふれていなくても、届けばブロック（回転なし）で返る。指は回転を決めるだけ
+  // ボールが届く範囲（ラケットの面の 0.3 m 手前〜0.15 m 後ろ）にある間に、右の指をすべらせたときだけ打つ。
+  // 指を動かさなければ打たない（勝手に打ち返さない。2026-11-19）。届く範囲は広め
   const z = playerZone();
   if (ball.v.z <= 0 || ball.p.z < z.c.z - 0.3) return;
+  if (ball.p.z > z.c.z + 0.15) { st.pTried = true; return; }   // 通りすぎた（空振り）
   const dx = ball.p.x - z.c.x, dy = ball.p.y - z.c.y;
-  const inReach = Math.abs(dx) <= 0.68 && dy >= -0.55 && dy <= 0.85;
-  if (!inReach) { if (ball.p.z >= z.c.z) st.pTried = true; return; }   // 面を過ぎても届かなければ、空振り
-  st.pTried = true;
+  if (!(Math.abs(dx) <= 0.68 && dy >= -0.55 && dy <= 0.85)) return;
   const brush = brushFromFinger();
+  if (brush.length() < 0.05) return;   // 指が止まっている・ふれていない
+  st.pTried = true;
   const p0 = ball.p.clone();
   const s = makeShot(0, p0, brush, false);
   P.swingT = 0; P.swingKind = brush.y < -0.3 ? "cut" : "drive"; P.swingDir = brush.x >= 0 ? -1 : 1;
