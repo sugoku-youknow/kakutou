@@ -29,7 +29,7 @@
   #shot { position:fixed; right:calc(16px + env(safe-area-inset-right)); bottom:14px; font-size:14px; font-weight:800; pointer-events:none; text-shadow:0 2px 6px rgba(0,0,0,.7); opacity:0; transition:opacity .3s; }
   #hint { position:fixed; left:0; right:0; bottom:12px; text-align:center; font-size:14px; color:#fff; pointer-events:none; text-shadow:0 2px 6px rgba(0,0,0,.8); }
   /* 画面の向きの切り替えボタン（シールドファイトと同じ形）。タイトル・ポーズの上にも出す */
-  #rot { position:fixed; right:calc(10px + env(safe-area-inset-right)); top:calc(8px + env(safe-area-inset-top)); z-index:20; width:44px; height:44px; padding:0; margin:0; border-radius:50%; background:rgba(255,255,255,.16); line-height:0; }
+  #rot { position:fixed; left:calc(62px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); z-index:20; width:44px; height:44px; padding:0; margin:0; border-radius:50%; background:rgba(255,255,255,.16); line-height:0; }
   #rot svg { width:22px; height:22px; }
   #pause { position:fixed; left:calc(10px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); width:44px; height:44px; border-radius:12px; border:0; background:rgba(10,12,18,.7); color:#fff; font-size:20px; font-weight:900; }
   .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; padding:16px; background:rgba(12,14,20,.82); overflow-y:auto; }
@@ -73,14 +73,14 @@
     <div class="cols">
       <div>
         <h1>🏓 ゆび卓球</h1>
-        <p class="lead">2本の指で体とラケットを動かす3D卓球。CPUと11点勝負。</p>
+        <p class="lead">回転で勝負する3D卓球。2本の指で体とラケットを動かして、CPUと11点勝負。</p>
         <ul class="how">
           <li><b>左の指</b>：体を動かす（左右・前後）</li>
-          <li><b>右の指</b>：スワイプでラケットを振る
-            <br>↑上に振る＝<b>ドライブ</b>（前回転）／↓下に振る＝<b>カット</b>（下回転）
-            <br>ななめに振ると打つ方向、速く振ると強い球（速すぎるとアウトしやすい）
-            <br>カーブを描くように振ると<b>横回転</b>で曲がる</li>
-          <li>ボールが自分の台で1回はねてから、体の近くに来たときに振る</li>
+          <li><b>右の指</b>：ふれている間ラケットを構える。ボールがラケットに来た<b>瞬間の指のスライド</b>の向きと速さで回転が決まる
+            <br>↑上＝<b>前回転</b>（速く深い・低く伸びる）／↓下＝<b>下回転</b>（遅く短い・止まる）
+            <br>←→横＝<b>横回転</b>（右にこすると左へ曲がる・横に跳ねる）。速くこするほど強い回転</li>
+          <li>打った球は基本的に入る。でも<b>相手の回転が残るとミス</b>（前回転→オーバー、下回転→ネット、横回転→横へ）</li>
+          <li>右上のボールの<b>矢印と同じ向きにこする</b>と、相手の回転を打ち消せる。指を止めたまま当てるとブロック</li>
         </ul>
       </div>
       <div>
@@ -153,12 +153,19 @@ function integrate(b, h) {
   b.v.addScaledVector(_a, h); b.p.addScaledVector(b.v, h);
   b.w.multiplyScalar(1 - 0.25 * h);
 }
+// 台ではねる。回転の向きと強さで、はね方が変わる（2026-11-19 強めた）
+//   前回転: 低く、前へ伸びる / 下回転: 高めに、止まる（強いと手前に戻る） / 横回転: 曲がる向きへ横に跳ねる
 function tableBounce(b) {
-  b.v.y = -b.v.y * 0.88;
-  // 回転と台の摩擦: 前回転は前に伸び、下回転は止まる
-  const sx = b.v.x + R * b.w.z, sz = b.v.z - R * b.w.x;
-  b.v.x -= 0.3 * sx; b.v.z -= 0.3 * sz;
-  b.w.x *= 0.55; b.w.z *= 0.55;
+  const hl = Math.hypot(b.v.x, b.v.z) || 1, dx = b.v.x / hl, dz = b.v.z / hl;
+  const top = dz * b.w.x - dx * b.w.z;   // (up × v̂)·ω … 前回転なら +
+  b.v.y = -b.v.y * 0.88 * clamp(1 - top * 0.0016, 0.72, 1.18);
+  b.v.x *= 0.88; b.v.z *= 0.88;
+  // 前回転・下回転: 表面の動きで前後に押される（R·ω の 45%）
+  b.v.x += 0.45 * R * -b.w.z; b.v.z += 0.45 * R * b.w.x;
+  // 横回転（縦の軸の回転）: 曲がる向き（ω_y·(up × v̂) = (v̂z, 0, −v̂x)·ω_y）へ横に跳ねる
+  const k = 0.0065 * b.w.y;
+  b.v.x += k * dz; b.v.z += -k * dx;
+  b.w.x *= 0.8; b.w.z *= 0.8; b.w.y *= 0.9;   // 回転ははねたあとも大部分が残る
 }
 // 1 ステップ進める。ev(type, side) で「台・ネット・床」に当たったことを知らせる
 function stepBall(b, h, ev, net = true) {
@@ -305,6 +312,29 @@ const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0xff
 trail.frustumCulled = false; scene.add(trail);
 const trailPts = [];
 
+// ボールのアップ（右上）: 自分の後ろから見たボール。回転の向きがわかるように模様をつける
+const closeScene = new THREE.Scene();
+closeScene.background = new THREE.Color(0x0c0f17);
+closeScene.add(new THREE.AmbientLight(0xffffff, 0.75));
+const closeLight = new THREE.DirectionalLight(0xffffff, 1.5); closeLight.position.set(-1.5, 2, 3); closeScene.add(closeLight);
+const closeCam = new THREE.PerspectiveCamera(30, 1, 0.1, 20); closeCam.position.set(0, 0, 4.4); closeCam.lookAt(0, 0, 0);
+const closeBall = (() => {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 256;
+  const g = c.getContext("2d");
+  g.fillStyle = "#fff6e6"; g.fillRect(0, 0, 512, 256);
+  g.fillStyle = "#ff8a1c"; g.fillRect(0, 116, 512, 24);                       // 赤道の帯
+  g.fillStyle = "#2f7fe0"; g.fillRect(0, 0, 18, 256); g.fillRect(247, 0, 18, 256);   // 縦の帯
+  g.fillStyle = "#e0353a"; for (const [x, y] of [[128, 60], [384, 196], [128, 196], [384, 60]]) { g.beginPath(); g.arc(x, y, 20, 0, Math.PI * 2); g.fill(); }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 28), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45 }));
+  closeScene.add(m); return m;
+})();
+const _q = new THREE.Quaternion(), _ax = V();
+function closeRect() {
+  const s = Math.round(clamp(H * 0.27, 84, 132));
+  return { s, x: W - s - 12, y: 10 };
+}
+
 // 選手
 function makeChar(shirt) {
   const g = new THREE.Group();
@@ -425,9 +455,9 @@ addEventListener("resize", resize); resize();
 // ===== 試合の状態 =====
 const ball = { p: V(0, 1, HL + 0.3), v: V(), w: V() };
 const LV = [
-  { name: "よわい", move: 2.0, react: 0.32, tMin: 0.78, tMax: 1.0, err: 0.15, spin: 40, aimW: 0.45, dMin: 0.55, dMax: 1.0, reach: 0.45 },
-  { name: "ふつう", move: 2.8, react: 0.2, tMin: 0.6, tMax: 0.88, err: 0.09, spin: 70, aimW: 0.58, dMin: 0.6, dMax: 1.15, reach: 0.5 },
-  { name: "つよい", move: 3.6, react: 0.1, tMin: 0.46, tMax: 0.72, err: 0.055, spin: 100, aimW: 0.66, dMin: 0.75, dMax: 1.22, reach: 0.56 },
+  { name: "よわい", move: 2.0, react: 0.32, tMin: 0.78, tMax: 1.0, err: 0.15, spin: 40, aimW: 0.45, dMin: 0.55, dMax: 1.0, reach: 0.45, spinU: 1.4, cancel: 0.32 },
+  { name: "ふつう", move: 2.8, react: 0.2, tMin: 0.6, tMax: 0.88, err: 0.09, spin: 70, aimW: 0.58, dMin: 0.6, dMax: 1.15, reach: 0.5, spinU: 2.1, cancel: 0.52 },
+  { name: "つよい", move: 3.6, react: 0.1, tMin: 0.46, tMax: 0.72, err: 0.055, spin: 100, aimW: 0.66, dMin: 0.75, dMax: 1.22, reach: 0.56, spinU: 2.8, cancel: 0.72 },
 ];
 let lv = LV[1];
 const st = {
@@ -437,7 +467,6 @@ const st = {
   hits: 0,
 };
 let cpuPlan = null;   // CPU がどこで打つか
-const swing = { t: 9, params: null, used: true };
 
 function resetPositions() {
   P.pos.set(0.15, 0, HL + 0.75); C.pos.set(-0.15, 0, -HL - 0.75);
@@ -462,10 +491,10 @@ function serverFor() {
 function newPoint() {
   st.server = serverFor();
   st.phase = "serve"; st.serveT = 0; st.rallyT = 0; st.hits = 0;
-  cpuPlan = null; swing.used = true; swing.t = 9;
+  cpuPlan = null;
   ball.v.set(0, 0, 0); ball.w.set(0, 0, 0);
   trailPts.length = 0;
-  hint(st.server === 0 ? "右の指でスワイプしてサーブ" : "");
+  hint(st.server === 0 ? "右の指をすべらせてサーブ（向きと速さで回転）" : "");
   updHud();
 }
 function updHud() {
@@ -479,19 +508,22 @@ function msg(t, color, ms = 1200) {
   const m = $("msg"); m.textContent = t; m.style.color = color || "#fff"; m.style.opacity = 1;
   clearTimeout(msgTimer); msgTimer = setTimeout(() => m.style.opacity = 0, ms);
 }
+// 試合中は文字を出さない（2026-11-19 ユーザーの希望）。点数だけ msg() で一瞬出す
 function shotLabel(t, color) {
+  return;
   const m = $("shot"); m.textContent = t; m.style.color = color || "#fff"; m.style.opacity = 1;
   clearTimeout(shotTimer); shotTimer = setTimeout(() => m.style.opacity = 0, 1300);
 }
-function hint(t) { $("hint").textContent = t; }
+function hint(t) { $("hint").textContent = ""; }
 
 // 点が決まった（winner: 0 = 自分, 1 = CPU）
 function point(winner, why) {
   if (st.phase !== "rally") return;
   st.phase = "dead"; st.deadT = 0;
   st.score[winner]++;
-  if (winner === 0) { msg(why || "ナイス！", "#7fc4ff"); Sfx.coin(); }
-  else { msg(why || "失点…", "#ff8a8a"); Sfx.miss(); }
+  // 点が入ったら、点数だけを一瞬出す（取った側の色）。理由（アウト・ネットなど）は出さない
+  msg(`${st.score[0]} - ${st.score[1]}`, winner === 0 ? "#7fc4ff" : "#ff8a8a", 800);
+  if (winner === 0) Sfx.coin(); else Sfx.miss();
   updHud();
   const [a, b] = st.score;
   if ((a >= 11 || b >= 11) && Math.abs(a - b) >= 2) {
@@ -504,7 +536,6 @@ function point(winner, why) {
 function afterDead() {
   if (st.gameWin >= 0) {
     if (st.over) { finish(); return; }
-    msg(st.gameWin === 0 ? "ゲームを取った！" : "ゲームを取られた", st.gameWin === 0 ? "#7fc4ff" : "#ff8a8a", 1600);
     st.score = [0, 0]; st.gameWin = -1;
     resetPositions();
   }
@@ -546,80 +577,114 @@ function onBallEvent(type, side) {
 function launch(hitter, p0, v, w, serve) {
   ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w);
   st.phase = "rally"; st.hitter = hitter; st.bounced = false; st.netTouched = false;
-  st.serveStage = serve ? 1 : 0; st.rallyT = 0; st.hits++;
+  st.serveStage = serve ? 1 : 0; st.rallyT = 0; st.hits++; st.pTried = false;
   Sfx.knock(); if (hitter === 0) Sfx.vibrate(15);
   hint("");
   cpuPlan = null;
   if (hitter === 0) planCpu();
 }
 
-// スワイプ → 打球の中身
-// sw: { dx, dy (画面の px), sn (速さ 0〜1.15), curve (-1〜1) }
-function shotFromSwipe(sw, p0, quality, serve) {
-  const cut = sw.dy > 0;
-  const ang = Math.atan2(sw.dx, cut ? sw.dy : -sw.dy);
-  let tx = clamp(ang / 0.7 * 0.68, -0.95, 0.95);
-  const sn = sw.sn;
-  let tz, T, topv;
-  if (serve) {
-    tz = -(0.45 + 0.75 * sn / 1.15); T = lerp(0.85, 0.5, sn / 1.15); topv = cut ? -(30 + 60 * sn) : 20 + 70 * sn;
-  } else if (cut) {
-    tz = -(0.45 + 0.65 * sn); T = lerp(1.05, 0.72, sn / 1.15); topv = -(40 + 80 * sn);
-  } else {
-    tz = -(0.55 + 0.72 * sn); T = lerp(0.95, 0.42, sn / 1.15); topv = 40 + 100 * sn;
-  }
-  const side = clamp(sw.curve, -1, 1) * 90;
-  // 相手の球の回転の影響（前回転の球は長く、下回転の球は短く、横回転は横にずれる）
-  if (!serve) {
-    const din = V(ball.v.x, 0, ball.v.z); if (din.lengthSq() < 1e-6) din.set(0, 0, 1); din.normalize();
-    const inTop = V().crossVectors(UP, din).dot(ball.w), inSide = -ball.w.y;
-    const k = cut === inTop < 0 ? 0.45 : 1;   // 同じ種類の回転で返すと影響が小さい
-    tz -= inTop * 0.0022 * k;
-    tx += inSide * 0.0016 * k;
-  }
-  // 打ち方のずれ（ラケットの真ん中から遠い・速く振るほどずれる）
-  const sig = (0.025 + 0.15 * (1 - quality)) * (0.7 + sn * 0.6);
-  tx += gauss() * sig; tz += gauss() * sig * 1.2;
-  const dir = V(tx - p0.x, 0, tz - p0.z);
-  const w = makeSpin(dir, topv, side);
-  const v = solveShot(p0, tx, tz, T, w, serve);
-  return { v, w, cut, sn, side };
+// ===== 回転が主役の打ち方（2026-11-19）=====
+// ラケットが当たる面（ボールから打つ人のほうへ向いた面）で考える。
+//   ・ボールの「当たる面の表面が動いている速さ」u = ω × n·R
+//   ・こすった速さ b（当たる面にそった向き。画面の上 = +y、右 = +x）→ 回転 ω = n × b / R
+// 相手の球の u と同じ向きにこすると、その分だけ回転を打ち消せる。打ち消せずに残った分 e が打球をずらす
+//   （前回転が残る → 上にはねて長くなる、下回転が残る → 下に落ちてネット、横回転が残る → 横にそれる）。
+// 回転を打ち消していれば、打った球は基本的に台に入る（ねらう場所は回転の向きで決まる）。
+const KV = 0.7, KH = 0.6, E_DEAD = 0.7;   // 残った回転で打球がずれる強さ（1 m/s 残ると何 m ずれるか）。E_DEAD 以下の弱い回転は気にしなくていい
+const faceN = who => V(0, 0, who === 0 ? 1 : -1);
+const surfaceVel = (w, n) => V().crossVectors(w, n).multiplyScalar(R);
+const spinFromBrush = (b, n) => V().crossVectors(n, b).divideScalar(R);
+// 回転を「前回転・横回転」に分ける。top: + 前回転 / - 下回転（進む向きに対して）、
+// side: 曲がる向き（自分の画面で + 右 / - 左。ω_y で曲がる向きは ω_y·(up × v̂) = ω_y·(v̂z, 0, −v̂x) の x）
+function spinParts(w, v) {
+  const d = V(v.x, 0, v.z); if (d.lengthSq() < 1e-6) d.set(0, 0, -1); d.normalize();
+  return { top: V().crossVectors(UP, d).dot(w), side: w.y * d.z };
 }
-function describe(s) {
-  const st = s.sn > 0.85 ? "スマッシュ級" : s.sn > 0.5 ? "強打" : "";
-  const kind = s.cut ? "カット" : "ドライブ";
-  const sd = Math.abs(s.side) > 25 ? (s.side > 0 ? "・右カーブ" : "・左カーブ") : "";
-  return `${kind}${st ? "（" + st + "）" : ""}${sd}`;
+function makeShot(who, p0, brush, serve) {
+  const n = faceN(who);
+  const uIn = serve ? V() : surfaceVel(ball.w, n);
+  const uLen = uIn.length();
+  const e = uIn.clone();
+  let canceled = 0;
+  if (uLen > 1e-3) {
+    const along = clamp(brush.dot(uIn) / uLen, 0, uLen);
+    e.addScaledVector(uIn, -along / uLen);
+    canceled = along / uLen;
+  }
+  // 出ていく回転: こすった分 + 残った相手の回転の半分
+  const uOut = brush.clone().addScaledVector(e, 0.5);
+  const w = spinFromBrush(uOut, n);
+  // ねらい: 前回転 → 深く速い、下回転 → 浅くゆっくり、横回転 → 曲がる側へ
+  const topN = clamp(uOut.y / 3, -1, 1), sideN = clamp(Math.abs(uOut.x) / 3, 0, 1);
+  const sg = who === 0 ? -1 : 1;
+  let depth, T;
+  if (serve) { depth = topN >= 0 ? lerp(0.75, 1.1, topN) : lerp(0.75, 0.5, -topN); T = topN >= 0 ? lerp(0.75, 0.55, topN) : lerp(0.75, 0.9, -topN); }
+  else { depth = topN >= 0 ? lerp(0.9, 1.15, topN) : lerp(0.9, 0.6, -topN); T = topN >= 0 ? lerp(0.8, 0.52, topN) : lerp(0.82, 1.0, -topN); }
+  T += sideN * 0.08;
+  let tx = clamp(-uOut.x * 0.2 + (Math.random() - 0.5) * 0.12, -0.6, 0.6);
+  // 残った回転で、ねらいがずれる（ずれる向きは当たる面の表面の動きの反対）
+  //   前回転が残る（表面が下へ）→ 長くなってオーバー / 下回転が残る（表面が上へ）→ 短くなってネット / 横回転 → 横へ
+  //   打つ人から見た横: 自分は +x が右、CPU は -x が右
+  const el = e.length(), ef = el > E_DEAD ? (el - E_DEAD) / el : 0;
+  depth = Math.max(-0.05, depth - e.y * ef * (e.y > 0 ? KV * 1.8 : KV));   // 下回転が残ると短くなる（ネットまでの距離が短いので強め）
+  tx += -e.x * ef * KH;
+  const v = solveShot(p0, tx, sg * depth, T, w, serve);
+  return { v, w, e: e.length(), uIn: uLen, canceled, uOut };
 }
+// 指の速さ（画面の高さ/秒）→ こする速さ b（m/s）。遅いとブロック（回転なし）
+function brushFromFinger() {
+  const pts = swP.pts, now = performance.now();
+  let f = null;
+  for (let i = pts.length - 1; i >= 0; i--) { if (now - pts[i].t > 90) break; f = pts[i]; }
+  const l = pts[pts.length - 1];
+  if (!f || !l || l === f || l.t - f.t < 8 || now - l.t > 90) return V();
+  const vx = (l.x - f.x) / (l.t - f.t) * 1000 / H, vy = (l.y - f.y) / (l.t - f.t) * 1000 / H;
+  const sp = Math.hypot(vx, vy), mag = clamp((sp - 0.4) * 1.0, 0, 3.5);
+  if (mag <= 0) return V();
+  return V(vx / sp * mag, -vy / sp * mag, 0);
+}
+function spinName(parts, mag) {
+  const a = [];
+  if (parts.top > 18) a.push("前回転"); else if (parts.top < -18) a.push("下回転");
+  if (Math.abs(parts.side) > 18) a.push(parts.side > 0 ? "右へ曲がる" : "左へ曲がる");
+  if (!a.length) return mag < 18 ? "回転なし" : "弱い回転";
+  return a.join("＋");
+}
+function powerDots(w) { const n = clamp(Math.round(w.length() / 35), 0, 5); return "●".repeat(n) + "○".repeat(5 - n); }
 
 // 自分のラケットの届く範囲（フォア／バックは自動で切り替え）
 function playerZone() {
   const fh = ball.p.x >= P.pos.x - 0.06;
-  return { fh, c: V(P.pos.x + (fh ? 0.4 : -0.28), TH + 0.24, P.pos.z - 0.34) };
+  return { fh, c: V(P.pos.x + (fh ? 0.4 : -0.28), TH + 0.3, P.pos.z - 0.34) };
 }
-function tryPlayerHit() {
-  if (st.phase !== "rally" || st.hitter !== 1 || !st.bounced || st.serveStage === 1) return false;
-  const z = playerZone(), d = V().subVectors(ball.p, z.c);
-  const nx = Math.abs(d.x) / 0.44, nz = Math.abs(d.z) / 0.42, ny = d.y > 0 ? d.y / 0.55 : -d.y / 0.32;
-  if (nx > 1 || nz > 1 || ny > 1) return false;
-  const quality = clamp(1 - Math.max(nx, nz, ny) * 0.85, 0, 1);
+// ボールがラケットの面まで来た瞬間に打つ。右の指がふれていれば、その瞬間の指のスライドで回転が決まる
+function checkPlayerHit() {
+  if (st.phase !== "rally" || st.hitter !== 1 || !st.bounced || st.serveStage === 1 || st.pTried) return;
+  const z = playerZone();
+  if (ball.p.z < z.c.z || ball.v.z <= 0) return;
+  st.pTried = true;
+  const dx = ball.p.x - z.c.x, dy = ball.p.y - z.c.y;
+  if (Math.abs(dx) > 0.46 || dy < -0.42 || dy > 0.6) return;
+  if (swP.id === null && !swP.pts.length) return;
+  const brush = brushFromFinger();
   const p0 = ball.p.clone();
-  const s = shotFromSwipe(swing.params, p0, quality, false);
+  const s = makeShot(0, p0, brush, false);
+  P.swingT = 0; P.swingKind = brush.y < -0.3 ? "cut" : "drive"; P.swingDir = brush.x >= 0 ? -1 : 1;
   launch(0, p0, s.v, s.w, false);
-  shotLabel(describe(s) + (quality > 0.75 ? " ◎" : quality > 0.4 ? " ○" : " △"), "#9fd0ff");
-  return true;
-}
-function playerSwing(params) {
-  swing.t = 0; swing.params = params; swing.used = false;
-  P.swingT = 0; P.swingKind = params.dy > 0 ? "cut" : "drive"; P.swingDir = params.dx >= 0 ? -1 : 1;
+  const name = brush.length() < 0.05 ? "ブロック" : spinName(spinParts(s.w, s.v), s.w.length());
+  let note = "";
+  if (s.uIn > 0.5) note = s.e <= E_DEAD ? "・回転を打ち消した！" : s.canceled > 0.3 ? "・少し打ち消した" : "・相手の回転が残った…";
+  shotLabel(name + " " + powerDots(s.w) + note, s.e > E_DEAD && s.uIn > 0.5 ? "#ffc27a" : "#9fd0ff");
   Sfx.shot();
-  if (st.phase === "serve" && st.server === 0 && st.serveT > 0.25) {
-    swing.used = true;
-    const p0 = serveBallPos(0);
-    const s = shotFromSwipe(params, p0, 0.85, true);
-    launch(0, p0, s.v, s.w, true);
-    shotLabel("サーブ: " + describe(s), "#9fd0ff");
-  } else if (tryPlayerHit()) swing.used = true;
+}
+function playerServe(brush) {
+  const p0 = serveBallPos(0);
+  const s = makeShot(0, p0, brush, true);
+  P.swingT = 0; P.swingKind = brush.y < -0.3 ? "cut" : "drive"; P.swingDir = brush.x >= 0 ? -1 : 1;
+  launch(0, p0, s.v, s.w, true);
+  shotLabel("サーブ: " + spinName(spinParts(s.w, s.v), s.w.length()) + " " + powerDots(s.w), "#9fd0ff");
+  Sfx.shot();
 }
 function serveBallPos(who) {
   const b = who === 0 ? P : C, sgn = who === 0 ? 1 : -1;
@@ -671,49 +736,46 @@ function updateCpu(dt) {
       cpuPlan.done = true;
       const dx = Math.abs(ball.p.x - rc.x), dy = ball.p.y - rc.y;
       // ぎりぎり間に合った球は、空振りすることもある
-      const whiff = clamp((cpuPlan.rush - 0.75) * 0.6, 0, 0.6) + clamp((ball.v.length() - 7) * 0.04, 0, 0.3);
+      const whiff = clamp((cpuPlan.rush - 0.8) * 0.6, 0, 0.6);
       if (dx < lv.reach && dy > -0.38 && dy < 0.6 && Math.random() >= whiff) cpuHit();
     }
   }
   // サーブ
   if (st.phase === "serve" && st.server === 1 && st.serveT > 1.2) cpuServe();
 }
-function cpuShot(p0, serve) {
-  const incSp = ball.v.length(), incSpin = ball.w.length();
-  // 速い球・回転の強い球・大きく動かされた球ほどミスしやすい
-  const rush = serve ? 0 : clamp((cpuPlan && cpuPlan.rush) || 0, 0, 1.5);
-  const err = serve ? lv.err * 0.6 : lv.err + Math.max(0, incSp - 4.5) * 0.045 + incSpin * 0.001 + rush * 0.12;
-  const cut = Math.random() < 0.25;
-  for (let tries = 0; tries < 2; tries++) {
-    let tx = (Math.random() * 2 - 1) * lv.aimW, tz, T;
-    if (serve) { tz = lerp(0.5, 1.1, Math.random()); T = lerp(0.85, 0.6, Math.random()); }
-    else { tz = lerp(lv.dMin, lv.dMax, Math.random()); T = lerp(lv.tMin, lv.tMax, Math.random()) + (cut ? 0.12 : 0) + tries * 0.12; }
-    tx += gauss() * err; tz += gauss() * err * 1.2;
-    const topv = (cut ? -0.6 : 0.5 + Math.random() * 0.5) * lv.spin;
-    const side = (Math.random() - 0.5) * lv.spin * 0.8;
-    const w = makeSpin(V(tx - p0.x, 0, tz - p0.z), topv, side);
-    const v = solveShot(p0, tx, tz, T, w, serve);
-    // ネットにかかりそうなら、たまにだけそのまま（ミス）にして、あとは打ち直す
-    if (tries === 1 || shotOutcome(p0, v, w, serve) === "in" || Math.random() < lv.err) return { v, w, cut };
-  }
+// CPU のこする向き: 前回転が多め、ときどき下回転・横回転。強いほど回転も強い
+function cpuBrush() {
+  const r = Math.random(), m = lv.spinU * (0.6 + Math.random() * 0.4);
+  let ang;   // 当たる面の上での向き（0 = 上 = 前回転）
+  if (r < 0.5) ang = (Math.random() - 0.5) * 1.0;
+  else if (r < 0.78) ang = Math.PI + (Math.random() - 0.5) * 1.0;
+  else ang = (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 2 + (Math.random() - 0.5) * 0.8);
+  return V(Math.sin(ang) * m, Math.cos(ang) * m, 0);
 }
 function cpuHit() {
   const p0 = ball.p.clone();
-  const s = cpuShot(p0, false);
-  C.swingT = 0; C.swingKind = s.cut ? "cut" : "drive"; C.swingDir = 1;
+  // 相手の回転をどれだけ打ち消せるか（強い CPU ほどうまい）
+  const uIn = surfaceVel(ball.w, faceN(1));
+  const c = clamp(lv.cancel + gauss() * 0.18 - Math.max(0, uIn.length() - 1.5) * 0.12, 0, 1);   // 強い回転ほど打ち消しにくい
+  const brush = cpuBrush(), ul = uIn.length();
+  if (ul > 1e-3) { const al = brush.dot(uIn) / ul; if (al < 0) brush.addScaledVector(uIn, -al / ul); }   // 矢印と逆向きにはこすらない
+  brush.addScaledVector(uIn, c);
+  const s = makeShot(1, p0, brush, false);
+  C.swingT = 0; C.swingKind = brush.y < -0.3 ? "cut" : "drive"; C.swingDir = 1;
   launch(1, p0, s.v, s.w, false);
 }
 function cpuServe() {
   const p0 = serveBallPos(1);
   ball.v.set(0, 0, 0); ball.w.set(0, 0, 0);
-  const s = cpuShot(p0, true);
-  C.swingT = 0; C.swingKind = "drive";
+  const brush = cpuBrush();
+  const s = makeShot(1, p0, brush, true);
+  C.swingT = 0; C.swingKind = brush.y < -0.3 ? "cut" : "drive";
   launch(1, p0, s.v, s.w, true);
 }
 
 // ===== 入力 =====
 const moveP = { id: null, sx: 0, sy: 0, x: 0, y: 0, bx: 0, bz: 0 };
-const swP = { id: null, pts: [], cool: 0, x: 0, y: 0, sx: 0, sy: 0 };
+const swP = { id: null, pts: [], x: 0, y: 0, sx: 0, sy: 0 };
 const keys = {};
 const swipeTrail = [];
 const DIRECT_K = () => 2.8 / (W * 0.5);   // ダイレクト: 指 1px で何 m 動くか（画面の左半分 ≒ 2.8 m）
@@ -726,7 +788,7 @@ ov.addEventListener("pointerdown", e => {
     Object.assign(moveP, { id: e.pointerId, sx: q.x, sy: q.y, x: q.x, y: q.y, bx: P.pos.x, bz: P.pos.z });
   } else {
     if (swP.id !== null) return;
-    Object.assign(swP, { id: e.pointerId, pts: [{ x: q.x, y: q.y, t: performance.now() }], cool: 0, x: q.x, y: q.y, sx: q.x, sy: q.y });
+    Object.assign(swP, { id: e.pointerId, pts: [{ x: q.x, y: q.y, t: performance.now() }], x: q.x, y: q.y, sx: q.x, sy: q.y });
   }
   try { ov.setPointerCapture(e.pointerId); } catch (err) {}
 });
@@ -737,38 +799,26 @@ ov.addEventListener("pointermove", e => {
   const now = performance.now();
   swP.x = q.x; swP.y = q.y;
   swipeTrail.push({ x: q.x, y: q.y, t: now });
-  if (now < swP.cool) return;
-  if (swP.cool) { swP.cool = 0; swP.pts = []; swP.sx = q.x; swP.sy = q.y; }
   swP.pts.push({ x: q.x, y: q.y, t: now });
-  while (swP.pts.length > 2 && now - swP.pts[0].t > 260) swP.pts.shift();
-  const f = swP.pts[0], L = Math.hypot(q.x - f.x, q.y - f.y);
-  if (L >= H * 0.17) fireSwipe(now);
+  while (swP.pts.length > 2 && now - swP.pts[0].t > 200) swP.pts.shift();
+  // サーブ: 指をすばやくすべらせたら、その向きと速さの回転で打つ
+  if (st.phase === "serve" && st.server === 0 && st.serveT > 0.25 && !st.paused) {
+    const b = brushFromFinger();
+    if (b.length() > 0.5) playerServe(b);
+  }
+  // 打つ瞬間を逃さないように、指が動いたときにも当たりを調べる
+  if (!st.paused) checkPlayerHit();
 });
 function endPointer(e) {
   if (e.pointerId === moveP.id) moveP.id = null;
   if (e.pointerId === swP.id) {
-    const now = performance.now(), f = swP.pts[0];
-    if (f && !swP.cool && swP.pts.length > 1) {
-      const l = swP.pts[swP.pts.length - 1], L = Math.hypot(l.x - f.x, l.y - f.y);
-      if (L >= H * 0.05 && L / Math.max(1, l.t - f.t) * 1000 > H * 0.8) fireSwipe(now);
-    }
-    swP.id = null; swP.pts = [];
+    // 指を離す直前のスライドも、少しのあいだ有効（離した瞬間に当たっても回転がかかる）
+    swP.pts = swP.pts.slice(-6); swP.id = null;
+    setTimeout(() => { if (swP.id === null) swP.pts = []; }, 90);
   }
 }
 ov.addEventListener("pointerup", endPointer);
 ov.addEventListener("pointercancel", endPointer);
-function fireSwipe(now) {
-  const pts = swP.pts, f = pts[0], l = pts[pts.length - 1];
-  const dx = l.x - f.x, dy = l.y - f.y, L = Math.hypot(dx, dy) || 1;
-  const dur = Math.max(16, l.t - f.t);
-  const speed = L / dur * 1000 / H;   // 1 秒に画面の高さ何個ぶん
-  let px = -dy / L, py = dx / L; if (px < 0) { px = -px; py = -py; }   // 画面の右寄りを向いた横方向
-  let dev = 0;
-  for (const p of pts) { const d = (p.x - f.x) * px + (p.y - f.y) * py; if (Math.abs(d) > Math.abs(dev)) dev = d; }
-  const params = { dx, dy, sn: clamp((speed - 1.0) / 4.0, 0, 1.15), curve: clamp(dev / L * 4, -1, 1) };
-  swP.cool = now + 230; swP.pts = [];
-  playerSwing(params);
-}
 addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; if (e.key === "Escape" && st.phase !== "title") togglePause(); });
 addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
@@ -797,16 +847,11 @@ function updatePlayer(dt) {
   }
   P.vel.subVectors(P.pos, prev).divideScalar(Math.max(dt, 1e-4));
   P.hand = playerZone().fh ? 1 : -1;
-  // 右の指の位置でラケットが少し動く（振る前の構え）
-  if (swP.id !== null) P.fing.set(clamp((swP.x - swP.sx) * 0.0016, -0.2, 0.2), clamp(-(swP.y - swP.sy) * 0.0012, -0.15, 0.2), clamp((swP.y - swP.sy) * 0.0012, -0.15, 0.15));
+  // 右の指の位置でラケットが動く（構え）
+  if (swP.id !== null) P.fing.set(clamp((swP.x - swP.sx) * 0.0016, -0.22, 0.22), clamp(-(swP.y - swP.sy) * 0.0014, -0.2, 0.22), 0);
   else P.fing.multiplyScalar(0.8);
   P.swingT += dt;
-  // 振っている間にボールが来たら当たる
-  if (!swing.used) {
-    swing.t += dt;
-    if (swing.t > 0.26) swing.used = true;
-    else if (tryPlayerHit()) swing.used = true;
-  }
+  checkPlayerHit();
 }
 
 // ===== メインループ =====
@@ -858,6 +903,16 @@ function render(rdt) {
   camPos.lerp(tp, k); camLook.lerp(tl, k);
   camera.position.copy(camPos); camera.lookAt(camLook);
   renderer.render(scene, camera);
+  // 右上のボールのアップ（同じ画面の右上に小さく描く）
+  if (st.phase !== "title" && st.phase !== "over") {
+    const wl = ball.w.length();
+    if (wl > 0.5) { _q.setFromAxisAngle(_ax.copy(ball.w).divideScalar(wl), Math.min(wl * 0.09, 16) * rdt); closeBall.quaternion.premultiply(_q); }
+    const r = closeRect(), y = H - r.y - r.s;
+    renderer.setScissorTest(true);
+    renderer.setViewport(r.x, y, r.s, r.s); renderer.setScissor(r.x, y, r.s, r.s);
+    renderer.render(closeScene, closeCam);
+    renderer.setScissorTest(false); renderer.setViewport(0, 0, W, H);
+  }
   drawOverlay();
 }
 function drawOverlay() {
@@ -875,11 +930,8 @@ function drawOverlay() {
       octx.strokeStyle = "rgba(79,163,255,.6)"; octx.lineWidth = 3;
       octx.beginPath(); octx.arc(moveP.x, moveP.y, 30, 0, Math.PI * 2); octx.stroke();
     }
-  } else {
-    octx.fillStyle = "rgba(255,255,255,.25)"; octx.font = "bold 13px system-ui"; octx.textAlign = "center";
-    octx.fillText(cfg.move === "stick" ? "左の指：スティック" : "左の指：ダイレクト移動", W * 0.2, H - 40);
   }
-  if (swP.id === null) { octx.fillStyle = "rgba(255,255,255,.25)"; octx.textAlign = "center"; octx.font = "bold 13px system-ui"; octx.fillText("右の指：スワイプで打つ", W * 0.75, H - 40); }
+  drawCloseUp();
   // スワイプの軌跡
   const now = performance.now();
   while (swipeTrail.length && now - swipeTrail[0].t > 260) swipeTrail.shift();
@@ -891,6 +943,28 @@ function drawOverlay() {
       octx.beginPath(); octx.moveTo(a.x, a.y); octx.lineTo(b.x, b.y); octx.stroke();
     }
   }
+}
+// ボールのアップの枠と矢印（文字は出さない）。矢印 = こちらに向いた面の表面が動く向き（＝打ち消すときにこする向き）
+function drawCloseUp() {
+  const r = closeRect(), cx = r.x + r.s / 2, cy = r.y + r.s / 2;
+  octx.save();
+  octx.strokeStyle = "rgba(255,255,255,.4)"; octx.lineWidth = 2;
+  octx.beginPath(); octx.roundRect ? octx.roundRect(r.x, r.y, r.s, r.s, 10) : octx.rect(r.x, r.y, r.s, r.s); octx.stroke();
+  const ux = ball.w.y, uy = ball.w.x, um = Math.hypot(ux, uy), wl = ball.w.length();
+  if (um > 12) {
+    const len = clamp(um / 150, 0.3, 1) * r.s * 0.78, dx = ux / um, dy = uy / um;
+    const x0 = cx - dx * len / 2, y0 = cy - dy * len / 2, x1 = cx + dx * len / 2, y1 = cy + dy * len / 2;
+    octx.lineCap = "round"; octx.lineJoin = "round";
+    for (const [col, lw] of [["rgba(0,0,0,.55)", 10], ["#ffd23f", 5]]) {
+      octx.strokeStyle = col; octx.lineWidth = lw;
+      octx.beginPath(); octx.moveTo(x0, y0); octx.lineTo(x1, y1);
+      const hs = r.s * 0.14;
+      octx.moveTo(x1 - dx * hs - dy * hs * 0.7, y1 - dy * hs + dx * hs * 0.7); octx.lineTo(x1, y1);
+      octx.lineTo(x1 - dx * hs + dy * hs * 0.7, y1 - dy * hs - dx * hs * 0.7);
+      octx.stroke();
+    }
+  }
+  octx.restore();
 }
 requestAnimationFrame(frame);
 
@@ -927,7 +1001,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && !st
 toTitle();
 
 // 動作確認用
-window.__pp = { st, ball, P, C, cfg, playerSwing, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
+window.__pp = { st, ball, P, C, cfg, makeShot, playerServe, surfaceVel, faceN, swP, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
 </script>
 </body>
 </html>
