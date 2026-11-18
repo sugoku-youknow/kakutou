@@ -153,6 +153,7 @@ const HL = TL / 2, HW = TW / 2;
 // 回転の強さ（2026-11-19）: 本物の卓球のドライブは毎秒100回転前後（約 600〜900 rad/s）。
 // ゲームの中の「こする速さ」の計算（打ち消し・ずれ）はこれまでの単位のまま、実際の回転 ω だけ SK 倍にする。
 const SK = 5;
+const SPD = 1.2;   // ボールの速さの倍率（2026-11-19 夜: 飛ぶ時間を 1/SPD にする）
 const KM = 0.0010;   // 回転で曲がる強さ（マグヌス効果）。本物くらい（強い回転で 10〜15 m/s² 曲がる）
 const KD = 0.11;     // 空気の抵抗
 const TS = 0.64;     // ゲームの時間の速さ（本物よりゆっくり。2026-11-19 打ちやすく 0.72 → 0.64）
@@ -391,7 +392,8 @@ function makeChar(shirt) {
   return { g, arm, racket, legs, torso, head, hip, hair, lArm, crouch: 0, pos: V(), vel: V(), walk: 0, swingT: 9, swingDir: 1, swingKind: "drive", hand: 1, fing: V() };
 }
 const P = makeChar(0x2f7fe0);   // 自分（カメラの前で台が見えなくならないように、半分すける）
-P.g.traverse(o => { if (o.isMesh && o.material && !o.material.length && o !== P.g.children[P.g.children.length - 1]) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; } });
+P.mats = [];
+P.g.traverse(o => { if (o.isMesh && o.material && !o.material.length && o !== P.g.children[P.g.children.length - 1]) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; P.mats.push(o.material); } });
 const C = makeChar(0xe03a3a);   // CPU
 C.g.rotation.y = Math.PI;
 
@@ -407,12 +409,15 @@ function poseChar(ch, dt) {
   // かがむ姿勢（低い球を追うとき）: 腰を落として、体を前にたおし、ひざを曲げる（足を縮める）
   const cr = clamp(ch.crouch || 0, 0, 1);
   for (const lg of ch.legs) { lg.scale.y = 1 - 0.5 * cr; lg.position.y = 0.39 * (1 - 0.5 * cr); }
-  ch.hip.position.y = 0.82 - 0.38 * cr; ch.torso.position.y = 1.16 - 0.42 * cr; ch.torso.rotation.x = 0.55 * cr;
-  ch.head.position.y = 1.58 - 0.46 * cr; ch.head.position.z = -0.08 * cr; ch.hair.position.y = 1.6 - 0.46 * cr; ch.hair.position.z = 0.01 - 0.08 * cr;
-  ch.lArm.position.y = 1.12 - 0.42 * cr; ch.arm.position.y = 1.32 - 0.42 * cr;
+  // 腰を支点に、上半身をまっすぐのまま前（-z）にたおす。腰からの距離: 胴の中心 0.34 / 肩 0.50 / 頭 0.76
+  const th = 0.62 * cr, cs = Math.cos(th), sn = Math.sin(th), hy = 0.82 - 0.40 * cr;
+  ch.hip.position.y = hy;
+  ch.torso.position.set(0, hy + 0.34 * cs, -0.34 * sn); ch.torso.rotation.x = -th;
+  ch.head.position.set(0, hy + 0.76 * cs, -0.76 * sn); ch.hair.position.set(0, hy + 0.78 * cs, 0.01 - 0.78 * sn);
+  ch.lArm.position.set(-0.24, hy + 0.30 * cs, -0.06 - 0.30 * sn); ch.arm.position.set(0.22, hy + 0.50 * cs, -0.50 * sn);
   // ラケット
   const hand = ch.hand;   // 1 = フォア（右）, -1 = バック（左）
-  const rest = hand > 0 ? V(0.4, 1.0 - 0.55 * cr, -0.22 - 0.1 * cr) : V(-0.26, 1.0 - 0.55 * cr, -0.34 - 0.1 * cr);
+  const rest = hand > 0 ? V(0.4, 1.0 - 0.55 * cr, -0.22 - 0.3 * cr) : V(-0.26, 1.0 - 0.55 * cr, -0.34 - 0.3 * cr);
   let rot = V(hand > 0 ? -0.2 : 0.2, hand > 0 ? -0.35 : 0.5, 0);
   const s = ch.swingT / 0.24;
   if (s < 1) {
@@ -490,9 +495,9 @@ addEventListener("resize", resize); resize();
 // ===== 試合の状態 =====
 const ball = { p: V(0, 1, HL + 0.3), v: V(), w: V() };
 const LV = [
-  { name: "よわい", move: 2.0, react: 0.32, tMin: 0.78, tMax: 1.0, err: 0.15, spin: 40, aimW: 0.45, dMin: 0.55, dMax: 1.0, reach: 0.45, spinU: 1.0, cancel: 0.32, lob: 0.07, smash: 0.4, smashRet: 0.05 },
-  { name: "ふつう", move: 2.8, react: 0.2, tMin: 0.6, tMax: 0.88, err: 0.09, spin: 70, aimW: 0.58, dMin: 0.6, dMax: 1.15, reach: 0.5, spinU: 1.6, cancel: 0.52, lob: 0.04, smash: 0.65, smashRet: 0.15 },
-  { name: "つよい", move: 3.6, react: 0.1, tMin: 0.46, tMax: 0.72, err: 0.055, spin: 100, aimW: 0.66, dMin: 0.75, dMax: 1.22, reach: 0.56, spinU: 2.3, cancel: 0.72, lob: 0.02, smash: 0.9, smashRet: 0.35 },
+  { name: "よわい", move: 2.3, react: 0.27, tMin: 0.78, tMax: 1.0, err: 0.15, spin: 40, aimW: 0.45, dMin: 0.55, dMax: 1.0, reach: 0.45, spinU: 1.0, cancel: 0.32, lob: 0.07, smash: 0.4, smashRet: 0.05 },
+  { name: "ふつう", move: 3.2, react: 0.17, tMin: 0.6, tMax: 0.88, err: 0.09, spin: 70, aimW: 0.58, dMin: 0.6, dMax: 1.15, reach: 0.5, spinU: 1.6, cancel: 0.52, lob: 0.04, smash: 0.65, smashRet: 0.15 },
+  { name: "つよい", move: 4.1, react: 0.085, tMin: 0.46, tMax: 0.72, err: 0.055, spin: 100, aimW: 0.66, dMin: 0.75, dMax: 1.22, reach: 0.56, spinU: 2.3, cancel: 0.72, lob: 0.02, smash: 0.9, smashRet: 0.35 },
 ];
 let lv = LV[1];
 const st = {
@@ -655,6 +660,16 @@ function launch(hitter, p0, v, w, serve, kind, remote) {
   if (hitter === 0 && !ON) planCpu();
 }
 
+// 今のボールが、z = planeZ（ラケットの面）に来たときの高さ（回転・台でのはね・ネットも同じ計算で先読み。床につくなら 0.05）
+const _pb = { p: V(), v: V(), w: V() };
+function predictY(planeZ) {
+  _pb.p.copy(ball.p); _pb.v.copy(ball.v); _pb.w.copy(ball.w);
+  let t = 0, floor = false;
+  const ev = type => { if (type === "floor") floor = true; };
+  while (t < 1.5 && _pb.p.z < planeZ && !floor) { stepBall(_pb, SUB, ev); t += SUB; }
+  return floor ? 0.05 : _pb.p.y;
+}
+
 // ===== 回転が主役の打ち方（2026-11-19）=====
 // ラケットが当たる面（ボールから打つ人のほうへ向いた面）で考える。
 //   ・ボールの「当たる面の表面が動いている速さ」u = ω × n·R
@@ -662,7 +677,9 @@ function launch(hitter, p0, v, w, serve, kind, remote) {
 // 相手の球の u と同じ向きにこすると、その分だけ回転を打ち消せる。打ち消せずに残った分 e が打球をずらす
 //   （前回転が残る → 上にはねて長くなる、下回転が残る → 下に落ちてネット、横回転が残る → 横にそれる）。
 // 回転を打ち消していれば、打った球は基本的に台に入る（ねらう場所は回転の向きで決まる）。
-const KV = 0.45, KH = 0.4, E_DEAD = 1.0;   // 残った回転で打球がずれる強さ（1 m/s 残ると何 m ずれるか）。E_DEAD 以下の弱い回転は気にしなくていい
+// 相手の球の回転がラケットに与える影響（SINF 倍）を大きくした（2026-11-19 夜）: 下回転の球に打ち消しきれない上回転で打つと、球は下に落ちる（ネット）など
+const SINF = 1.5;
+const KV = 0.8, KH = 0.7, E_DEAD = 0.6;   // 残った回転で打球がずれる強さ（1 m/s 残ると何 m ずれるか）。E_DEAD 以下の弱い回転は気にしなくていい
 const faceN = who => V(0, 0, who === 0 ? 1 : -1);
 const surfaceVel = (w, n) => V().crossVectors(w, n).multiplyScalar(R / SK);
 const spinFromBrush = (b, n) => V().crossVectors(n, b).multiplyScalar(SK / R);
@@ -678,7 +695,7 @@ const toPhys = b => V(-b.x, b.y, b.z);
 function makeShot(who, p0, brushGame, serve) {
   const brush = toPhys(brushGame);
   const n = faceN(who);
-  const uIn = serve ? V() : surfaceVel(ball.w, n);
+  const uIn = serve ? V() : surfaceVel(ball.w, n).multiplyScalar(SINF);
   const uLen = uIn.length();
   const e = uIn.clone();
   let canceled = 0;
@@ -698,6 +715,7 @@ function makeShot(who, p0, brushGame, serve) {
   if (serve) { depth = topN >= 0 ? lerp(0.75, 1.1, topN) : lerp(0.75, 0.5, -topN); T = topN >= 0 ? lerp(0.6, 0.42, topN) : lerp(0.6, 0.72, -topN); }
   else { depth = topN >= 0 ? lerp(0.9, 1.15, topN) : lerp(0.9, 0.6, -topN); T = topN >= 0 ? lerp(0.54, 0.36, topN) : lerp(0.56, 0.72, -topN); }
   T += sideN * 0.05 + Math.max(0, Math.abs(p0.z) - 2.0) * 0.1;   // 遠くから打つ（カット）ときは、飛ぶ時間を少し長く
+  T /= SPD;
   let tx = clamp(-uOut.x * 0.2 + (Math.random() - 0.5) * 0.12, -0.6, 0.6);
   // 残った回転で、ねらいがずれる（ずれる向きは当たる面の表面の動きの反対）
   //   前回転が残る（表面が下へ）→ 長くなってオーバー / 下回転が残る（表面が上へ）→ 短くなってネット / 横回転 → 横へ
@@ -715,9 +733,9 @@ function makeShot(who, p0, brushGame, serve) {
   if (ef === 0) {
     for (let k = 1; k <= 6 && shotOutcome(p0, v, w, serve) !== "in"; k++) {
       w.multiplyScalar(0.85);
-      v = solveShot(p0, tx, sg * depth, T * (1 + 0.07 * k), w, serve);
+      v = solveShot(p0, tx, sg * depth, T * (1 + 0.12 * k), w, serve);
     }
-    if (shotOutcome(p0, v, w, serve) !== "in") { w.set(0, 0, 0); v = solveShot(p0, tx, sg * depth, T * 1.5, w, serve); }   // それでも入らない無理な打点は、回転なしで入れる
+    if (shotOutcome(p0, v, w, serve) !== "in") { w.set(0, 0, 0); v = solveShot(p0, tx, sg * depth, T * 2.2, w, serve); }   // それでも入らない無理な打点は、回転なしで入れる
   }
   return { v, w, e: e.length(), uIn: uLen, canceled, uOut };
 }
@@ -774,7 +792,7 @@ function makeSmash(who, p0, brushGame) {
   const w = spinFromBrush(toPhys(V(brushGame.x * 0.3, 1.0, 0)), faceN(who));   // 少しだけ前回転
   const tx = clamp(brushGame.x * 0.18, -0.6, 0.6) * (who === 0 ? 1 : -1) + (Math.random() - 0.5) * 0.15;
   let res;
-  for (const T of [0.26, 0.32, 0.4, 0.5, 0.62]) {
+  for (const T of [0.26, 0.32, 0.4, 0.5, 0.62].map(t => t / SPD)) {
     const depth = lerp(1.0, 1.25, Math.random());
     const v = solveShot(p0, tx, sg * depth, T, w, false);
     res = { v, w, kind: "smash" };
@@ -926,7 +944,7 @@ function updateCpu(dt) {
   C.pos.x = clamp(C.pos.x, -1.9, 1.9); C.pos.z = clamp(C.pos.z, -HL - 2.4, -HL - 0.25);
   C.hand = ball.p.x <= C.pos.x + 0.06 ? 1 : -1;
   { const incoming = st.phase === "rally" && st.hitter === 0 && ball.v.z < 0 && Math.abs(ball.p.z - C.pos.z) < 2.4;
-    C.crouch += ((incoming ? clamp((1.0 - ball.p.y) / 0.9, 0, 1) : 0) - C.crouch) * Math.min(1, dt * 9 / TS); }
+    C.crouch += ((incoming ? clamp((1.0 - ball.p.y) / 0.8, 0, 1) : 0) - C.crouch) * Math.min(1, dt * 20 / TS); }
   C.swingT += dt;
 
   // 打つ
@@ -958,7 +976,7 @@ function cpuBrush() {
 function cpuHit() {
   const p0 = ball.p.clone();
   // 相手の回転をどれだけ打ち消せるか（強い CPU ほどうまい）
-  const uIn = toPhys(surfaceVel(ball.w, faceN(1)));   // ゲームの向き
+  const uIn = toPhys(surfaceVel(ball.w, faceN(1))).multiplyScalar(SINF);   // ゲームの向き
   const c = clamp(lv.cancel + gauss() * 0.18 - Math.max(0, uIn.length() - 1.5) * 0.12, 0, 1);   // 強い回転ほど打ち消しにくい
   const brush = cpuBrush(), ul = uIn.length();
   if (ul > 1e-3) { const al = brush.dot(uIn) / ul; if (al < 0) brush.addScaledVector(uIn, -al / ul); }   // 矢印と逆向きにはこすらない
@@ -1045,12 +1063,12 @@ function updatePlayer(dt) {
     if (keys.w || keys.arrowup) iz -= 1; if (keys.s || keys.arrowdown) iz += 1;
     P.pos.x += ix * 3.2 * dt; P.pos.z += iz * 3.2 * dt;
   }
-  // 台の後ろだけでなく、台の横にも動ける（2026-11-19）。台（と、その分の余白）の中には入れず、ふちにそってすべる。相手側へは行かない
-  P.pos.x = clamp(P.pos.x, -3.0, 3.0); P.pos.z = clamp(P.pos.z, 0.15, HL + 3.3);
+  // コート全体を動ける（2026-11-19 夜）。台（と、その分の余白）の中にだけは入れず、ふちにそってすべる
+  P.pos.x = clamp(P.pos.x, -3.3, 3.3); P.pos.z = clamp(P.pos.z, -5.7, 5.7);
   const BX = HW + 0.3, BZ = HL + 0.25;
-  if (Math.abs(P.pos.x) < BX && P.pos.z < BZ) {
-    if (prev.z >= BZ - 1e-3) P.pos.z = BZ;                              // 後ろから来た: 台の手前で止まる
-    else P.pos.x = (prev.x >= 0 ? 1 : -1) * BX;                         // 横から来た: 台のふちで止まる
+  if (Math.abs(P.pos.x) < BX && Math.abs(P.pos.z) < BZ) {
+    if (Math.abs(prev.z) >= BZ - 1e-3) P.pos.z = (prev.z >= 0 ? 1 : -1) * BZ;   // 台の前後から来た: 台の端の手前で止まる
+    else P.pos.x = (prev.x >= 0 ? 1 : -1) * BX;                                 // 横から来た: 台のふちで止まる
   }
   // ダイレクトで端にぶつかったら、指の基準をずらして「指と体が同じ動き」を保つ
   if (moveP.id !== null && cfg.move === "direct") {
@@ -1063,9 +1081,12 @@ function updatePlayer(dt) {
   if (swP.id !== null) P.fing.set(clamp((swP.x - swP.sx) * 0.0016, -0.22, 0.22), clamp(-(swP.y - swP.sy) * 0.0014, -0.2, 0.22), 0);
   else P.fing.multiplyScalar(0.8);
   // 低い球がとんでくるときは、かがんで追う（高さ 1.0 m で立ち、床すれすれで深くかがむ）
-  { const incoming = st.phase === "rally" && st.hitter === 1 && ball.v.z > 0 && Math.abs(ball.p.z - P.pos.z) < 2.4;
-    const target = incoming ? clamp((1.0 - ball.p.y) / 0.9, 0, 1) : 0;
-    P.crouch += (target - P.crouch) * Math.min(1, dt * 9 / TS); }
+  // 球がラケットの面まで来たときの高さを先読みして（床について止まる球は低い高さ）、先にかがむ。すばやくかがみ、すばやく立つ
+  { const incoming = st.phase === "rally" && st.hitter === 1 && ball.v.z > 0 && ball.p.z < P.pos.z + 0.5;
+    if (incoming) { P.predT = (P.predT || 0) - dt; if (P.predT <= 0) { P.predY = predictY(P.pos.z - 0.34); P.predT = 0.03; } }
+    const yy = incoming ? Math.min(ball.p.y + 0.15, P.predY == null ? 9 : P.predY) : 9;
+    const target = incoming ? clamp((1.0 - yy) / 0.8, 0, 1) : 0;
+    P.crouch += (target - P.crouch) * Math.min(1, dt * 26 / TS); }
   P.swingT += dt;
   checkPlayerHit();
   checkServe();
@@ -1123,15 +1144,19 @@ function render(rdt) {
   trailGeo.attributes.position.needsUpdate = true;
   // カメラ: 自分の後ろから
   const tp = st.phase === "title" ? V(2.6, 2.2, HL + 2.6) : V(P.pos.x * 0.7 + 0.2, 2.5, P.pos.z + 1.7);
-  const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.3, 0.55, -0.85);
+  const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.3, 0.55, Math.min(-0.85, P.pos.z - 0.5));   // 台の向こう側に立っても、向いている先を見る
   if (st.phase === "rally" || st.phase === "dead" || (st.phase === "serve" && st.tossed)) {
     // ボールを追う（低い球・高い球のどちらも画面に入るように、見る先をボールのほうへ寄せ、低いときはカメラも少し下げる）
     const b = ball.p;
     tl.x = lerp(tl.x, b.x * 0.85, 0.6); tl.y = lerp(tl.y, Math.max(0.2, b.y * 0.85), 0.6); tl.z = lerp(tl.z, clamp(b.z * 0.75, -2.2, 1.6), 0.5);
-    tp.x += (b.x - P.pos.x * 0.7) * 0.2; tp.y -= clamp((1.0 - b.y) * 0.6, 0, 0.55);
+    tp.x += (b.x - P.pos.x * 0.7) * 0.45; tp.y -= clamp((1.0 - b.y) * 0.8, 0, 0.75) + P.crouch * 0.25;
   }
-  const k = 1 - Math.pow(0.002, rdt);
+  const following = st.phase === "rally" || (st.phase === "serve" && st.tossed);
+  const k = 1 - Math.pow(following ? 0.00004 : 0.002, rdt);   // ボールを追うときは、すばやく
   camPos.lerp(tp, k); camLook.lerp(tl, k);
+  // ボールが近くにあるとき・低いときは、自分のからだをさらに透けさせる（打つ瞬間に球が見えるように）
+  { const near = following && st.hitter === 1 && ball.p.z > P.pos.z - 2.6 && ball.p.z < P.pos.z + 0.6, to = near ? 0.2 : 0.55;
+    for (const m of P.mats) m.opacity += (to - m.opacity) * Math.min(1, rdt * 14); }
   camera.position.copy(camPos); camera.lookAt(camLook);
   if (shake > 0.002) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake *= Math.pow(0.0008, rdt); } else shake = 0;
   renderer.render(scene, camera);
