@@ -82,6 +82,7 @@
             <br>←→横＝<b>横回転</b>（こすった向きに曲がる・横に跳ねる）。速くこするほど強い回転</li>
           <li><b>引き付けて打てる</b>（カット戦法）：台から離れて、低い球をぎりぎりまで待ってから打っていい。ただし<b>タイミングを大きく外す</b>と、球が高く<b>ひょろひょろ</b>の山なりになる
             <br>山なり球が来たときだけ、指を<b>すばやくはじく</b>と<b>スマッシュ</b>で決められる</li>
+          <li><b>打つ瞬間に左の指で動いている向き</b>で、球が変わる：前へ＝<b>強打</b>（速く深い）／右へ＝右側へ／左へ＝左側へ／後ろへ＝<b>ゆるい球</b></li>
           <li>打った球は基本的に入る。でも<b>相手の回転が残るとミス</b>（前回転→オーバー、下回転→ネット、横回転→横へ）</li>
           <li>右上のボールの<b>矢印と同じ向きにこする</b>と、相手の回転を打ち消せる。</li>
         </ul>
@@ -153,7 +154,9 @@ const HL = TL / 2, HW = TW / 2;
 // 回転の強さ（2026-11-19）: 本物の卓球のドライブは毎秒100回転前後（約 600〜900 rad/s）。
 // ゲームの中の「こする速さ」の計算（打ち消し・ずれ）はこれまでの単位のまま、実際の回転 ω だけ SK 倍にする。
 const SK = 5;
-const SPD = 1.2;   // ボールの速さの倍率（2026-11-19 夜: 飛ぶ時間を 1/SPD にする）
+const SPD = 1.0;   // 打ち出しの速さの倍率（元の速さにもどした。2026-11-20）
+// ボールの動きだけ 1.2 倍速にする（軌道の形・打ち出しの速さは同じで、同じ軌道を 1.2 倍の速さでたどる）。体や操作の速さは変わらない
+const BTS = 1.2;
 const KM = 0.0010;   // 回転で曲がる強さ（マグヌス効果）。本物くらい（強い回転で 10〜15 m/s² 曲がる）
 const KD = 0.11;     // 空気の抵抗
 const TS = 0.64;     // ゲームの時間の速さ（本物よりゆっくり。2026-11-19 打ちやすく 0.72 → 0.64）
@@ -389,7 +392,7 @@ function makeChar(shirt) {
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.004; g.add(shadow);
   scene.add(g);
-  return { g, arm, racket, legs, torso, head, hip, hair, lArm, crouch: 0, pos: V(), vel: V(), walk: 0, swingT: 9, swingDir: 1, swingKind: "drive", hand: 1, fing: V() };
+  return { g, arm, racket, legs, torso, head, hip, hair, lArm, crouch: 0, mv: V(), pos: V(), vel: V(), walk: 0, swingT: 9, swingDir: 1, swingKind: "drive", hand: 1, fing: V() };
 }
 const P = makeChar(0x2f7fe0);   // 自分（カメラの前で台が見えなくならないように、半分すける）
 P.mats = [];
@@ -692,7 +695,17 @@ function spinParts(w, v) {
 // 横にこすった向きにボールが曲がるように、画面でのこする向き（ゲームの向き）の左右を、物理の向きと反対にする（2026-11-19）。
 // 矢印（ボールのアップ）も同じく左右を反対にして出すので、「矢印と同じ向きにこすると打ち消せる」はそのまま。
 const toPhys = b => V(-b.x, b.y, b.z);
-function makeShot(who, p0, brushGame, serve) {
+// 打つ瞬間の、左の指（体の移動）の向きで、打球が変わる（2026-11-20）:
+//   前へ動いている = 強打（速く・深く） / 右へ = 右側へ / 左へ = 左側へ / 後ろへ = ゆるい球（遅く・浅く）
+// mv: 自分から見た動いている向き（x = 右、z = 後ろ）。大きさは 0〜1。弱い動きは無視する
+function mvInfo(mv) {
+  if (!mv) return { f: 0, bk: 0, sx: 0 };
+  const len = mv.length(); if (len < 0.25) return { f: 0, bk: 0, sx: 0 };
+  const k = clamp((len - 0.25) / 0.75, 0, 1) / len;
+  return { f: clamp(-mv.z * k, 0, 1), bk: clamp(mv.z * k, 0, 1), sx: clamp(mv.x * k, -1, 1) };
+}
+function makeShot(who, p0, brushGame, serve, mv) {
+  const mi = mvInfo(who === 0 ? mv : null);
   const brush = toPhys(brushGame);
   const n = faceN(who);
   const uIn = serve ? V() : surfaceVel(ball.w, n).multiplyScalar(SINF);
@@ -716,13 +729,16 @@ function makeShot(who, p0, brushGame, serve) {
   else { depth = topN >= 0 ? lerp(0.9, 1.15, topN) : lerp(0.9, 0.6, -topN); T = topN >= 0 ? lerp(0.54, 0.36, topN) : lerp(0.56, 0.72, -topN); }
   T += sideN * 0.05 + Math.max(0, Math.abs(p0.z) - 2.0) * 0.1;   // 遠くから打つ（カット）ときは、飛ぶ時間を少し長く
   T /= SPD;
-  let tx = clamp(-uOut.x * 0.2 + (Math.random() - 0.5) * 0.12, -0.6, 0.6);
+  // 動きながら打つ: 前へ = 強打（飛ぶ時間を 35% 短く・深く）、後ろへ = ゆるい球（飛ぶ時間を 60% 長く・浅く）
+  T *= (1 - 0.35 * mi.f) * (1 + 0.6 * mi.bk); depth += 0.2 * mi.f - 0.3 * mi.bk;
+  let tx = clamp(-uOut.x * 0.2 + (Math.random() - 0.5) * 0.12, -0.6, 0.6) + mi.sx * 0.5;   // 右へ動きながら = 右側へ、左へ = 左側へ
   // 残った回転で、ねらいがずれる（ずれる向きは当たる面の表面の動きの反対）
   //   前回転が残る（表面が下へ）→ 長くなってオーバー / 下回転が残る（表面が上へ）→ 短くなってネット / 横回転 → 横へ
   //   打つ人から見た横: 自分は +x が右、CPU は -x が右
   const el = e.length(), ef = el > E_DEAD ? (el - E_DEAD) / el : 0;
   depth = Math.max(0.3, depth - e.y * ef * (e.y > 0 ? KV * 1.8 : KV));   // 下回転が残ると短くなる（ネットまでの距離が短いので強め）
   tx += -e.x * ef * KH;
+  tx = clamp(tx, -0.68, 0.68);
   let v = solveShot(p0, tx, sg * depth, T, w, serve);
   // サーブは、まず自分の台ではねてからネットをこえる。低い位置から打つとネットにかかるので、下向きの速さを強くして高くはねさせる
   if (serve) for (const vy0 of [-0.8, -2, -3.4, -4.8, -6.2]) {
@@ -787,12 +803,12 @@ function makeLob(who, p0) {
   }
   return res;
 }
-function makeSmash(who, p0, brushGame) {
-  const sg = who === 0 ? -1 : 1;
+function makeSmash(who, p0, brushGame, mv) {
+  const sg = who === 0 ? -1 : 1, mi = mvInfo(who === 0 ? mv : null);
   const w = spinFromBrush(toPhys(V(brushGame.x * 0.3, 1.0, 0)), faceN(who));   // 少しだけ前回転
-  const tx = clamp(brushGame.x * 0.18, -0.6, 0.6) * (who === 0 ? 1 : -1) + (Math.random() - 0.5) * 0.15;
+  const tx = clamp(clamp(brushGame.x * 0.18, -0.6, 0.6) * (who === 0 ? 1 : -1) + (Math.random() - 0.5) * 0.15 + mi.sx * 0.5, -0.68, 0.68);
   let res;
-  for (const T of [0.26, 0.32, 0.4, 0.5, 0.62].map(t => t / SPD)) {
+  for (const T of [0.26, 0.32, 0.4, 0.5, 0.62].map(t => t / SPD * (1 - 0.25 * mi.f) * (1 + 0.5 * mi.bk))) {
     const depth = lerp(1.0, 1.25, Math.random());
     const v = solveShot(p0, tx, sg * depth, T, w, false);
     res = { v, w, kind: "smash" };
@@ -857,9 +873,9 @@ function checkPlayerHit() {
   st.pTried = true;
   const p0 = ball.p.clone(), late = u > 0.8;
   let s;
-  if (st.lob && ball.p.y >= TH) s = makeSmash(0, p0, brush);            // 山なり球は、台の上の高さならいつ打ってもスマッシュ
+  if (st.lob && ball.p.y >= TH) s = makeSmash(0, p0, brush, P.mv);            // 山なり球は、台の上の高さならいつ打ってもスマッシュ
   else if (late) s = makeLob(0, p0);                                    // 大きくタイミングを外した → 山なり球
-  else s = makeShot(0, p0, brush, false);
+  else s = makeShot(0, p0, brush, false, P.mv);
   P.swingT = 0; P.swingKind = brush.y < -0.3 ? "cut" : "drive"; P.swingDir = brush.x >= 0 ? -1 : 1;
   launch(0, p0, s.v, s.w, false, s.kind);
   Sfx.shot();
@@ -897,7 +913,7 @@ function checkServe() {
 }
 function playerServe(brush) {
   const p0 = st.tossed ? ball.p.clone() : serveBallPos(0);
-  const s = makeShot(0, p0, brush, true);
+  const s = makeShot(0, p0, brush, true, P.mv);
   P.swingT = 0; P.swingKind = brush.y < -0.3 ? "cut" : "drive"; P.swingDir = brush.x >= 0 ? -1 : 1;
   launch(0, p0, s.v, s.w, true);
   shotLabel("サーブ: " + spinName(spinParts(s.w, s.v), s.w.length()) + " " + powerDots(s.w), "#9fd0ff");
@@ -922,7 +938,7 @@ function planCpu() {
   b.served = st.serveStage !== 1;
   while (!stop && t < 3) {
     stepBall(b, SUB, ev); t += SUB;
-    if (bounced && ((b.v.y < 0 && b.p.y < TH + 0.28) || b.p.z < -HL - 0.15)) { plan = { p: b.p.clone(), t }; break; }
+    if (bounced && ((b.v.y < 0 && b.p.y < TH + 0.28) || b.p.z < -HL - 0.15)) { plan = { p: b.p.clone(), t: t / BTS }; break; }   // t: ボールの時間 → ゲームの時間（CPU の動きと同じ単位）にそろえる
   }
   // rush: 打つ場所までの距離 ÷ 間に合う時間（1 を超えるとぎりぎり）
   const rush = plan ? Math.hypot(plan.p.x + 0.36 - C.pos.x, plan.p.z - 0.3 - C.pos.z) / Math.max(0.1, (plan.t - lv.react) * lv.move) : 0;
@@ -1048,6 +1064,7 @@ addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
 
 function updatePlayer(dt) {
   const prev = P.pos.clone();
+  let stickDir = null;
   if (moveP.id !== null && cfg.move === "direct") {
     const k = DIRECT_K();
     P.pos.x = moveP.bx + (moveP.x - moveP.sx) * k;
@@ -1062,6 +1079,7 @@ function updatePlayer(dt) {
     if (keys.a || keys.arrowleft) ix -= 1; if (keys.d || keys.arrowright) ix += 1;
     if (keys.w || keys.arrowup) iz -= 1; if (keys.s || keys.arrowdown) iz += 1;
     P.pos.x += ix * 3.2 * dt; P.pos.z += iz * 3.2 * dt;
+    stickDir = V(ix, 0, iz);
   }
   // コート全体を動ける（2026-11-19 夜）。台（と、その分の余白）の中にだけは入れず、ふちにそってすべる
   P.pos.x = clamp(P.pos.x, -3.3, 3.3); P.pos.z = clamp(P.pos.z, -5.7, 5.7);
@@ -1076,6 +1094,9 @@ function updatePlayer(dt) {
     moveP.bx = P.pos.x - (moveP.x - moveP.sx) * k; moveP.bz = P.pos.z - (moveP.y - moveP.sy) * k;
   }
   P.vel.subVectors(P.pos, prev).divideScalar(Math.max(dt, 1e-4));
+  // 動いている向き（スティックはたおした向き、ダイレクトは実際の動き）。ごく短い間の平均にして、打つ瞬間に使う
+  { const iv = stickDir || V(P.vel.x / 3.2, 0, P.vel.z / 3.2); if (iv.length() > 1) iv.normalize();
+    P.mv.lerp(iv, 1 - Math.exp(-(dt / TS) / 0.08)); }
   P.hand = playerZone().fh ? 1 : -1;
   // 右の指の位置でラケットが動く（構え）
   if (swP.id !== null) P.fing.set(clamp((swP.x - swP.sx) * 0.0016, -0.22, 0.22), clamp(-(swP.y - swP.sy) * 0.0014, -0.2, 0.22), 0);
@@ -1107,10 +1128,10 @@ function update(dt, rdt) {
   else { updatePlayer(dt); updateCpu(dt); }
   if (st.phase === "serve") {
     st.serveT += dt;
-    if (st.tossed) stepToss(dt);
+    if (st.tossed) stepToss(dt * BTS);
     if (!st.tossed) { ball.p.copy(serveBallPos(st.server)); ball.v.set(0, 0, 0); }
   } else {
-    let t = dt;
+    let t = dt * BTS;
     while (t > 1e-6) { if (st.hold) break; const h = Math.min(SUB, t); t -= h; stepBall(ball, h, onBallEvent); if (ON) checkHold(); }
     if (st.phase === "rally" && !st.hold) {
       st.rallyT += dt;
