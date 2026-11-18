@@ -28,6 +28,9 @@
   #msg { position:fixed; left:0; right:0; top:32%; text-align:center; font-size:38px; font-weight:900; pointer-events:none; text-shadow:0 3px 10px rgba(0,0,0,.6); opacity:0; transition:opacity .2s; }
   #shot { position:fixed; right:calc(16px + env(safe-area-inset-right)); bottom:14px; font-size:14px; font-weight:800; pointer-events:none; text-shadow:0 2px 6px rgba(0,0,0,.7); opacity:0; transition:opacity .3s; }
   #hint { position:fixed; left:0; right:0; bottom:12px; text-align:center; font-size:14px; color:#fff; pointer-events:none; text-shadow:0 2px 6px rgba(0,0,0,.8); }
+  /* 画面の向きの切り替えボタン（シールドファイトと同じ形）。タイトル・ポーズの上にも出す */
+  #rot { position:fixed; right:calc(10px + env(safe-area-inset-right)); top:calc(8px + env(safe-area-inset-top)); z-index:20; width:44px; height:44px; padding:0; margin:0; border-radius:50%; background:rgba(255,255,255,.16); line-height:0; }
+  #rot svg { width:22px; height:22px; }
   #pause { position:fixed; left:calc(10px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); width:44px; height:44px; border-radius:12px; border:0; background:rgba(10,12,18,.7); color:#fff; font-size:20px; font-weight:900; }
   .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; padding:16px; background:rgba(12,14,20,.82); overflow-y:auto; }
   .screen > * { margin-top:auto; margin-bottom:auto; flex-shrink:0; }
@@ -63,6 +66,7 @@
 <div id="shot"></div>
 <div id="hint"></div>
 <button id="pause" data-nosfx hidden>Ⅱ</button>
+<button id="rot" type="button" aria-label="画面の向きの切り替え" hidden></button>
 
 <div class="screen" id="title">
   <div class="card">
@@ -88,7 +92,6 @@
         <div class="lab">試合</div>
         <div class="seg" data-k="games"><button data-v="1">1ゲーム</button><button data-v="3">3ゲーム(2本先取)</button></div>
         <button class="main" id="start">はじめる</button>
-        <button class="flipBtn" hidden>⟲ 画面の上下を反対にする</button>
         <div class="seg" style="margin-top:8px" id="titleBtns"><button id="toGames">← ゲーム一覧</button></div>
       </div>
     </div>
@@ -102,7 +105,6 @@
     <div class="seg" data-k="move"><button data-v="stick">スティック</button><button data-v="direct">ダイレクト</button></div>
     <button class="main" id="resume">つづける</button>
     <div id="menuSnd"></div>
-    <button class="flipBtn" hidden>⟲ 画面の上下を反対にする</button>
     <button id="quit">タイトルへ</button>
   </div>
 </div>
@@ -370,12 +372,12 @@ const ov = $("ov"), octx = ov.getContext("2d");
 let W = 1, H = 1;
 // 縦画面のとき（スマホの自動回転がオフで横に持っている）は、ゲーム全体を 90° 回して横長に表示する。
 // rotDir: 1 = 時計回りに回す（スマホの上を左に倒して持つ）、-1 = 反時計回り（上を右に倒す）。
-// 傾きセンサーが使えればそれで自動で決め、使えないときは「上下を反対にする」ボタンで切り替える。
+// どちら向きかは、右上の切り替えボタン（シールドファイトと同じ）で決める。
 let rotDir = +(store.get("pp-rotdir") || 1) === -1 ? -1 : 1, rotOn = false;
 function applyRot() {
   const app = $("app"), sw = innerWidth, sh = innerHeight;
   rotOn = sh > sw;
-  document.querySelectorAll(".flipBtn").forEach(b => b.hidden = !rotOn);
+  $("rot").hidden = !(rotOn || (canLock && coarse));
   if (!rotOn) { app.style.width = sw + "px"; app.style.height = sh + "px"; app.style.transform = ""; W = sw; H = sh; return; }
   W = sh; H = sw;
   app.style.width = W + "px"; app.style.height = H + "px";
@@ -392,17 +394,23 @@ function setRotDir(d) {
   moveP.id = null; swP.id = null;
   applyRot();
 }
-// 傾きセンサー: 縦画面のまま横に倒したとき、どちらの端が下かを見る（Android はそのまま、iPhone は許可が要る）
-const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-addEventListener("devicemotion", e => {
-  const g = e.accelerationIncludingGravity; if (!g || g.x == null || !rotOn) return;
-  const ax = IOS ? -g.x : g.x;   // + なら右の端が上
-  if (ax > 6) setRotDir(1); else if (ax < -6) setRotDir(-1);
-});
-function askMotion() {
-  try { if (window.DeviceMotionEvent && DeviceMotionEvent.requestPermission) DeviceMotionEvent.requestPermission().catch(() => {}); } catch (e) {}
+// 切り替えボタン（シールドファイトと同じ）:
+//  - 縦画面のまま（自動回転オフ・iPhone など）: 回す向きを反対にする（スマホの上を左に倒す ↔ 右に倒す）
+//  - 本当の横画面で、向きを固定できる端末（Android の全画面・インストールしたアプリ）: 横向きの左右を入れ替えて固定する
+const coarse = matchMedia("(pointer:coarse)").matches;
+const standalone = matchMedia("(display-mode: standalone), (display-mode: fullscreen)").matches || navigator.standalone;
+const canLock = !!(screen.orientation && screen.orientation.lock) && (!!document.documentElement.requestFullscreen || standalone);
+$("rot").innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5"/><path d="M3 4v5h5M21 20v-5h-5"/></svg>';
+function lockTo(o) {
+  const lock = () => { try { const r = screen.orientation.lock(o); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
+  if (document.fullscreenElement || standalone || !document.documentElement.requestFullscreen) { lock(); return; }
+  try { const r = document.documentElement.requestFullscreen({ navigationUI: "hide" }); if (r && r.then) r.then(lock, () => {}); else lock(); } catch (e) {}
 }
-document.querySelectorAll(".flipBtn").forEach(b => b.addEventListener("click", () => setRotDir(-rotDir)));
+$("rot").addEventListener("click", () => {
+  $("rot").blur();
+  if (rotOn) { setRotDir(-rotDir); return; }
+  if (canLock) lockTo((screen.orientation.type || "").includes("secondary") ? "landscape-primary" : "landscape-secondary");
+});
 function resize() {
   applyRot();
   renderer.setSize(W, H, false);
@@ -908,7 +916,7 @@ function toTitle() {
   ball.p.set(0, TH + 0.4, 0); ball.v.set(0, 0, 0);
   resetPositions();
 }
-$("start").onclick = () => { askMotion(); startMatch(); };
+$("start").onclick = startMatch;
 $("again").onclick = startMatch;
 $("toTitle").onclick = toTitle;
 $("quit").onclick = toTitle;
