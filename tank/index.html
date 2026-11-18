@@ -239,7 +239,7 @@ const TEAM_NAME = ["赤", "青"], TEAM_CSS = ["#ff5a5a", "#4a9bff"];
 const BUL = [
   { id: "ast", name: "アステロイド", sub: "通常弾", tur: "rifle", spd: 7, dmg: 3, max: 2, cd: .45, r: .1, col: 0xfff3a0, desc: "威力が一番高い（1発でやられる）。まっすぐしか飛ばない" },
   { id: "met", name: "メテオラ", sub: "炸裂弾", tur: "bound", spd: 4.2, boom: 2, br: 1.15, max: 2, cd: .6, r: .14, col: 0xff8a3a, desc: "壁や戦車に当たると爆発する（自分も巻きこまれる）" },
-  { id: "vip", name: "バイパー", sub: "変化弾", tur: "std", spd: 5.5, dmg: 1, path: true, max: 2, cd: .45, r: .1, col: 0x7af0ff, desc: "ステージに指でえがいた道をなぞって飛ぶ" },
+  { id: "vip", name: "バイパー", sub: "変化弾", tur: "std", spd: 11, dmg: 1, path: true, max: 2, cd: .45, r: .1, col: 0x7af0ff, desc: "ステージに指でえがいた道をなぞって飛ぶ" },
   { id: "hnd", name: "ハウンド", sub: "追尾弾", tur: "homing", spd: 4.4, dmg: 1, home: 2.2, life: 6, max: 2, cd: .5, r: .1, col: 0xa6ff7a, desc: "近くの相手を追いかける" },
   { id: "gim", name: "ギムレット", sub: "徹甲弾", spd: 8.5, dmg: 3, pierce: true, r: .13, col: 0xfffbe0, desc: "壁を壊しながら進む" },
   { id: "tom", name: "トマホーク", sub: "変化炸裂弾", spd: 5, boom: 2, br: 1.15, path: true, r: .15, col: 0xff6ad0, desc: "えがいた道をなぞって飛び、当たると爆発" },
@@ -423,25 +423,38 @@ function nodeAt(x, z, mask) {
 loadMap("plaza");
 
 // ================= 動きの計算（ホスト・CPU・自分の戦車で同じもの） =================
-// 戦車: スティックの向きへ車体をまわしながら進む（後ろ向きのほうが近ければバック）。
-// 横すべりは「すべりにくさ」で消える（低いと曲がるときに流れる）
+// 戦車（2026-11-19 作り直し）: スティックを倒した向きへ、そのまま進む（倒した量で速さが変わる）。
+// 車体はあとから進む向きへまわる（見た目だけ。後ろ向きのほうが近ければバックの向き）。
+// 性能: スピード = 最高速度 / かそく = 進む向きの速さが変わる速さ / まがりやすさ・すべりにくさ = 向きを変えるときの速さ（低いと少し流れる）
 function driveTank(t, mx, mz, dt) {
-  const st = t.st, mag = Math.min(1, Math.hypot(mx, mz));
-  let thr = 0;
-  if (mag > 0.12) {
-    const want = Math.atan2(mz, mx);
-    let d = angDiff(want, t.h), rev = false;
-    if (Math.abs(d) > PI * 0.62) { d = angDiff(want + PI, t.h); rev = true; }
-    t.h = angDiff(t.h + clamp(d, -st.turn * dt, st.turn * dt), 0);
-    thr = mag * Math.max(0, Math.cos(d)) * (rev ? -0.85 : 1);
+  const st = t.st;
+  let mag = Math.min(1, Math.hypot(mx, mz));
+  if (mag < 0.12) mag = 0;
+  const ux = mag ? mx / Math.hypot(mx, mz) : 0, uz = mag ? mz / Math.hypot(mx, mz) : 0;
+  const tx = ux * mag * st.spd, tz = uz * mag * st.spd;   // めざす速度
+  const sp = Math.hypot(t.vx, t.vz);
+  // 今の速度の向きに沿った成分（加速・減速）と、横の成分（向きを変える）を別の速さで近づける
+  const dx = tx - t.vx, dz = tz - t.vz;
+  let ax, az;
+  if (sp > .05) {
+    const fx = t.vx / sp, fz = t.vz / sp, along = dx * fx + dz * fz, side = -dx * fz + dz * fx;
+    const accA = (mag ? 1 : 1.4) * st.acc, accS = 6 + st.turn * 1.3 + st.grip * .45;
+    const a1 = clamp(along, -accA * dt, accA * dt), s1 = clamp(side, -accS * dt, accS * dt);
+    ax = a1 * fx - s1 * fz; az = a1 * fz + s1 * fx;
+  } else {
+    const l = Math.hypot(dx, dz), m = Math.min(l, st.acc * dt);
+    ax = l ? dx / l * m : 0; az = l ? dz / l * m : 0;
   }
-  const fx = Math.cos(t.h), fz = Math.sin(t.h);
-  let vF = t.vx * fx + t.vz * fz, vL = -t.vx * fz + t.vz * fx;
-  const target = thr * st.spd, rate = (thr === 0 ? 1.3 : 1) * st.acc;
-  vF += clamp(target - vF, -rate * dt, rate * dt);
-  vL *= Math.exp(-st.grip * dt);
-  t.vx = vF * fx - vL * fz; t.vz = vF * fz + vL * fx;
+  t.vx += ax; t.vz += az;
   t.x += t.vx * dt; t.z += t.vz * dt;
+  // 車体の向き（見た目）
+  const vs = Math.hypot(t.vx, t.vz);
+  if (vs > .3) {
+    const want = Math.atan2(t.vz, t.vx);
+    let d = angDiff(want, t.h);
+    if (Math.abs(d) > PI * .62) d = angDiff(want + PI, t.h);
+    t.h = angDiff(t.h + clamp(d, -(st.turn * 2.2) * dt, (st.turn * 2.2) * dt), 0);
+  }
   collideWalls(t, TANK_R);
 }
 function collideWalls(o, r) {
