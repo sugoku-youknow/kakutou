@@ -32,7 +32,10 @@
   #rot { position:fixed; left:calc(62px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); z-index:20; width:44px; height:44px; padding:0; margin:0; border-radius:50%; background:rgba(255,255,255,.16); line-height:0; }
   #rot svg { width:22px; height:22px; }
   /* キャラの移動速度（×1〜×5）。押すたびに ×1 → ×2 → … → ×5 → ×1。細かくはポーズ画面のスライダー */
-  #spd { position:fixed; left:calc(114px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); z-index:20; width:44px; height:44px; padding:0; margin:0; border-radius:50%; background:rgba(255,255,255,.16); color:#fff; font-size:13px; font-weight:900; }
+  /* キャラの移動速度のバー（試合中だけ。×1.00〜×2.00 を 0.01 きざみで） */
+  #spd { position:fixed; left:calc(114px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); z-index:20; height:44px; width:min(210px, 30vw); display:flex; align-items:center; gap:8px; padding:0 12px; border-radius:22px; background:rgba(255,255,255,.16); color:#fff; font-size:12px; font-weight:900; }
+  #spd input[type=range] { flex:1; min-width:0; margin:0; }
+  #spd .spdV { min-width:3.2em; text-align:right; }
   input[type=range].spdR { width:100%; margin:4px 0 0; padding:0; accent-color:var(--blue); }
   #pause { position:fixed; left:calc(10px + env(safe-area-inset-left)); top:calc(8px + env(safe-area-inset-top)); width:44px; height:44px; border-radius:12px; border:0; background:rgba(10,12,18,.7); color:#fff; font-size:20px; font-weight:900; }
   .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; padding:16px; background:rgba(12,14,20,.82); overflow-y:auto; }
@@ -46,6 +49,16 @@
   .seg { display:flex; gap:6px; }
   .seg button { flex:1; margin:0; padding:10px 4px; font-size:14px; }
   .seg input { flex:1.3; min-width:0; margin:0; padding:10px 6px; font-size:15px; font-weight:700; text-align:center; border-radius:12px; border:1px solid var(--line); background:#0f121a; color:var(--text); -webkit-user-select:text; user-select:text; }
+  /* 枠（チームA・チームB）をえらぶ画面 */
+  .slotgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px; text-align:center; }
+  .slotgrid .tm { font-size:12px; font-weight:800; margin:2px 0 4px; }
+  .slotgrid .tm.a { color:#7fc4ff; } .slotgrid .tm.b { color:#ff8a8a; }
+  .slotgrid button { width:100% !important; margin:0 0 6px !important; padding:10px 6px; min-height:44px; font-size:14px; }   /* パーティの待ち合わせ画面の側の「ボタンは小さく」を上書き */
+  .slotgrid button.me { outline:2px solid var(--accent); }
+  .slotnote { font-size:12px; color:var(--sub); margin-top:6px; line-height:1.5; text-align:center; }
+  .slotnote b { color:#fff; font-size:15px; }
+  .fmtrow { display:flex; gap:6px; margin-top:8px; }
+  .fmtrow button { flex:1; margin:0; padding:10px 4px; font-size:14px; }
   .seg button.on { background:var(--blue); color:#06192b; }
   button { font:inherit; font-size:16px; font-weight:700; border:0; border-radius:12px; padding:12px 10px; width:100%; margin-top:8px; background:#2a3142; color:var(--text); cursor:pointer; }
   button.main { background:var(--accent); color:#2a1a05; font-size:18px; }
@@ -71,7 +84,7 @@
 <div id="hint"></div>
 <button id="pause" data-nosfx hidden>Ⅱ</button>
 <button id="rot" type="button" aria-label="画面の向きの切り替え" hidden></button>
-<button id="spd" type="button" aria-label="キャラの移動速度（押すと切り替え）" data-nosfx hidden></button>
+<div id="spd" hidden aria-label="キャラの移動速度"><input type="range" class="spdR" min="1" max="2" step="0.01"><span class="spdV"></span></div>
 
 <div class="screen" id="title">
   <div class="card">
@@ -84,6 +97,7 @@
           <li><b>右の指</b>：ボールがラケットに来た<b>瞬間の指のスライド</b>の向きと速さで回転が決まる（ボールが体の近くにある間に指をすべらせると打つ）
             <br>↑上＝<b>前回転</b>（速く深い・低く伸びる）／↓下＝<b>下回転</b>（遅く短い・止まる）
             <br>←→横＝<b>横回転</b>（こすった向きに曲がる・横に跳ねる）。速くこするほど強い回転</li>
+          <li><b>オンラインは 1対1・2対1・2対2</b>：3人以上のときは、4つの枠（チームA・B）から自分で選んで入る。ホストが「決定」→ゲーム形式を選んで「スタート」。枠に入らない人は観戦。チームのどちらの人もボールを打てる</li>
           <li><b>引き付けて打てる</b>（カット戦法）：台から離れて、低い球をぎりぎりまで待ってから打っていい。ただし<b>タイミングを大きく外す</b>と、球が高く<b>ひょろひょろ</b>の山なりになる
             <br>山なり球が来たときだけ、指を<b>すばやくはじく</b>と<b>スマッシュ</b>で決められる</li>
           <li><b>打つ瞬間に左の指で動いている向き</b>で、球が変わる：前へ＝<b>強打</b>（速く深い）／右へ＝右側へ／左へ＝左側へ／後ろへ＝<b>ゆるい球</b></li>
@@ -95,8 +109,8 @@
         <div class="lab">体の動かし方</div>
         <div class="seg" data-k="move"><button data-v="stick">スティック</button><button data-v="direct">ダイレクト</button></div>
         <div class="small" id="moveDesc"></div>
-        <div class="lab">キャラの移動速度 <b class="spdV"></b>（今の速さの 1〜5 倍。試合中も変えられる）</div>
-        <input type="range" class="spdR" min="1" max="5" step="0.1">
+        <div class="lab">キャラの移動速度 <b class="spdV"></b>（今の速さの 1〜2 倍。0.01 きざみ。試合中も画面の上のバーで変えられる）</div>
+        <input type="range" class="spdR" min="1" max="2" step="0.01">
         <div class="lab">CPUのつよさ</div>
         <div class="seg" data-k="cpu"><button data-v="0">よわい</button><button data-v="1">ふつう</button><button data-v="2">つよい</button></div>
         <div class="lab">試合</div>
@@ -115,6 +129,8 @@
     <h2 id="netTitle"></h2>
     <div id="netCode" style="font-size:48px; font-weight:800; letter-spacing:.2em; color:var(--accent); margin:4px 0"></div>
     <div class="small" id="netSub" style="min-height:2.4em"></div>
+    <div id="netSlots" hidden></div>
+    <button class="main" id="netGo" hidden></button>
     <button id="netCancel">やめる</button>
   </div>
 </div>
@@ -124,8 +140,8 @@
     <h2>ポーズ</h2>
     <div class="lab">体の動かし方</div>
     <div class="seg" data-k="move"><button data-v="stick">スティック</button><button data-v="direct">ダイレクト</button></div>
-    <div class="lab">キャラの移動速度 <b class="spdV"></b>（今の速さの 1〜5 倍。試合中も変えられる）</div>
-    <input type="range" class="spdR" min="1" max="5" step="0.1">
+    <div class="lab">キャラの移動速度 <b class="spdV"></b>（今の速さの 1〜2 倍。0.01 きざみ。試合中も画面の上のバーで変えられる）</div>
+    <input type="range" class="spdR" min="1" max="2" step="0.01">
     <button class="main" id="resume">つづける</button>
     <div id="menuSnd"></div>
     <button id="quit">タイトルへ</button>
@@ -279,23 +295,21 @@ function shotOutcome(p0, v, w, serve) {
 // ===== 設定 =====
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 const cfg = Object.assign({ move: "stick", cpu: "1", games: "1", speed: 1 }, (() => { try { return JSON.parse(store.get("pp-cfg") || "{}"); } catch (e) { return {}; } })());
-cfg.speed = Math.max(1, Math.min(5, +cfg.speed || 1));   // キャラの移動速度の倍率（1〜5）
+cfg.speed = Math.max(1, Math.min(2, +cfg.speed || 1));   // キャラの移動速度の倍率（1〜2。前の版で 2 より大きくしていた人も 2 までに）
 const MOVE_DESC = {
   stick: "左の指をおいた所がスティックの中心。倒した方向に走る",
   direct: "左の指を動かした分だけ、体もそのまま同じように動く",
 };
 // キャラの移動速度（1〜5 倍）。タイトル・ポーズのスライダー、試合中のボタン、パーティの待ち合わせの 3 か所から変えられる
 function setSpeed(v) {
-  cfg.speed = Math.round(Math.max(1, Math.min(5, +v || 1)) * 10) / 10; store.set("pp-cfg", JSON.stringify(cfg)); refreshSpd();
+  cfg.speed = Math.round(Math.max(1, Math.min(2, +v || 1)) * 100) / 100; store.set("pp-cfg", JSON.stringify(cfg)); refreshSpd();
   if (window.ykgLobby && ykgLobby.active && typeof partyUi === "function") partyUi();
 }
 function refreshSpd() {
-  document.querySelectorAll(".spdV").forEach(e => e.textContent = "×" + cfg.speed.toFixed(1));
+  document.querySelectorAll(".spdV").forEach(e => e.textContent = "×" + cfg.speed.toFixed(2));
   document.querySelectorAll(".spdR").forEach(e => { if (+e.value !== cfg.speed) e.value = cfg.speed; });
-  $("spd").textContent = "×" + (Number.isInteger(cfg.speed) ? cfg.speed : cfg.speed.toFixed(1));
 }
 document.querySelectorAll(".spdR").forEach(e => e.addEventListener("input", () => setSpeed(e.value)));
-$("spd").addEventListener("click", () => { $("spd").blur(); setSpeed(Math.floor(cfg.speed + 1e-6) >= 5 ? 1 : Math.floor(cfg.speed + 1e-6) + 1); });
 function refreshSeg() {
   refreshSpd();
   document.querySelectorAll(".seg[data-k]").forEach(s => s.querySelectorAll("button").forEach(b => b.classList.toggle("on", cfg[s.dataset.k] === b.dataset.v)));
@@ -337,8 +351,9 @@ floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 const court = new THREE.Mesh(new THREE.PlaneGeometry(7, 12), mat(0x9a3b2f));
 court.rotation.x = -Math.PI / 2; court.position.y = 0.002; court.receiveShadow = true; scene.add(court);
 // フェンス
+const fences = [];
 for (const [x, z, w, d] of [[0, -6, 7, 0.05], [0, 6, 7, 0.05], [-3.5, 0, 0.05, 12], [3.5, 0, 0.05, 12]]) {
-  const f = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, d), mat(0x1b3f7a)); f.position.set(x, 0.35, z); scene.add(f);
+  const f = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, d), mat(0x1b3f7a)); f.position.set(x, 0.35, z); scene.add(f); fences.push(f);
 }
 // 台
 const top = new THREE.Mesh(new THREE.BoxGeometry(TW, 0.03, TL), mat(0x1f5fae));
@@ -536,6 +551,11 @@ let cpuPlan = null;   // CPU がどこで打つか
 function resetPositions() {
   P.pos.set(0.15, 0, HL + 0.75); C.pos.set(-0.15, 0, -HL - 0.75);
   P.vel.set(0, 0, 0); C.vel.set(0, 0, 0); P.tgt = null; C.tgt = null;
+  if (ON && ON.phase === "playing") {   // 通信対戦: 枠（チームの人数）に合わせた、はじめの立ち位置
+    const me = mePl();
+    if (me && me.slot >= 0) P.pos.copy(wv(startWorldPos(ON.pid)));
+    for (const [pid, a] of ON.av) { if (ON.players.has(pid) && ON.players.get(pid).slot >= 0) a.pos.copy(wv(startWorldPos(pid))); a.tgt = null; a.vel.set(0, 0, 0); }
+  }
 }
 function startMatch() {
   if (ON) { hostStartMatch(); return; }   // 通信対戦: 始められるのはホストだけ
@@ -543,12 +563,12 @@ function startMatch() {
   st.firstServer = Math.random() < 0.5 ? 0 : 1;
   startMatchCore(cfg.games === "3" ? 2 : 1, null);
 }
-function startMatchCore(need, sv) {
+function startMatchCore(need, sv, svp) {
   // 得点板の名前: ひとり用は あなた/CPU、通信対戦は あなた/相手（観戦は 2 人の名前）
   const nm = document.querySelectorAll("#hud .nm");
   if (nm.length === 2) {
     if (!ON) { nm[0].textContent = "あなた"; nm[1].textContent = "CPU"; }
-    else if (ON.role === 2) { nm[0].textContent = ON.names[0] || "ホスト"; nm[1].textContent = ON.names[1] || "ゲスト"; }
+    else if (ON.spec) { nm[0].textContent = teamNames(0).join("・") || "A"; nm[1].textContent = teamNames(1).join("・") || "B"; }
     else { nm[0].textContent = "あなた"; nm[1].textContent = "相手"; }
   }
   st.score = [0, 0]; st.games = [0, 0]; st.need = need; st.over = false; st.gameWin = -1;
@@ -556,7 +576,7 @@ function startMatchCore(need, sv) {
   $("title").hidden = true; $("result").hidden = true; $("menu").hidden = true; $("pause").hidden = false;
   st.paused = false; st.hold = false;
   tryLandscape();
-  newPoint(sv);
+  newPoint(sv, svp);
   updHud();
 }
 function serverFor() {
@@ -564,11 +584,12 @@ function serverFor() {
   const f = (st.firstServer + st.games[0] + st.games[1]) % 2;
   return tot < 20 ? (f + Math.floor(tot / 2)) % 2 : (f + tot) % 2;
 }
-function newPoint(sv) {
+function newPoint(sv, svp) {
   st.server = sv != null ? sv : serverFor();
   st.phase = "serve"; st.serveT = 0; st.rallyT = 0; st.hits = 0;
   cpuPlan = null; st.lob = false; st.smash = false; st.hold = false; st.over = false; st.gameWin = -1; st.tossed = false; st.tossT = 0; st.missWait = 0;
-  if (ON) ON.claimed = -1;
+  if (ON) { ON.claimed = -1; ON.pending = -1; st.serverPid = svp != null ? svp : (ON.host ? hostPickServer(st.server) : null); } else st.serverPid = null;
+  st.lastShot = null;
   ball.v.set(0, 0, 0); ball.w.set(0, 0, 0);
   trailPts.length = 0;
   hint(st.server === 0 ? "右の指をすべらせてサーブ（向きと速さで回転）" : "");
@@ -598,11 +619,11 @@ function point(winner, why) {
   if (st.phase !== "rally") return;
   if (ON) {
     // 通信対戦: 点を出すのは「ボールがとんでくる側（受ける側）」だけ。ホストが確定して、みんなに知らせる
-    if (ON.role === 2 || st.hitter === 0) return;
+    if (ON.spec || st.hitter === 0) return;
     if (ON.claimed === st.hits) return;
     ON.claimed = st.hits;
     const ww = wid(winner);
-    if (ON.role === 0) hostConfirm(ww, st.hits); else bcast({ t: "claim", w: ww, n: st.hits });
+    if (ON.host) hostConfirm(ww, st.hits, ON.pid); else bcast({ t: "claim", w: ww, n: st.hits });
     return;
   }
   pointApply(winner);
@@ -631,22 +652,23 @@ function afterDead() {
     resetPositions(); ng = true;
   }
   newPoint();
-  if (ON) bcast({ t: "np", s: st.score.slice(), g: st.games.slice(), sv: st.server, ng });
+  if (ON) bcast({ t: "np", s: swapIf(st.score), g: swapIf(st.games), sv: wid(st.server), svp: st.serverPid, ng });
 }
 function finish() {
   st.phase = "over"; st.hold = false; $("pause").hidden = true; $("menu").hidden = true; hint("");
   const win = st.games[0] > st.games[1];
+  const winW = ON ? (win ? ON.side : 1 - ON.side) : 0;   // 勝ったチーム（世界の A = 0 / B = 1）
   let title, col;
-  if (ON && ON.role === 2) { title = `${(win ? ON.names[0] : ON.names[1]) || (win ? "ホスト" : "ゲスト")}の勝ち`; col = "#ffe27a"; }
-  else if (ON) { title = win ? "🏆 あなたの勝ち！" : "相手の勝ち…"; col = win ? "#7fc4ff" : "#ff8a8a"; }
+  if (ON && ON.spec) { title = `チーム${winW ? "B" : "A"}（${teamNames(winW).join("・")}）の勝ち`; col = "#ffe27a"; }
+  else if (ON) { title = win ? "🏆 あなたのチームの勝ち！" : "相手のチームの勝ち…"; col = win ? "#7fc4ff" : "#ff8a8a"; }
   else { title = win ? "🏆 あなたの勝ち！" : "CPUの勝ち…"; col = win ? "#7fc4ff" : "#ff8a8a"; }
   $("resTitle").textContent = title; $("resTitle").style.color = col;
   $("resScore").textContent = st.need > 1 ? `ゲーム ${st.games[0]} - ${st.games[1]}` : `${st.score[0]} - ${st.score[1]}`;
-  $("again").hidden = !!(ON && ON.role !== 0); $("resWait").hidden = !(ON && ON.role !== 0);
+  $("again").hidden = !!(ON && !ON.host); $("resWait").hidden = !(ON && !ON.host);
   $("toTitle").textContent = PARTY ? "ゲーム一覧へ" : ON ? "やめる" : "タイトルへ";
   $("result").hidden = false;
-  if (ON && ON.role === 0) { ON.playing = false; partyReport(win ? [ON.names[0]] : [ON.names[1]], win ? [ON.names[1]] : [ON.names[0]]); }
-  if (!(ON && ON.role === 2)) { if (win) Sfx.win(); else Sfx.lose(); }
+  if (ON && ON.host) { ON.playing = false; partyReport(teamNames(winW), teamNames(1 - winW)); }
+  if (!(ON && ON.spec)) { if (win) Sfx.win(); else Sfx.lose(); }
 }
 
 // ボールが当たったときのルール判定
@@ -676,13 +698,16 @@ function missLater(winner) { if (!st.missWait) { st.missWait = MISS_GRACE; st.mi
 
 // ボールを打ち出す（hitter: 0 自分 / 1 CPU）
 function launch(hitter, p0, v, w, serve, kind, remote) {
+  // n: この点の中での打球の通し番号。自分が打ったときは 1 つ進め、通信で届いたときは、相手の番号にそろえる（同時に 2 人が打ったときも全員が同じ番号になる）
+  const n = remote && remote.n != null ? remote.n : st.hits + 1;
   ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w); st.hold = false; st.tossed = false; st.missWait = 0;
-  if (ON && ON.role !== 2 && !remote) sendShot(p0, v, w, serve, kind);
+  if (ON && !ON.spec && !remote) sendShot(p0, v, w, serve, kind, n);
   st.lob = kind === "lob"; st.smash = kind === "smash";   // ひょろひょろの山なり球 / スマッシュ
   hitFx(p0, v, w, kind, hitter === 0);
   st.phase = "rally"; st.hitter = hitter; st.bounced = false; st.netTouched = false;
-  st.serveStage = serve ? 1 : 0; st.rallyT = 0; st.hits++; st.pTried = false;
-  Sfx.knock(); if (hitter === 0 && !(ON && ON.role === 2)) Sfx.vibrate(15);
+  st.serveStage = serve ? 1 : 0; st.rallyT = 0; st.hits = n; st.pTried = false;
+  st.lastShot = { pid: remote ? remote.pid : (ON ? ON.pid : 0), n };
+  Sfx.knock(); if (hitter === 0 && !(ON && ON.spec)) Sfx.vibrate(15);
   hint("");
   cpuPlan = null;
   if (hitter === 0 && !ON) planCpu();
@@ -694,7 +719,7 @@ function predictY(planeZ) {
   _pb.p.copy(ball.p); _pb.v.copy(ball.v); _pb.w.copy(ball.w);
   let t = 0, floor = false;
   const ev = type => { if (type === "floor") floor = true; };
-  while (t < 1.5 && _pb.p.z < planeZ && !floor) { stepBall(_pb, SUB, ev); t += SUB; }
+  while (t < 4 && _pb.p.z < planeZ && !floor) { stepBall(_pb, SUB, ev); t += SUB; }   // 遠くに下がって待つときも、ラケットの面に来るまで先読みできるように 4 秒まで
   return floor ? 0.05 : _pb.p.y;
 }
 
@@ -928,11 +953,7 @@ function doToss(b) {
   swP.pts = [];   // はじいた指の動きは、トスに使い切る（そのまま打球にならないように）
   P.swingT = 0; P.swingKind = "drive"; P.swingDir = 1;
   Sfx.shot();
-  if (ON && ON.role !== 2) bcast({ t: "toss", p: arr3(wv(p)), v: arr3(wv(v)) });
-}
-function applyToss(m) {
-  if (st.phase !== "serve") return;
-  st.tossed = true; st.tossT = 0; ball.p.copy(wv(fromArr(m.p))); ball.v.copy(wv(fromArr(m.v))); ball.w.set(0, 0, 0);
+  if (ON && !ON.spec) bcast({ t: "toss", pid: ON.pid, p: arr3(wv(p)), v: arr3(wv(v)) });
 }
 // トスしたボールの動き（重力だけ）。落ちたら手にもどる
 function stepToss(dt) {
@@ -941,7 +962,7 @@ function stepToss(dt) {
   if (ball.p.y < TH + 0.03) { st.tossed = false; st.tossT = 0; }
 }
 function checkServe() {
-  if (st.phase !== "serve" || st.server !== 0 || st.paused || (ON && ON.role === 2)) return;
+  if (st.phase !== "serve" || st.server !== 0 || st.paused || (ON && (ON.spec || st.serverPid !== ON.pid))) return;   // 通信対戦では、サーブ係の人だけ
   const b = brushFromFinger();
   if (b.length() < 0.05) return;
   if (!st.tossed) { if (st.serveT > 0.25 && b.y >= 0.5 && b.y >= Math.abs(b.x) * 0.5) doToss(b); return; }
@@ -958,7 +979,7 @@ function playerServe(brush) {
   Sfx.shot();
 }
 function serveBallPos(who) {
-  const b = who === 0 ? P : C, sgn = who === 0 ? 1 : -1;
+  const b = serverChar(who), sgn = who === 0 ? 1 : -1;
   return V(clamp(b.pos.x + 0.22 * sgn, -HW * 0.9, HW * 0.9), TH + 0.22, sgn * Math.max(Math.abs(b.pos.z) - 0.3, HL + 0.06));
 }
 
@@ -1061,7 +1082,7 @@ const keys = {};
 const swipeTrail = [];
 const DIRECT_K = () => 2.8 * cfg.speed / (W * 0.5);   // ダイレクト: 指 1px で何 m 動くか（画面の左半分 ≒ 2.8 m）
 ov.addEventListener("pointerdown", e => {
-  if (st.phase === "title" || st.paused || (ON && ON.role === 2)) return;
+  if (st.phase === "title" || st.paused || (ON && ON.spec)) return;
   e.preventDefault();
   const q = toLocal(e);
   if (q.x < W * 0.45) {
@@ -1162,7 +1183,7 @@ function frame(now) {
   render(rdt);
 }
 function update(dt, rdt) {
-  if (ON) { if (ON.role !== 2) updatePlayer(dt); updateRemote(dt, rdt); }
+  if (ON) { if (!ON.spec) updatePlayer(dt); updateRemote(dt, rdt); }
   else { updatePlayer(dt); updateCpu(dt); }
   if (st.phase === "serve") {
     st.serveT += dt;
@@ -1180,13 +1201,15 @@ function update(dt, rdt) {
         point(st.bounced && st.serveStage !== 1 ? h : 1 - h, st.bounced ? "" : "アウト");
       }
     }
-    if (st.phase === "dead") { st.deadT += rdt; if (st.deadT > 1.4 && (!ON || ON.role === 0)) afterDead(); }
+    if (st.phase === "dead") { st.deadT += rdt; if (st.deadT > 1.4 && (!ON || ON.host)) afterDead(); }
   }
 }
 const camPos = V(0, 1.9, HL + 2.6), camLook = V(0, 0.8, -0.8);
 function render(rdt) {
   if ($("spd").hidden !== $("pause").hidden) $("spd").hidden = $("pause").hidden;   // 試合中だけ出す（ポーズボタンと同じ）
+  C.g.visible = !ON; P.g.visible = !(ON && ON.spec);   // 通信対戦では、CPU は出ない。観戦のときは自分のキャラも出ない
   poseChar(P, rdt); poseChar(C, rdt);
+  if (ON) for (const a of ON.av.values()) poseChar(a, rdt);
   ballMesh.position.copy(ball.p);
   const tnow = performance.now() * 0.001, wob = st.lob && (st.phase === "rally" || st.phase === "dead");
   if (wob) { ballMesh.position.x += Math.sin(tnow * 22) * 0.035; ballMesh.position.y += Math.sin(tnow * 17 + 1) * 0.03; }   // ひょろひょろ
@@ -1204,13 +1227,15 @@ function render(rdt) {
   for (let i = 0; i < TRAIL; i++) { const p = trailPts[Math.max(0, trailPts.length - 1 - i)] || ball.p; arr[i * 3] = p.x + (wob ? Math.sin(i * 0.9 + tnow * 20) * 0.04 : 0); arr[i * 3 + 1] = p.y; arr[i * 3 + 2] = p.z; }
   trailGeo.attributes.position.needsUpdate = true;
   // カメラ: 自分の後ろから
-  const tp = st.phase === "title" ? V(2.6, 2.2, HL + 2.6) : V(P.pos.x * 0.7 + 0.2, 2.5, P.pos.z + 1.7);
+  // 後ろに下がるほど、カメラは近づいて（自分の後ろ 1.7 m → 最大 0.7 m）高くなる（遠くなりすぎてボールが小さい・フェンスにかくれる、を防ぐ）
+  const deep = clamp((P.pos.z - 3.0) / 2.7, 0, 1);
+  const tp = st.phase === "title" ? V(2.6, 2.2, HL + 2.6) : V(P.pos.x * 0.7 + 0.2, 2.5 + 0.9 * deep, P.pos.z + 1.7 - 1.0 * deep);
   const tl = st.phase === "title" ? V(0, TH, 0) : V(P.pos.x * 0.3, 0.55, Math.min(-0.85, P.pos.z - 0.5));   // 台の向こう側に立っても、向いている先を見る
   if (st.phase === "rally" || st.phase === "dead" || (st.phase === "serve" && st.tossed)) {
     // ボールを追う（低い球・高い球のどちらも画面に入るように、見る先をボールのほうへ寄せ、低いときはカメラも少し下げる）
     const b = ball.p;
-    tl.x = lerp(tl.x, b.x * 0.85, 0.6); tl.y = lerp(tl.y, Math.max(0.2, b.y * 0.85), 0.6); tl.z = lerp(tl.z, clamp(b.z * 0.75, -2.2, 1.6), 0.5);
-    tp.x += (b.x - P.pos.x * 0.7) * 0.45; tp.y -= clamp((1.0 - b.y) * 0.5, 0, 0.45) + P.crouch * 0.1;
+    tl.x = lerp(tl.x, b.x * 0.85, 0.6); tl.y = lerp(tl.y, Math.max(0.2, b.y * 0.85), 0.6); tl.z = lerp(tl.z, clamp(b.z * 0.75, -2.2, Math.max(1.6, P.pos.z - 0.8)), 0.5 + 0.4 * clamp(1 - Math.abs(b.z - P.pos.z) / 3, 0, 1));   // 自分の近くに来たボールほど、しっかり見る
+    tp.x += (b.x - P.pos.x * 0.7) * 0.45; tp.y -= (clamp((1.0 - b.y) * 0.5, 0, 0.45) + P.crouch * 0.1) * (1 - 0.7 * deep);
   }
   const following = st.phase === "rally" || (st.phase === "serve" && st.tossed);
   const k = 1 - Math.pow(following ? 0.00004 : 0.002, rdt);   // ボールを追うときは、すばやく
@@ -1219,6 +1244,8 @@ function render(rdt) {
   { const near = following && st.hitter === 1 && ball.p.z > P.pos.z - 2.6 && ball.p.z < P.pos.z + 0.6, to = near ? 0.2 : 0.55;
     for (const m of P.mats) m.opacity += (to - m.opacity) * Math.min(1, rdt * 14); }
   camera.position.copy(camPos); camera.lookAt(camLook);
+  // カメラの外側（うしろ）にあるフェンスは、ボールをかくさないように消す
+  fences[0].visible = camera.position.z > -5.9; fences[1].visible = camera.position.z < 5.9;
   if (shake > 0.002) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake *= Math.pow(0.0008, rdt); } else shake = 0;
   renderer.render(scene, camera);
   // 右上のボールのアップ（同じ画面の右上に小さく描く）
@@ -1286,13 +1313,17 @@ function drawCloseUp() {
 }
 requestAnimationFrame(frame);
 
-// ===== 通信対戦（2026-11-19）=====
-// ホスト(0)・ゲスト(1)の 2 人 + 観戦(2)。どの端末も、ふだんのゲームをそのまま動かす（自分の打球はその場で決まるので、自分の操作に遅れがない）。
-// 通信でやりとりするのは、打球（打った位置・速さ・回転）、体の位置、点の知らせだけ。ボールの飛び方はどの端末でも同じ計算なので同じになる。
-//  ・ゲストの画面は世界を 180° 回して「ゲストが手前」に見せる（位置・速さ・回転を (x,y,z)→(-x,y,-z)。ミラーではなく回転なので回転の向きは変わらない）。
-//  ・点を決めるのは「そのボールがとんでくる側（受ける側）」だけ。ホストが確定して、全員に点数を知らせる。
-//  ・打った側の画面では、ボールが相手のラケットまで行ったら、相手の返球か点の知らせが届くまでそこで止めておく（通信の遅れでボールが先に行きすぎないように）。
-//  ・通信の中身は、すべてホスト側の見方（世界）の座標・番号（0 = ホスト、1 = ゲスト）で書く。
+// ===== 通信対戦（2026-11-19。2026-11-20 に 3〜4 人（2対1・2対2）と観戦に対応）=====
+// 参加者は番号（pid）を持ち、4 つの枠（A1 A2 | B1 B2）から自分で選んで入る。枠に入らない人は観戦。
+//   チームA = 世界の手前（+z）、チームB = 世界の奥（-z）。形式（1対1・2対1・1対2・2対2）は、枠に入った人数で決まる。
+// どの端末も、ふだんのゲームをそのまま動かす（自分の打球はその場で決まるので、自分の操作に遅れがない）。
+//  ・通信でやりとりするのは、打球（位置・速さ・回転）、体の位置、トス、点の知らせだけ。ボールの飛び方はどの端末でも同じ計算なので同じになる。
+//  ・チームBの人の画面は、世界を 180° 回して「自分が手前」に見せる（(x,y,z)→(-x,y,-z)。ミラーではなく回転なので回転の向きは変わらない）。
+//  ・通信の中身は、すべて世界の座標、チームの番号（A = 0、B = 1）、参加者の番号（pid）で書く。ゲームの中の「0 = 自分のチーム、1 = 相手のチーム」は、受けた側で直す。
+//  ・点を決めるのは「そのボールがとんでくる側（受ける側）のチーム」。ホストが確定して、全員に点数を知らせる。
+//    受ける側が「返せなかった」と言ってきたときは、相方がぎりぎりで打ち返しているかもしれないので、ホストは 0.3 秒待ってから確定する。
+//  ・チームのどちらの人も打てる。同じ瞬間に 2 人が打ったときは、番号の小さい人の球が残る（打球の通し番号 n で、全員が同じ結果になる）。
+//  ・打った側の画面では、ボールが受ける側のラケットまで行ったら、返球か点の知らせが届くまでそこで止めておく。
 const FORCE_OFF = new URLSearchParams(location.search).has("offline");
 const isOffline = () => FORCE_OFF || !navigator.onLine || typeof Peer === "undefined";
 let PARTY = (() => { try { if (!new URLSearchParams(location.search).has("party")) return null; const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); return j && /^\d$/.test(j.code) ? j : null; } catch (e) { return null; } })();
@@ -1300,14 +1331,15 @@ if (PARTY && isOffline()) PARTY = null;
 const NET_PREFIX = "pingpong-v1-", PARTY_PREFIX = "pingpong-party-";
 const netId = (code, party) => (party ? PARTY_PREFIX : NET_PREFIX) + code;
 const toGames = () => { if (typeof ykgToGames === "function") ykgToGames(); else location.href = "../"; };
-let ON = null, peer = null;     // ON: 通信対戦の状態 { role, party, code, conns, opp, hc, playing, names, ... }
+let ON = null, peer = null;     // ON: 通信対戦の状態 { host, spec, side, pid, players, phase, need, conns, hc, av, ... }
 const R3 = a => Math.round(a * 1000) / 1000;
 const arr3 = v => [R3(v.x), R3(v.y), R3(v.z)];
 const fromArr = a => V(a[0], a[1], a[2]);
-const wv = v => (ON && ON.role === 1) ? V(-v.x, v.y, -v.z) : V(v.x, v.y, v.z);   // 自分の見方 ⇄ 世界（位置・速さ・回転、どれも同じ変換）
-const wid = l => (ON && ON.role === 1 ? 1 - l : l);                                 // 自分から見た番号 ⇄ 世界の番号
+const esc = t => String(t == null ? "" : t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const wv = v => (ON && ON.side === 1) ? V(-v.x, v.y, -v.z) : V(v.x, v.y, v.z);   // 自分の見方 ⇄ 世界（位置・速さ・回転、どれも同じ変換）
+const wid = l => (ON && ON.side === 1 ? 1 - l : l);                                 // 自分から見たチーム番号 ⇄ 世界のチーム番号
 const lid = wid;
-const swapIf = a => (ON && ON.role === 1 ? [a[1], a[0]] : a.slice());
+const swapIf = a => (ON && ON.side === 1 ? [a[1], a[0]] : a.slice());
 
 function partyReport(w, l) {
   if (!PARTY || PARTY.role !== "host" || (!w.length && !l.length)) return;
@@ -1329,67 +1361,170 @@ function sendTo(c, m, unrel) {
 }
 function bcast(m, unrel) {
   if (!ON) return;
-  if (ON.role === 0) { for (const c of ON.conns) sendTo(c, m, unrel); }
+  if (ON.host) { for (const c of ON.conns) sendTo(c, m, unrel); }
   else if (ON.hc) sendTo(ON.hc, m, unrel);
 }
-const hostName = () => (PARTY ? String(PARTY.name || "ホスト").slice(0, 12) : "ホスト");
+function relay(m, from, unrel) { for (const c of ON.conns) if (c !== from) sendTo(c, m, unrel); }
+const myName = () => (PARTY ? String(PARTY.name || (PARTY.role === "host" ? "ホスト" : "ゲスト")).slice(0, 12) : (ON && ON.host ? "ホスト" : "ゲスト"));
 
-// ---------- 画面（部屋番号でつなぐとき） ----------
-function netScreen(title, code, sub, cancelLabel) {
-  $("netTitle").textContent = title; $("netCode").textContent = code || ""; $("netSub").textContent = sub || "";
-  $("netCancel").textContent = cancelLabel || "やめる"; $("net").hidden = false; $("title").hidden = true;
+// ---------- 参加者・枠 ----------
+const mePl = () => ON && ON.players.get(ON.pid);
+const pidsOnSide = s => [...ON.players.values()].filter(p => p.slot >= 0 && (p.slot >> 1) === s).sort((a, b) => a.slot - b.slot);
+const sideCounts = () => [pidsOnSide(0).length, pidsOnSide(1).length];
+const lineupOk = () => { const [a, b] = sideCounts(); return a >= 1 && b >= 1; };
+const teamNames = s => pidsOnSide(s).map(p => p.name);
+const playersList = () => [...ON.players.values()].map(p => ({ pid: p.pid, name: p.name, slot: p.slot, ws: !!p.wantSpec }));
+// 自分が観戦か・どちらのチームか（枠が決まってから）
+function recomputeMe() {
+  const m = mePl();
+  ON.spec = ON.phase !== "slots" && (!m || m.slot < 0);
+  ON.side = (m && m.slot >= 2 && !ON.spec) ? 1 : 0;
 }
-function netFailed(why) {
-  if (PARTY) { try { peer && peer.destroy(); } catch (e) {} peer = null; ON = null; netScreen("つながりません", "", why, "ゲーム一覧へ"); return; }
-  closeNet(); toTitle(); netScreen("つながりません", "", why, "もどる");
+// 自分から見た「0 = 自分のチーム側、1 = 相手側」で、その人の体のむき（手前側は -z をむく）
+function avatarSide(p) { const ws = p.slot >> 1; return ON.spec ? ws : (ws === ON.side ? 0 : 1); }
+function startWorldPos(pid) {
+  const pl = ON.players.get(pid), side = pl.slot >> 1, mates = pidsOnSide(side), idx = mates.findIndex(q => q.pid === pid);
+  const x = mates.length === 1 ? (side === 0 ? 0.15 : -0.15) : ((idx === 0) === (side === 0) ? -0.8 : 0.8);
+  return V(x, 0, side === 0 ? HL + 0.75 : -HL - 0.75);
 }
-function closeNet() { try { peer && peer.destroy(); } catch (e) {} peer = null; ON = null; $("net").hidden = true; }
+// 自分以外の、枠に入っている人のキャラクターをそろえる（チームの相方は半透明、相手は赤）
+function ghostify(ch) { ch.mats = []; ch.g.traverse(o => { if (o.isMesh && o.material && !o.material.length && o !== ch.g.children[ch.g.children.length - 1]) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; ch.mats.push(o.material); } }); }
+function clearAvatars() { if (ON && ON.av) { for (const a of ON.av.values()) scene.remove(a.g); ON.av.clear(); } }
+function syncAvatars() {
+  const others = [...ON.players.values()].filter(p => p.slot >= 0 && p.pid !== ON.pid), keep = new Set(others.map(p => p.pid));
+  for (const [pid, a] of ON.av) if (!keep.has(pid)) { scene.remove(a.g); ON.av.delete(pid); }
+  for (const p of others) {
+    if (ON.av.has(p.pid)) continue;
+    const ls = avatarSide(p), a = makeChar(ls === 0 ? 0x5aa9ff : 0xe03a3a);
+    a.g.rotation.y = ls === 0 ? 0 : Math.PI; a.pid = p.pid; a.ls = ls;
+    if (ls === 0 && !ON.spec) ghostify(a);
+    ON.av.set(p.pid, a);
+  }
+}
+const sideAvatars = ls => { const r = []; if (!ON.spec && ls === 0) r.push(P); for (const a of ON.av.values()) if (a.ls === ls) r.push(a); return r; };
+const serverChar = who => { if (ON && ON.players) { const a = st.serverPid === ON.pid ? P : ON.av.get(st.serverPid); if (a) return a; } return who === 0 ? P : C; };
 
-// ---------- パーティの待ち合わせ画面 ----------
-let partySet = null;
+// ---------- ロビー（枠をえらぶ → 決定 → ゲーム形式（ゲームの数）をえらぶ → スタート） ----------
+let slotEl = null, partySetEl = null;
+function slotPanel() {
+  if (!slotEl) { slotEl = document.createElement("div"); slotEl.addEventListener("click", onSlotClick); }
+  const m = mePl(), host = ON.host, ph = ON.phase, byslot = s => [...ON.players.values()].find(q => q.slot === s);
+  let h = "";
+  if (ph === "slots") h += `<div class="slotnote">好きな枠を押して入ります（もう一度押すと出ます）。<br>枠に入らない人は観戦になります。ホストが「決定」を押すと確定します。</div>`;
+  else { const [a, b] = sideCounts(); h += `<div class="slotnote"><b>${a}対${b}</b>（チームA ${a}人 ・ チームB ${b}人）</div>`; }
+  h += `<div class="slotgrid">`;
+  for (const s of [0, 1]) {
+    h += `<div><div class="tm ${s ? "b" : "a"}">チーム${s ? "B" : "A"}</div>`;
+    for (const k of [0, 1]) {
+      const slot = s * 2 + k, q = byslot(slot), mine = m && m.slot === slot, dis = ph !== "slots" || (q && !mine) || (m && m.wantSpec);
+      h += `<button data-slot="${slot}" class="${mine ? "on me" : ""}" ${dis ? "disabled" : ""}>${q ? esc(q.name) : "（空き）"}</button>`;
+    }
+    h += `</div>`;
+  }
+  h += `</div>`;
+  const out = [...ON.players.values()].filter(q => q.slot < 0).map(q => q.name);
+  if (out.length) h += `<div class="slotnote">${ph === "slots" ? "選んでいる人" : "観戦"}: ${esc(out.join("・"))}</div>`;
+  if (ph !== "slots") {
+    h += `<div class="slotnote" style="margin-top:8px">ゲーム形式（ゲームの数）${host ? "" : "：ホストが選びます"}</div>
+      <div class="fmtrow"><button data-games="1" class="${ON.need === 1 ? "on" : ""}" ${host ? "" : "disabled"}>1ゲーム</button><button data-games="3" class="${ON.need === 2 ? "on" : ""}" ${host ? "" : "disabled"}>3ゲーム（2本先取）</button></div>`;
+    if (host) h += `<div class="fmtrow"><button data-act="back">← 枠を選び直す</button></div>`;
+  }
+  slotEl.innerHTML = h; return slotEl;
+}
+function onSlotClick(e) {
+  const b = e.target.closest("button"); if (!b || b.disabled || !ON) return;
+  if (b.dataset.slot != null) requestSlot(+b.dataset.slot);
+  else if (b.dataset.games && ON.host) { cfg.games = b.dataset.games; store.set("pp-cfg", JSON.stringify(cfg)); ON.need = cfg.games === "3" ? 2 : 1; lobbyChanged(false); }
+  else if (b.dataset.act === "back" && ON.host) { ON.phase = "slots"; ON.auto = false; lobbyChanged(false); }
+}
+function requestSlot(slot) {
+  const m = mePl(); if (!m || ON.phase !== "slots" || m.wantSpec) return;
+  const target = m.slot === slot ? -1 : slot;
+  if (ON.host) hostSetSlot(ON.pid, target); else if (ON.hc) sendTo(ON.hc, { t: "slot", slot: target });
+}
+function hostSetSlot(pid, slot) {
+  if (ON.phase !== "slots") return;
+  const pl = ON.players.get(pid); if (!pl || pl.wantSpec) return;
+  if (slot >= 0 && [...ON.players.values()].some(q => q.slot === slot && q.pid !== pid)) return;
+  pl.slot = slot; ON.auto = false; lobbyChanged(false);
+}
+// 2 人だけのときは、ホスト A1 と相手 B1 に自動で入れる（1 対 1）。3 人以上になったら、みんなで選び直す
+function autoSeat() {
+  const n = ON.players.size, all = [...ON.players.values()];
+  if (n === 2 && !ON.auto && all.every(p => p.slot < 0) && !all.some(p => p.wantSpec)) { const g = all.find(p => p.pid !== ON.pid); ON.players.get(ON.pid).slot = 0; g.slot = 2; ON.auto = true; ON.phase = "format"; }
+  else if (n !== 2 && ON.auto) { for (const p of all) p.slot = -1; ON.auto = false; ON.phase = "slots"; }
+  if (ON.phase === "format" && !lineupOk()) { ON.phase = "slots"; ON.auto = false; }
+}
+function lobbyChanged(autoOk) {
+  if (!ON || !ON.host) return;
+  if (ON.phase !== "playing" && autoOk) autoSeat();
+  recomputeMe(); bcastLobby(); lobbyUi();
+}
+function bcastLobby() { if (ON && ON.host) bcast({ t: "lobby", players: playersList(), phase: ON.phase, need: ON.need }); }
+function applyLobby(m) {
+  ON.players = new Map(m.players.map(p => [p.pid, { pid: p.pid, name: p.name, slot: p.slot, wantSpec: p.ws }]));
+  ON.phase = m.phase; ON.need = m.need || 1; recomputeMe();
+  if (ON.phase === "playing" && st.phase !== "title") syncAvatars();
+  if (st.phase === "title") lobbyUi();
+}
 function partyMembers() {
-  if (!ON) return [];
-  const list = [{ name: ON.names[0], tag: "ホスト", me: ON.role === 0 }];
-  if (ON.names[1]) list.push({ name: ON.names[1], tag: "", me: ON.role === 1 });
-  for (const n of ON.specs || []) list.push({ name: n, tag: "観戦", me: false });
-  return list;
+  return [...ON.players.values()].map(p => ({ name: p.name, tag: [p.pid === 0 ? "ホスト" : "", p.slot >= 0 ? `${p.slot >> 1 ? "B" : "A"}${(p.slot & 1) + 1}` : (ON.phase === "slots" ? "選択中" : "観戦")].filter(Boolean).join(" "), me: p.pid === ON.pid }));
 }
 function partyLobbyOpts() {
-  const rules = "回転で勝負する3D卓球の1対1。右の指を、ボールが来た瞬間にすばやくはじくほど強い回転。\n相手の回転が残ると、球がオーバー・ネット・横にそれてミスになる。タイミングを大きく外すと山なり球になり、山なり球にだけスマッシュが打てる。";
-  const mine = [{ label: () => "移動速度: ×" + cfg.speed.toFixed(1) + "（押すと切り替え）", onClick: () => setSpeed(Math.floor(cfg.speed + 1e-6) >= 5 ? 1 : Math.floor(cfg.speed + 1e-6) + 1) }, { label: () => "体の動かし方: " + (cfg.move === "stick" ? "スティック" : "ダイレクト"), onClick: () => { cfg.move = cfg.move === "stick" ? "direct" : "stick"; store.set("pp-cfg", JSON.stringify(cfg)); refreshSeg(); moveP.id = null; } }];
-  const isHost = ON && ON.role === 0;
-  if (!ON || !ON.ready) return { rules, mine, members: partyMembers(), button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
-  if (!isHost) return { rules, mine, members: partyMembers(), button: null, wait: ON.role === 2 ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…", status: `試合: ${ON.need > 1 ? "3ゲーム（2本先取）" : "1ゲーム"}` };
-  if (!partySet) {
-    partySet = document.createElement("div");
-    partySet.innerHTML = `<div class="yl-row"><button data-v="1">1ゲーム</button><button data-v="3">3ゲーム(2本先取)</button></div>`;
-    partySet.addEventListener("click", e => { const b = e.target.closest("button[data-v]"); if (!b) return; cfg.games = b.dataset.v; store.set("pp-cfg", JSON.stringify(cfg)); ON.need = cfg.games === "3" ? 2 : 1; refreshSeg(); partyUi(); bcastLobby(); });
-  }
-  partySet.querySelectorAll("button").forEach(b => b.classList.toggle("on", cfg.games === b.dataset.v));
-  return { rules, mine, members: partyMembers(), settings: partySet, button: { label: "スタート", disabled: !ON.opp, onClick: hostStartMatch }, status: ON.opp ? "2人そろいました" : "相手が来るのを待っています…（1人は観戦になります）" };
+  const rules = "回転で勝負する3D卓球。1対1・2対1・2対2。右の指を、ボールが来た瞬間にすばやくはじくほど強い回転。\n相手の回転が残ると、球がオーバー・ネット・横にそれてミスになる。タイミングを大きく外すと山なり球になり、山なり球にだけスマッシュが打てる。チームのどちらの人も、ボールを打てる。";
+  const mine = [{ label: () => "移動速度: ×" + cfg.speed.toFixed(2) + "（押すと 1 → 1.25 → 1.5 → 1.75 → 2）", onClick: () => { const n = [1, 1.25, 1.5, 1.75, 2].find(x => x > cfg.speed + 0.001); setSpeed(n || 1); } }, { label: () => "体の動かし方: " + (cfg.move === "stick" ? "スティック" : "ダイレクト"), onClick: () => { cfg.move = cfg.move === "stick" ? "direct" : "stick"; store.set("pp-cfg", JSON.stringify(cfg)); refreshSeg(); moveP.id = null; } }];
+  if (!ON || !ON.ready || (!ON.host && ON.pid < 0)) return { rules, mine, members: ON ? partyMembers() : [], button: null, wait: ON && ON.host ? "部屋を準備しています…" : "ホストにつないでいます…" };
+  const ph = ON.phase;
+  if (!ON.host) return { rules, mine, members: partyMembers(), settings: slotPanel(), button: null, wait: ph === "slots" ? "枠を選んで、ホストが決定するのを待っています…" : "ホストがスタートするのを待っています…" };
+  const btn = ph === "slots" ? { label: "決定（この顔ぶれで進む）", disabled: !lineupOk(), onClick: () => { if (lineupOk()) { ON.phase = "format"; lobbyChanged(false); } } } : { label: "スタート", disabled: false, onClick: hostStartMatch };
+  return { rules, mine, members: partyMembers(), settings: slotPanel(), button: btn, status: ph === "slots" ? (lineupOk() ? "チームA・チームBに 1 人以上ずつ入りました" : "チームAとチームBに、1 人以上ずつ入ってください") : "" };
 }
-function partyUi() {
+function partyUi(retry) {
   if (!PARTY || !window.ykgLobby || !ON) return;
   if (st.phase !== "title") return;
   const o = partyLobbyOpts();
   if (ykgLobby.active) ykgLobby.update(o); else ykgLobby.open(o);
+  // 試合のあとで待ち合わせに戻るとき、ゲストの待ち合わせ画面は、パーティの側の「始まった」が解けるまで開かない。少しのあいだ開き直す
+  if (!ykgLobby.active && (retry || 0) < 12) setTimeout(() => partyUi((retry || 0) + 1), 300);
 }
-function bcastLobby() { if (ON && ON.role === 0) bcast({ t: "lobby", names: ON.names, specs: ON.specs || [], need: ON.need }); }
+function lobbyUi() { if (PARTY) partyUi(); else netUi(); }
 function netUi() {
-  if (PARTY) { partyUi(); return; }
-  if (!ON) return;
-  if (ON.role === 0) netScreen("部屋をつくりました", ON.code, ON.opp ? "つながりました。まもなく始まります…" : "友だちに、この番号を伝えてください。相手が入ると自動で始まります", "やめる");
-  else netScreen("部屋に入ります", ON.code, ON.ready ? "ホストが始めるのを待っています…" : "つないでいます…", "やめる");
+  if (PARTY || !ON) return;
+  $("net").hidden = false; $("title").hidden = true;
+  $("netTitle").textContent = ON.host ? "部屋をつくりました" : "部屋に入りました";
+  $("netCode").textContent = ON.code; $("netCancel").textContent = "やめる";
+  const ok = ON.ready && (ON.host || ON.pid >= 0);
+  if (!ok) { $("netSub").textContent = "つないでいます…"; $("netSlots").hidden = true; $("netGo").hidden = true; return; }
+  const sl = slotPanel(); if (sl.parentNode !== $("netSlots")) $("netSlots").appendChild(sl);
+  $("netSlots").hidden = false;
+  if (ON.host) {
+    $("netSub").textContent = ON.phase === "slots" ? "友だちにこの番号を伝えてください。みんなが枠を選んだら「決定」" : "ゲームの数を選んで「スタート」";
+    $("netGo").hidden = false;
+    if (ON.phase === "slots") { $("netGo").textContent = "決定（この顔ぶれで進む）"; $("netGo").disabled = !lineupOk(); $("netGo").onclick = () => { if (lineupOk()) { ON.phase = "format"; lobbyChanged(false); } }; }
+    else { $("netGo").textContent = "スタート"; $("netGo").disabled = false; $("netGo").onclick = hostStartMatch; }
+  } else { $("netSub").textContent = ON.phase === "slots" ? "枠を選んで、ホストが決定するのを待っています…" : "ホストがスタートするのを待っています…"; $("netGo").hidden = true; }
 }
+function netScreen(title, code, sub, cancelLabel) {
+  $("netTitle").textContent = title; $("netCode").textContent = code || ""; $("netSub").textContent = sub || "";
+  $("netCancel").textContent = cancelLabel || "やめる"; $("netSlots").hidden = true; $("netGo").hidden = true; $("net").hidden = false; $("title").hidden = true;
+}
+function netFailed(why) {
+  if (PARTY) { try { peer && peer.destroy(); } catch (e) {} peer = null; clearAvatars(); ON = null; netScreen("つながりません", "", why, "ゲーム一覧へ"); return; }
+  closeNet(); toTitle(); netScreen("つながりません", "", why, "もどる");
+}
+function closeNet() { clearAvatars(); try { peer && peer.destroy(); } catch (e) {} peer = null; ON = null; $("net").hidden = true; }
 
 // ---------- ホスト ----------
+function newOn(host, party, code) {
+  return { host, spec: false, side: 0, pid: host ? 0 : -1, party, code, conns: new Set(), hc: null, players: new Map(), nextPid: 1, phase: "slots", need: cfg.games === "3" ? 2 : 1, auto: false, ready: false, lastPos: 0, claimed: -1, pending: -1, av: new Map(), serveIdx: [0, 0], playing: false, wantSpec: false };
+}
 function netStartHost(code, party) {
   if (isOffline()) { netFailed("オフラインです。CPUと対戦できます"); return; }
-  ON = { role: 0, party, code, conns: new Set(), opp: null, playing: false, ready: false, lastPos: 0, names: [hostName(), ""], specs: [], need: cfg.games === "3" ? 2 : 1, claimed: -1 };
+  ON = newOn(true, party, code); ON.players.set(0, { pid: 0, name: myName(), slot: -1, wantSpec: false });
   let tries = 0;
   const open = () => {
     try { peer = new Peer(netId(ON.code, party)); } catch (e) { netFailed("通信を始められません"); return; }
-    peer.on("open", () => { ON.ready = true; netUi(); });
+    peer.on("open", () => { ON.ready = true; lobbyUi(); });
     peer.on("error", e => {
       if (e.type === "unavailable-id") {
         if (party && ++tries < 90) { try { peer.destroy(); } catch (x) {} setTimeout(() => { if (ON) open(); }, 1000); return; }
@@ -1405,64 +1540,74 @@ function netStartHost(code, party) {
     });
   };
   open();
-  netUi();
+  lobbyUi();
 }
-function specNames() { const a = []; if (ON) for (const c of ON.conns) if (c.spec) a.push(c.pname); return a; }
 function onHello(m, c) {
-  c.pname = String(m.name || "ゲスト").slice(0, 12);
-  const wantSpec = !!m.spec || !!ON.opp;
-  if (!wantSpec && !ON.opp) { c.spec = false; ON.opp = c; ON.names[1] = c.pname; }
-  else { c.spec = true; }
-  ON.conns.add(c);
-  ON.specs = specNames();
-  sendTo(c, { t: "welcome", role: c.spec ? 2 : 1, names: ON.names, need: ON.need });
-  if (ON.playing) sendTo(c, { t: "start", mid: 1, need: st.need, fs: st.firstServer, sv: st.server, s: st.score.slice(), g: st.games.slice() });   // 途中から見る人
-  bcastLobby();
-  if (st.phase === "title") {
-    if (!ON.party && ON.opp === c) { netUi(); setTimeout(() => { if (ON && ON.opp === c && st.phase === "title") hostStartMatch(); }, 900); }
-    else partyUi();
-  }
+  if (c.pid != null) return;
+  const pid = ON.nextPid++; c.pid = pid;
+  let nm = String(m.name || "ゲスト").slice(0, 12); if ([...ON.players.values()].some(p => p.name === nm)) nm = nm.slice(0, 10) + pid;
+  ON.players.set(pid, { pid, name: nm, slot: -1, wantSpec: !!m.spec }); ON.conns.add(c);
+  sendTo(c, { t: "welcome", pid, players: playersList(), phase: ON.phase, need: ON.need });
+  if (ON.phase === "playing" && ON.playing) sendTo(c, startMsg(true));   // 途中から来た人は観戦
+  lobbyChanged(true);
+}
+function startMsg(mid) { return { t: "start", mid: mid ? 1 : 0, need: st.need, sv: wid(st.server), svp: st.serverPid, players: playersList(), s: swapIf(st.score), g: swapIf(st.games) }; }
+function hostPickServer(localSide) {
+  const ws = wid(localSide), list = pidsOnSide(ws); if (!list.length) return null;
+  return list[ON.serveIdx[ws]++ % list.length].pid;
 }
 function dropConn(c) {
-  if (!ON || ON.role !== 0 || !ON.conns.has(c)) return;
-  ON.conns.delete(c); ON.specs = specNames();
-  if (ON.opp === c) {
-    ON.opp = null; ON.names[1] = "";
-    if (ON.playing) { ON.playing = false; bcast({ t: "stop" }); matchStop("相手がいなくなりました"); }
-    else bcastLobby();
+  if (!ON || !ON.host || !ON.conns.has(c)) return;
+  ON.conns.delete(c);
+  const pid = c.pid, was = ON.players.get(pid); ON.players.delete(pid);
+  const av = ON.av.get(pid); if (av) { scene.remove(av.g); ON.av.delete(pid); }
+  if (ON.phase === "playing" && ON.playing && was && was.slot >= 0) {
+    if (!lineupOk()) { ON.playing = false; ON.phase = "slots"; ON.auto = false; bcast({ t: "stop" }); matchStop("相手がいなくなりました"); lobbyChanged(false); return; }
+    if (st.serverPid === pid) { st.serverPid = hostPickServer(st.server); bcast({ t: "svp", pid: st.serverPid }); }   // サーブする人が抜けたら、同じチームの別の人に
   }
-  if (st.phase === "title") { if (ON.party) partyUi(); else netUi(); }
-  bcastLobby();
+  lobbyChanged(true);
 }
 // 試合をやめて、待ち合わせに戻る
 function matchStop(why) {
   st.phase = "title"; st.hold = false; $("pause").hidden = true; $("menu").hidden = true; $("result").hidden = true; hint("");
-  resetPositions();
+  clearAvatars(); resetPositions();
   if (!ON) return;
-  if (ON.role === 0 && PARTY) { partyUi(); return; }
-  if (ON.role === 0) { netScreen("相手がいなくなりました", ON.code, "新しい相手が入ると、また始められます", "やめる"); return; }
-  netScreen(why || "ホストが始めるのを待っています…", ON.code || "", "", PARTY ? "ゲーム一覧へ" : "やめる");
+  ON.playing = false; if (ON.phase === "playing") ON.phase = "slots";
+  recomputeMe(); lobbyUi();
 }
 function hostStartMatch() {
-  if (!ON || ON.role !== 0 || !ON.opp) return;
-  ON.playing = true; ON.need = cfg.games === "3" ? 2 : 1;
+  if (!ON || !ON.host || ON.phase === "slots" || !lineupOk()) return;
+  ON.phase = "playing"; ON.playing = true; ON.need = cfg.games === "3" ? 2 : 1; ON.serveIdx = [0, 0]; ON.pending = -1;
+  recomputeMe(); syncAvatars();
   st.firstServer = Math.random() < 0.5 ? 0 : 1;
   startMatchCore(ON.need, null);
-  bcast({ t: "start", need: st.need, fs: st.firstServer, sv: st.server });
+  bcastLobby();
+  bcast(startMsg(false));
   if (window.ykgLobby && ykgLobby.active) ykgLobby.closeAll();
   $("net").hidden = true;
 }
-// 点の確定（ホストだけ）。ownerClaimed: 受ける側が出した点
-function hostConfirm(ww, n) {
-  if (!ON || ON.role !== 0 || st.phase !== "rally" || n !== st.hits) return;
-  pointApply(ww);
-  bcast({ t: "pt", w: ww, s: st.score.slice(), g: st.games.slice(), ov: st.over ? 1 : 0, gw: st.gameWin });
+// 点の確定（ホストだけ）。ww: 世界のチーム番号（勝ったほう）。pid: 点を知らせてきた人
+function hostConfirm(ww, n, pid) {
+  if (!ON || !ON.host || st.phase !== "rally" || n !== st.hits) return;
+  const hitterWorld = wid(st.hitter), sp = ON.players.get(pid);
+  if (!sp || sp.slot < 0 || (sp.slot >> 1) === hitterWorld) return;   // 点を出せるのは受ける側のチームだけ
+  if (ww === hitterWorld) {   // 受ける側が「返せなかった」→ 相方がぎりぎりで打ち返すかもしれないので、0.3 秒待ってから確定
+    if (ON.pending === n) return;
+    ON.pending = n;
+    setTimeout(() => { if (ON && ON.pending === n) { ON.pending = -1; if (st.phase === "rally" && st.hits === n) confirmPoint(ww); } }, 300);
+    return;
+  }
+  confirmPoint(ww);
+}
+function confirmPoint(ww) {
+  pointApply(lid(ww));
+  bcast({ t: "pt", w: ww, s: swapIf(st.score), g: swapIf(st.games), ov: st.over ? 1 : 0, gw: st.gameWin < 0 ? -1 : wid(st.gameWin) });
 }
 
 // ---------- ゲスト・観戦 ----------
 function netJoin(code, party, spec) {
   if (isOffline()) { netFailed("オフラインです。CPUと対戦できます"); return; }
-  ON = { role: spec ? 2 : 1, party, code, hc: null, ready: false, lastPos: 0, names: ["ホスト", ""], specs: [], need: 1, claimed: -1 };
+  ON = newOn(false, party, code); ON.wantSpec = !!spec;
   let tries = 0;
   const go = () => {
     try { peer && peer.destroy(); } catch (e) {}
@@ -1472,8 +1617,8 @@ function netJoin(code, party, spec) {
       if (party) setTimeout(() => { if (ON && ON.hc === hc && !hc.open && ++tries < 60) go(); }, 2500);
       hc.on("open", () => {
         hc.opened = true; ON.ready = true; hc.uch = openUch(hc);
-        hc.send({ t: "hello", name: PARTY ? String(PARTY.name || "ゲスト").slice(0, 12) : "ゲスト", spec: !!spec });
-        netUi();
+        hc.send({ t: "hello", name: myName(), spec: !!spec });
+        lobbyUi();
       });
       hc.on("data", m => onNet(m, hc));
       hc.on("close", () => {
@@ -1490,35 +1635,34 @@ function netJoin(code, party, spec) {
     });
   };
   go();
-  netUi();
+  lobbyUi();
 }
 
 // ---------- 受信 ----------
 function onNet(m, c) {
   if (!m || !ON) return;
-  const host = ON.role === 0;
+  const host = ON.host;
   switch (m.t) {
     case "hello": if (host) onHello(m, c); return;
-    case "claim": if (host && c === ON.opp) hostConfirm(m.w, m.n); return;
-    case "pos":
-      if (host) { if (c !== ON.opp) return; for (const s of ON.conns) if (s.spec) sendTo(s, m, true); }
-      applyPos(m); return;
-    case "shot":
-      if (host) { if (c !== ON.opp) return; for (const s of ON.conns) if (s.spec) sendTo(s, m); }
-      applyShot(m); return;
-    case "welcome": ON.role = m.role; ON.names = m.names || ON.names; ON.need = m.need || 1; if (ON.party) partyUi(); return;
-    case "lobby": ON.names = m.names || ON.names; ON.specs = m.specs || []; ON.need = m.need || 1; if (st.phase === "title") partyUi(); return;
+    case "slot": if (host && c.pid != null) hostSetSlot(c.pid, m.slot); return;
+    case "claim": if (host && c.pid != null) hostConfirm(m.w, m.n, c.pid); return;
+    case "pos": if (host) relay(m, c, true); applyPos(m); return;
+    case "shot": if (host) relay(m, c); applyShot(m); return;
+    case "toss": if (host) relay(m, c); applyToss(m); return;
+    case "welcome": ON.pid = m.pid; applyLobby(m); return;
+    case "lobby": applyLobby(m); return;
     case "start": applyStart(m); return;
     case "np": applyNp(m); return;
     case "pt": applyPt(m); return;
+    case "svp": st.serverPid = m.pid; return;
     case "over": if (st.phase === "dead" || st.phase === "rally") finish(); return;
-    case "toss": applyToss(m); return;
-    case "stop": matchStop("ホストが始めるのを待っています…"); return;
+    case "stop": ON.playing = false; ON.phase = "slots"; matchStop("ホストが始めるのを待っています…"); return;
   }
 }
 function applyStart(m) {
-  startMatchCore(m.need, ON.role === 1 ? 1 - m.sv : m.sv);
-  st.firstServer = m.fs;
+  ON.players = new Map(m.players.map(p => [p.pid, { pid: p.pid, name: p.name, slot: p.slot, wantSpec: p.ws }]));
+  ON.phase = "playing"; ON.need = m.need; ON.playing = true; recomputeMe(); syncAvatars();
+  startMatchCore(m.need, lid(m.sv), m.svp);
   if (m.s) { st.score = swapIf(m.s); st.games = swapIf(m.g); updHud(); }
   if (window.ykgLobby) ykgLobby.close();
   $("net").hidden = true;
@@ -1526,37 +1670,44 @@ function applyStart(m) {
 function applyNp(m) {
   st.score = swapIf(m.s); st.games = swapIf(m.g); st.over = false; st.gameWin = -1;
   if (m.ng) resetPositions();
-  newPoint(lid(m.sv));
+  newPoint(lid(m.sv), m.svp);
 }
 function applyPt(m) {
   if (st.phase !== "rally") return;
   pointApply(lid(m.w), { s: swapIf(m.s), g: swapIf(m.g), ov: !!m.ov, gw: m.gw < 0 ? -1 : lid(m.gw) });
 }
-function remoteChar(i) { return ON.role === 2 ? (i === 0 ? P : C) : C; }
 function applyPos(m) {
-  const p = wv(V(m.x, 0, m.z)), ch = remoteChar(m.i);
-  ch.tgt = p; ch.hand = m.hd; ch.crouch = m.cr || 0; ch.fing.set(m.fx, m.fy, m.fz);
+  if (m.pid === ON.pid) return;
+  const a = ON.av.get(m.pid); if (!a) return;
+  a.tgt = wv(V(m.x, 0, m.z)); a.hand = m.hd; a.crouch = m.cr || 0; a.fing.set(m.fx, m.fy, m.fz);
 }
 function applyShot(m) {
+  if (m.pid === ON.pid) return;
   if (st.phase !== "rally" && st.phase !== "serve") return;
-  const hl = lid(m.h), ch = ON.role === 2 ? (hl === 0 ? P : C) : C;
-  ch.swingT = 0; ch.swingKind = m.sk; ch.swingDir = m.sd;
-  launch(hl, wv(fromArr(m.p)), wv(fromArr(m.v)), wv(fromArr(m.w)), !!m.sv, m.k || undefined, true);
+  // 同じ瞬間に 2 人が打ったとき: 通し番号 n が同じなら、番号（pid）の小さい人の球を残す。古い知らせは捨てる
+  if (m.n < st.hits) return;
+  if (m.n === st.hits && st.lastShot && st.lastShot.n === m.n && m.pid >= st.lastShot.pid) return;
+  const a = ON.av.get(m.pid); if (a) { a.swingT = 0; a.swingKind = m.sk; a.swingDir = m.sd; }
+  launch(lid(m.h), wv(fromArr(m.p)), wv(fromArr(m.v)), wv(fromArr(m.w)), !!m.sv, m.k || undefined, { pid: m.pid, n: m.n });
 }
-function sendShot(p0, v, w, serve, kind) {
-  bcast({ t: "shot", h: wid(0), p: arr3(wv(p0)), v: arr3(wv(v)), w: arr3(wv(w)), sv: serve ? 1 : 0, k: kind || "", sk: P.swingKind, sd: P.swingDir });
+function applyToss(m) {
+  if (m.pid === ON.pid) return;
+  if (st.phase !== "serve") return;
+  st.tossed = true; st.tossT = 0; ball.p.copy(wv(fromArr(m.p))); ball.v.copy(wv(fromArr(m.v))); ball.w.set(0, 0, 0);
+}
+function sendShot(p0, v, w, serve, kind, n) {
+  bcast({ t: "shot", pid: ON.pid, n, h: wid(0), p: arr3(wv(p0)), v: arr3(wv(v)), w: arr3(wv(w)), sv: serve ? 1 : 0, k: kind || "", sk: P.swingKind, sd: P.swingDir });
 }
 function sendPos(now) {
-  if (!ON || ON.role === 2 || st.phase === "title" || now - ON.lastPos < 50) return;
+  if (!ON || ON.spec || ON.pid < 0 || st.phase === "title" || now - ON.lastPos < 50) return;
   ON.lastPos = now;
   const p = wv(P.pos);
-  bcast({ t: "pos", i: wid(0), cr: R3(P.crouch), x: R3(p.x), z: R3(p.z), hd: P.hand, fx: R3(P.fing.x), fy: R3(P.fing.y), fz: R3(P.fing.z) }, true);
+  bcast({ t: "pos", pid: ON.pid, cr: R3(P.crouch), x: R3(p.x), z: R3(p.z), hd: P.hand, fx: R3(P.fing.x), fy: R3(P.fing.y), fz: R3(P.fing.z) }, true);
 }
-// 相手（観戦は両方）の体をなめらかに動かす
+// ほかの人（相方・相手）の体をなめらかに動かす
 function updateRemote(dt, rdt) {
-  const chs = ON.role === 2 ? [P, C] : [C];
   const k = 1 - Math.pow(0.0008, rdt);
-  for (const ch of chs) {
+  for (const ch of ON.av.values()) {
     if (ch.tgt) { const px = ch.pos.x, pz = ch.pos.z; ch.pos.x += (ch.tgt.x - px) * k; ch.pos.z += (ch.tgt.z - pz) * k; ch.vel.set((ch.pos.x - px) / Math.max(rdt, 1e-3), 0, (ch.pos.z - pz) / Math.max(rdt, 1e-3)); }
     ch.swingT += dt;
   }
@@ -1564,11 +1715,11 @@ function updateRemote(dt, rdt) {
 // 打った側（と観戦）の画面: ボールが受ける側のラケットまで行ったら、返球か点の知らせが届くまで止める
 function checkHold() {
   if (!ON || st.phase !== "rally" || st.hold) return;
-  if (ON.role !== 2 && st.hitter === 1) return;   // 自分が受ける側
-  // 受ける側の台ではねたあとだけ（台の横に立つ相手でも、ネットをこえる前に止まらないように）
-  if (!st.bounced) return;
-  if (st.hitter === 0) { if (ball.v.z < 0 && ball.p.z <= C.pos.z + 0.3) st.hold = true; }
-  else if (ball.v.z > 0 && ball.p.z >= P.pos.z - 0.34) st.hold = true;
+  if (!ON.spec && st.hitter === 1) return;   // 自分のチームが受ける側
+  if (!st.bounced) return;                    // 受ける側の台ではねたあとだけ
+  const recvSide = st.hitter === 0 ? 1 : 0, list = sideAvatars(recvSide); if (!list.length) return;
+  if (recvSide === 1) { if (ball.v.z < 0 && ball.p.z <= Math.max(...list.map(a => a.pos.z + 0.3))) st.hold = true; }
+  else if (ball.v.z > 0 && ball.p.z >= Math.min(...list.map(a => a.pos.z - 0.34))) st.hold = true;
 }
 
 // ===== 画面のボタン =====
@@ -1618,7 +1769,7 @@ if (PARTY) {
 }
 
 // 動作確認用
-window.__pp = { get ON() { return ON; }, netStartHost, netJoin, hostStartMatch, bcast, st, ball, P, C, cfg, stepBall, brushFromFinger, makeLob, makeSmash, shotOutcome, launch, makeShot, playerServe, surfaceVel, faceN, swP, toPhys, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
+window.__pp = { camera, onNet, applyShot, hostConfirm, get ON() { return ON; }, netStartHost, netJoin, hostStartMatch, bcast, st, ball, P, C, cfg, stepBall, brushFromFinger, makeLob, makeSmash, shotOutcome, launch, makeShot, playerServe, surfaceVel, faceN, swP, toPhys, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
 </script>
 </body>
 </html>
