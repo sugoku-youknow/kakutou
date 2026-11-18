@@ -10,7 +10,7 @@ const CDN_HOSTS = ["cdn.jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com"];
 // 入れたときに先に保存しておくもの（取れなかったものは飛ばす。あとで開いたときにも保存される）
 const PRE = [
   "./", "index.html", "manifest.json", "party-beacon.js?v=7", "ykg-sfx.js?v=1", "icon-192.png?v=3", "apple-touch-icon.png?v=3",
-  "shieldfight/", "shieldfight/icon.png", "jenga/", "tameru/", "shougi/", "soinsu/", "kaitaku/",
+  "shieldfight/", "shieldfight/icon.png", "jenga/", "tameru/", "shougi/", "soinsu/", "kaitaku/", "pingpong/",
   "gomu/", "gomu/style.css", "gomu/js/main.js", "gomu/js/game.js", "gomu/js/board.js", "gomu/js/network.js", "gomu/js/physics.js", "gomu/js/cpu.js",
   "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
   "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/rapier.es.js",
