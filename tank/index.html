@@ -45,6 +45,7 @@ input{font:inherit}
 #screen.toolbar input[type=range]{width:min(150px,24vw);accent-color:#ffd21a}
 #rotB{position:fixed;z-index:2147483200;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 84px);width:36px;height:36px;padding:0;border-radius:50%;border:1px solid #776;background:rgba(20,18,14,.75);line-height:0}
 #rotB svg{width:20px;height:20px}
+#layB{position:fixed;z-index:2147483200;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 128px);width:36px;height:36px;padding:0;border-radius:50%;border:1px solid #776;background:rgba(20,18,14,.75);font-size:17px;line-height:34px;text-align:center}
 #hud.editing #quit,#hud.editing #timer,#hud.editing #scorebar,#hud.editing #feed,#hud.editing #hint,#hud.editing #banner,#hud.editing #spec{display:none}
 #ask{position:fixed;inset:0;z-index:2147483300;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
 #ask .card{text-align:center}
@@ -160,6 +161,7 @@ table.res td:last-child{text-align:right;color:#ffd21a;letter-spacing:1px}
 </div>
 <div id="screen"></div>
 <button id="rotB" class="hidden" aria-label="縦画面と横画面の切り替え" data-nosfx><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5"/><path d="M3 4v5h5M21 20v-5h-5"/></svg></button>
+<button id="layB" class="hidden" aria-label="ボタンの配置を変える" data-nosfx>🎮</button>
 <div id="ask" class="hidden"><div class="card"><h2 id="askT"></h2><div class="row"><button class="btn sub" id="askN">やめる</button><button class="btn red" id="askY">はい</button></div></div></div>
 <div id="garage" class="hidden">
   <div class="gtop"><div style="min-width:70px"></div><div class="t">戦車をカスタマイズ</div><div class="n" id="gnext"></div></div>
@@ -221,31 +223,33 @@ const isOffline = () => FORCE_OFF || !navigator.onLine || typeof Peer === "undef
 const MAX_PLAYERS = 4, WIN_ROUNDS = 3, ROUND_TIME = 90, COUNT_SEC = 3;
 const TANK_R = 0.36;
 const CRATE_HP = 2;                       // 木箱: 弾 2 発か地雷で壊れる
-const MINE_MAX = 2, MINE_FUSE = 10, MINE_R = 1.4, MINE_ARM = 0.6, MINE_SELF = 2.0, MINE_TRIG = 0.75;
+const MINE_MAX = 2, MINE_FUSE = 10, MINE_R = 1.4, MINE_ARM = 0.6, MINE_TRIG = 0.75;
 const COLORS = [0xe8463c, 0x3a7be8, 0x3cb55a, 0xf0b428];
-const TEAM_COLS = [[0xe23b3b, 0xff8f6b], [0x2f74e8, 0x63c6ff]];
+const TEAM_COLS = [[0xe23b3b, 0xff8f6b, 0xb02a58], [0x2f74e8, 0x63c6ff, 0x5a4fd8]];
 const TEAM_NAME = ["赤", "青"], TEAM_CSS = ["#ff5a5a", "#4a9bff"];
 
 // 2026-11-19: 弾は「アステロイドなどの前」の 4 種類にもどした（1 つ選ぶ・壁で跳ね返る・1 発でやられる・地雷あり）
 // パーツ（弾・機体・タイヤ）。機体とタイヤの数字を足したものが戦車の性能（スピード・かそく・まがりやすさ・すべりにくさ）
 const PARTS = {
   g: [
-    { id: "std", name: "スタンダード", spd: 5.6, bnc: 1, max: 4, cd: .28, r: .1, lv: 3, desc: "クセのない基本の弾" },
-    { id: "rifle", name: "ライフル", spd: 10, bnc: 0, max: 2, cd: .45, r: .09, lv: 5, desc: "とても速いが跳ね返らない" },
-    { id: "bound", name: "バウンド", spd: 3.7, bnc: 3, max: 3, cd: .32, r: .13, lv: 2, desc: "遅いが、よく跳ね返る" },
-    { id: "homing", name: "ホーミング", spd: 3.5, bnc: 0, max: 1, cd: .5, r: .13, lv: 2, home: 2.4, life: 7, desc: "近くの相手をゆっくり追いかける。1発ずつ" },
+    // 2026-11-19: 弾を全体的に遅く（約 0.75 倍）。ホーミングは追いかける力を弱く
+    { id: "std", name: "スタンダード", spd: 4.2, bnc: 1, max: 4, cd: .28, r: .1, lv: 3, desc: "クセのない基本の弾" },
+    { id: "rifle", name: "ライフル", spd: 7.5, bnc: 0, max: 2, cd: .45, r: .09, lv: 5, desc: "とても速いが跳ね返らない" },
+    { id: "bound", name: "バウンド", spd: 2.8, bnc: 3, max: 3, cd: .32, r: .13, lv: 2, desc: "遅いが、よく跳ね返る" },
+    { id: "homing", name: "ホーミング", spd: 2.7, bnc: 0, max: 1, cd: .5, r: .13, lv: 2, home: 1.1, homeDelay: .5, life: 6, desc: "近くの相手を少しだけ追いかける。1発ずつ" },
   ],
+  // 2026-11-19: 機体・タイヤの差を大きく（合計 2〜10 のうち、はしの組み合わせでは体感がかなり変わる）
   b: [
     { id: "std", name: "スタンダード", s: [3, 3, 3, 3], desc: "クセのない機体" },
-    { id: "heavy", name: "ヘビー", s: [4, 1, 2, 5], desc: "重くて滑りにくい。速いが加速が遅い" },
-    { id: "light", name: "ライト", s: [2, 5, 4, 2], desc: "軽くて加速と曲がりが得意" },
-    { id: "sport", name: "スポーツ", s: [5, 3, 2, 1], desc: "最高速度が一番。とても滑りやすい" },
+    { id: "heavy", name: "ヘビー", s: [3, 1, 1, 5], desc: "重い。止まりやすく滑らないが、加速と曲がりが苦手" },
+    { id: "light", name: "ライト", s: [2, 5, 5, 1], desc: "軽くて加速と曲がりが得意。よく滑る" },
+    { id: "sport", name: "スポーツ", s: [5, 3, 1, 1], desc: "最高速度が一番。曲がりにくく、とても滑りやすい" },
   ],
   w: [
     { id: "normal", name: "ノーマル", s: [3, 3, 3, 3], desc: "バランス型のタイヤ" },
-    { id: "track", name: "キャタピラ", s: [1, 3, 5, 5], desc: "遅いが、よく曲がって滑らない" },
-    { id: "slick", name: "スリック", s: [5, 3, 3, 1], desc: "速いがよく滑る" },
-    { id: "off", name: "オフロード", s: [2, 5, 2, 4], desc: "加速が良く、滑りにくい" },
+    { id: "track", name: "キャタピラ", s: [1, 2, 5, 5], desc: "遅いが、よく曲がって滑らない" },
+    { id: "slick", name: "スリック", s: [5, 3, 2, 1], desc: "速いがよく滑る" },
+    { id: "off", name: "オフロード", s: [2, 5, 3, 4], desc: "加速が良く、滑りにくい" },
   ],
 };
 const STAT_NAMES = ["スピード", "かそく", "まがりやすさ", "すべりにくさ"];
@@ -256,8 +260,9 @@ const randLoad = () => fixLoad({ g: Math.floor(Math.random() * PARTS.g.length), 
 const gunOf = t => PARTS.g[t.load.g];
 function rawStats(load) { const b = PARTS.b[load.b], w = PARTS.w[load.w]; return b.s.map((v, i) => v + w.s[i]); }   // 2〜10
 function tankStats(load) {
-  const s = rawStats(load);
-  return { spd: (2.0 + 0.28 * s[0]) * 0.8, acc: (4 + 1.5 * s[1]) * 0.8, turn: 2.2 + 0.55 * s[2], grip: 1.5 + 2.0 * s[3] };
+  // 合計 2〜10 を 0〜1 にして、はば広く割り当てる（2026-11-19: 差が体感できるように）
+  const s = rawStats(load).map(v => clamp((v - 2) / 8, 0, 1)), lerp = (a, b, t) => a + (b - a) * t;
+  return { spd: lerp(1.5, 3.9, s[0]), acc: lerp(2.2, 12, s[1]), turn: lerp(1.3, 6.5, s[2]), grip: lerp(0.5, 8, s[3]) };
 }
 const loadText = l => `${PARTS.g[l.g].name}弾・${PARTS.b[l.b].name}・${PARTS.w[l.w].name}`;
 
@@ -580,7 +585,7 @@ function assignTeams(list) {
 }
 function swapTeam(id) { if (!host.tm.has(id)) return; host.tm.set(id, 1 - host.tm.get(id)); hostLobby(); }
 const teamCount = k => lobbyPs.filter(p => p.tm === k).length;
-const teamsReady = () => !host.team || (teamCount(0) >= 1 && teamCount(1) >= 1 && teamCount(0) <= 2 && teamCount(1) <= 2);
+const teamsReady = () => !host.team || (teamCount(0) >= 1 && teamCount(1) >= 1);   // 2026-11-19: 1 対 3 など、自由に分けられる（赤と青に 1 人以上ずつ）
 
 // ---------- ホスト: 試合とラウンド ----------
 function hostStart() {
@@ -591,7 +596,7 @@ function hostStart() {
     team: !!host.team, round: 0, teamScore: [0, 0],
     players: list.map((p, i) => {
       const tm = host.team ? p.tm : undefined;
-      const color = host.team ? TEAM_COLS[tm][idx[tm]++ % 2] : COLORS[i % COLORS.length];
+      const color = host.team ? TEAM_COLS[tm][idx[tm]++ % 3] : COLORS[i % COLORS.length];
       return { id: p.id, name: p.name, bot: !!p.bot, tm, color, load: p.bot ? randLoad() : fixLoad(host.loads.get(p.id) || (p.id === myId ? LOAD : {})) };
     }),
     score: new Map(list.map(p => [p.id, 0])),
@@ -626,8 +631,10 @@ function checkReady(force) {
 function spawnFor(list, team) {
   const out = new Map();
   if (team) {
-    const sides = [["1", "3"], ["2", "4"]], k = [0, 0];
-    for (const p of list) out.set(p.id, spawnPts[sides[p.tm][k[p.tm]++ % 2]]);
+    // 赤は左の 2 か所（1・3）、青は右の 2 か所（2・4）から。3 人以上のチームは、のこりの場所をかりる（人数の多いチームから決める）
+    const pref = [["1", "3", "2", "4"], ["2", "4", "1", "3"]], used = new Set();
+    for (const tm of [0, 1].sort((a, b) => list.filter(p => p.tm === b).length - list.filter(p => p.tm === a).length))
+      for (const p of list.filter(q => q.tm === tm)) { const c = pref[tm].find(s => !used.has(s)) || pref[tm][0]; used.add(c); out.set(p.id, spawnPts[c]); }
   } else {
     const order = list.length === 2 ? ["1", "4"] : list.length === 3 ? ["1", "4", "2"] : ["1", "4", "2", "3"];
     const sh = list.slice().sort(() => Math.random() - .5);
@@ -670,7 +677,7 @@ function hostFire(id, a, cid) {
   const sx = t.x + Math.cos(a) * (TANK_R + 0.14), sz = t.z + Math.sin(a) * (TANK_R + 0.14);
   if (solidAt(sx, sz)) return false;   // 砲身が壁にめりこんでいるときは撃てない
   t.cdUntil = G.time + gun.cd; t.tu = a;
-  G.bullets.push({ id: G.nextB++, ow: id, tm: t.tm, cid: cid || 0, ty: t.load.g, x: sx, z: sz, vx: Math.cos(a) * gun.spd, vz: Math.sin(a) * gun.spd, bnc: gun.bnc, age: 0, r: gun.r, life: gun.life || 0, home: gun.home || 0 });
+  G.bullets.push({ id: G.nextB++, ow: id, tm: t.tm, cid: cid || 0, ty: t.load.g, x: sx, z: sz, vx: Math.cos(a) * gun.spd, vz: Math.sin(a) * gun.spd, bnc: gun.bnc, age: 0, r: gun.r, life: gun.life || 0, home: gun.home || 0, hd: gun.homeDelay || .25 });
   if (id === myId || mode === "local") sfx("shot");
   return true;
 }
@@ -688,8 +695,10 @@ function hitCrate(n, dmg) {
   const hp = Math.max(0, crateHp[n] - dmg); setCrateLocal(n, hp); if (G) G.crDiff.set(n, hp);
   broadcast({ t: "ev", e: "crate", i: n, hp });
 }
+let killSrc = "";
 function killTank(t, by) {
   if (!t.alive) return;
+  if (by === t.id && window.__tank) { const T = window.__tank; T.self = (T.self || 0) + 1; T.by = T.by || {}; T.by[killSrc] = (T.by[killSrc] || 0) + 1; }   // 確認用: 自分でやられた回数（地雷 / 弾）
   t.alive = false;
   broadcast({ t: "ev", e: "kill", id: t.id, by, x: r2(t.x), z: r2(t.z) });
   checkRoundEnd();
@@ -697,7 +706,9 @@ function killTank(t, by) {
 function explode(m) {
   G.mines = G.mines.filter(q => q !== m);
   broadcast({ t: "ev", e: "boom", x: r2(m.x), z: r2(m.z) });
+  killSrc = "mine";
   for (const t of G.tanks.values()) if (t.alive && Math.hypot(t.x - m.x, t.z - m.z) < MINE_R + TANK_R * 0.4) killTank(t, m.ow);
+  killSrc = "";
   for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) if (grid[j * MW + i] === 2 && Math.hypot(wx(i) - m.x, wz(j) - m.z) < MINE_R + 0.25) hitCrate(j * MW + i, 9);
   G.bullets = G.bullets.filter(b => Math.hypot(b.x - m.x, b.z - m.z) > MINE_R);
   for (const q of G.mines) if (Math.hypot(q.x - m.x, q.z - m.z) < MINE_R + 0.2) q.fuse = Math.min(q.fuse, G.time + 0.12);   // 近くの地雷もつられて爆発
@@ -801,12 +812,12 @@ function hostTick(dt) {
   }
   if (!play) return;
   // 弾
-  const hooks = { crate: n => hitCrate(n, 1), bounce: () => bounceSfx() };
+  const hooks = { crate: n => hitCrate(n, 1), bounce: bb => { bb.bd = true; bounceSfx(); } };
   const dead = new Set();
   for (const b of G.bullets) {
     b.age += dt;
     if (b.life && b.age > b.life) { dead.add(b); continue; }
-    if (b.home && b.age > 0.25) {
+    if (b.home && b.age > b.hd) {
       let best = null, bd = 1e9;
       for (const t of all) { if (!t.alive || t.id === b.ow || (G.team && t.tm === b.tm)) continue; const d = Math.hypot(t.x - b.x, t.z - b.z); if (d < bd) { bd = d; best = t; } }
       if (best) {
@@ -817,10 +828,13 @@ function hostTick(dt) {
     }
     if (!moveBullet(b, dt, hooks)) { dead.add(b); continue; }
     for (const t of all) {
-      if (!t.alive || (t.id === b.ow && b.age < 0.15)) continue;
+      // 2026-11-19: 弾がおそくなったので、自分で追いついてしまわないように、自分の弾は「1 回跳ね返ったあと」からあたる
+      if (!t.alive || (t.id === b.ow && !b.bd)) continue;
       if (Math.hypot(t.x - b.x, t.z - b.z) < TANK_R + b.r) {
         dead.add(b);
+        killSrc = "bullet";
         if (!(G.team && t.tm === b.tm && t.id !== b.ow)) killTank(t, b.ow);   // チーム戦: 味方の弾には当たらない（自分の弾は当たる）
+        killSrc = "";
         break;
       }
     }
@@ -842,7 +856,8 @@ function hostTick(dt) {
     let go = G.time >= m.fuse;
     if (!go) for (const t of all) {
       if (!t.alive || Math.hypot(t.x - m.x, t.z - m.z) > MINE_TRIG) continue;
-      if (G.time - m.t0 > (t.id === m.ow ? MINE_SELF : MINE_ARM)) { go = true; break; }
+      if (t.id === m.ow) continue;   // 2026-11-19: 自分の地雷には反応しない
+      if (G.time - m.t0 > MINE_ARM) { go = true; break; }
     }
     if (go) explode(m);
   }
@@ -1036,6 +1051,7 @@ function beginRoundView(m) {
     const load = fixLoad(p.load);
     const t = { id: p.id, name: p.name, tm: p.tm, color: p.color, load, st: tankStats(load), x: p.x, z: p.z, h: p.h, tu: p.h, tx: p.x, tz: p.z, th: p.h, ttu: p.h, vx: 0, vz: 0, alive: !!p.alive, roll: 0 };
     t.mesh = makeTank(load, p.color); t.mesh.root.scale.setScalar(1.15); scene.add(t.mesh.root);
+    t.label = makeNameLabel(p.name, p.color, p.id === myId && !spectating); scene.add(t.label);
     S.tanks.set(p.id, t);
   }
   const me = S.tanks.get(myId);
@@ -1361,15 +1377,33 @@ function makeBulletMesh(b) {
   return g;
 }
 function removeBulletMesh(b) { if (b.mesh) scene.remove(b.mesh); b.mesh = null; }
+// 名前のふだ（戦車の上。2026-11-19）。ラウンドごとに作りなおすので、clearActors で片づける
+function makeNameLabel(name, color, me) {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 64;
+  const x = c.getContext("2d"), txt = String(name).slice(0, 12);
+  x.font = "bold 30px system-ui,'Hiragino Sans','Noto Sans JP',sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  const w = Math.min(244, x.measureText(txt).width + 26);
+  x.fillStyle = "rgba(14,12,9,.78)"; x.beginPath(); x.roundRect ? x.roundRect(128 - w / 2, 8, w, 48, 14) : x.rect(128 - w / 2, 8, w, 48); x.fill();
+  x.lineWidth = me ? 4 : 3; x.strokeStyle = "#" + color.toString(16).padStart(6, "0"); x.stroke();
+  x.fillStyle = me ? "#ffd21a" : "#fff"; x.fillText(txt, 128, 33, 232);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.renderOrder = 10; sp.scale.set(2.1, .525, 1);
+  return sp;
+}
+function removeNameLabel(t) { if (t.label) { scene.remove(t.label); t.label.material.map.dispose(); t.label.material.dispose(); t.label = null; } }
 function syncMines(list) {
   const seen = new Set();
   for (const m of list) {
     seen.add(m.id);
     let o = S.mines.get(m.id);
     if (!o) {
-      o = { ...m, mesh: new THREE.Group() };
-      part(cyl(.17, .19, .06, 18), mat(0xe8c020), o.mesh, 0, .03, 0);
+      o = { ...m, mesh: new THREE.Group(), mine: m.ow === myId };
+      // 2026-11-19: 自分の地雷は緑（あんぜん）、相手の地雷は赤（きけん）。ふちの輪も同じ色
+      const base = o.mine ? 0x35c46a : 0xe0453a;
+      part(cyl(.17, .19, .06, 18), mat(base), o.mesh, 0, .03, 0);
       part(cyl(.1, .1, .02, 14), mat(0x222222), o.mesh, 0, .065, 0);
+      const ring = new THREE.Mesh(geo("mring", () => new THREE.TorusGeometry(.23, .018, 6, 24)), new THREE.MeshBasicMaterial({ color: base })); ring.rotation.x = PI / 2; ring.position.y = .02; o.mesh.add(ring);
       o.lamp = part(geo("lamp", () => new THREE.SphereGeometry(.04, 8, 6)), new THREE.MeshBasicMaterial({ color: 0x661010 }), o.mesh, 0, .08, 0);
       o.mesh.position.set(m.x, 0, m.z); scene.add(o.mesh); S.mines.set(m.id, o);
       sfx("place");
@@ -1416,7 +1450,7 @@ function scorch(x, z) {
   xg.position.set(x, 0, z); scene.add(xg); scorchList.push(xg);
 }
 function clearActors() {
-  for (const t of S.tanks.values()) if (t.mesh) scene.remove(t.mesh.root);
+  for (const t of S.tanks.values()) { if (t.mesh) scene.remove(t.mesh.root); removeNameLabel(t); }
   for (const b of S.bullets.values()) removeBulletMesh(b);
   for (const b of S.pred.values()) removeBulletMesh(b);
   for (const m of S.mines.values()) scene.remove(m.mesh);
@@ -1467,7 +1501,7 @@ function resize() {
   VW = innerWidth; VH = innerHeight;
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(VW, VH, false);
   fitCamera(); applyLayout();
-  if (screen === "layout") renderUI();
+  if (layEdit) renderUI();
   if (!$("garage").classList.contains("hidden")) { sizePreview(); updGarage(); }
   const rb = $("rotBtn"); if (rb) rb.textContent = rotLabel();
   if (PARTY && window.ykgLobby && ykgLobby.active) ykgLobby.update({});
@@ -1496,7 +1530,7 @@ function localMove() {
   return { mx: wxv / l * mag, mz: wzv / l * mag };
 }
 const myTank = () => (mode === "client" ? S.tanks.get(myId) : G && G.tanks.get(myId));
-const canPlay = () => screen === "game" && !spectating && S.phase === "play" && !overInfo && $("garage").classList.contains("hidden");
+const canPlay = () => screen === "game" && !layEdit && !spectating && S.phase === "play" && !overInfo && $("garage").classList.contains("hidden");
 let predCid = 1, localCd = 0;
 function fireLocal() {
   if (!canPlay()) return;
@@ -1542,7 +1576,7 @@ function stickGeo(id) { const L = layOf(id); return { cx: L.x * VW, cy: L.y * VH
 function knob(id, s) { $(id).firstElementChild.style.transform = s ? `translate(${s.dx * STICK}px,${s.dy * STICK}px)` : ""; }
 function setStick(s, x, y) { let dx = (x - s.ox) / s.r, dy = (y - s.oy) / s.r; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } s.dx = dx; s.dy = dy; s.dist = Math.hypot(x - s.ox, y - s.oy); }
 canvas.addEventListener("pointerdown", e => {
-  if (screen === "layout") return;
+  if (layEdit) return;
   if (screen !== "game") return;
   if (e.pointerType === "mouse") {
     IN.mouse = true; IN.mx = e.clientX; IN.my = e.clientY;
@@ -1577,13 +1611,13 @@ canvas.addEventListener("pointercancel", endPointer);
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 addEventListener("keydown", e => {
   if (!$("garage").classList.contains("hidden")) { garageKey(e); return; }
-  if (e.target && e.target.tagName === "INPUT") return;
+  if (layEdit || (e.target && e.target.tagName === "INPUT")) return;
   IN.keys.add(e.code);
   if (screen === "game" && (e.code === "Space" || e.code === "KeyE")) { mineLocal(); e.preventDefault(); }
 });
 addEventListener("keyup", e => IN.keys.delete(e.code));
 addEventListener("blur", () => { IN.keys.clear(); IN.tl = IN.tr = null; knob("stL", null); knob("stR", null); });
-$("mineBtn").addEventListener("pointerdown", e => { if (screen === "layout") return; e.preventDefault(); e.stopPropagation(); mineLocal(); });
+$("mineBtn").addEventListener("pointerdown", e => { if (layEdit) return; e.preventDefault(); e.stopPropagation(); mineLocal(); });
 // 確認（ブラウザの confirm() は全画面と横画面の固定が外れるので、ページの中に出す）
 function ask(title, onYes) {
   $("askT").textContent = title; $("ask").classList.remove("hidden");
@@ -1634,7 +1668,7 @@ function updHud() {
 }
 // スティックと地雷ボタン（自分の戦車が動けるときだけ出す）
 function updWeaponBtns() {
-  if (screen === "layout") return;
+  if (layEdit) return;
   const me = myTank();
   const show = screen === "game" && !spectating && me && me.alive && S.phase !== "done";
   $("mineBtn").classList.toggle("hidden", !show || IN.mouse);
@@ -1702,7 +1736,7 @@ const RULES = `<div class="rules">
 ・<b>PC</b>: WASDで移動、マウスでねらってクリックで発射、スペースで地雷<br>
 ・弾は<b>壁で跳ね返る</b>。<b>1発当たるとやられる</b>（自分の弾でも！）<br>
 ・弾どうしがぶつかると、威力に関係なく<b>両方消える</b><br>
-・地雷（1人2個まで）: 10秒たつか、戦車が近づくと爆発。まわりの戦車・木箱・弾をふきとばす<br>
+・地雷（1人2個まで）: 10秒たつか、<b>相手の</b>戦車が近づくか弾が当たると爆発。まわりの戦車・木箱・弾をふきとばす。<b>自分の地雷には近づいても反応しない</b>（色: 自分の地雷は緑、相手の地雷は赤）<br>
 ・木箱は弾2発か地雷で壊れる<br>
 ・最後まで残った人（チーム）がラウンドの勝ち。<b>3本先取</b>。1ラウンド90秒（時間切れは引き分け）<br>
 ・バトルの前とラウンドの合間に、弾・機体・タイヤを変えられる（全員が準備OKを押すと次のバトルが始まる）<br>
@@ -1710,13 +1744,28 @@ const RULES = `<div class="rules">
 ・チーム戦: 味方の弾には当たらない（地雷は当たる）</div>`;
 const segH = (opts, cur, pre) => `<div class="seg">${opts.map(([k, s]) => `<button class="${k === cur ? "on" : ""}" data-a="${pre}-${k}">${s}</button>`).join("")}</div>`;
 let partySet = null, partyGuestSet = null, sfxBtn = null;
-const partyMine = () => [{ label: "🎮 ボタンの配置を変える", onClick: () => { ykgLobby.hide(); enterLayout(); } }];
-// ボタン配置の編集画面
-let editSel = "stL", layPrev = "menu", layDrag = null;
-function enterLayout() { if (screen === "layout") return; layPrev = screen; screen = "layout"; editSel = "stL"; renderUI(); }
-function exitLayout() { screen = layPrev; renderUI(); if (PARTY && window.ykgLobby && (screen === "lobby" || screen === "connecting")) ykgLobby.show(); }
+const partyMine = () => [{ label: "🎮 ボタンの配置を変える", onClick: () => enterLayout() }];
+// ボタン配置の編集（2026-11-19: screen は変えずに、上にかぶせる。いつでも開ける）。
+// 対戦中にひらくと、オンラインでは試合は止まらない（自分の戦車は止まる）。ひとりで遊んでいるときだけ、試合も止まる
+let layEdit = false, layGarageWas = false, editSel = "stL", layDrag = null;
+function enterLayout() {
+  if (layEdit) return;
+  layEdit = true; editSel = "stL"; layDrag = null;
+  layGarageWas = !$("garage").classList.contains("hidden"); $("garage").classList.add("hidden");   // パーツ選びの上からでも開けるように、いったん隠す
+  if (window.ykgLobby && ykgLobby.hide) ykgLobby.hide();
+  IN.tl = IN.tr = null; IN.keys.clear(); knob("stL", null); knob("stR", null);
+  renderUI();
+}
+function exitLayout() {
+  layEdit = false; layDrag = null;
+  if (layGarageWas && S.prep) { $("garage").classList.remove("hidden"); requestAnimationFrame(() => { sizePreview(); updGarage(); }); }
+  layGarageWas = false;
+  renderUI();
+  if (PARTY && window.ykgLobby && ykgLobby.active && ykgLobby.show) ykgLobby.show();
+}
+$("layB").addEventListener("click", e => { e.stopPropagation(); enterLayout(); });
 $("hud").addEventListener("pointerdown", e => {
-  if (screen !== "layout") return;
+  if (!layEdit) return;
   const el = e.target.closest && e.target.closest(".lay"); if (!el) return;
   e.preventDefault(); e.stopPropagation();
   editSel = el.id; const L = layOf(el.id);
@@ -1737,7 +1786,7 @@ function partyLobbyOpts() {
   if (screen === "connecting") return { rules, mine, button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
   const members = lobbyPs.map(p => ({ name: p.name, tag: [p.id === 0 ? "ホスト" : p.bot ? "CPU" : "", host.team ? TEAM_NAME[p.tm] + "チーム" : ""].filter(Boolean).join(" "), me: p.id === myId }))
     .concat(lobbySpecs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })));
-  const status = `${lobbyPs.length} / ${MAX_PLAYERS}人` + (lobbyPs.length < 2 ? "（CPU を含めて 2人以上で始められます）" : !teamsReady() ? "（チーム戦は赤と青に1〜2人ずつ）" : "");
+  const status = `${lobbyPs.length} / ${MAX_PLAYERS}人` + (lobbyPs.length < 2 ? "（CPU を含めて 2人以上で始められます）" : !teamsReady() ? "（チーム戦は赤と青に1人以上ずつ）" : "");
   const info = `ステージ: ${STAGES[host.stage] || "ランダム"} ・ ${host.team ? "チーム戦" : "個人戦"} ・ CPU ${LV[host.cpuLv].name}`;
   if (!isHost) {
     if (!partyGuestSet) {
@@ -1775,10 +1824,11 @@ function partyLobbyOpts() {
 }
 function renderUI() {
   const s = $("screen");
-  const inGame = screen === "game", lay = screen === "layout";
+  const inGame = screen === "game", lay = layEdit;
   $("hud").classList.toggle("hidden", !inGame && !lay);
   $("hud").classList.toggle("editing", lay);
   $("rotB").classList.toggle("hidden", !canRot());
+  $("layB").classList.toggle("hidden", lay || spectating);
   s.classList.toggle("clear", inGame);
   s.classList.toggle("toolbar", lay);
   if (lay) {   // ボタン配置の編集: 上に小さな道具バー
@@ -1834,7 +1884,7 @@ function renderUI() {
         : `<div class="note">ステージ: <b>${STAGES[host.stage] || "ランダム"}</b> ・ ${host.team ? "チーム戦（赤／青を押すとチームを変えられる）" : "個人戦"} ・ CPU ${LV[host.cpuLv].name}</div>`}
       <div class="note">${lobbyPs.length} / ${MAX_PLAYERS}人 ・ 3本先取</div>
       ${isHost ? `<button class="btn red" data-a="start" ${lobbyPs.length < 2 || !teamsReady() ? "disabled" : ""}>スタート</button>
-        ${lobbyPs.length < 2 ? `<div class="note">2人以上（CPUを含む）で始められます</div>` : !teamsReady() ? `<div class="note">チーム戦は、赤と青に1〜2人ずつ必要です</div>` : ""}`
+        ${lobbyPs.length < 2 ? `<div class="note">2人以上（CPUを含む）で始められます</div>` : !teamsReady() ? `<div class="note">チーム戦は、赤と青に1人以上ずつ必要です</div>` : ""}`
         : `<div class="note">ホストがスタートするのを待っています…</div>`}
       <button class="btn sub" data-a="leave">退出</button></div>`;
   } else if (inGame && overInfo) {
@@ -2079,6 +2129,7 @@ function updateView(dt) {
   for (const t of S.tanks.values()) {
     const m = t.mesh; if (!m) continue;
     m.root.visible = t.alive;
+    if (t.label) { t.label.visible = t.alive; t.label.position.set(t.x, 1.0, t.z - .25); }
     if (!t.alive) continue;
     const dx = t.x - m.root.position.x, dz = t.z - m.root.position.z;
     const mv = dx * Math.cos(t.h) + dz * Math.sin(t.h);
@@ -2088,7 +2139,10 @@ function updateView(dt) {
   for (const b of S.bullets.values()) if (b.mesh) b.mesh.position.set(b.x, 0, b.z);
   for (const b of S.pred.values()) if (b.mesh) b.mesh.position.set(b.x, 0, b.z);
   const blink = Math.floor(performance.now() / 120) % 2 === 0;
-  for (const m of S.mines.values()) m.lamp.material.color.setHex(m.bl ? (blink ? 0xff2020 : 0x441010) : (Math.floor(performance.now() / 600) % 2 ? 0xaa2020 : 0x441010));
+  for (const m of S.mines.values()) {
+    const on = m.bl ? blink : Math.floor(performance.now() / 600) % 2 === 0;
+    m.lamp.material.color.setHex(m.mine ? (on ? 0x70ff9a : 0x144026) : (on ? 0xff3030 : 0x441010));
+  }
   for (let i = fxList.length - 1; i >= 0; i--) {
     const f = fxList[i]; f.t += dt; const k = Math.min(1, f.t / f.life);
     f.upd(f.obj, k, dt);
@@ -2106,6 +2160,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
   if ((mode === "host" || mode === "local") && G) {
+    if (layEdit && mode === "local") { syncFromG(); renderer.render(scene, camera); return; }   // ひとりで遊んでいるときは、配置を変えているあいだ試合も止める
     acc += dt; let n = 0;
     while (acc >= 1 / 60 && n < 5) { hostTick(1 / 60); acc -= 1 / 60; n++; if (G && mode === "host" && ++G.snapK % 2 === 0) sendSnap(); }
     if (n >= 5) acc = 0;
@@ -2125,6 +2180,7 @@ if (new URLSearchParams(location.search).has("debug")) window.__tank = {
   step(sec) {
     const t0 = performance.now(); let n = 0;
     for (let k = 0; k < Math.round(sec * 60); k++) {
+      if (layEdit && mode === "local") break;
       if (G) { hostTick(1 / 60); n++; if (mode === "host" && ++G.snapK % 2 === 0) sendSnap(); }
       else if (mode === "client" && screen === "game") clientTick(1 / 60);
     }
@@ -2132,7 +2188,7 @@ if (new URLSearchParams(location.search).has("debug")) window.__tank = {
     return { simMsPerTick: n ? ((t1 - t0) / n).toFixed(3) : 0, drawMs: (performance.now() - t1).toFixed(1) };
   },
   fireAt(x, z) { const t = G && G.tanks.get(myId); return t ? hostFire(myId, Math.atan2(z - t.z, x - t.x)) : false; },
-  mine() { return hostMine(myId); },
+  mine(id) { return hostMine(id == null ? myId : id); },
   grid(i, j) { return grid[j * MW + i]; },
   view() { return { mode, screen, phase: S.phase, tleft: S.tleft, tanks: [...S.tanks.values()].map(t => [t.name, t.alive, +t.x.toFixed(1), +t.z.toFixed(1)]), bullets: S.bullets.size, pred: S.pred.size, mines: S.mines.size, card: ($("screen").innerText || "").slice(0, 80) }; },
   state() { return G && { phase: G.phase, round: host.match && host.match.round, tleft: G.tleft.toFixed(1), tanks: [...G.tanks.values()].map(t => [t.name, t.alive, +t.x.toFixed(1), +t.z.toFixed(1)]), bullets: G.bullets.length, kinds: G.bullets.map(b => PARTS.g[b.ty].id).join(), bpos: G.bullets.map(b => [PARTS.g[b.ty].id, +b.x.toFixed(2), +b.z.toFixed(2)]), mines: G.mines.length, score: host.match && [...host.match.score], over: !!overInfo }; },
