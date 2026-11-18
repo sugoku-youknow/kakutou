@@ -33,12 +33,26 @@ input{font:inherit}
 #banner{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);font-size:64px;font-weight:900;color:#fff;text-shadow:0 4px 0 #000,0 0 18px rgba(0,0,0,.6);white-space:nowrap}
 #banner.small{font-size:30px}
 #toast{position:absolute;left:50%;top:22%;transform:translateX(-50%);background:rgba(0,0,0,.8);padding:8px 16px;border-radius:12px;font-size:14px;transition:opacity .3s;opacity:0;white-space:nowrap}
-.stick{position:absolute;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08)}
+.lay{position:absolute;left:0;top:0;transform-origin:center center}
+.stick{width:120px;height:120px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);pointer-events:none}
+#hud.editing .lay{pointer-events:auto;outline:2px dashed rgba(255,210,26,.8);outline-offset:3px;touch-action:none}
+#hud.editing .lay.sel{outline:3px solid #ffd21a}
+#hud.editing .lay *{pointer-events:none}
+#hud.editing .lay::after{content:attr(data-name);position:absolute;left:50%;top:-20px;transform:translateX(-50%);font-size:11px;font-weight:800;background:#ffd21a;color:#222;padding:1px 7px;border-radius:7px;white-space:nowrap}
+#screen.toolbar{inset:auto;left:50%;top:6px;transform:translateX(-50%);background:none;padding:0;overflow:visible}
+#screen.toolbar .card{width:auto;padding:6px 10px;display:flex;align-items:center;gap:8px;white-space:nowrap;background:rgba(38,35,29,.95)}
+#screen.toolbar .card .btn{width:auto;margin:0;padding:8px 10px;font-size:13px}
+#screen.toolbar input[type=range]{width:min(150px,24vw);accent-color:#ffd21a}
+#rotB{position:fixed;z-index:2147483200;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 84px);width:36px;height:36px;padding:0;border-radius:50%;border:1px solid #776;background:rgba(20,18,14,.75);line-height:0}
+#rotB svg{width:20px;height:20px}
+#hud.editing #quit,#hud.editing #timer,#hud.editing #scorebar,#hud.editing #feed,#hud.editing #hint,#hud.editing #banner,#hud.editing #spec{display:none}
+#ask{position:fixed;inset:0;z-index:2147483300;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
+#ask .card{text-align:center}
+#ask .row .btn{margin-top:0}
 .stick .knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.5)}
 #stR{border-color:rgba(255,210,26,.6)}
 #stR .knob{background:rgba(255,210,26,.65)}
-#weap{position:absolute;right:calc(env(safe-area-inset-right) + 8px);top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px}
-.wbtn{pointer-events:auto;touch-action:none;width:86px;min-height:44px;border-radius:12px;border:2px solid rgba(255,255,255,.35);background:rgba(20,18,14,.6);font-size:12px;font-weight:800;line-height:1.15;padding:4px 4px;position:relative;overflow:hidden}
+.wbtn{pointer-events:auto;touch-action:none;width:86px;min-height:44px;border-radius:12px;border:2px solid rgba(255,255,255,.35);background:rgba(20,18,14,.6);font-size:12px;font-weight:800;line-height:1.15;padding:4px 4px;position:absolute;overflow:hidden}
 .wbtn small{display:block;font-size:10px;font-weight:600;opacity:.75}
 .wbtn.on{border-color:var(--c,#ffd21a);background:rgba(20,18,14,.85);box-shadow:0 0 10px var(--c,#ffd21a)}
 .wbtn i{position:absolute;left:0;bottom:0;height:4px;background:var(--c,#ffd21a);width:0}
@@ -142,13 +156,17 @@ table.res td:last-child{text-align:right;color:#ffd21a;letter-spacing:1px}
   <div id="feed"></div>
   <div id="banner" class="hidden"></div>
   <div id="toast"></div>
-  <div id="stL" class="stick hidden"><div class="knob"></div></div>
-  <div id="stR" class="stick hidden"><div class="knob"></div></div>
-  <div id="weap"><button id="wb0" class="wbtn" data-nosfx></button><button id="wb1" class="wbtn" data-nosfx></button><button id="wsyn" class="wbtn syn" data-nosfx></button></div>
+  <div id="stL" class="stick lay" data-name="移動"><div class="knob"></div></div>
+  <div id="stR" class="stick lay" data-name="ねらう・撃つ"><div class="knob"></div></div>
+  <button id="wb0" class="wbtn lay" data-nosfx data-name="弾1"></button>
+  <button id="wb1" class="wbtn lay" data-nosfx data-name="弾2"></button>
+  <button id="wsyn" class="wbtn syn lay" data-nosfx data-name="合成"></button>
   <div id="hint"></div>
   <div id="spec" class="hidden">観戦中</div>
 </div>
 <div id="screen"></div>
+<button id="rotB" class="hidden" aria-label="縦画面と横画面の切り替え" data-nosfx><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5"/><path d="M3 4v5h5M21 20v-5h-5"/></svg></button>
+<div id="ask" class="hidden"><div class="card"><h2 id="askT"></h2><div class="row"><button class="btn sub" id="askN">やめる</button><button class="btn red" id="askY">はい</button></div></div></div>
 <div id="garage" class="hidden">
   <div class="gtop"><div style="min-width:70px"></div><div class="t">戦車をカスタマイズ</div><div class="n" id="gnext"></div></div>
   <div class="gmain">
@@ -264,39 +282,44 @@ const loadText = l => `${BUL[l.g1].name}＋${BUL[l.g2].name}・${PARTS.b[l.b].na
 // 上半分（8 行）だけ書き、下半分は 180° まわしてつくる（どの出発点も同じ条件になる）。# = 壁、x = 木箱、1〜4 = 出発点
 // 2026-11-18: 広さを約半分（24×16 → 18×12）にし、壁は薄い板（厚さ 0.1）に。
 // # は「そのマスの中心を通る壁」: となりの # とつながって、横・縦の線になる（ひとつだけの # は長さ 1 の板）
-const MW = 18, MH = 12, WALL_T = 0.1;
+// 2026-11-19: 正方形（14×14）にして、画面のまん中に置く（左右のスティックとステージが重ならないように）
+const MW = 14, MH = 14, WALL_T = 0.1;
 const HALF = {
   plaza: [
-    "##################",
-    "#1..............2#",
-    "#...##......##...#",
-    "#...#........#...#",
-    "#.......x........#",
-    "#......#...x.....#",
+    "##############",
+    "#1..........2#",
+    "#..##....##..#",
+    "#..#......#..#",
+    "#......x.....#",
+    "#....#...x...#",
+    "#............#",
   ],
   maze: [
-    "##################",
-    "#1....#.....#...2#",
-    "#.##..#..##.#.##.#",
-    "#.#.........#....#",
-    "#.#..####.....##.#",
-    "#.......#..#.....#",
+    "##############",
+    "#1...#......2#",
+    "#.##.#..##.#.#",
+    "#.#.......#..#",
+    "#.#..###.....#",
+    "#......#..##.#",
+    "#..#.........#",
   ],
   crates: [
-    "##################",
-    "#1...x....x.....2#",
-    "#....x....x......#",
-    "#xx.xx..xx..xx.xx#",
-    "#......x....x....#",
-    "#..x..x...xx..x..#",
+    "##############",
+    "#1..x....x..2#",
+    "#...x....x...#",
+    "#xx.xx..xx.xx#",
+    "#.....x......#",
+    "#..x..x..xx..#",
+    "#....x...x...#",
   ],
   cross: [
-    "##################",
-    "#1....#....#....2#",
-    "#.....#.xx.#.....#",
-    "#..#..x....x..#..#",
-    "#................#",
-    "####.##.......####",
+    "##############",
+    "#1...#..#...2#",
+    "#....#..#....#",
+    "#..#.x..x.#..#",
+    "#............#",
+    "###.##....####",
+    "#.....x......#",
   ],
 };
 const STAGES = { random: "ランダム", plaza: "広場", maze: "迷路", crates: "木箱だらけ", cross: "十字路" };
@@ -1486,10 +1509,10 @@ function updAimLine(t) {
 let VW = innerWidth, VH = innerHeight;
 const camR = new THREE.Vector3(1, 0, 0), camU = new THREE.Vector3(0, 0, -1);
 function fitCamera() {
-  const portrait = VH > VW * 1.05, el = 60 * PI / 180, az = portrait ? PI / 2 : 0;
+  const portrait = VH > VW * 1.05, el = 60 * PI / 180, az = 0;   // 2026-11-19: ステージは正方形なので回さない。まん中に置く
   camera.aspect = VW / VH; camera.updateProjectionMatrix();
   const dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
-  const target = new THREE.Vector3(portrait ? -0.2 : 0, 0, portrait ? 0 : 0.25);
+  const target = new THREE.Vector3(0, 0, portrait ? 0 : 0.25);
   const pts = []; for (const x of [-MW / 2 + .4, MW / 2 - .4]) for (const z of [-MH / 2 + .4, MH / 2 - .4]) for (const y of [0, .6]) pts.push(new THREE.Vector3(x, y, z));
   const topM = portrait ? .9 : .84, v = new THREE.Vector3();
   let lo = 4, hi = 150;
@@ -1507,7 +1530,8 @@ function fitCamera() {
 function resize() {
   VW = innerWidth; VH = innerHeight;
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(VW, VH, false);
-  fitCamera();
+  fitCamera(); applyLayout();
+  if (screen === "layout") renderUI();
   if (!$("garage").classList.contains("hidden")) { sizePreview(); updGarage(); }
   const rb = $("rotBtn"); if (rb) rb.textContent = rotLabel();
   if (PARTY && window.ykgLobby && ykgLobby.active) ykgLobby.update({});
@@ -1516,7 +1540,7 @@ addEventListener("resize", resize);
 addEventListener("orientationchange", () => { for (const ms of [100, 400, 900]) setTimeout(resize, ms); });
 
 // ================= 入力 =================
-// スマホ: 画面の左半分 = 移動スティック、右半分 = ねらうスティック（はなすと発射。軽くタップでも今の向きに発射）
+// スマホ: 左のスティック = 移動、右のスティック = ねらう（はなすと発射。軽くタップでも今の向きに発射）。場所は決まっていて、配置を変えられる
 // PC: WASD / 矢印で移動、マウスでねらってクリックで発射、1 / 2 / Q で弾、スペース・右クリック・E で合成
 // slot: 今の弾（0 / 1、2 = 合成弾）。draw: バイパー系でえがいている道 { id, pts }
 const IN = { keys: new Set(), mouse: false, mx: 0, my: 0, aimA: 0, tl: null, tr: null, aiming: false, slot: 0, prevSlot: 0, synLocal: 0, draw: null };
@@ -1608,13 +1632,48 @@ function nearMyTank(cx, cy) {
   const v = new THREE.Vector3(t.x, .3, t.z).project(camera);
   return Math.hypot((v.x + 1) / 2 * VW - cx, (1 - v.y) / 2 * VH - cy) < 80;
 }
-function stickEl(id, s, show) {
-  const el = $(id); el.classList.toggle("hidden", !show); if (!show || !s) return;
-  el.style.left = s.ox + "px"; el.style.top = s.oy + "px";
-  el.firstElementChild.style.transform = `translate(${s.dx * STICK}px,${s.dy * STICK}px)`;
+// ---------- ボタンの配置（2026-11-19）: スティックは決まった場所に固定。位置と大きさは自分で変えられる（縦画面・横画面で別々に覚える）
+const LAY_IDS = ["stL", "stR", "wb0", "wb1", "wsyn"];
+const LAY_DEF = {
+  land: { stL: { x: .12, y: .7, s: 1 }, stR: { x: .88, y: .7, s: 1 }, wb0: { x: .93, y: .2, s: 1 }, wb1: { x: .93, y: .35, s: 1 }, wsyn: { x: .82, y: .275, s: 1 } },
+  port: { stL: { x: .22, y: .87, s: 1 }, stR: { x: .78, y: .87, s: 1 }, wb0: { x: .3, y: .75, s: 1 }, wb1: { x: .7, y: .75, s: 1 }, wsyn: { x: .5, y: .82, s: 1 } },
+};
+let LAY = (() => { try { return JSON.parse(store.get("tank-layout") || "null") || {}; } catch (e) { return {}; } })();
+const layOri = () => VH > VW * 1.05 ? "port" : "land";
+const layOf = id => { const o = layOri(); return (LAY[o] && LAY[o][id]) || LAY_DEF[o][id]; };
+function setLay(id, v) { const o = layOri(); LAY[o] = LAY[o] || {}; LAY[o][id] = v; store.set("tank-layout", JSON.stringify(LAY)); }
+function applyLayout() {
+  for (const id of LAY_IDS) {
+    const L = layOf(id), el = $(id);
+    el.style.left = (L.x * VW) + "px"; el.style.top = (L.y * VH) + "px";
+    el.style.transform = `translate(-50%,-50%) scale(${L.s})`;
+  }
 }
-function setStick(s, x, y) { let dx = (x - s.ox) / STICK, dy = (y - s.oy) / STICK; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } s.dx = dx; s.dy = dy; s.dist = Math.hypot(x - s.ox, y - s.oy); }
+// スティックの中心と半径（画面の座標）
+function stickGeo(id) { const L = layOf(id); return { cx: L.x * VW, cy: L.y * VH, r: STICK * L.s }; }
+function knob(id, s) { $(id).firstElementChild.style.transform = s ? `translate(${s.dx * STICK}px,${s.dy * STICK}px)` : ""; }
+function setStick(s, x, y) { let dx = (x - s.ox) / s.r, dy = (y - s.oy) / s.r; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } s.dx = dx; s.dy = dy; s.dist = Math.hypot(x - s.ox, y - s.oy); }
+// バイパー系（タッチ）: 右のスティックを倒すと、戦車からカーソルが動いて弾道をえがく。はなすと発射
+const CUR_SPEED = 7;
+const curMesh = new THREE.Mesh(new THREE.TorusGeometry(.22, .04, 8, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
+curMesh.rotation.x = PI / 2; curMesh.renderOrder = 11; curMesh.visible = false; scene.add(curMesh);
+function cursorTick(dt) {
+  const d = IN.draw, t = myTank();
+  if (!d || !d.cursor || !IN.tr || !t) { curMesh.visible = false; return; }
+  const mag = Math.hypot(IN.tr.dx, IN.tr.dy);
+  if (mag > .2) {
+    const [wxv, wzv] = screenToWorld(IN.tr.dx, IN.tr.dy), l = Math.hypot(wxv, wzv) || 1;
+    const lim = .9, nx = clamp(d.cur[0] + wxv / l * mag * CUR_SPEED * dt, -MW / 2 + lim, MW / 2 - lim), nz = clamp(d.cur[1] + wzv / l * mag * CUR_SPEED * dt, -MH / 2 + lim, MH / 2 - lim);
+    const last = d.pts.length ? d.pts[d.pts.length - 1] : [t.x, t.z], step = Math.hypot(nx - last[0], nz - last[1]);
+    if (d.len + Math.hypot(nx - d.cur[0], nz - d.cur[1]) <= PATH_MAX) {
+      d.cur = [nx, nz];
+      if (step >= .25 && d.pts.length < AIM_MAX - 2) { d.len += step; d.pts.push([nx, nz]); if (d.pts.length === 1) IN.aimA = Math.atan2(nz - t.z, nx - t.x); }
+    }
+  }
+  curMesh.visible = true; curMesh.position.set(d.cur[0], .33, d.cur[1]); curMesh.material.color.setHex(BUL[curKind(t)].col);
+}
 canvas.addEventListener("pointerdown", e => {
+  if (screen === "layout") return;
   if (screen !== "game") return;
   if (e.pointerType === "mouse") {
     IN.mouse = true; IN.mx = e.clientX; IN.my = e.clientY;
@@ -1623,34 +1682,33 @@ canvas.addEventListener("pointerdown", e => {
     return;
   }
   IN.mouse = false;
-  // バイパー系: 右半分か自分の戦車のあたりから指でなぞると、それが弾道になる
-  if (isPathKind() && canPlay() && !IN.draw && (e.clientX >= VW / 2 || nearMyTank(e.clientX, e.clientY))) {
-    drawStart(e.pointerId, e.clientX, e.clientY);
-    try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
-    e.preventDefault(); return;
+  const gl = stickGeo("stL"), gr = stickGeo("stR"), x = e.clientX, y = e.clientY;
+  const inL = Math.hypot(x - gl.cx, y - gl.cy) < gl.r * 1.5, inR = Math.hypot(x - gr.cx, y - gr.cy) < gr.r * 1.5;
+  let s = null;
+  if (inL && !IN.tl && (!inR || Math.hypot(x - gl.cx, y - gl.cy) <= Math.hypot(x - gr.cx, y - gr.cy))) { s = IN.tl = { id: e.pointerId, ox: gl.cx, oy: gl.cy, r: gl.r }; setStick(s, x, y); knob("stL", s); }
+  else if (inR && !IN.tr) {
+    s = IN.tr = { id: e.pointerId, ox: gr.cx, oy: gr.cy, r: gr.r }; setStick(s, x, y); knob("stR", s);
+    const t = myTank();
+    if (isPathKind() && canPlay() && t) IN.draw = { id: e.pointerId, pts: [], len: 0, cursor: true, cur: [t.x, t.z] };
   }
-  const s = { id: e.pointerId, ox: e.clientX, oy: e.clientY, dx: 0, dy: 0, dist: 0 };
-  if (e.clientX < VW / 2) { if (!IN.tl) { IN.tl = s; stickEl("stL", s, true); } }
-  else if (!IN.tr) { IN.tr = s; stickEl("stR", s, true); }
-  try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
-  e.preventDefault();
+  if (s) { try { canvas.setPointerCapture(e.pointerId); } catch (x2) {} e.preventDefault(); }
 });
 canvas.addEventListener("pointermove", e => {
-  if (IN.draw && e.pointerId === IN.draw.id) { drawMove(e.clientX, e.clientY); if (e.pointerType === "mouse") { IN.mx = e.clientX; IN.my = e.clientY; } return; }
+  if (IN.draw && !IN.draw.cursor && e.pointerId === IN.draw.id) { drawMove(e.clientX, e.clientY); IN.mx = e.clientX; IN.my = e.clientY; return; }
   if (e.pointerType === "mouse") { IN.mx = e.clientX; IN.my = e.clientY; IN.mouse = true; return; }
-  if (IN.tl && e.pointerId === IN.tl.id) { setStick(IN.tl, e.clientX, e.clientY); stickEl("stL", IN.tl, true); }
+  if (IN.tl && e.pointerId === IN.tl.id) { setStick(IN.tl, e.clientX, e.clientY); knob("stL", IN.tl); }
   if (IN.tr && e.pointerId === IN.tr.id) {
-    setStick(IN.tr, e.clientX, e.clientY); stickEl("stR", IN.tr, true);
-    if (IN.tr.dist > 14) { const [ax, az] = screenToWorld(IN.tr.dx, IN.tr.dy); IN.aimA = Math.atan2(az, ax); IN.aiming = true; }
+    setStick(IN.tr, e.clientX, e.clientY); knob("stR", IN.tr);
+    if (!IN.draw && IN.tr.dist > 12) { const [ax, az] = screenToWorld(IN.tr.dx, IN.tr.dy); IN.aimA = Math.atan2(az, ax); IN.aiming = true; }
   }
 });
 function endPointer(e) {
-  if (IN.draw && e.pointerId === IN.draw.id) { drawEnd(e.type !== "pointercancel"); return; }
-  if (IN.tl && e.pointerId === IN.tl.id) { IN.tl = null; stickEl("stL", null, false); }
+  if (IN.draw && !IN.draw.cursor && e.pointerId === IN.draw.id) { drawEnd(e.type !== "pointercancel"); return; }
+  if (IN.tl && e.pointerId === IN.tl.id) { IN.tl = null; knob("stL", null); }
   if (IN.tr && e.pointerId === IN.tr.id) {
-    const s = IN.tr; IN.tr = null; IN.aiming = false; stickEl("stR", null, false);
-    if (e.type !== "pointercancel") fireLocal();
-    void s;
+    IN.tr = null; IN.aiming = false; knob("stR", null);
+    if (IN.draw && IN.draw.cursor) { drawEnd(e.type !== "pointercancel"); curMesh.visible = false; }
+    else if (e.type !== "pointercancel") fireLocal();
   }
 }
 canvas.addEventListener("pointerup", endPointer);
@@ -1668,9 +1726,15 @@ addEventListener("keydown", e => {
   }
 });
 addEventListener("keyup", e => IN.keys.delete(e.code));
-addEventListener("blur", () => { IN.keys.clear(); IN.tl = IN.tr = null; IN.draw = null; stickEl("stL", null, false); stickEl("stR", null, false); });
-for (const [id, k] of [["wb0", 0], ["wb1", 1], ["wsyn", 2]]) $(id).addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); selectSlot(k); });
-$("quit").addEventListener("click", () => { if (confirm(PARTY ? "ゲーム一覧へ戻りますか？" : "試合をやめますか？")) leave(); });
+addEventListener("blur", () => { IN.keys.clear(); IN.tl = IN.tr = null; IN.draw = null; knob("stL", null); knob("stR", null); });
+for (const [id, k] of [["wb0", 0], ["wb1", 1], ["wsyn", 2]]) $(id).addEventListener("pointerdown", e => { if (screen === "layout") return; e.preventDefault(); e.stopPropagation(); selectSlot(k); });
+// 確認（ブラウザの confirm() は全画面と横画面の固定が外れるので、ページの中に出す）
+function ask(title, onYes) {
+  $("askT").textContent = title; $("ask").classList.remove("hidden");
+  $("askY").onclick = () => { $("ask").classList.add("hidden"); onYes(); };
+  $("askN").onclick = () => $("ask").classList.add("hidden");
+}
+$("quit").addEventListener("click", () => ask(PARTY ? "ゲーム一覧へ戻りますか？" : "試合をやめますか？", leave));
 function mouseAim(t) {
   ray.setFromCamera({ x: IN.mx / VW * 2 - 1, y: -(IN.my / VH) * 2 + 1 }, camera);
   if (ray.ray.intersectPlane(aimPlane, hitP)) IN.aimA = Math.atan2(hitP.z - t.z, hitP.x - t.x);
@@ -1711,7 +1775,7 @@ function updHud() {
   $("spec").classList.toggle("hidden", !spectating);
   const pk = me && BUL[curKind(me)].path;
   $("hint").textContent = spectating ? "" : IN.mouse ? (pk ? "バイパー: ステージの上をドラッグして弾道をえがく ・ 1/2/Q 弾 ・ スペース 合成" : "WASD 移動 ・ クリックで発射 ・ 1/2/Q 弾 ・ スペース 合成")
-    : pk ? "右側か自分の戦車からなぞって弾道をえがく" : (S.round === 1 && S.phase !== "end" ? "左で移動 ・ 右でねらって離すと発射" : "");
+    : pk ? "右のスティックを倒すとカーソルが動いて弾道をえがく。はなすと発射" : (S.round === 1 && S.phase !== "end" ? "左で移動 ・ 右でねらって離すと発射" : "");
   $("hint").classList.toggle("hidden", !$("hint").textContent);
   // カウントダウン
   if (S.phase === "count" && mode === "client" || (S.phase === "count" && G)) {
@@ -1723,9 +1787,12 @@ function updHud() {
 // 弾のボタン（右はし）: 弾1・弾2・合成
 let weapKey = "";
 function updWeaponBtns() {
-  const me = myTank(), el = $("weap");
+  if (screen === "layout") return;
+  const me = myTank();
   const show = screen === "game" && !spectating && me && me.alive && S.phase !== "done";
-  el.classList.toggle("hidden", !show); if (!show) { weapKey = ""; return; }
+  for (const id of ["wb0", "wb1", "wsyn"]) $(id).classList.toggle("hidden", !show);
+  for (const id of ["stL", "stR"]) $(id).classList.toggle("hidden", !show || IN.mouse);
+  if (!show) { weapKey = ""; return; }
   const sk = synOf(me.load), syn = mySyn(), slot = curSlot();
   const prog = syn === 1 ? clamp((performance.now() - IN.synLocal) / 1000 / SYN_TIME, 0, 1) : syn === 2 ? 1 : 0;
   const key = [me.load.g1, me.load.g2, sk, syn, slot, Math.round(prog * 20)].join();
@@ -1769,15 +1836,27 @@ const docEl = document.documentElement;
 const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const canRot = () => matchMedia("(pointer:coarse)").matches && !!(window.screen.orientation && window.screen.orientation.lock) && (standalone || !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen));
 const rotLabel = () => innerHeight > innerWidth ? "📱 横画面にする" : "📱 縦画面にする";
-function toggleRot() {
-  const toLand = innerHeight > innerWidth;
-  const lock = () => { try { const r = window.screen.orientation.lock(toLand ? "landscape" : "portrait"); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
+// 2026-11-19: えらんだ向きを覚えておき（ykg-orient。ゲーム一覧と共通）、全画面が外れたり、ページを開き直したりしても、次にさわったときに戻す
+const ORI_KEY = "ykg-orient";
+function applyOrient(land) {
+  const lock = () => { try { const r = window.screen.orientation.lock(land ? "landscape" : "portrait"); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
   if (document.fullscreenElement || document.webkitFullscreenElement || standalone) { lock(); return; }
   try {
     const r = docEl.requestFullscreen ? docEl.requestFullscreen({ navigationUI: "hide" }) : docEl.webkitRequestFullscreen();
     if (r && r.then) r.then(lock, () => {}); else setTimeout(lock, 300);
   } catch (e) {}
 }
+function toggleRot() { const toLand = innerHeight > innerWidth; store.set(ORI_KEY, toLand ? "land" : "port"); applyOrient(toLand); }
+function keepOrient() {
+  const pref = store.get(ORI_KEY); if (!pref || !canRot()) return;
+  const land = pref === "land", now = innerWidth > innerHeight;
+  if (land !== now || !(document.fullscreenElement || document.webkitFullscreenElement || standalone)) applyOrient(land);
+}
+if (canRot()) {
+  if (standalone) keepOrient();
+  addEventListener("pointerdown", e => { if (!e.target.closest || !e.target.closest("#rotB")) keepOrient(); }, { capture: true });
+}
+$("rotB").addEventListener("click", e => { e.stopPropagation(); toggleRot(); });
 
 // ================= メニュー・部屋 =================
 let meName = PARTY ? String(PARTY.name || "").slice(0, 12) : "";
@@ -1797,7 +1876,27 @@ const RULES = `<div class="rules">
 ・チーム戦: 味方の弾・爆発には当たらない</div>`;
 const segH = (opts, cur, pre) => `<div class="seg">${opts.map(([k, s]) => `<button class="${k === cur ? "on" : ""}" data-a="${pre}-${k}">${s}</button>`).join("")}</div>`;
 let partySet = null, partyGuestSet = null, sfxBtn = null;
-const partyMine = () => canRot() ? [{ label: rotLabel, onClick: toggleRot }] : [];
+const partyMine = () => [{ label: "🎮 ボタンの配置を変える", onClick: () => { ykgLobby.hide(); enterLayout(); } }];
+// ボタン配置の編集画面
+let editSel = "stL", layPrev = "menu", layDrag = null;
+function enterLayout() { if (screen === "layout") return; layPrev = screen; screen = "layout"; editSel = "stL"; renderUI(); }
+function exitLayout() { screen = layPrev; renderUI(); if (PARTY && window.ykgLobby && (screen === "lobby" || screen === "connecting")) ykgLobby.show(); }
+$("hud").addEventListener("pointerdown", e => {
+  if (screen !== "layout") return;
+  const el = e.target.closest && e.target.closest(".lay"); if (!el) return;
+  e.preventDefault(); e.stopPropagation();
+  editSel = el.id; const L = layOf(el.id);
+  layDrag = { id: el.id, sx: e.clientX, sy: e.clientY, x0: L.x, y0: L.y, pid: e.pointerId };
+  try { el.setPointerCapture(e.pointerId); } catch (x) {}
+  renderUI();
+});
+$("hud").addEventListener("pointermove", e => {
+  if (!layDrag || e.pointerId !== layDrag.pid) return;
+  const L = layOf(layDrag.id);
+  setLay(layDrag.id, { ...L, x: clamp(layDrag.x0 + (e.clientX - layDrag.sx) / VW, .03, .97), y: clamp(layDrag.y0 + (e.clientY - layDrag.sy) / VH, .05, .97) });
+  applyLayout();
+});
+for (const ev of ["pointerup", "pointercancel"]) $("hud").addEventListener(ev, () => { layDrag = null; });
 function partyLobbyOpts() {
   const isHost = mode === "host", mine = partyMine();
   const rules = "4種類の弾から2つ選んで戦う戦車バトル。HP3、3本先取。\n弾を合成すると強い合成弾が撃てる（1.5秒かかる）。\nスタートのあと、それぞれ弾・機体・タイヤを選んで戦車をつくる。";
@@ -1842,9 +1941,24 @@ function partyLobbyOpts() {
 }
 function renderUI() {
   const s = $("screen");
-  const inGame = screen === "game";
-  $("hud").classList.toggle("hidden", !inGame);
+  const inGame = screen === "game", lay = screen === "layout";
+  $("hud").classList.toggle("hidden", !inGame && !lay);
+  $("hud").classList.toggle("editing", lay);
+  $("rotB").classList.toggle("hidden", !canRot());
   s.classList.toggle("clear", inGame);
+  s.classList.toggle("toolbar", lay);
+  if (lay) {   // ボタン配置の編集: 上に小さな道具バー
+    s.classList.remove("hidden");
+    const L = layOf(editSel), pct = Math.round(L.s * 100), nm = $(editSel).dataset.name;
+    s.innerHTML = `<div class="card"><b style="color:#ffd21a">${esc(nm)}</b><input type="range" id="laysize" min="50" max="220" step="5" value="${pct}"><span id="laypct" style="font-size:12px;width:3em">${pct}%</span>
+      <button class="btn sub" data-a="layone">戻す</button><button class="btn sub" data-a="layreset">全部戻す</button><button class="btn" data-a="laydone">完了</button></div>`;
+    $("laysize").addEventListener("input", e => { const v = layOf(editSel); setLay(editSel, { ...v, s: +e.target.value / 100 }); $("laypct").textContent = e.target.value + "%"; applyLayout(); });
+    for (const id of LAY_IDS) { $(id).classList.remove("hidden"); $(id).classList.toggle("sel", id === editSel); }
+    $("wb0").innerHTML = "弾1<small>切り替え</small>"; $("wb1").innerHTML = "弾2<small>切り替え</small>"; $("wsyn").innerHTML = "合成<small>ボタン</small>"; weapKey = "";
+    applyLayout();
+    return;
+  }
+  for (const id of LAY_IDS) $(id).classList.remove("sel");
   if (PARTY) {
     const inLobby = screen === "connecting" || screen === "lobby";
     if (inLobby) { ykgLobby.open(partyLobbyOpts()); s.classList.add("hidden"); s.innerHTML = ""; return; }
@@ -1869,6 +1983,7 @@ function renderUI() {
       <button class="btn sub" data-a="practice">CPUと対戦する</button></div>
       <details class="rd"><summary>ルール・遊び方</summary>${RULES}</details>
       <div class="row" id="sndrow"></div>
+      <button class="btn sub" data-a="layout">🎮 ボタンの配置を変える</button>
       <button class="btn sub" data-a="games">← ゲーム一覧へ（you know games）</button>
       ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}</div>`;
   } else if (screen === "connecting") {
@@ -1907,6 +2022,7 @@ function renderUI() {
       ${r.over ? `<div class="note">決着！</div>` : readyBox() + prepButtons()}</div>`;
   } else if (screen === "prep") {
     h = `<div class="card"><h2>バトルの準備</h2><div class="note" style="margin-bottom:6px">弾・機体・タイヤを選んで「準備OK」</div>${readyBox()}${prepButtons()}
+      ${spectating ? "" : `<button class="btn sub" data-a="layout">🎮 ボタンの配置を変える</button>`}
       <button class="btn sub" data-a="leave">${PARTY ? "ゲーム一覧へ" : mode === "local" ? "やめる" : "退出"}</button></div>`;
   }
   s.innerHTML = h;
@@ -1919,6 +2035,10 @@ $("screen").addEventListener("click", async e => {
   else if (a === "join") { fixName(); joinRoom($("code").value); }
   else if (a === "practice") { fixName(); startPractice(); }
   else if (a === "rot") { fixName(); toggleRot(); }
+  else if (a === "layout") { if (screen === "menu") fixName(); enterLayout(); }
+  else if (a === "laydone") exitLayout();
+  else if (a === "layone") { const o = layOri(); if (LAY[o]) delete LAY[o][editSel]; store.set("tank-layout", JSON.stringify(LAY)); renderUI(); }
+  else if (a === "layreset") { delete LAY[layOri()]; store.set("tank-layout", JSON.stringify(LAY)); renderUI(); }
   else if (a === "garage") { if (iAmReady()) readyLocal(false); openGarage(() => renderUI()); }
   else if (a === "ready") readyLocal(true);
   else if (a === "unready") readyLocal(false);
@@ -2071,7 +2191,7 @@ function openGarage(back) {
   initGarage();
   gTmp = { ...LOAD }; gBack = back; gTankKey = "";
   $("garage").classList.remove("hidden");
-  IN.tl = IN.tr = null; stickEl("stL", null, false); stickEl("stR", null, false);
+  IN.tl = IN.tr = null; IN.draw = null; knob("stL", null); knob("stR", null);
   requestAnimationFrame(() => { sizePreview(); updGarage(); });
   updGarage();
 }
@@ -2169,7 +2289,7 @@ function frame(now) {
     if (n >= 5) acc = 0;
     syncFromG();
   } else if (mode === "client" && screen === "game") clientTick(dt);
-  if (screen === "game") { updateView(dt); updHud(); }
+  if (screen === "game") { cursorTick(dt); updateView(dt); updHud(); }
   if (S.phase === "play" && S.lastCount) S.lastCount = 0;
   renderer.render(scene, camera);
   if (gR && !$("garage").classList.contains("hidden") && gTank) {
@@ -2183,6 +2303,7 @@ if (new URLSearchParams(location.search).has("debug")) window.__tank = {
   step(sec) {
     const t0 = performance.now(); let n = 0;
     for (let k = 0; k < Math.round(sec * 60); k++) {
+      if (screen === "game") cursorTick(1 / 60);
       if (G) { hostTick(1 / 60); n++; if (mode === "host" && ++G.snapK % 2 === 0) sendSnap(); }
       else if (mode === "client" && screen === "game") clientTick(1 / 60);
     }

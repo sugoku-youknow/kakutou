@@ -471,5 +471,23 @@ addEventListener("offline", render);
 
 try { if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) {}
 </script>
+<script>
+// 2026-11-19（タンクファイト）: ゲームの中で選んだ画面の向き（ykg-orient = land / port）を、ゲーム一覧でも保つ。
+// 向きの固定は全画面のときだけできるので、インストールしたアプリならすぐ、ブラウザなら最初にさわったときに全画面にして固定する
+(function () {
+  let pref = null; try { pref = localStorage.getItem("ykg-orient"); } catch (e) {}
+  const o = screen.orientation, d = document.documentElement;
+  if (!pref || !o || !o.lock || !matchMedia("(pointer:coarse)").matches) return;
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const land = pref === "land";
+  const lock = () => { try { const r = o.lock(land ? "landscape" : "portrait"); if (r && r.catch) r.catch(() => {}); } catch (e) {} };
+  const apply = () => {
+    if (document.fullscreenElement || document.webkitFullscreenElement || standalone) { lock(); return; }
+    try { const r = d.requestFullscreen ? d.requestFullscreen({ navigationUI: "hide" }) : d.webkitRequestFullscreen && d.webkitRequestFullscreen(); if (r && r.then) r.then(lock, () => {}); } catch (e) {}
+  };
+  if (standalone) apply();
+  addEventListener("pointerdown", () => { if ((innerWidth > innerHeight) !== land || !(document.fullscreenElement || document.webkitFullscreenElement || standalone)) apply(); }, { capture: true });
+})();
+</script>
 </body>
 </html>
