@@ -52,13 +52,9 @@ input{font:inherit}
 .stick .knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.5)}
 #stR{border-color:rgba(255,210,26,.6)}
 #stR .knob{background:rgba(255,210,26,.65)}
-.wbtn{pointer-events:auto;touch-action:none;width:86px;min-height:44px;border-radius:12px;border:2px solid rgba(255,255,255,.35);background:rgba(20,18,14,.6);font-size:12px;font-weight:800;line-height:1.15;padding:4px 4px;position:absolute;overflow:hidden}
-.wbtn small{display:block;font-size:10px;font-weight:600;opacity:.75}
-.wbtn.on{border-color:var(--c,#ffd21a);background:rgba(20,18,14,.85);box-shadow:0 0 10px var(--c,#ffd21a)}
-.wbtn i{position:absolute;left:0;bottom:0;height:4px;background:var(--c,#ffd21a);width:0}
-.wbtn.syn{border-style:dashed}
-.wbtn.syn.ready{border-style:solid;animation:glow 1s infinite alternate}
-.wbtn.off{opacity:.35}
+#mineBtn{position:absolute;pointer-events:auto;width:68px;height:68px;border-radius:50%;border:3px solid rgba(255,210,26,.85);background:rgba(20,18,14,.55);font-weight:800;font-size:12px;line-height:1.15;touch-action:none;padding:0}
+#mineBtn b{display:block;font-size:15px;color:#ffd21a;letter-spacing:2px}
+#mineBtn:active{background:rgba(255,210,26,.35)}
 @keyframes glow{from{box-shadow:0 0 4px var(--c)}to{box-shadow:0 0 16px var(--c)}}
 #hint{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 8px);transform:translateX(-50%);font-size:12px;opacity:.7;white-space:nowrap;background:rgba(20,18,14,.5);padding:3px 10px;border-radius:8px}
 #spec{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 30px);transform:translateX(-50%);font-size:14px;font-weight:700;background:rgba(20,18,14,.7);padding:5px 12px;border-radius:10px}
@@ -158,9 +154,7 @@ table.res td:last-child{text-align:right;color:#ffd21a;letter-spacing:1px}
   <div id="toast"></div>
   <div id="stL" class="stick lay" data-name="移動"><div class="knob"></div></div>
   <div id="stR" class="stick lay" data-name="ねらう・撃つ"><div class="knob"></div></div>
-  <button id="wb0" class="wbtn lay" data-nosfx data-name="弾1"></button>
-  <button id="wb1" class="wbtn lay" data-nosfx data-name="弾2"></button>
-  <button id="wsyn" class="wbtn syn lay" data-nosfx data-name="合成"></button>
+  <button id="mineBtn" class="lay" data-nosfx data-name="地雷">地雷<b id="mineN">●●</b></button>
   <div id="hint"></div>
   <div id="spec" class="hidden">観戦中</div>
 </div>
@@ -226,32 +220,21 @@ const isOffline = () => FORCE_OFF || !navigator.onLine || typeof Peer === "undef
 // ================= ゲームの設定 =================
 const MAX_PLAYERS = 4, WIN_ROUNDS = 3, ROUND_TIME = 90, COUNT_SEC = 3;
 const TANK_R = 0.36;
-const TANK_HP = 3;                        // 2026-11-18: HP 制（弾ごとにダメージがちがう）。地雷は削除
-const CRATE_HP = 3;                       // 木箱: ダメージ 3 で壊れる
-const SYN_TIME = 1.5;                     // 合成にかかる秒数
+const CRATE_HP = 2;                       // 木箱: 弾 2 発か地雷で壊れる
+const MINE_MAX = 2, MINE_FUSE = 10, MINE_R = 1.4, MINE_ARM = 0.6, MINE_SELF = 2.0, MINE_TRIG = 0.75;
 const COLORS = [0xe8463c, 0x3a7be8, 0x3cb55a, 0xf0b428];
 const TEAM_COLS = [[0xe23b3b, 0xff8f6b], [0x2f74e8, 0x63c6ff]];
 const TEAM_NAME = ["赤", "青"], TEAM_CSS = ["#ff5a5a", "#4a9bff"];
 
-// 弾（2026-11-18 作り直し）: 4 種類から 2 つ選んで、ボタンで切り替える。壁では跳ね返らない（当たると消える）。
-// dmg = 当たったときのダメージ / boom = 爆発のダメージ（br = 半径。壁・木箱・戦車に当たると爆発）/ path = えがいた道をなぞる /
-// home = 追いかける強さ / avoid = 壁をよける / pierce = 壁を壊して進む。0〜3 は選べる弾、4〜7 は合成弾
-const BUL = [
-  { id: "ast", name: "アステロイド", sub: "通常弾", tur: "rifle", spd: 7, dmg: 3, max: 2, cd: .45, r: .1, col: 0xfff3a0, desc: "威力が一番高い（1発でやられる）。まっすぐしか飛ばない" },
-  { id: "met", name: "メテオラ", sub: "炸裂弾", tur: "bound", spd: 4.2, boom: 2, br: 1.15, max: 2, cd: .6, r: .14, col: 0xff8a3a, desc: "壁や戦車に当たると爆発する（自分も巻きこまれる）" },
-  { id: "vip", name: "バイパー", sub: "変化弾", tur: "std", spd: 11, dmg: 1, path: true, max: 2, cd: .45, r: .1, col: 0x7af0ff, desc: "ステージに指でえがいた道をなぞって飛ぶ" },
-  { id: "hnd", name: "ハウンド", sub: "追尾弾", tur: "homing", spd: 4.4, dmg: 1, home: 2.2, life: 6, max: 2, cd: .5, r: .1, col: 0xa6ff7a, desc: "近くの相手を追いかける" },
-  { id: "gim", name: "ギムレット", sub: "徹甲弾", spd: 8.5, dmg: 3, pierce: true, r: .13, col: 0xfffbe0, desc: "壁を壊しながら進む" },
-  { id: "tom", name: "トマホーク", sub: "変化炸裂弾", spd: 5, boom: 2, br: 1.15, path: true, r: .15, col: 0xff6ad0, desc: "えがいた道をなぞって飛び、当たると爆発" },
-  { id: "sal", name: "サラマンダー", sub: "誘導炸裂弾", spd: 4.2, boom: 2, br: 1.15, home: 2.2, life: 6, r: .15, col: 0xff5a3a, desc: "相手を追いかけ、当たると爆発" },
-  { id: "hor", name: "ホーネット", sub: "強化追尾弾", spd: 5, dmg: 2, home: 4.6, avoid: true, life: 7, r: .11, col: 0x3affb0, desc: "よく追いかけ、壁をよけて飛ぶ" },
-];
-// 合成: 2 つの弾の組み合わせ → 合成弾（同じ弾を 2 つ選んだときも合成できる）
-const SYN = { "0,0": 4, "1,2": 5, "1,3": 6, "3,3": 7 };
-const synOf = load => { const k = [load.g1, load.g2].sort((a, b) => a - b).join(","); return SYN[k] != null ? SYN[k] : -1; };
+// 2026-11-19: 弾は「アステロイドなどの前」の 4 種類にもどした（1 つ選ぶ・壁で跳ね返る・1 発でやられる・地雷あり）
 // パーツ（弾・機体・タイヤ）。機体とタイヤの数字を足したものが戦車の性能（スピード・かそく・まがりやすさ・すべりにくさ）
 const PARTS = {
-  g: BUL.slice(0, 4),
+  g: [
+    { id: "std", name: "スタンダード", spd: 5.6, bnc: 1, max: 4, cd: .28, r: .1, lv: 3, desc: "クセのない基本の弾" },
+    { id: "rifle", name: "ライフル", spd: 10, bnc: 0, max: 2, cd: .45, r: .09, lv: 5, desc: "とても速いが跳ね返らない" },
+    { id: "bound", name: "バウンド", spd: 3.7, bnc: 3, max: 3, cd: .32, r: .13, lv: 2, desc: "遅いが、よく跳ね返る" },
+    { id: "homing", name: "ホーミング", spd: 3.5, bnc: 0, max: 1, cd: .5, r: .13, lv: 2, home: 2.4, life: 7, desc: "近くの相手をゆっくり追いかける。1発ずつ" },
+  ],
   b: [
     { id: "std", name: "スタンダード", s: [3, 3, 3, 3], desc: "クセのない機体" },
     { id: "heavy", name: "ヘビー", s: [4, 1, 2, 5], desc: "重くて滑りにくい。速いが加速が遅い" },
@@ -267,16 +250,16 @@ const PARTS = {
 };
 const STAT_NAMES = ["スピード", "かそく", "まがりやすさ", "すべりにくさ"];
 const fixPart = (v, k) => { const n = Math.floor(+v || 0); return n >= 0 && n < PARTS[k].length ? n : 0; };   // 範囲外（消したガトリングなど）は最初のパーツに
-const fixLoad = l => ({ g1: fixPart(l && l.g1, "g"), g2: fixPart(l && (l.g2 != null ? l.g2 : 1), "g"), b: fixPart(l && l.b, "b"), w: fixPart(l && l.w, "w") });
-let LOAD = (() => { try { return fixLoad(JSON.parse(store.get("tank-load2") || "{}")); } catch (e) { return fixLoad({}); } })();
-const ri = n => Math.floor(Math.random() * n);
-const randLoad = () => { const combos = [[0, 0], [1, 2], [1, 3], [3, 3], [0, 1], [0, 3], [0, 2], [2, 3]], c = pick(combos); return fixLoad({ g1: c[0], g2: c[1], b: ri(PARTS.b.length), w: ri(PARTS.w.length) }); };
+const fixLoad = l => ({ g: fixPart(l && l.g, "g"), b: fixPart(l && l.b, "b"), w: fixPart(l && l.w, "w") });
+let LOAD = (() => { try { return fixLoad(JSON.parse(store.get("tank-load") || "{}")); } catch (e) { return fixLoad({}); } })();
+const randLoad = () => fixLoad({ g: Math.floor(Math.random() * PARTS.g.length), b: Math.floor(Math.random() * PARTS.b.length), w: Math.floor(Math.random() * PARTS.w.length) });
+const gunOf = t => PARTS.g[t.load.g];
 function rawStats(load) { const b = PARTS.b[load.b], w = PARTS.w[load.w]; return b.s.map((v, i) => v + w.s[i]); }   // 2〜10
 function tankStats(load) {
   const s = rawStats(load);
   return { spd: (2.0 + 0.28 * s[0]) * 0.8, acc: (4 + 1.5 * s[1]) * 0.8, turn: 2.2 + 0.55 * s[2], grip: 1.5 + 2.0 * s[3] };
 }
-const loadText = l => `${BUL[l.g1].name}＋${BUL[l.g2].name}・${PARTS.b[l.b].name}・${PARTS.w[l.w].name}`;
+const loadText = l => `${PARTS.g[l.g].name}弾・${PARTS.b[l.b].name}・${PARTS.w[l.w].name}`;
 
 // ================= ステージ =================
 // 上半分（8 行）だけ書き、下半分は 180° まわしてつくる（どの出発点も同じ条件になる）。# = 壁、x = 木箱、1〜4 = 出発点
@@ -323,7 +306,7 @@ const HALF = {
   ],
 };
 const STAGES = { random: "ランダム", plaza: "広場", maze: "迷路", crates: "木箱だらけ", cross: "十字路" };
-const STAGE_NOTE = { random: "ラウンドごとに変わる", plaza: "壁が少なく撃ち合いが中心", maze: "細い通路。バイパーやハウンドが活きる", crates: "木箱を壊すと開けていく", cross: "四すみに陣地。真ん中は広い" };
+const STAGE_NOTE = { random: "ラウンドごとに変わる", plaza: "壁が少なく撃ち合いが中心", maze: "細い通路。跳ね返りを狙おう", crates: "木箱を壊すと開けていく", cross: "四すみに陣地。真ん中は広い" };
 function fullMap(k) {
   const h = HALF[k] || HALF.plaza, sw = { "1": "4", "4": "1", "2": "3", "3": "2" };
   return h.concat(h.slice().reverse().map(r => [...r].reverse().map(c => sw[c] || c).join("")));
@@ -479,45 +462,40 @@ function sepTanks(t, list) {
   }
   collideWalls(t, TANK_R);
 }
-// 弾を動かす。壁・木箱に当たると false（跳ね返らない。2026-11-18）。
-// 壁は薄いので、1 回に 0.04 より長く進まない（すり抜けないように）。ギムレット（pierce）は hooks.wall で壁を壊して進む
+// 弾を動かす（壁で跳ね返る。木箱に当たると消える）。消えたら false
+// 壁は薄いので、1 回に 0.04 より長く進まない（すり抜けないように）
 function moveBullet(b, dt, hooks) {
   const sp = Math.hypot(b.vx, b.vz), n = Math.max(1, Math.ceil(sp * dt / 0.04)), h = dt / n, pad = (b.r || 0) * .7;
   for (let k = 0; k < n; k++) {
     const nx = b.x + b.vx * h, nz = b.z + b.vz * h, w = rectAt(nx, nz, pad);
     if (!w) { b.x = nx; b.z = nz; continue; }
-    if (w.kind === "c") {
-      if (hooks && hooks.crate) hooks.crate(w.n, b);
-      if (b.pierce && w.dead) { b.x = nx; b.z = nz; continue; }
-      return false;
+    if (w.kind === "c") { if (hooks && hooks.crate) hooks.crate(w.n); return false; }
+    if (!(b.bnc > 0)) return false;
+    let fx = b.x < w.x0 - pad || b.x > w.x1 + pad, fz = b.z < w.z0 - pad || b.z > w.z1 + pad;
+    if (w.out || (!fx && !fz)) fx = fz = true;
+    else if (fx && fz) {   // 角: 先にぶつかった面で跳ね返る
+      const ex = b.vx ? ((b.vx > 0 ? w.x0 - pad : w.x1 + pad) - b.x) / b.vx : -1, ez = b.vz ? ((b.vz > 0 ? w.z0 - pad : w.z1 + pad) - b.z) / b.vz : -1;
+      if (ex > ez) fz = false; else fx = false;
     }
-    if (b.pierce && !w.out && hooks && hooks.wall && hooks.wall(nx, nz)) { b.x = nx; b.z = nz; continue; }
-    return false;
+    b.bnc--; if (fx) b.vx = -b.vx; if (fz) b.vz = -b.vz;
+    if (hooks && hooks.bounce) hooks.bounce(b);
   }
   return true;
 }
-// 弾の通り道（ねらいの線・CPU 用）。まっすぐ、最初に当たるところまで
-function trace(x, z, a, maxLen, r = 0) {
-  const b = { x, z, vx: Math.cos(a), vz: Math.sin(a), r }, step = 0.04;
+// 弾の通り道（ねらいの線・CPU 用）
+function trace(x, z, a, bnc, maxLen, r = 0) {
+  const b = { x, z, vx: Math.cos(a), vz: Math.sin(a), bnc, r }, pts = [[x, z]], step = 0.04;
   let len = 0, end = "len";
   if (solidAt(x, z)) return { pts: [[x, z], [x, z]], end: "wall", len: 0 };
   while (len < maxLen) {
+    const vx0 = b.vx, vz0 = b.vz;
     const ok = moveBullet(b, step, { crate: () => { end = "crate"; } });
     len += step;
-    if (!ok) { if (end !== "crate") end = "wall"; break; }
+    if (!ok) { pts.push([b.x, b.z]); if (end !== "crate") end = "wall"; return { pts, end, len }; }
+    if (b.vx !== vx0 || b.vz !== vz0) pts.push([b.x, b.z]);
   }
-  return { pts: [[x, z], [b.x, b.z]], end, len };
+  pts.push([b.x, b.z]); return { pts, end, len };
 }
-// ギムレットで壊せる壁のマス（その点のマスか、となりの # のマス。外わくは壊せない）
-function wallCellAt(x, z) {
-  let best = -1, bd = .75;
-  for (let j = tj(z) - 1; j <= tj(z) + 1; j++) for (let i = ti(x) - 1; i <= ti(x) + 1; i++) {
-    if (i <= 0 || j <= 0 || i >= MW - 1 || j >= MH - 1 || grid[j * MW + i] !== 1) continue;
-    const d = Math.hypot(wx(i) - x, wz(j) - z); if (d < bd) { bd = d; best = j * MW + i; }
-  }
-  return best;
-}
-function breakWallLocal(n) { if (grid[n] !== 1) return false; grid[n] = 0; buildRects(); return true; }
 function pathHits(pts, tanks, selfId, rad) {
   let acc = 0;
   for (let i = 0; i < pts.length - 1; i++) {
@@ -552,7 +530,7 @@ let practiceBots = Math.min(3, Math.max(1, +(store.get("tank-bots") || 1))), pra
 let practiceTeam = store.get("tank-team") === "1", practiceLv = clamp(+(store.get("tank-lv") || 1), 0, 2);
 host.cpuLv = practiceLv;
 // 画面に出すもの（ホストは G から写す。参加者はスナップショットから）
-const S = { tanks: new Map(), bullets: new Map(), pred: new Map(), phase: "none", round: 0, players: [], score: new Map(), ts: [0, 0], team: false, tleft: ROUND_TIME, countEnd: 0, lastCount: 0 };
+const S = { tanks: new Map(), bullets: new Map(), mines: new Map(), pred: new Map(), phase: "none", round: 0, players: [], score: new Map(), ts: [0, 0], team: false, tleft: ROUND_TIME, countEnd: 0, lastCount: 0 };
 
 // ================= 通信 =================
 function broadcast(m, local = true) {
@@ -568,8 +546,9 @@ function sendSnap() {
   if (!G) return;
   const m = {
     t: "s", tl: Math.max(0, Math.ceil(G.tleft)),
-    k: [...G.tanks.values()].map(t => [t.id, r2(t.x), r2(t.z), r2(t.h), r2(t.tu), t.alive ? 1 : 0, t.hp, synState(t)]),
+    k: [...G.tanks.values()].map(t => [t.id, r2(t.x), r2(t.z), r2(t.h), r2(t.tu), t.alive ? 1 : 0]),
     b: G.bullets.map(b => [b.id, b.ow, b.cid, b.ty, r2(b.x), r2(b.z), r2(b.vx), r2(b.vz)]),
+    m: G.mines.map(n => [n.id, n.ow, r2(n.x), r2(n.z), n.fuse - G.time < 2 ? 1 : 0]),
   };
   const s = JSON.stringify(m);
   for (const c of [...host.conns.values(), ...host.specs.values()]) {
@@ -664,11 +643,11 @@ function startRound() {
   const list = M.players.filter(p => !p.gone);
   for (const p of list) if (!p.bot) p.load = fixLoad(host.loads.get(p.id) || p.load);
   const sp = spawnFor(list, M.team);
-  G = { stage, phase: "count", t: 0, time: 0, tleft: ROUND_TIME, team: M.team, tanks: new Map(), bullets: [], nextB: 1, crDiff: new Map(), wallBroken: [], endAt: 0, over: false, snapK: 0 };
+  G = { stage, phase: "count", t: 0, time: 0, tleft: ROUND_TIME, team: M.team, tanks: new Map(), bullets: [], mines: [], nextB: 1, nextM: 1, crDiff: new Map(), endAt: 0, over: false, snapK: 0 };
   for (const p of list) {
     const [x, z] = sp.get(p.id) || [0, 0];
     const h = Math.atan2(-z, -x);
-    G.tanks.set(p.id, { id: p.id, name: p.name, bot: p.bot, tm: p.tm, color: p.color, load: p.load, st: tankStats(p.load), x, z, h, tu: h, vx: 0, vz: 0, alive: true, hp: TANK_HP, cdUntil: 0, synAt: 0, posQ: 0 });
+    G.tanks.set(p.id, { id: p.id, name: p.name, bot: p.bot, tm: p.tm, color: p.color, load: p.load, st: tankStats(p.load), x, z, h, tu: h, vx: 0, vz: 0, alive: true, cdUntil: 0, posQ: 0 });
   }
   broadcast(roundMsg());
 }
@@ -676,80 +655,52 @@ function roundMsg() {
   const M = host.match;
   return {
     t: "round", n: M.round, stage: G.stage, team: M.team, phase: G.phase, tl: Math.ceil(G.tleft),
-    cr: [...G.crDiff], wb: G.wallBroken,
-    ps: M.players.filter(p => !p.gone).map(p => { const t = G.tanks.get(p.id); return { id: p.id, name: p.name, bot: p.bot, tm: p.tm, color: p.color, load: p.load, x: r2(t.x), z: r2(t.z), h: r2(t.h), alive: t.alive ? 1 : 0, hp: t.hp }; }),
+    cr: [...G.crDiff],
+    ps: M.players.filter(p => !p.gone).map(p => { const t = G.tanks.get(p.id); return { id: p.id, name: p.name, bot: p.bot, tm: p.tm, color: p.color, load: p.load, x: r2(t.x), z: r2(t.z), h: r2(t.h), alive: t.alive ? 1 : 0 }; }),
     score: [...M.score], ts: M.teamScore,
   };
 }
-// 合成の状態: 0 = なし / 1 = 合成中 / 2 = 合成弾を撃てる
-const synState = t => !t.synAt ? 0 : G.time >= t.synAt ? 2 : 1;
-function hostSyn(id) {
-  if (!G || G.phase !== "play") return false;
-  const t = G.tanks.get(id);
-  if (!t || !t.alive || t.synAt || synOf(t.load) < 0) return false;
-  t.synAt = G.time + SYN_TIME;
-  return true;
-}
-// 撃つ: slot 0 / 1 = 選んだ弾、2 = 合成弾。path = バイパー系のえがいた道（ワールド座標の点）
-function hostFire(id, a, cid, slot, path) {
+function hostFire(id, a, cid) {
   if (!G || G.phase !== "play") return false;
   const t = G.tanks.get(id);
   if (!t || !t.alive || !Number.isFinite(a)) return false;
-  let kind;
-  if (slot === 2) { if (synState(t) !== 2) return false; kind = synOf(t.load); if (kind < 0) return false; }
-  else {
-    if (synState(t) === 1) return false;   // 合成中は撃てない
-    kind = slot ? t.load.g2 : t.load.g1;
-    if (G.time < t.cdUntil || G.bullets.filter(b => b.ow === id && b.ty === kind).length >= BUL[kind].max) return false;
-  }
-  const B = BUL[kind];
-  let pts = null;
-  if (B.path && Array.isArray(path)) {
-    pts = path.slice(0, 90).filter(p => Array.isArray(p) && Number.isFinite(+p[0]) && Number.isFinite(+p[1])).map(p => [clamp(+p[0], -MW / 2, MW / 2), clamp(+p[1], -MH / 2, MH / 2)]);
-    while (pts.length && Math.hypot(pts[0][0] - t.x, pts[0][1] - t.z) < TANK_R + .3) pts.shift();
-    if (pts.length) a = Math.atan2(pts[0][1] - t.z, pts[0][0] - t.x); else pts = null;
-  }
+  const gun = gunOf(t);
+  if (G.time < t.cdUntil) return false;
+  if (G.bullets.filter(b => b.ow === id).length >= gun.max) return false;
   const sx = t.x + Math.cos(a) * (TANK_R + 0.14), sz = t.z + Math.sin(a) * (TANK_R + 0.14);
-  if (solidAt(sx, sz) && !B.pierce) return false;   // 砲身が壁にめりこんでいるときは撃てない
-  if (slot === 2) t.synAt = 0; else t.cdUntil = G.time + B.cd;
-  t.tu = a;
-  G.bullets.push({ id: G.nextB++, ow: id, tm: t.tm, cid: cid || 0, ty: kind, x: sx, z: sz, vx: Math.cos(a) * B.spd, vz: Math.sin(a) * B.spd, age: 0, r: B.r, life: B.life || 0, home: B.home || 0, pierce: !!B.pierce, avoid: !!B.avoid, path: pts, pi: 0 });
-  if (id === myId || mode === "local") sfx(slot === 2 ? "breakGuard" : "shot");
+  if (solidAt(sx, sz)) return false;   // 砲身が壁にめりこんでいるときは撃てない
+  t.cdUntil = G.time + gun.cd; t.tu = a;
+  G.bullets.push({ id: G.nextB++, ow: id, tm: t.tm, cid: cid || 0, ty: t.load.g, x: sx, z: sz, vx: Math.cos(a) * gun.spd, vz: Math.sin(a) * gun.spd, bnc: gun.bnc, age: 0, r: gun.r, life: gun.life || 0, home: gun.home || 0 });
+  if (id === myId || mode === "local") sfx("shot");
+  return true;
+}
+function hostMine(id) {
+  if (!G || G.phase !== "play") return false;
+  const t = G.tanks.get(id);
+  if (!t || !t.alive) return false;
+  if (G.mines.filter(m => m.ow === id).length >= MINE_MAX) return false;
+  if (G.mines.some(m => Math.hypot(m.x - t.x, m.z - t.z) < 0.6)) return false;
+  G.mines.push({ id: G.nextM++, ow: id, x: t.x, z: t.z, t0: G.time, fuse: G.time + MINE_FUSE });
   return true;
 }
 function hitCrate(n, dmg) {
-  if (grid[n] !== 2 || dmg <= 0) return;
+  if (grid[n] !== 2) return;
   const hp = Math.max(0, crateHp[n] - dmg); setCrateLocal(n, hp); if (G) G.crDiff.set(n, hp);
   broadcast({ t: "ev", e: "crate", i: n, hp });
 }
-function breakWall(n) {
-  if (!breakWallLocal(n)) return;
-  G.wallBroken.push(n);
-  broadcast({ t: "ev", e: "wall", i: n });
-}
-function damageTank(t, dmg, by) {
-  if (!t.alive || dmg <= 0) return;
-  t.hp = Math.max(0, t.hp - dmg);
-  if (t.hp <= 0) killTank(t, by);
-  else broadcast({ t: "ev", e: "hit", id: t.id, hp: t.hp, by, x: r2(t.x), z: r2(t.z) });
-}
 function killTank(t, by) {
   if (!t.alive) return;
-  t.alive = false; t.hp = 0;
+  t.alive = false;
   broadcast({ t: "ev", e: "kill", id: t.id, by, x: r2(t.x), z: r2(t.z) });
   checkRoundEnd();
 }
-// 爆発（メテオラ系）: まわりの戦車（味方はのぞく。自分はふくむ）・木箱・弾に当たる
-function boomAt(b, dead) {
-  const B = BUL[b.ty], x = b.x, z = b.z;
-  broadcast({ t: "ev", e: "boom", x: r2(x), z: r2(z), r: B.br });
-  for (const t of G.tanks.values()) {
-    if (!t.alive || Math.hypot(t.x - x, t.z - z) > B.br + TANK_R * .5) continue;
-    if (G.team && t.tm === b.tm && t.id !== b.ow) continue;
-    damageTank(t, B.boom, b.ow);
-  }
-  for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) if (grid[j * MW + i] === 2 && Math.hypot(wx(i) - x, wz(j) - z) < B.br + .3) hitCrate(j * MW + i, 3);
-  for (const o of G.bullets) if (o !== b && Math.hypot(o.x - x, o.z - z) < B.br) dead.add(o);
+function explode(m) {
+  G.mines = G.mines.filter(q => q !== m);
+  broadcast({ t: "ev", e: "boom", x: r2(m.x), z: r2(m.z) });
+  for (const t of G.tanks.values()) if (t.alive && Math.hypot(t.x - m.x, t.z - m.z) < MINE_R + TANK_R * 0.4) killTank(t, m.ow);
+  for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) if (grid[j * MW + i] === 2 && Math.hypot(wx(i) - m.x, wz(j) - m.z) < MINE_R + 0.25) hitCrate(j * MW + i, 9);
+  G.bullets = G.bullets.filter(b => Math.hypot(b.x - m.x, b.z - m.z) > MINE_R);
+  for (const q of G.mines) if (Math.hypot(q.x - m.x, q.z - m.z) < MINE_R + 0.2) q.fuse = Math.min(q.fuse, G.time + 0.12);   // 近くの地雷もつられて爆発
 }
 function checkRoundEnd() {
   if (!G || G.phase !== "play" || G.endAt) return;
@@ -803,8 +754,8 @@ function hostHandle(id, m) {
     if (!t.alive || G.phase === "count" || ![m.x, m.z, m.h, m.tu].every(Number.isFinite)) return;
     t.x = clamp(m.x, -MW / 2, MW / 2); t.z = clamp(m.z, -MH / 2, MH / 2); t.h = m.h; t.tu = m.tu;
     t.vx = Number.isFinite(m.vx) ? m.vx : 0; t.vz = Number.isFinite(m.vz) ? m.vz : 0;
-  } else if (m.t === "f") hostFire(id, +m.a, m.c | 0, clamp(m.s | 0, 0, 2), m.p);
-  else if (m.t === "syn") hostSyn(id);
+  } else if (m.t === "f") hostFire(id, +m.a, m.c | 0);
+  else if (m.t === "mn") hostMine(id);
 }
 function hostDrop(id) {
   if (host.specs.has(id)) { host.specs.delete(id); if (!host.playing) hostLobby(); return; }
@@ -850,40 +801,31 @@ function hostTick(dt) {
   }
   if (!play) return;
   // 弾
-  const hooks = {
-    crate: (n, b) => hitCrate(n, BUL[b.ty].boom ? 0 : BUL[b.ty].dmg || 0),
-    wall: (x, z) => { const n = wallCellAt(x, z); if (n < 0) return false; breakWall(n); return true; },
-  };
+  const hooks = { crate: n => hitCrate(n, 1), bounce: () => bounceSfx() };
   const dead = new Set();
   for (const b of G.bullets) {
-    if (dead.has(b)) continue;
     b.age += dt;
-    const B = BUL[b.ty], sp = Math.hypot(b.vx, b.vz);
     if (b.life && b.age > b.life) { dead.add(b); continue; }
-    const steer = na => { b.vx = Math.cos(na) * sp; b.vz = Math.sin(na) * sp; };
-    if (b.path) {   // えがいた道をなぞる（道が終わったら、そのまままっすぐ）
-      while (b.pi < b.path.length && Math.hypot(b.path[b.pi][0] - b.x, b.path[b.pi][1] - b.z) < Math.max(.15, sp * dt * 1.5)) b.pi++;
-      if (b.pi < b.path.length) steer(Math.atan2(b.path[b.pi][1] - b.z, b.path[b.pi][0] - b.x));
-    } else if (b.home && b.age > 0.25) {
+    if (b.home && b.age > 0.25) {
       let best = null, bd = 1e9;
       for (const t of all) { if (!t.alive || t.id === b.ow || (G.team && t.tm === b.tm)) continue; const d = Math.hypot(t.x - b.x, t.z - b.z); if (d < bd) { bd = d; best = t; } }
-      if (best) { const cur = Math.atan2(b.vz, b.vx), want = Math.atan2(best.z - b.z, best.x - b.x); steer(cur + clamp(angDiff(want, cur), -b.home * dt, b.home * dt)); }
+      if (best) {
+        const sp = Math.hypot(b.vx, b.vz), cur = Math.atan2(b.vz, b.vx), want = Math.atan2(best.z - b.z, best.x - b.x);
+        const na = cur + clamp(angDiff(want, cur), -b.home * dt, b.home * dt);
+        b.vx = Math.cos(na) * sp; b.vz = Math.sin(na) * sp;
+      }
     }
-    if (b.avoid) {   // ホーネット: 前に壁があればよける
-      const cur = Math.atan2(b.vz, b.vx), look = .75;
-      if (solidAt(b.x + Math.cos(cur) * look, b.z + Math.sin(cur) * look))
-        for (const d of [.4, -.4, .8, -.8, 1.2, -1.2, 1.7, -1.7]) if (!solidAt(b.x + Math.cos(cur + d) * look, b.z + Math.sin(cur + d) * look)) { steer(cur + clamp(d, -7 * dt, 7 * dt)); break; }
-    }
-    if (!moveBullet(b, dt, hooks)) { dead.add(b); if (B.boom) boomAt(b, dead); continue; }
+    if (!moveBullet(b, dt, hooks)) { dead.add(b); continue; }
     for (const t of all) {
       if (!t.alive || (t.id === b.ow && b.age < 0.15)) continue;
       if (Math.hypot(t.x - b.x, t.z - b.z) < TANK_R + b.r) {
         dead.add(b);
-        if (B.boom) boomAt(b, dead);
-        else if (!(G.team && t.tm === b.tm && t.id !== b.ow)) damageTank(t, B.dmg, b.ow);   // チーム戦: 味方の弾には当たらない（自分の弾は当たる）
+        if (!(G.team && t.tm === b.tm && t.id !== b.ow)) killTank(t, b.ow);   // チーム戦: 味方の弾には当たらない（自分の弾は当たる）
         break;
       }
     }
+    if (dead.has(b)) continue;
+    for (const m of G.mines) if (Math.hypot(m.x - b.x, m.z - b.z) < 0.22 + b.r) { dead.add(b); m.fuse = Math.min(m.fuse, G.time); break; }
   }
   // 弾どうし: 威力に関係なく両方消える
   for (let i = 0; i < G.bullets.length; i++) {
@@ -894,13 +836,23 @@ function hostTick(dt) {
     }
   }
   if (dead.size) G.bullets = G.bullets.filter(b => !dead.has(b));
+  // 地雷
+  for (const m of [...G.mines]) {
+    if (!G.mines.includes(m)) continue;
+    let go = G.time >= m.fuse;
+    if (!go) for (const t of all) {
+      if (!t.alive || Math.hypot(t.x - m.x, t.z - m.z) > MINE_TRIG) continue;
+      if (G.time - m.t0 > (t.id === m.ow ? MINE_SELF : MINE_ARM)) { go = true; break; }
+    }
+    if (go) explode(m);
+  }
 }
 
 // ================= CPU =================
 const LV = [
-  { name: "よわい", think: .5, err: .17, fire: .5, dodge: .3, syn: .05, path: .4 },
-  { name: "ふつう", think: .32, err: .08, fire: .75, dodge: .65, syn: .12, path: .8 },
-  { name: "つよい", think: .2, err: .03, fire: .95, dodge: .92, syn: .2, path: 1 },
+  { name: "よわい", think: .5, err: .17, fire: .5, dodge: .3, mine: .08, sweep: 0 },
+  { name: "ふつう", think: .32, err: .08, fire: .75, dodge: .65, mine: .2, sweep: 40 },
+  { name: "つよい", think: .18, err: .03, fire: .95, dodge: .92, mine: .3, sweep: 72 },
 ];
 function botUpdate(t, dt) {
   const ai = t.ai || (t.ai = { next: Math.random() * .4, mv: [0, 0], aim: t.tu, dodgeT: 0, dv: [0, 0], fleeT: 0, flee: [0, 0], side: Math.random() < .5 ? 1 : -1, sideT: 0 });
@@ -912,50 +864,34 @@ function botUpdate(t, dt) {
   if (ai.fleeT > 0) return { mx: ai.flee[0], mz: ai.flee[1] };
   return { mx: ai.mv[0], mz: ai.mv[1] };
 }
-// CPU が撃てる弾: slot 0 / 1（ふつうの弾）、2（合成弾ができているとき）
-function slotKind(t, slot) { return slot === 2 ? synOf(t.load) : slot ? t.load.g2 : t.load.g1; }
-function canFireSlot(t, slot) {
-  if (slot === 2) return synState(t) === 2;
-  const k = slotKind(t, slot);
-  return synState(t) !== 1 && G.time >= t.cdUntil && G.bullets.filter(b => b.ow === t.id && b.ty === k).length < BUL[k].max;
-}
-// 1 つの弾で、だれかに当てられる撃ち方をさがす → { a, path } か null
-function shotFor(t, kind, foes, all, L) {
-  const B = BUL[kind], muz = a => [t.x + Math.cos(a) * (TANK_R + .14), t.z + Math.sin(a) * (TANK_R + .14)];
-  const near = foes.slice().sort((p, q) => Math.hypot(p.x - t.x, p.z - t.z) - Math.hypot(q.x - t.x, q.z - t.z));
-  if (B.path) {   // バイパー系: 道さがしの道をそのまま弾道にする
-    if (Math.random() > L.path) return null;
-    if (navDirty) buildNav();
-    for (const o of near) {
-      const p = bfs(nodeAt(t.x, t.z, navFree), nodeAt(o.x, o.z, navFree), navFree, new Set());
-      if (!p || p.length < 2) continue;
-      const pts = p.filter((n, i) => i % 2 === 0 || i === p.length - 1).map(n => [nodeX(n % NX), nodeZ(Math.floor(n / NX))]);
-      pts.push([o.x, o.z]);
-      let len = 0; for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-      if (len > 16) continue;
-      while (pts.length > 1 && Math.hypot(pts[0][0] - t.x, pts[0][1] - t.z) < TANK_R + .3) pts.shift();
-      return { a: Math.atan2(pts[0][1] - t.z, pts[0][0] - t.x), path: pts };
-    }
-    return null;
-  }
-  if (B.home) {   // 追尾弾: 近い相手のほうへ。目の前が壁でなければ撃つ
-    const o = near[0], d = Math.hypot(o.x - t.x, o.z - t.z), a = Math.atan2(o.z - t.z, o.x - t.x);
-    if (d < 10 && lineClear(t.x, t.z, t.x + Math.cos(a) * 1.2, t.z + Math.sin(a) * 1.2)) return { a: a + (Math.random() * 2 - 1) * .3 };
-    return null;
-  }
-  for (const o of near) {   // まっすぐ飛ぶ弾（少し先をねらう）
-    const d = Math.hypot(o.x - t.x, o.z - t.z), lead = d / B.spd * .8;
+const canFire = t => G.time >= t.cdUntil && G.bullets.filter(b => b.ow === t.id).length < gunOf(t).max;
+// 当てられる撃ち方をさがす（まっすぐ → ホーミング → 跳ね返り）。見つからなければ null
+function findShot(t, foes, all, gun, L) {
+  const reach = gun.life ? gun.spd * gun.life : 24;
+  const test = (a, far) => {
+    const sx = t.x + Math.cos(a) * (TANK_R + .14), sz = t.z + Math.sin(a) * (TANK_R + .14);
+    const r = trace(sx, sz, a, gun.bnc, far || reach, gun.r);
+    const h = pathHits(r.pts, all, t.id, TANK_R + gun.r + .03);
+    if (!h || h.t.id === t.id || (G.team && h.t.tm === t.tm)) return null;
+    return h.d;
+  };
+  let best = null, bd = 1e9;
+  for (const o of foes) {
+    const d = Math.hypot(o.x - t.x, o.z - t.z), lead = d / gun.spd * .8;
     const a = Math.atan2(o.z + (o.vz || 0) * lead - t.z, o.x + (o.vx || 0) * lead - t.x);
-    if (B.pierce) { if (d < 14) return { a }; continue; }
-    const [sx, sz] = muz(a), r = trace(sx, sz, a, 20, B.r);
-    const h = pathHits(r.pts, all, t.id, TANK_R + B.r + .03);
-    if (h && h.t.id !== t.id && !(G.team && h.t.tm === t.tm)) return { a };
-    if (B.boom) {   // 炸裂弾: 相手の近くの壁に当てても爆風が届く
-      const [ex, ez] = r.pts[1];
-      if (Math.hypot(ex - o.x, ez - o.z) < B.br * .9 && Math.hypot(ex - t.x, ez - t.z) > B.br + .6) return { a };
-    }
+    const r = test(a); if (r != null && r < bd) { bd = r; best = a; }
   }
-  return null;
+  if (best != null) return best;
+  if (gun.home) {
+    const o = foes.reduce((a, b) => Math.hypot(b.x - t.x, b.z - t.z) < Math.hypot(a.x - t.x, a.z - t.z) ? b : a);
+    const a = Math.atan2(o.z - t.z, o.x - t.x);
+    if (Math.hypot(o.x - t.x, o.z - t.z) < 10 && lineClear(t.x, t.z, t.x + Math.cos(a) * 1.4, t.z + Math.sin(a) * 1.4)) return a;
+  }
+  if (L.sweep && gun.bnc > 0) {
+    const n = L.sweep, off = Math.random() * TAU / n;
+    for (let k = 0; k < n; k++) { const a = off + k * TAU / n, r = test(a, Math.min(reach, 15)); if (r != null && r < bd) { bd = r; best = a; } }
+  }
+  return best;
 }
 const DIR8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 function bfs(s, g, mask, blocked) {
@@ -996,22 +932,25 @@ function botPlan(t, ai, L) {
       }
     }
   }
+  // 2. 地雷からはなれる
+  for (const m of G.mines) {
+    const d = Math.hypot(t.x - m.x, t.z - m.z);
+    if (d < MINE_R + .5 && (m.ow !== t.id || G.time - m.t0 > .3 || m.fuse - G.time < 2.5)) { const l = d || 1; ai.flee = [(t.x - m.x) / l, (t.z - m.z) / l]; ai.fleeT = .5; break; }
+  }
   const near = foes.reduce((a, o) => Math.hypot(o.x - t.x, o.z - t.z) < Math.hypot(a.x - t.x, a.z - t.z) ? o : a);
   const dist = Math.hypot(near.x - t.x, near.z - t.z);
-  // 2. 撃つ（合成弾ができていればそれを優先）
-  if (Math.random() < L.fire) {
-    let fired = false;
-    for (const slot of [2, 0, 1].filter(s => canFireSlot(t, s))) {
-      const s = shotFor(t, slotKind(t, slot), foes, all, L);
-      if (!s) continue;
-      const a = BUL[slotKind(t, slot)].path ? s.a : s.a + (Math.random() * 2 - 1) * L.err;
-      if (hostFire(t.id, a, 0, slot, s.path)) { t.tu = a; ai.aim = a; fired = true; break; }
-    }
-    if (!fired) ai.aim = Math.atan2(near.z - t.z, near.x - t.x);
+  // 3. 撃つ
+  const gun = gunOf(t);
+  if (canFire(t) && Math.random() < L.fire) {
+    const a0 = findShot(t, foes, all, gun, L);
+    if (a0 != null) { const a = a0 + (Math.random() * 2 - 1) * L.err; t.tu = a; ai.aim = a; hostFire(t.id, a); }
+    else ai.aim = Math.atan2(near.z - t.z, near.x - t.x);
   }
-  // 3. 合成（相手が近くないときに、ときどき）
-  if (synState(t) === 0 && synOf(t.load) >= 0 && dist > 3 && ai.dodgeT <= 0 && Math.random() < L.syn) hostSyn(t.id);
-  // 4. 動く
+  // 4. 地雷を置いて逃げる
+  if (dist < 2.6 && Math.random() < L.mine && hostMine(t.id)) {
+    ai.flee = [(t.x - near.x) / (dist || 1), (t.z - near.z) / (dist || 1)]; ai.fleeT = 1.0;
+  }
+  // 5. 動く
   const los = lineClear(t.x, t.z, near.x, near.z);
   if (los && dist < 5) {
     if (ai.sideT <= 0) { ai.side = Math.random() < .5 ? 1 : -1; ai.sideT = .8 + Math.random(); }
@@ -1023,6 +962,7 @@ function botPlan(t, ai, L) {
   }
   if (navDirty) buildNav();
   const blocked = new Set();
+  for (const m of G.mines) for (let b = 0; b < NZ; b++) for (let a = 0; a < NX; a++) if (Math.hypot(nodeX(a) - m.x, nodeZ(b) - m.z) < MINE_R) blocked.add(b * NX + a);
   let path = bfs(nodeAt(t.x, t.z, navFree), nodeAt(near.x, near.z, navFree), navFree, blocked);
   if (!path) {
     path = bfs(nodeAt(t.x, t.z, navWall), nodeAt(near.x, near.z, navWall), navWall, blocked);
@@ -1034,8 +974,7 @@ function botPlan(t, ai, L) {
         for (const r of crateRect.values()) { if (r.dead) continue; const d = Math.hypot((r.x0 + r.x1) / 2 - px, (r.z0 + r.z1) / 2 - pz); if (d < cd) { cd = d; cr = r; } }
         if (cr) {
           const cx = (cr.x0 + cr.x1) / 2, cz = (cr.z0 + cr.z1) / 2, a = Math.atan2(cz - t.z, cx - t.x);
-          const sl = [0, 1].find(s => canFireSlot(t, s) && !BUL[slotKind(t, s)].home && !BUL[slotKind(t, s)].path);
-          if (sl != null && lineClear(t.x, t.z, cx - Math.cos(a) * .55, cz - Math.sin(a) * .55) && hostFire(t.id, a, 0, sl)) { t.tu = a; ai.aim = a; }
+          if (canFire(t) && lineClear(t.x, t.z, cx - Math.cos(a) * .55, cz - Math.sin(a) * .55) && hostFire(t.id, a)) { t.tu = a; ai.aim = a; }
         }
         path = path.slice(0, k);
       }
@@ -1089,31 +1028,27 @@ function beginRoundView(m) {
   if (!$("garage").classList.contains("hidden")) { $("garage").classList.add("hidden"); gBack = null; }
   loadMap(m.stage);
   for (const [i, hp] of m.cr || []) setCrateLocal(i, hp);
-  if (m.wb && m.wb.length) { for (const n of m.wb) grid[n] = 0; buildRects(); }
   buildStage();
   clearActors();
   S.players = m.ps; S.team = !!m.team; S.round = m.n; S.score = new Map(m.score || []); S.ts = m.ts || [0, 0];
   S.phase = m.phase || "count"; S.tleft = m.tl || ROUND_TIME;
   for (const p of m.ps) {
     const load = fixLoad(p.load);
-    const t = { id: p.id, name: p.name, tm: p.tm, color: p.color, load, st: tankStats(load), x: p.x, z: p.z, h: p.h, tu: p.h, tx: p.x, tz: p.z, th: p.h, ttu: p.h, vx: 0, vz: 0, alive: !!p.alive, hp: p.hp != null ? p.hp : TANK_HP, syn: 0, roll: 0 };
+    const t = { id: p.id, name: p.name, tm: p.tm, color: p.color, load, st: tankStats(load), x: p.x, z: p.z, h: p.h, tu: p.h, tx: p.x, tz: p.z, th: p.h, ttu: p.h, vx: 0, vz: 0, alive: !!p.alive, roll: 0 };
     t.mesh = makeTank(load, p.color); t.mesh.root.scale.setScalar(1.15); scene.add(t.mesh.root);
-    t.bar = makeHpBar(); scene.add(t.bar.g);
     S.tanks.set(p.id, t);
   }
   const me = S.tanks.get(myId);
   if (me && !spectating) IN.aimA = me.h;
-  IN.slot = 0; IN.synLocal = 0; IN.draw = null; updWeaponBtns();
+  updWeaponBtns();
   if (S.phase === "count") { S.countEnd = performance.now() + COUNT_SEC * 1000; S.lastCount = 0; }
   $("feed").innerHTML = "";
   updScore(); renderUI();
 }
 function applySnap(m) {
   S.tleft = m.tl;
-  for (const [id, x, z, h, tu, al, hp, syn] of m.k) {
+  for (const [id, x, z, h, tu, al] of m.k) {
     const t = S.tanks.get(id); if (!t) continue;
-    t.hp = hp;
-    if (!(t.synHold > performance.now()) && !(id === myId && t.syn === 1 && syn === 0 && performance.now() - IN.synLocal < 400)) t.syn = syn;   // 自分の操作の直後は、古い知らせで戻さない
     if (id === myId && !spectating) continue;
     t.tx = x; t.tz = z; t.th = h; t.ttu = tu; t.alive = !!al;
   }
@@ -1125,9 +1060,13 @@ function applySnap(m) {
       if (ow === myId && cid && S.pred.has(cid)) { const p = S.pred.get(cid); S.pred.delete(cid); removeBulletMesh(p); }
       else if (ow !== myId) sfx("shot");
       b = { id, ow, ty, x, z, vx, vz }; b.mesh = makeBulletMesh(b); S.bullets.set(id, b);
-    } else { b.x = x; b.z = z; b.vx = vx; b.vz = vz; }
+    } else {
+      if (Math.sign(vx) !== Math.sign(b.vx) || Math.sign(vz) !== Math.sign(b.vz)) { if (!PARTS.g[ty].home) bounceSfx(); }
+      b.x = x; b.z = z; b.vx = vx; b.vz = vz;
+    }
   }
-  for (const [id, b] of S.bullets) if (!seen.has(id)) { puff(b.x, b.z, BUL[b.ty].col); removeBulletMesh(b); S.bullets.delete(id); }
+  for (const [id, b] of S.bullets) if (!seen.has(id)) { puff(b.x, b.z, 0xfff1c0); removeBulletMesh(b); S.bullets.delete(id); }
+  syncMines((m.m || []).map(([id, ow, x, z, bl]) => ({ id, ow, x, z, bl })));
 }
 function applyEv(m) {
   if (m.e === "kill") {
@@ -1140,15 +1079,8 @@ function applyEv(m) {
     const by = S.tanks.get(m.by), who = t.name;
     addFeed(m.by == null ? `${esc(who)} がいなくなった` : m.by === m.id ? `${esc(who)} が自爆` : `${esc(by ? by.name : "?")} → ${esc(who)}`);
     updScore();
-  } else if (m.e === "hit") {
-    const t = S.tanks.get(m.id); if (!t) return;
-    t.hp = m.hp; t.hitT = performance.now();
-    spark(m.x, m.z);
-    if (m.id === myId && !spectating) { sfx("damage"); vibrate(80); } else sfx("knock");
   } else if (m.e === "boom") {
-    explosion(m.x, m.z, (m.r || 1.1) * 1.05, 0xffa030); sfx("hit"); vibrate(40);
-  } else if (m.e === "wall") {
-    breakWallLocal(m.i); buildStage(); debris(wx(m.i % MW), wz(Math.floor(m.i / MW)), 0xd8c9a8); sfx("breakGuard");
+    explosion(m.x, m.z, MINE_R * 1.05, 0xffa030); sfx("hit"); sfx("breakGuard"); vibrate(60);
   } else if (m.e === "crate") {
     setCrateLocal(m.i, m.hp);
     const o = crateMeshes.get(m.i);
@@ -1415,30 +1347,37 @@ function makeTank(load, color) {
   const wheels = buildTires(PARTS.w[load.w].id, body, color);
   const top = buildBody(PARTS.b[load.b].id, body, color);
   const tur = new THREE.Group(); tur.position.y = top; root.add(tur);
-  buildTurret(BUL[load.g1].tur, tur, color);
+  buildTurret(PARTS.g[load.g].id, tur, color);
   return { root, tur, wheels };
 }
-// HP の目もり（戦車の上の 3 つの四角）
-function makeHpBar() {
-  const g = new THREE.Group(), pips = [];
-  for (let i = 0; i < TANK_HP; i++) {
-    const p = new THREE.Mesh(geo("pip", () => new THREE.PlaneGeometry(.26, .1)), new THREE.MeshBasicMaterial({ color: 0x6fe06f, depthTest: false })); p.renderOrder = 10; p.position.x = (i - (TANK_HP - 1) / 2) * .3; g.add(p); pips.push(p);
-  }
-  return { g, pips };
-}
 
-// ---------- 弾・演出 ----------
+// ---------- 弾・地雷・演出 ----------
 function makeBulletMesh(b) {
-  const B = BUL[b.ty] || BUL[0], g = new THREE.Group(), rr = Math.max(.12, B.r * 1.5);
-  const s = part(geo("bs" + rr, () => new THREE.SphereGeometry(rr, 12, 8)), mat(B.col, "b"), g, 0, .32, 0); s.castShadow = false;
-  if (b.ty >= 4) { const h = new THREE.Mesh(geo("bh" + rr, () => new THREE.SphereGeometry(rr * 1.7, 12, 8)), new THREE.MeshBasicMaterial({ color: B.col, transparent: true, opacity: .3 })); h.position.y = .32; g.add(h); }   // 合成弾は光る
-  const t = S.tanks.get(b.ow);
-  if (t) { const ring = new THREE.Mesh(geo("bring" + rr, () => new THREE.TorusGeometry(rr * 1.05, .02, 6, 16)), mat(t.color, "b")); ring.rotation.x = PI / 2; ring.position.y = .32; g.add(ring); }   // だれの弾か: まわりの輪の色
-  const sh = new THREE.Mesh(geo("bsh" + rr, () => new THREE.CircleGeometry(rr * .95, 12)), MAT.shadow); sh.rotation.x = -PI / 2; sh.position.y = .015; g.add(sh);
+  const gun = PARTS.g[b.ty] || PARTS.g[0], t = S.tanks.get(b.ow), col = t ? lighten(t.color, .55) : 0xffffff;
+  const g = new THREE.Group();
+  const s = part(geo("bs" + gun.r, () => new THREE.SphereGeometry(Math.max(.13, gun.r * 1.5), 12, 8)), mat(col, "b"), g, 0, .32, 0); s.castShadow = false;
+  const sh = new THREE.Mesh(geo("bsh" + gun.r, () => new THREE.CircleGeometry(Math.max(.12, gun.r * 1.4), 12)), MAT.shadow); sh.rotation.x = -PI / 2; sh.position.y = .015; g.add(sh);
   g.position.set(b.x, 0, b.z); scene.add(g);
   return g;
 }
 function removeBulletMesh(b) { if (b.mesh) scene.remove(b.mesh); b.mesh = null; }
+function syncMines(list) {
+  const seen = new Set();
+  for (const m of list) {
+    seen.add(m.id);
+    let o = S.mines.get(m.id);
+    if (!o) {
+      o = { ...m, mesh: new THREE.Group() };
+      part(cyl(.17, .19, .06, 18), mat(0xe8c020), o.mesh, 0, .03, 0);
+      part(cyl(.1, .1, .02, 14), mat(0x222222), o.mesh, 0, .065, 0);
+      o.lamp = part(geo("lamp", () => new THREE.SphereGeometry(.04, 8, 6)), new THREE.MeshBasicMaterial({ color: 0x661010 }), o.mesh, 0, .08, 0);
+      o.mesh.position.set(m.x, 0, m.z); scene.add(o.mesh); S.mines.set(m.id, o);
+      sfx("place");
+    }
+    o.bl = m.bl;
+  }
+  for (const [id, o] of S.mines) if (!seen.has(id)) { scene.remove(o.mesh); S.mines.delete(id); }
+}
 const fxList = [];
 function addFx(obj, life, upd) { scene.add(obj); fxList.push({ obj, t: 0, life, upd }); }
 function explosion(x, z, size, col) {
@@ -1477,32 +1416,29 @@ function scorch(x, z) {
   xg.position.set(x, 0, z); scene.add(xg); scorchList.push(xg);
 }
 function clearActors() {
-  for (const t of S.tanks.values()) { if (t.mesh) scene.remove(t.mesh.root); if (t.bar) scene.remove(t.bar.g); }
+  for (const t of S.tanks.values()) if (t.mesh) scene.remove(t.mesh.root);
   for (const b of S.bullets.values()) removeBulletMesh(b);
   for (const b of S.pred.values()) removeBulletMesh(b);
+  for (const m of S.mines.values()) scene.remove(m.mesh);
   for (const s of scorchList) scene.remove(s);
   for (const f of fxList) scene.remove(f.obj);
-  S.tanks.clear(); S.bullets.clear(); S.pred.clear(); scorchList.length = 0; fxList.length = 0;
+  S.tanks.clear(); S.bullets.clear(); S.pred.clear(); S.mines.clear(); scorchList.length = 0; fxList.length = 0;
   aimLine.visible = false;
 }
 function clearGame() { clearActors(); G = null; S.phase = "none"; S.prep = null; overInfo = null; roundInfo = null; }
 
-// ねらいの線（まっすぐの弾は最初に当たる所まで。バイパー系はえがいている道）
-const AIM_MAX = 100;
+// ねらいの線（自分の戦車から、跳ね返りもふくめて）
+const AIM_MAX = 16;
 const aimGeo = new THREE.BufferGeometry(); aimGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * AIM_MAX), 3));
 const aimLine = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: .22, gapSize: .12, depthTest: false }));
 aimLine.renderOrder = 9;
 aimLine.visible = false; aimLine.frustumCulled = false; scene.add(aimLine);
-function setAimPts(pts, col) {
-  const pos = aimGeo.attributes.position, n = Math.min(AIM_MAX, pts.length);
-  for (let i = 0; i < n; i++) pos.setXYZ(i, pts[i][0], .32, pts[i][1]);
-  pos.needsUpdate = true; aimGeo.setDrawRange(0, n); aimLine.computeLineDistances(); aimLine.material.color.setHex(col); aimLine.visible = n >= 2;
-}
 function updAimLine(t) {
-  const B = BUL[curKind(t)], a = IN.aimA, sx = t.x + Math.cos(a) * (TANK_R + .14), sz = t.z + Math.sin(a) * (TANK_R + .14);
-  if (B.path && IN.draw) { setAimPts([[t.x, t.z], ...IN.draw.pts], B.col); return; }
-  const r = trace(sx, sz, a, B.home ? 2.5 : 8, B.r);
-  setAimPts(r.pts, B.col);
+  const gun = gunOf(t), a = IN.aimA, sx = t.x + Math.cos(a) * (TANK_R + .14), sz = t.z + Math.sin(a) * (TANK_R + .14);
+  const r = trace(sx, sz, a, gun.bnc, gun.life ? Math.min(gun.spd * gun.life, 8) : 8, gun.r);
+  const pos = aimGeo.attributes.position, n = Math.min(AIM_MAX, r.pts.length);
+  for (let i = 0; i < n; i++) pos.setXYZ(i, r.pts[i][0], .32, r.pts[i][1]);
+  pos.needsUpdate = true; aimGeo.setDrawRange(0, n); aimLine.computeLineDistances(); aimLine.visible = n >= 2;
 }
 
 // ---------- カメラ（ななめ上から。たて画面ではステージを 90° まわして大きく見せる） ----------
@@ -1542,8 +1478,7 @@ addEventListener("orientationchange", () => { for (const ms of [100, 400, 900]) 
 // ================= 入力 =================
 // スマホ: 左のスティック = 移動、右のスティック = ねらう（はなすと発射。軽くタップでも今の向きに発射）。場所は決まっていて、配置を変えられる
 // PC: WASD / 矢印で移動、マウスでねらってクリックで発射、1 / 2 / Q で弾、スペース・右クリック・E で合成
-// slot: 今の弾（0 / 1、2 = 合成弾）。draw: バイパー系でえがいている道 { id, pts }
-const IN = { keys: new Set(), mouse: false, mx: 0, my: 0, aimA: 0, tl: null, tr: null, aiming: false, slot: 0, prevSlot: 0, synLocal: 0, draw: null };
+const IN = { keys: new Set(), mouse: false, mx: 0, my: 0, aimA: 0, tl: null, tr: null, aiming: false };
 const STICK = 60;
 const ray = new THREE.Raycaster(), aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.3), hitP = new THREE.Vector3();
 const screenToWorld = (sx, sy) => [camR.x * sx - camU.x * sy, camR.z * sx - camU.z * sy];
@@ -1563,80 +1498,33 @@ function localMove() {
 const myTank = () => (mode === "client" ? S.tanks.get(myId) : G && G.tanks.get(myId));
 const canPlay = () => screen === "game" && !spectating && S.phase === "play" && !overInfo && $("garage").classList.contains("hidden");
 let predCid = 1, localCd = 0;
-// 自分の合成の状態（0 なし / 1 合成中 / 2 撃てる）
-function mySyn() { const t = myTank(); if (!t) return 0; return mode === "client" ? (t.syn || 0) : synState(t); }
-function curSlot() { return IN.slot === 2 ? (mySyn() === 2 ? 2 : IN.prevSlot) : IN.slot; }
-function curKind(t) { return slotKind(t, curSlot()); }
-function fireLocal(path) {
+function fireLocal() {
   if (!canPlay()) return;
   const t = myTank(); if (!t || !t.alive) return;
-  const slot = curSlot(), kind = slotKind(t, slot), B = BUL[kind];
-  const p = B.path && path && path.length > 1 ? path.map(q => [r2(q[0]), r2(q[1])]) : null;
-  let a = IN.aimA;
-  if (p) a = Math.atan2(p[0][1] - t.z, p[0][0] - t.x);
-  const done = () => { if (slot === 2) { IN.slot = IN.prevSlot; if (mode === "client") { t.syn = 0; t.synHold = performance.now() + 500; } } };
-  if (mode !== "client") { if (hostFire(myId, a, 0, slot, p)) done(); return; }
-  const now = performance.now() / 1000;
-  if (slot !== 2) {
-    if (mySyn() === 1 || now < localCd) return;
-    const mine = [...S.bullets.values()].filter(b => b.ow === myId && b.ty === kind).length + [...S.pred.values()].filter(b => b.ty === kind).length;
-    if (mine >= B.max) return;
-  }
+  const a = IN.aimA;
+  if (mode !== "client") { hostFire(myId, a); return; }
+  const gun = gunOf(t), now = performance.now() / 1000;
+  const mine = [...S.bullets.values()].filter(b => b.ow === myId).length + S.pred.size;
+  if (now < localCd || mine >= gun.max) return;
   const sx = t.x + Math.cos(a) * (TANK_R + .14), sz = t.z + Math.sin(a) * (TANK_R + .14);
-  if (solidAt(sx, sz) && !B.pierce) return;
-  if (slot !== 2) localCd = now + B.cd;
+  if (solidAt(sx, sz)) return;
+  localCd = now + gun.cd;
   const c = predCid++;
-  sendHost({ t: "f", a: r2(a), c, s: slot, p });
-  sfx(slot === 2 ? "breakGuard" : "shot");
-  // まっすぐ飛ぶ弾は、すぐ見えるように先に出しておく（ホストから届いたら入れかえる）
-  if (!B.path && !B.home && !B.pierce) {
-    const b = { id: -c, ow: myId, ty: kind, x: sx, z: sz, vx: Math.cos(a) * B.spd, vz: Math.sin(a) * B.spd, r: B.r, age: 0 };
-    b.mesh = makeBulletMesh(b); S.pred.set(c, b);
-  }
-  done();
+  sendHost({ t: "f", a: r2(a), c });
+  // 自分の弾はすぐ見えるように先に出しておく（ホストから届いたら入れかえる）
+  const b = { id: -c, ow: myId, ty: t.load.g, x: sx, z: sz, vx: Math.cos(a) * gun.spd, vz: Math.sin(a) * gun.spd, bnc: gun.bnc, r: gun.r, age: 0 };
+  b.mesh = makeBulletMesh(b); S.pred.set(c, b); sfx("shot");
 }
-// 合成ボタン: 合成していなければ合成を始める。できていれば合成弾を選ぶ
-function synLocal() {
+function mineLocal() {
   if (!canPlay()) return;
-  const t = myTank(); if (!t || !t.alive || synOf(t.load) < 0) return;
-  const s = mySyn();
-  if (s === 2) { if (IN.slot !== 2) { IN.prevSlot = IN.slot; IN.slot = 2; } sfx("select"); return; }
-  if (s === 1) return;
-  if (mode === "client") { sendHost({ t: "syn" }); t.syn = 1; } else if (!hostSyn(myId)) return;
-  IN.synLocal = performance.now(); sfx("charge");
-}
-function selectSlot(k) { if (k === IN.slot) return; if (k === 2) { synLocal(); return; } IN.slot = k; IN.draw = null; sfx("select"); }
-// バイパー系: ステージの上に指（マウス）でえがく
-function groundAt(cx, cy) {
-  ray.setFromCamera({ x: cx / VW * 2 - 1, y: -(cy / VH) * 2 + 1 }, camera);
-  return ray.ray.intersectPlane(aimPlane, hitP) ? [hitP.x, hitP.z] : null;
-}
-const PATH_MAX = 22;
-function drawStart(id, cx, cy) { const p = groundAt(cx, cy); IN.draw = { id, pts: p ? [p] : [], len: 0 }; }
-function drawMove(cx, cy) {
-  const d = IN.draw, p = groundAt(cx, cy); if (!d || !p) return;
-  const t = myTank(), last = d.pts[d.pts.length - 1] || (t ? [t.x, t.z] : p);
-  const step = Math.hypot(p[0] - last[0], p[1] - last[1]);
-  if (step < .25 || d.len + step > PATH_MAX || d.pts.length >= AIM_MAX - 2) return;
-  d.pts.push(p); d.len += step;
-  const t2 = myTank(); if (t2 && d.pts.length === 2) IN.aimA = Math.atan2(d.pts[0][1] - t2.z, d.pts[0][0] - t2.x);
-}
-function drawEnd(fire) {
-  const d = IN.draw; IN.draw = null; if (!d || !fire) return;
-  if (d.pts.length >= 2) fireLocal(d.pts);
-  else fireLocal();   // ちょんと押しただけ: 今の向きにまっすぐ
-}
-const isPathKind = () => { const t = myTank(); return !!(t && BUL[curKind(t)].path); };
-function nearMyTank(cx, cy) {
-  const t = myTank(); if (!t) return false;
-  const v = new THREE.Vector3(t.x, .3, t.z).project(camera);
-  return Math.hypot((v.x + 1) / 2 * VW - cx, (1 - v.y) / 2 * VH - cy) < 80;
+  const t = myTank(); if (!t || !t.alive) return;
+  if (mode === "client") sendHost({ t: "mn" }); else hostMine(myId);
 }
 // ---------- ボタンの配置（2026-11-19）: スティックは決まった場所に固定。位置と大きさは自分で変えられる（縦画面・横画面で別々に覚える）
-const LAY_IDS = ["stL", "stR", "wb0", "wb1", "wsyn"];
+const LAY_IDS = ["stL", "stR", "mineBtn"];
 const LAY_DEF = {
-  land: { stL: { x: .12, y: .7, s: 1 }, stR: { x: .88, y: .7, s: 1 }, wb0: { x: .93, y: .2, s: 1 }, wb1: { x: .93, y: .35, s: 1 }, wsyn: { x: .82, y: .275, s: 1 } },
-  port: { stL: { x: .22, y: .87, s: 1 }, stR: { x: .78, y: .87, s: 1 }, wb0: { x: .3, y: .75, s: 1 }, wb1: { x: .7, y: .75, s: 1 }, wsyn: { x: .5, y: .82, s: 1 } },
+  land: { stL: { x: .12, y: .7, s: 1 }, stR: { x: .88, y: .7, s: 1 }, mineBtn: { x: .88, y: .36, s: 1 } },
+  port: { stL: { x: .22, y: .87, s: 1 }, stR: { x: .78, y: .87, s: 1 }, mineBtn: { x: .78, y: .73, s: 1 } },
 };
 let LAY = (() => { try { return JSON.parse(store.get("tank-layout") || "null") || {}; } catch (e) { return {}; } })();
 const layOri = () => VH > VW * 1.05 ? "port" : "land";
@@ -1653,32 +1541,12 @@ function applyLayout() {
 function stickGeo(id) { const L = layOf(id); return { cx: L.x * VW, cy: L.y * VH, r: STICK * L.s }; }
 function knob(id, s) { $(id).firstElementChild.style.transform = s ? `translate(${s.dx * STICK}px,${s.dy * STICK}px)` : ""; }
 function setStick(s, x, y) { let dx = (x - s.ox) / s.r, dy = (y - s.oy) / s.r; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } s.dx = dx; s.dy = dy; s.dist = Math.hypot(x - s.ox, y - s.oy); }
-// バイパー系（タッチ）: 右のスティックを倒すと、戦車からカーソルが動いて弾道をえがく。はなすと発射
-const CUR_SPEED = 15;   // 2026-11-19: 7 → 15（倒した向きへすばやく動いて、自由にえがけるように）
-const curMesh = new THREE.Mesh(new THREE.TorusGeometry(.22, .04, 8, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
-curMesh.rotation.x = PI / 2; curMesh.renderOrder = 11; curMesh.visible = false; scene.add(curMesh);
-function cursorTick(dt) {
-  const d = IN.draw, t = myTank();
-  if (!d || !d.cursor || !IN.tr || !t) { curMesh.visible = false; return; }
-  const mag = Math.hypot(IN.tr.dx, IN.tr.dy);
-  if (mag > .2) {
-    const [wxv, wzv] = screenToWorld(IN.tr.dx, IN.tr.dy), l = Math.hypot(wxv, wzv) || 1;
-    const lim = .9, nx = clamp(d.cur[0] + wxv / l * mag * CUR_SPEED * dt, -MW / 2 + lim, MW / 2 - lim), nz = clamp(d.cur[1] + wzv / l * mag * CUR_SPEED * dt, -MH / 2 + lim, MH / 2 - lim);
-    const last = d.pts.length ? d.pts[d.pts.length - 1] : [t.x, t.z], step = Math.hypot(nx - last[0], nz - last[1]);
-    if (d.len + Math.hypot(nx - d.cur[0], nz - d.cur[1]) <= PATH_MAX) {
-      d.cur = [nx, nz];
-      if (step >= .25 && d.pts.length < AIM_MAX - 2) { d.len += step; d.pts.push([nx, nz]); if (d.pts.length === 1) IN.aimA = Math.atan2(nz - t.z, nx - t.x); }
-    }
-  }
-  curMesh.visible = true; curMesh.position.set(d.cur[0], .33, d.cur[1]); curMesh.material.color.setHex(BUL[curKind(t)].col);
-}
 canvas.addEventListener("pointerdown", e => {
   if (screen === "layout") return;
   if (screen !== "game") return;
   if (e.pointerType === "mouse") {
     IN.mouse = true; IN.mx = e.clientX; IN.my = e.clientY;
-    if (e.button === 0) { if (isPathKind() && canPlay()) drawStart(e.pointerId, e.clientX, e.clientY); else fireLocal(); }
-    else if (e.button === 2) synLocal();
+    if (e.button === 0) fireLocal(); else if (e.button === 2) mineLocal();
     return;
   }
   IN.mouse = false;
@@ -1686,29 +1554,22 @@ canvas.addEventListener("pointerdown", e => {
   const inL = Math.hypot(x - gl.cx, y - gl.cy) < gl.r * 1.5, inR = Math.hypot(x - gr.cx, y - gr.cy) < gr.r * 1.5;
   let s = null;
   if (inL && !IN.tl && (!inR || Math.hypot(x - gl.cx, y - gl.cy) <= Math.hypot(x - gr.cx, y - gr.cy))) { s = IN.tl = { id: e.pointerId, ox: gl.cx, oy: gl.cy, r: gl.r }; setStick(s, x, y); knob("stL", s); }
-  else if (inR && !IN.tr) {
-    s = IN.tr = { id: e.pointerId, ox: gr.cx, oy: gr.cy, r: gr.r }; setStick(s, x, y); knob("stR", s);
-    const t = myTank();
-    if (isPathKind() && canPlay() && t) IN.draw = { id: e.pointerId, pts: [], len: 0, cursor: true, cur: [t.x, t.z] };
-  }
+  else if (inR && !IN.tr) { s = IN.tr = { id: e.pointerId, ox: gr.cx, oy: gr.cy, r: gr.r }; setStick(s, x, y); knob("stR", s); }
   if (s) { try { canvas.setPointerCapture(e.pointerId); } catch (x2) {} e.preventDefault(); }
 });
 canvas.addEventListener("pointermove", e => {
-  if (IN.draw && !IN.draw.cursor && e.pointerId === IN.draw.id) { drawMove(e.clientX, e.clientY); IN.mx = e.clientX; IN.my = e.clientY; return; }
   if (e.pointerType === "mouse") { IN.mx = e.clientX; IN.my = e.clientY; IN.mouse = true; return; }
   if (IN.tl && e.pointerId === IN.tl.id) { setStick(IN.tl, e.clientX, e.clientY); knob("stL", IN.tl); }
   if (IN.tr && e.pointerId === IN.tr.id) {
     setStick(IN.tr, e.clientX, e.clientY); knob("stR", IN.tr);
-    if (!IN.draw && IN.tr.dist > 12) { const [ax, az] = screenToWorld(IN.tr.dx, IN.tr.dy); IN.aimA = Math.atan2(az, ax); IN.aiming = true; }
+    if (IN.tr.dist > 12) { const [ax, az] = screenToWorld(IN.tr.dx, IN.tr.dy); IN.aimA = Math.atan2(az, ax); IN.aiming = true; }
   }
 });
 function endPointer(e) {
-  if (IN.draw && !IN.draw.cursor && e.pointerId === IN.draw.id) { drawEnd(e.type !== "pointercancel"); return; }
   if (IN.tl && e.pointerId === IN.tl.id) { IN.tl = null; knob("stL", null); }
   if (IN.tr && e.pointerId === IN.tr.id) {
     IN.tr = null; IN.aiming = false; knob("stR", null);
-    if (IN.draw && IN.draw.cursor) { drawEnd(e.type !== "pointercancel"); curMesh.visible = false; }
-    else if (e.type !== "pointercancel") fireLocal();
+    if (e.type !== "pointercancel") fireLocal();
   }
 }
 canvas.addEventListener("pointerup", endPointer);
@@ -1718,16 +1579,11 @@ addEventListener("keydown", e => {
   if (!$("garage").classList.contains("hidden")) { garageKey(e); return; }
   if (e.target && e.target.tagName === "INPUT") return;
   IN.keys.add(e.code);
-  if (screen === "game") {
-    if (e.code === "Space" || e.code === "KeyE") { synLocal(); e.preventDefault(); }
-    else if (e.code === "Digit1") selectSlot(0);
-    else if (e.code === "Digit2") selectSlot(1);
-    else if (e.code === "KeyQ") selectSlot(IN.slot === 0 ? 1 : 0);
-  }
+  if (screen === "game" && (e.code === "Space" || e.code === "KeyE")) { mineLocal(); e.preventDefault(); }
 });
 addEventListener("keyup", e => IN.keys.delete(e.code));
-addEventListener("blur", () => { IN.keys.clear(); IN.tl = IN.tr = null; IN.draw = null; knob("stL", null); knob("stR", null); });
-for (const [id, k] of [["wb0", 0], ["wb1", 1], ["wsyn", 2]]) $(id).addEventListener("pointerdown", e => { if (screen === "layout") return; e.preventDefault(); e.stopPropagation(); selectSlot(k); });
+addEventListener("blur", () => { IN.keys.clear(); IN.tl = IN.tr = null; knob("stL", null); knob("stR", null); });
+$("mineBtn").addEventListener("pointerdown", e => { if (screen === "layout") return; e.preventDefault(); e.stopPropagation(); mineLocal(); });
 // 確認（ブラウザの confirm() は全画面と横画面の固定が外れるので、ページの中に出す）
 function ask(title, onYes) {
   $("askT").textContent = title; $("ask").classList.remove("hidden");
@@ -1765,17 +1621,9 @@ function updScore() {
 function updHud() {
   const tl = mode === "client" ? S.tleft : G ? Math.max(0, Math.ceil(G.tleft)) : ROUND_TIME;
   const tm = $("timer"); tm.textContent = `${Math.floor(tl / 60)}:${String(tl % 60).padStart(2, "0")}`; tm.classList.toggle("hot", tl <= 10);
-  const me = myTank();
-  // 合成ができたら、合成弾を自動で選ぶ
-  const syn = mySyn();
-  if (syn === 2 && IN.lastSyn !== 2 && IN.slot !== 2) { IN.prevSlot = IN.slot; IN.slot = 2; sfx("coin"); }
-  if (syn !== 2 && IN.slot === 2) IN.slot = IN.prevSlot;
-  IN.lastSyn = syn;
   updWeaponBtns();
   $("spec").classList.toggle("hidden", !spectating);
-  const pk = me && BUL[curKind(me)].path;
-  $("hint").textContent = spectating ? "" : IN.mouse ? (pk ? "バイパー: ステージの上をドラッグして弾道をえがく ・ 1/2/Q 弾 ・ スペース 合成" : "WASD 移動 ・ クリックで発射 ・ 1/2/Q 弾 ・ スペース 合成")
-    : pk ? "右のスティックを倒すとカーソルが動いて弾道をえがく。はなすと発射" : (S.round === 1 && S.phase !== "end" ? "左で移動 ・ 右でねらって離すと発射" : "");
+  $("hint").textContent = spectating ? "" : IN.mouse ? "WASD 移動 ・ マウスでねらってクリック ・ スペース 地雷" : (S.round === 1 && S.phase !== "end" ? "左で移動 ・ 右でねらって離すと発射" : "");
   $("hint").classList.toggle("hidden", !$("hint").textContent);
   // カウントダウン
   if (S.phase === "count" && mode === "client" || (S.phase === "count" && G)) {
@@ -1784,31 +1632,16 @@ function updHud() {
     if (n !== S.lastCount) { S.lastCount = n; showBanner(String(n), 0); sfx("count", n); }
   }
 }
-// 弾のボタン（右はし）: 弾1・弾2・合成
-let weapKey = "";
+// スティックと地雷ボタン（自分の戦車が動けるときだけ出す）
 function updWeaponBtns() {
   if (screen === "layout") return;
   const me = myTank();
   const show = screen === "game" && !spectating && me && me.alive && S.phase !== "done";
-  for (const id of ["wb0", "wb1", "wsyn"]) $(id).classList.toggle("hidden", !show);
+  $("mineBtn").classList.toggle("hidden", !show || IN.mouse);
   for (const id of ["stL", "stR"]) $(id).classList.toggle("hidden", !show || IN.mouse);
-  if (!show) { weapKey = ""; return; }
-  const sk = synOf(me.load), syn = mySyn(), slot = curSlot();
-  const prog = syn === 1 ? clamp((performance.now() - IN.synLocal) / 1000 / SYN_TIME, 0, 1) : syn === 2 ? 1 : 0;
-  const key = [me.load.g1, me.load.g2, sk, syn, slot, Math.round(prog * 20)].join();
-  if (key === weapKey) return; weapKey = key;
-  [[$("wb0"), me.load.g1, 0], [$("wb1"), me.load.g2, 1]].forEach(([b, k, s]) => {
-    b.style.setProperty("--c", css(BUL[k].col));
-    b.innerHTML = `${BUL[k].name}<small>${BUL[k].sub}</small>`;
-    b.classList.toggle("on", slot === s); b.classList.toggle("off", syn === 1);
-  });
-  const w = $("wsyn");
-  w.classList.toggle("hidden", sk < 0);
-  if (sk >= 0) {
-    w.style.setProperty("--c", css(BUL[sk].col));
-    w.innerHTML = `${syn === 2 ? BUL[sk].name : syn === 1 ? "合成中…" : "合成"}<small>${syn === 2 ? BUL[sk].sub : BUL[sk].name}</small><i style="width:${prog * 100}%"></i>`;
-    w.classList.toggle("ready", syn === 2); w.classList.toggle("on", slot === 2);
-  }
+  if (!show) return;
+  const used = [...S.mines.values()].filter(m => m.ow === myId).length;
+  $("mineN").textContent = "●".repeat(Math.max(0, MINE_MAX - used)) + "○".repeat(Math.min(MINE_MAX, used));
 }
 // 準備OKの人数（カスタマイズ画面の右上にも出す）
 function readyCount() {
@@ -1865,15 +1698,16 @@ function fixName() { if (PARTY) return; meName = ""; meName = myName(); store.se
 const urlRoom = (new URLSearchParams(location.search).get("room") || "").replace(/\D/g, "").slice(0, 4);
 function shareUrl() { const u = new URL(location.href); u.search = "?room=" + host.code + "&openExternalBrowser=1"; u.hash = ""; return u.toString(); }
 const RULES = `<div class="rules">
-・<b>スマホ</b>: 左半分をなぞって移動、右半分をなぞってねらい、<b>離すと発射</b>（タップでも今の向きに撃つ）。右はしのボタンで弾の切り替えと合成<br>
-・<b>PC</b>: WASDで移動、マウスでねらってクリックで発射、1/2/Qで弾の切り替え、スペースで合成<br>
-・戦車の<b>HPは3</b>。弾は壁に当たると消える（跳ね返らない）。弾どうしがぶつかると<b>両方消える</b><br>
-・弾は4種類から<b>2つ</b>選ぶ: <b>アステロイド</b>（通常弾・ダメージ3・まっすぐ）／<b>メテオラ</b>（炸裂弾・当たると爆発してダメージ2）／<b>バイパー</b>（変化弾・ステージの上を指でなぞった道を飛ぶ・ダメージ1）／<b>ハウンド</b>（追尾弾・相手を追いかける・ダメージ1）<br>
-・<b>合成</b>（1.5秒）: アステロイド＋アステロイド＝<b>ギムレット</b>（壁を壊して進む・3）／バイパー＋メテオラ＝<b>トマホーク</b>（なぞった道を飛んで爆発）／ハウンド＋メテオラ＝<b>サラマンダー</b>（追いかけて爆発）／ハウンド＋ハウンド＝<b>ホーネット</b>（よく追いかけ、壁をよける・2）<br>
-・爆発は自分にも当たる。木箱はダメージ3で壊れる<br>
+・<b>スマホ</b>: 左のスティックで移動、右のスティックでねらって<b>離すと発射</b>（タップでも今の向きに撃つ）。「地雷」ボタンで地雷<br>
+・<b>PC</b>: WASDで移動、マウスでねらってクリックで発射、スペースで地雷<br>
+・弾は<b>壁で跳ね返る</b>。<b>1発当たるとやられる</b>（自分の弾でも！）<br>
+・弾どうしがぶつかると、威力に関係なく<b>両方消える</b><br>
+・地雷（1人2個まで）: 10秒たつか、戦車が近づくと爆発。まわりの戦車・木箱・弾をふきとばす<br>
+・木箱は弾2発か地雷で壊れる<br>
 ・最後まで残った人（チーム）がラウンドの勝ち。<b>3本先取</b>。1ラウンド90秒（時間切れは引き分け）<br>
 ・バトルの前とラウンドの合間に、弾・機体・タイヤを変えられる（全員が準備OKを押すと次のバトルが始まる）<br>
-・チーム戦: 味方の弾・爆発には当たらない</div>`;
+・スティックと地雷ボタンの位置・大きさは「ボタンの配置を変える」で変えられる<br>
+・チーム戦: 味方の弾には当たらない（地雷は当たる）</div>`;
 const segH = (opts, cur, pre) => `<div class="seg">${opts.map(([k, s]) => `<button class="${k === cur ? "on" : ""}" data-a="${pre}-${k}">${s}</button>`).join("")}</div>`;
 let partySet = null, partyGuestSet = null, sfxBtn = null;
 const partyMine = () => [{ label: "🎮 ボタンの配置を変える", onClick: () => { ykgLobby.hide(); enterLayout(); } }];
@@ -1899,7 +1733,7 @@ $("hud").addEventListener("pointermove", e => {
 for (const ev of ["pointerup", "pointercancel"]) $("hud").addEventListener(ev, () => { layDrag = null; });
 function partyLobbyOpts() {
   const isHost = mode === "host", mine = partyMine();
-  const rules = "4種類の弾から2つ選んで戦う戦車バトル。HP3、3本先取。\n弾を合成すると強い合成弾が撃てる（1.5秒かかる）。\nスタートのあと、それぞれ弾・機体・タイヤを選んで戦車をつくる。";
+  const rules = "弾が壁で跳ね返る戦車バトル。1発でやられる。3本先取。\nスタートのあと、それぞれ弾・機体・タイヤを選んで戦車をつくる。\nスマホ: 左のスティックで移動、右のスティックでねらって離すと発射、ボタンで地雷。";
   if (screen === "connecting") return { rules, mine, button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
   const members = lobbyPs.map(p => ({ name: p.name, tag: [p.id === 0 ? "ホスト" : p.bot ? "CPU" : "", host.team ? TEAM_NAME[p.tm] + "チーム" : ""].filter(Boolean).join(" "), me: p.id === myId }))
     .concat(lobbySpecs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })));
@@ -1954,7 +1788,6 @@ function renderUI() {
       <button class="btn sub" data-a="layone">戻す</button><button class="btn sub" data-a="layreset">全部戻す</button><button class="btn" data-a="laydone">完了</button></div>`;
     $("laysize").addEventListener("input", e => { const v = layOf(editSel); setLay(editSel, { ...v, s: +e.target.value / 100 }); $("laypct").textContent = e.target.value + "%"; applyLayout(); });
     for (const id of LAY_IDS) { $(id).classList.remove("hidden"); $(id).classList.toggle("sel", id === editSel); }
-    $("wb0").innerHTML = "弾1<small>切り替え</small>"; $("wb1").innerHTML = "弾2<small>切り替え</small>"; $("wsyn").innerHTML = "合成<small>ボタン</small>"; weapKey = "";
     applyLayout();
     return;
   }
@@ -1969,7 +1802,7 @@ function renderUI() {
   let h = "";
   if (screen === "menu") {
     const off = isOffline();
-    h = `<div class="card"><h1>タンクファイト<small>4種類の弾と合成弾で撃ち合う戦車バトル</small></h1>
+    h = `<div class="card"><h1>タンクファイト<small>跳ね返る弾で撃ち合う戦車バトル</small></h1>
       ${canRot() ? `<button class="btn sub" data-a="rot" id="rotBtn">${rotLabel()}</button>` : ""}
       <label>なまえ</label><input id="name" class="in" maxlength="12" value="${esc(store.get("tank-name") || "")}" placeholder="ゲスト">
       ${off ? `<div class="note">📴 オフライン: CPUとの対戦だけ遊べます</div>` : `<button class="btn" data-a="host">部屋をつくる</button>
@@ -2070,7 +1903,7 @@ $("screen").addEventListener("click", async e => {
 });
 
 // ================= ガレージ（弾・機体・タイヤを選ぶ） =================
-const GCOLS = [{ k: "g1", list: "g", name: "弾1" }, { k: "g2", list: "g", name: "弾2" }, { k: "b", list: "b", name: "機体" }, { k: "w", list: "w", name: "タイヤ" }];
+const GCOLS = [{ k: "g", list: "g", name: "弾" }, { k: "b", list: "b", name: "機体" }, { k: "w", list: "w", name: "タイヤ" }];
 let gTmp = null, gFocus = 0, gBack = null, gIcons = null, gR = null, gScene = null, gCam = null, gTank = null, gTankKey = "", gSpin = 0;
 const MY_PREVIEW_COL = 0xe8463c;
 function initGarage() {
@@ -2088,11 +1921,7 @@ function initGarage() {
   for (const L of ["g", "b", "w"]) {
     gIcons[L] = PARTS[L].map(p => {
       const g = new THREE.Group();
-      if (L === "g") {   // 弾: 弾の色の玉と、その弾の砲塔
-        buildTurret(p.tur, g, MY_PREVIEW_COL);
-        part(new THREE.SphereGeometry(.09, 14, 10), mat(p.col, "b"), g, .52, .07, 0);
-        ic.position.set(.55, .5, .85); ic.lookAt(.2, .06, 0);
-      }
+      if (L === "g") { buildTurret(p.id, g, MY_PREVIEW_COL); ic.position.set(.55, .5, .85); ic.lookAt(.17, .06, 0); }
       else if (L === "b") { buildBody(p.id, g, MY_PREVIEW_COL); ic.position.set(.95, .85, 1.15); ic.lookAt(0, .2, 0); }
       else { buildTires(p.id, g, MY_PREVIEW_COL); ic.position.set(.95, .75, 1.15); ic.lookAt(0, .1, 0); }
       gScene.add(g); gR.render(gScene, ic); const url = gR.domElement.toDataURL(); gScene.remove(g);
@@ -2161,15 +1990,12 @@ function updGarage() {
   });
   const raw = rawStats(gTmp);
   const bar = (name, v, cls) => `<div class="gst"><div class="gl">${name}</div><div class="gb ${cls || ""}"><i style="width:${clamp(v, 0, 1) * 100}%"></i></div></div>`;
-  const sk = synOf(gTmp), pw = B => (B.dmg || B.boom || 0) / 3;
+  const gun = PARTS.g[gTmp.g];
   $("gstats").innerHTML = raw.map((v, i) => bar(STAT_NAMES[i], v / 10)).join("") + `<div class="gsep"></div>`
-    + bar(`${BUL[gTmp.g1].name}`, pw(BUL[gTmp.g1]), "bul") + bar(`${BUL[gTmp.g2].name}`, pw(BUL[gTmp.g2]), "bul")
-    + `<div class="gst"><div class="gl">合成</div><div style="font-size:12px;font-weight:800;color:${sk >= 0 ? css(BUL[sk].col) : "#888"}">${sk >= 0 ? `${BUL[sk].name}（${BUL[sk].sub}）` : "この組み合わせでは合成できない"}</div></div>`;
+    + bar("弾の速さ", gun.lv / 5, "bul") + bar("はねかえり", gun.bnc / 3, "bul") + bar("同時に撃てる", gun.max / 4, "bul");
   updGarageTop();
   const fc = GCOLS[gFocus], fp = PARTS[fc.list][gTmp[fc.k]];
-  const dmgText = B => B.boom ? `爆発ダメージ${B.boom}` : `ダメージ${B.dmg}`;
-  $("gname").innerHTML = fc.list === "g" ? `<b>${fc.name}: ${esc(fp.name)}（${esc(fp.sub)}）</b><small>${esc(fp.desc)}・${dmgText(fp)}・${fp.max}発まで</small>`
-    : `<b>${fc.name}: ${esc(fp.name)}</b><small>${esc(fp.desc)}</small>`;
+  $("gname").innerHTML = `<b>${fc.name}: ${esc(fp.name)}</b><small>${esc(fp.desc)}${fc.list === "g" ? `（跳ね返り${fp.bnc}回・${fp.max}発まで）` : ""}</small>`;
   const tk = JSON.stringify(gTmp);
   if (tk !== gTankKey) {
     if (gTank) gScene.remove(gTank.root);
@@ -2191,13 +2017,13 @@ function openGarage(back) {
   initGarage();
   gTmp = { ...LOAD }; gBack = back; gTankKey = "";
   $("garage").classList.remove("hidden");
-  IN.tl = IN.tr = null; IN.draw = null; knob("stL", null); knob("stR", null);
+  IN.tl = IN.tr = null; knob("stL", null); knob("stR", null);
   requestAnimationFrame(() => { sizePreview(); updGarage(); });
   updGarage();
 }
 function closeGarage(ok) {
   if (ok) {
-    LOAD = fixLoad(gTmp); store.set("tank-load2", JSON.stringify(LOAD));
+    LOAD = fixLoad(gTmp); store.set("tank-load", JSON.stringify(LOAD));
     host.loads.set(myId, LOAD);
     if (S.prep) readyLocal(true);   // カスタマイズの OK = 準備OK
     else if (mode === "client") sendHost({ t: "load", load: LOAD });
@@ -2213,7 +2039,7 @@ function syncFromG() {
   if (!G) return;
   for (const t of G.tanks.values()) {
     const v = S.tanks.get(t.id); if (!v) continue;
-    v.x = t.x; v.z = t.z; v.h = t.h; v.tu = t.tu; v.alive = t.alive; v.hp = t.hp; v.syn = synState(t);
+    v.x = t.x; v.z = t.z; v.h = t.h; v.tu = t.tu; v.alive = t.alive;
   }
   const seen = new Set();
   for (const b of G.bullets) {
@@ -2222,7 +2048,8 @@ function syncFromG() {
     if (!v) { v = { id: b.id, ow: b.ow, ty: b.ty }; v.x = b.x; v.z = b.z; v.mesh = makeBulletMesh(v); S.bullets.set(b.id, v); if (b.ow !== myId && mode === "host") sfx("shot"); }
     v.x = b.x; v.z = b.z; v.vx = b.vx; v.vz = b.vz;
   }
-  for (const [id, v] of S.bullets) if (!seen.has(id)) { puff(v.x, v.z, BUL[v.ty].col); removeBulletMesh(v); S.bullets.delete(id); }
+  for (const [id, v] of S.bullets) if (!seen.has(id)) { puff(v.x, v.z, 0xfff1c0); removeBulletMesh(v); S.bullets.delete(id); }
+  syncMines(G.mines.map(m => ({ id: m.id, ow: m.ow, x: m.x, z: m.z, bl: m.fuse - G.time < 2 ? 1 : 0 })));
   S.tleft = Math.max(0, Math.ceil(G.tleft));
 }
 function clientTick(dt) {
@@ -2245,19 +2072,13 @@ function clientTick(dt) {
   for (const b of S.bullets.values()) { const nx = b.x + b.vx * dt, nz = b.z + b.vz * dt; if (!solidAt(nx, nz)) { b.x = nx; b.z = nz; } }
   for (const [c, b] of S.pred) {
     b.age += dt;
-    if (b.age > .6 || !moveBullet(b, dt)) { puff(b.x, b.z, BUL[b.ty].col); removeBulletMesh(b); S.pred.delete(c); }
+    if (b.age > .6 || !moveBullet(b, dt)) { puff(b.x, b.z, 0xfff1c0); removeBulletMesh(b); S.pred.delete(c); }
   }
 }
 function updateView(dt) {
   for (const t of S.tanks.values()) {
     const m = t.mesh; if (!m) continue;
     m.root.visible = t.alive;
-    if (t.bar) {   // HP の目もり（カメラのほうを向ける）
-      t.bar.g.visible = t.alive;
-      t.bar.g.position.set(t.x, 1.05, t.z); t.bar.g.quaternion.copy(camera.quaternion);
-      const flash = t.hitT && performance.now() - t.hitT < 300;
-      t.bar.pips.forEach((p, i) => p.material.color.setHex(i < t.hp ? (flash ? 0xffffff : t.hp === 1 ? 0xff5a3a : 0x6fe06f) : 0x2a2a2a));
-    }
     if (!t.alive) continue;
     const dx = t.x - m.root.position.x, dz = t.z - m.root.position.z;
     const mv = dx * Math.cos(t.h) + dz * Math.sin(t.h);
@@ -2266,6 +2087,8 @@ function updateView(dt) {
   }
   for (const b of S.bullets.values()) if (b.mesh) b.mesh.position.set(b.x, 0, b.z);
   for (const b of S.pred.values()) if (b.mesh) b.mesh.position.set(b.x, 0, b.z);
+  const blink = Math.floor(performance.now() / 120) % 2 === 0;
+  for (const m of S.mines.values()) m.lamp.material.color.setHex(m.bl ? (blink ? 0xff2020 : 0x441010) : (Math.floor(performance.now() / 600) % 2 ? 0xaa2020 : 0x441010));
   for (let i = fxList.length - 1; i >= 0; i--) {
     const f = fxList[i]; f.t += dt; const k = Math.min(1, f.t / f.life);
     f.upd(f.obj, k, dt);
@@ -2274,8 +2097,7 @@ function updateView(dt) {
   // ねらいの線
   const me = S.tanks.get(myId);
   if (screen === "game" && me && me.alive && !spectating && S.phase !== "end" && S.phase !== "done") {
-    if (IN.draw) updAimLine(me);
-    else if (IN.mouse) { mouseAim(me); updAimLine(me); }
+    if (IN.mouse) { mouseAim(me); updAimLine(me); }
     else if (IN.aiming) updAimLine(me);
     else aimLine.visible = false;
   } else aimLine.visible = false;
@@ -2289,7 +2111,7 @@ function frame(now) {
     if (n >= 5) acc = 0;
     syncFromG();
   } else if (mode === "client" && screen === "game") clientTick(dt);
-  if (screen === "game") { cursorTick(dt); updateView(dt); updHud(); }
+  if (screen === "game") { updateView(dt); updHud(); }
   if (S.phase === "play" && S.lastCount) S.lastCount = 0;
   renderer.render(scene, camera);
   if (gR && !$("garage").classList.contains("hidden") && gTank) {
@@ -2303,18 +2125,17 @@ if (new URLSearchParams(location.search).has("debug")) window.__tank = {
   step(sec) {
     const t0 = performance.now(); let n = 0;
     for (let k = 0; k < Math.round(sec * 60); k++) {
-      if (screen === "game") cursorTick(1 / 60);
       if (G) { hostTick(1 / 60); n++; if (mode === "host" && ++G.snapK % 2 === 0) sendSnap(); }
       else if (mode === "client" && screen === "game") clientTick(1 / 60);
     }
     const t1 = performance.now(); syncFromG(); if (screen === "game") { updateView(1 / 60); updHud(); } renderer.render(scene, camera);
     return { simMsPerTick: n ? ((t1 - t0) / n).toFixed(3) : 0, drawMs: (performance.now() - t1).toFixed(1) };
   },
-  fireAt(x, z, slot, path) { const t = G && G.tanks.get(myId); return t ? hostFire(myId, Math.atan2(z - t.z, x - t.x), 0, slot, path) : false; },
-  syn() { return hostSyn(myId); },
+  fireAt(x, z) { const t = G && G.tanks.get(myId); return t ? hostFire(myId, Math.atan2(z - t.z, x - t.x)) : false; },
+  mine() { return hostMine(myId); },
   grid(i, j) { return grid[j * MW + i]; },
-  view() { return { mode, screen, phase: S.phase, tleft: S.tleft, tanks: [...S.tanks.values()].map(t => [t.name, t.alive, +t.x.toFixed(1), +t.z.toFixed(1)]), bullets: S.bullets.size, pred: S.pred.size, card: ($("screen").innerText || "").slice(0, 80) }; },
-  state() { return G && { phase: G.phase, round: host.match && host.match.round, tleft: G.tleft.toFixed(1), tanks: [...G.tanks.values()].map(t => [t.name, t.hp, +t.x.toFixed(1), +t.z.toFixed(1)]), bullets: G.bullets.length, kinds: G.bullets.map(b => BUL[b.ty].id).join(), bpos: G.bullets.map(b => [BUL[b.ty].id, +b.x.toFixed(2), +b.z.toFixed(2)]), walls: G.wallBroken.length, score: host.match && [...host.match.score], over: !!overInfo }; },
+  view() { return { mode, screen, phase: S.phase, tleft: S.tleft, tanks: [...S.tanks.values()].map(t => [t.name, t.alive, +t.x.toFixed(1), +t.z.toFixed(1)]), bullets: S.bullets.size, pred: S.pred.size, mines: S.mines.size, card: ($("screen").innerText || "").slice(0, 80) }; },
+  state() { return G && { phase: G.phase, round: host.match && host.match.round, tleft: G.tleft.toFixed(1), tanks: [...G.tanks.values()].map(t => [t.name, t.alive, +t.x.toFixed(1), +t.z.toFixed(1)]), bullets: G.bullets.length, kinds: G.bullets.map(b => PARTS.g[b.ty].id).join(), bpos: G.bullets.map(b => [PARTS.g[b.ty].id, +b.x.toFixed(2), +b.z.toFixed(2)]), mines: G.mines.length, score: host.match && [...host.match.score], over: !!overInfo }; },
 };
 
 // ================= はじめ =================
