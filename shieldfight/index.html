@@ -483,8 +483,10 @@ const zoneR = ks => ZONE_R0 + ZONE_FAST * ZONE_TAU * (1 - Math.exp(-ks / ZONE_TA
 const ZONE_WARP_MUL = 1.3;           // ゾーンの回り込み攻撃の吹っ飛ばしの倍率（攻撃の強さの上限 1.3 倍と同じ。背後から当てても、相手がすぐ立て直して戻らないように）
 const zoneCd = r => Math.round(ZONE_CD_BASE + ZONE_CD_PER100 * r / 100);
 // レスラーのダッシュつかみ: 3 フレーム目から前へダッシュ（1 フレームに 15.6px、14 フレーム目まで。約 187px）し、4〜14 フレーム目に前 30px 以内の敵をつかむ
-const GRAB_ON = 4, GRAB_OFF = 14, GRAB_REACH = 30, GRAB_DASH_FROM = 3, GRAB_DASH_TO = 14, GRAB_DASH_V = 15.6;
-const GRAB_HOLD = 20, GRAB_WHIFF = 24, GRAB_FRAC = 0.9;    // 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし（0.85 だとステージ中央から投げても崖の外まで届かなかった）
+const GRAB_ON = 10, GRAB_OFF = 20, GRAB_REACH = 30, GRAB_DASH_FROM = 8, GRAB_DASH_TO = 19, GRAB_DASH_V = 15.6;   // 2026-11-21: 攻撃（7 フレーム目）より遅く。7 フレームの構え（予兆）のあとダッシュ（もとは 4〜14 / 3〜14）
+const GRAB_HOLD = 20, GRAB_WHIFF = 40, GRAB_FRAC = 0.9;   // 2026-11-21: 空振りの隙 24 → 40
+// 2026-11-21: 攻撃している最中（p.a > 0）の敵はつかめない。つかもうとすると弾かれて GRAB_BOUNCE フレーム動けない（クールタイムはそのまま）
+const GRAB_BOUNCE = 36;    // 持ち上げる時間 / 空振りの隙 / 投げの吹っ飛ばし（0.85 だとステージ中央から投げても崖の外まで届かなかった）
 const GRAB_CARRY_V = 4;                                    // 持ち上げている間、投げる向きへ歩く速さ（px/フレーム。地上では足場の端で止まる）
 const WIND_FRAMES = 300, WIND_W = 440, WIND_H = 280;    // 天狗の風の場: 続く時間（5 秒）/ 横幅 / 高さ
 const WIND_FOE_MV = 0.45, WIND_FOE_JP = 0.55, WIND_SELF_MV = 1.6, WIND_SELF_JP = 1.4;   // 場の中の 移動速度・ジャンプの高さ の倍率（敵 / 天狗自身）
@@ -619,7 +621,7 @@ const CHARS = [
     skill: { name: "ゾーン", cd: 2, cdText: "2秒＋円の大きさしだい（円が消えてから）", hold: true, maxCharge: 1e6,
       text: "押している間、円が広がる。円の中では、攻撃ボタンで敵の背後へ回り込み、スキルボタンで全員の位置を入れ替える。円が消えると、大きさに応じて自分がダメージを受ける" } },
   { id: "wrestler", name: "レスラー", A: 4, D: 3, S: 2, tag: "盾ごとつかんで投げ飛ばす",
-    skill: { name: "ダッシュつかみ", cd: 5, text: "前へダッシュして敵をつかみ、押した方向へ投げる。盾もカウンターも効かない" } },
+    skill: { name: "ダッシュつかみ", cd: 5, text: "少し構えてから前へダッシュして敵をつかみ、押した方向へ投げる。盾もカウンターも効かない。攻撃している最中の敵には弾かれる" } },
   { id: "tengu", name: "天狗", A: 2, D: 2, S: 4, tag: "風の場で、敵を鈍らせ自分は速くなる",
     skill: { name: "羽うちわ", cd: 10, text: "前方に5秒間、風の場を作る。中では敵が遅く、自分は速くなる" } },
   // 17〜20 体目（必ず末尾に足す）。atk: 通常攻撃の種類（ATKS の番号）/ forms: 形態ごとの性能（A/D/S は最初の形態の値）
@@ -652,7 +654,7 @@ const CHARS = [
     auto: "ステージにタバコが出る（3秒ごと、3本まで）。口のタバコは5秒で吸い切り、なくなると禁断症状（全性能-2・1秒に5%のダメージ）。吸っている間に拾うと5本までストックでき、吸い切ると次に火がつく。敵も拾って消せる" },
   // 26〜28 体目（必ず末尾に足す）
   { id: "vamp", name: "吸血鬼", A: 3, D: 1, S: 4, tag: "盾ごと噛みついて、相手の%を吸い取る",
-    skill: { name: "吸血", cd: 7, cdText: "7秒（空振りは2秒。途中で攻撃されて止められたらなし）", text: "前へダッシュして敵をつかみ、0.5秒噛みつく（盾・カウンター無視。吹っ飛ばさない）。8%＋相手の%の20%を吸い取り、同じだけ自分の%が回復する" },
+    skill: { name: "吸血", cd: 7, cdText: "7秒（空振りは2秒）", text: "少し構えてから前へダッシュして敵をつかみ、0.5秒噛みつく（盾・カウンター無視。吹っ飛ばさない）。8%＋相手の%の20%を吸い取り、同じだけ自分の%が回復する" },
     auto: "吸血鬼の羽: 二段ジャンプで羽を広げ、スピード6の地上ジャンプと同じ高さまで跳ぶ。落ちるのがゆっくり（0.6倍）" },
   { id: "hadou", name: "波動士", A: 2, D: 2, S: 2, tag: "波動をためて撃つ。追い込まれるほど強くなる",
     skill: { name: "波動弾", cd: 0, cdText: "撃ったあと1.5秒", text: "押すと頭の上で波動をため始め、もう一度押すと撃つ。ためるほど、また自分の%が多いほど大きく速い（最大3秒）。ためている波動は触れた敵に当たり続ける。動くなどでためが止まっても、ため量は残り、押すと再開" },
@@ -1326,9 +1328,8 @@ function releaseGrab(p) {                     // つかみをやめる（つか�
 }
 // 敵の攻撃（殴られた・爆風・糸・つかみ・拘束魔法）で、つかみに行くダッシュが止められたら、クールタイムをなくす（すぐもう一度使える）。releaseGrab より先に呼ぶ
 // 侍の居合斬り・槍兵の突進突き（構えから突進の終わりまで）も同じ。攻撃をリセットする前に呼ぶ
+// 2026-11-21 から、レスラー・吸血鬼のつかみ（ダッシュ・噛みつき）は止められてもクールタイムが残る（2026-11-18 までは 0 に戻していた）
 function grabBroken(t) {
-  if (t.gr > 0 && !t.grT) t.kc = 0;
-  if (t.vbT > 0) t.kc = 0;                    // 吸血鬼: 噛みついている途中で止められても、クールタイムなし（2026-11-18）
   if (t.a > 0 && (t.ak === 1 || (t.ak === 3 && t.a <= ATKS[3].dashTo))) t.kc = 0;
 }
 // おくれたんの花で動けない（土下座の）相手は、殴られても飛ばされるだけで、残りの時間は動けないまま（花→攻撃→落ちた先の花… とつなげられる）。
@@ -1362,6 +1363,11 @@ function grabStep(p, inp) {                   // 前へダッシュしながら�
       if (hx1 < hbL(e) || hx0 > hbR(e) || p.y + phOf(p) < e.y || p.y > e.y + phOf(e)) continue;
       const d = Math.abs(ecx(e) - ecx(p));
       if (d < bd) { bd = d; best = e; }
+    }
+    if (best && best.a > 0) {                 // 攻撃している最中の相手: つかめずに弾かれる（攻撃 > つかみ）
+      p.gr = 0; p.fz = GRAB_BOUNCE; p.vx = -p.f * 6; p.bf = 10;
+      emit("b", p.f > 0 ? p.x + pwOf(p) + 4 : p.x - 4, ecy(p), -p.f, 0);
+      return;
     }
     if (best && chOf(p).id === "vamp" && !p.isClone) { p.gr = 0; startBite(p, best); return; }   // 吸血鬼: つかんだら噛みつく（無敵にはならない）
     if (best) {                               // つかんだ: 盾もカウンターも関係ない。ここから投げるまで、レスラーは無敵（untouchable）
@@ -2776,7 +2782,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
 
     }
 
-    case "wrestler": return g && face && sameLevel && gap < GRAB_REACH + 90 && t.a === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵へ、ダッシュしてつかむ
+    case "wrestler": return g && face && sameLevel && gap < GRAB_REACH + 120 && t.a === 0 && t.cd === 0 && ((shieldUp(t) && tFaces) || t.cn > 0) ? KEY.k : 0;   // 盾やカウンターで固めた敵へ、ダッシュしてつかむ
     case "tengu": return g && face && ((sameLevel && gap < 200) || (!t.ground && t.y + phOf(t) > PY + 4 && gap < 280)) ? KEY.k : 0;   // 戦う場所か、崖の外の敵へ風の場を出す
     case "boomer":                                                                                                      // 盾をこちらへ向けた敵の向こうまで投げて、帰りで背中に当てる。盾を見て止まっている敵にも
       return g && face && sameLevel && c.sbk === 0 && !c.bt && ((shieldUp(t) && tFaces && gap > 100 && gap < 250) || (tFaces && gap > 20 && gap <= 100 && t.a === 0 && Math.abs(t.vx) < 0.6)) ? KEY.k : 0;
@@ -2784,7 +2790,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
     case "camp": return face && Math.abs(dyFeet) < 40 && gap > 60 && gap < 600 && c.um === 0 ? KEY.k : 0;                     // 前の敵へウルトラショット
     case "splat": return g && face && sameLevel && gap > 30 && gap < 260 ? KEY.k : 0;                                         // 前の敵へサメで突っ込む（爆発は盾が効かない）
     case "cf": return g && face && gap < CF_REACH - 6 && Math.abs(dyFeet) < 40 && t.s === 0 && t.ground ? KEY.k : 0;              // 地上の敵を蹴り上げる（盾を構えていても）
-    case "vamp": return face && gap < GRAB_REACH + 90 && Math.abs(dyFeet) < 40 && t.s === 0 && t.a === 0 ? KEY.k : 0;       // ダッシュで噛みつける距離（盾を構えた相手にも）
+    case "vamp": return face && gap < GRAB_REACH + 120 && t.cd === 0 && Math.abs(dyFeet) < 40 && t.s === 0 && t.a === 0 ? KEY.k : 0;       // ダッシュで噛みつける距離（盾を構えた相手にも）
     case "gambler": return face && sameLevel && gap < ATKS[4].reach - 8 ? KEY.k : 0;                                         // ハンマーが届く距離
     case "hadou": {                                                                                                     // 魔法使いと同じく、狙った長さまでためて、敵が射線にいたら撃つ
       if (!c.hw) { if (!g || gap > HW_RANGE) return 0; c.aiHw = [20, 40, 60, 90, 180][Math.floor(Math.random() * 5)]; return KEY.k; }
@@ -3232,7 +3238,7 @@ function hostTick() {
 
 const r1 = v => Math.round(v * 10) / 10;
 // レスラーのつかみの状態（0 = なし / 1 = つかみに行っている / 2 = 持ち上げている）。参加者の画面では、届いた値を使う
-const grabState = p => role === "client" ? (p.gs | 0) : p.gr > 0 ? (p.grH > 0 ? 2 : 1) : 0;
+const grabState = p => role === "client" ? (p.gs | 0) : p.gr > 0 ? (p.grH > 0 ? 2 : p.gr < GRAB_DASH_FROM && !p.grT ? 3 : 1) : 0;   // 3: ダッシュ前の構え
 // 時計師が巻き戻しで戻る先（2 秒前の位置）。参加者の画面では、届いた値を使う
 const rewindPoint = p => role === "client" ? p.rp || null : (p.tl && p.tl.length ? p.tl[0] : null);
 function serEnt(p) {                                         // 見た目に必要な状態だけを送る
@@ -5396,6 +5402,10 @@ function drawPlayer(p, i, me, now) {
   if (gs && p.al) {
     cx.fillStyle = chd.id === "vamp" ? "#e2e8f0" : "#fdba74";   // 吸血鬼は白い手
     if (gs === 1) { const ax = p.f > 0 ? p.x + PLW : p.x - 18; cx.fillRect(ax, p.y + 20, 18, 6); cx.fillRect(ax, p.y + 34, 18, 6); }
+    else if (gs === 3) {                       // 構え（予兆）: 腕を後ろへ引き、頭の上に赤い「！」
+      const ax = p.f > 0 ? p.x - 10 : p.x + PLW - 4; cx.fillRect(ax, p.y + 22, 14, 6); cx.fillRect(ax, p.y + 34, 14, 6);
+      cx.save(); cx.fillStyle = "#ef4444"; cx.font = "bold 22px sans-serif"; cx.textAlign = "center"; cx.fillText("！", p.x + PLW / 2, p.y - 26); cx.restore();
+    }
     else {
       cx.fillRect(p.x + 4, p.y - 14, 6, 18); cx.fillRect(p.x + PLW - 10, p.y - 14, 6, 18);
       cx.strokeStyle = "rgba(255,255,255," + (0.5 + 0.4 * Math.sin(now / 50)).toFixed(2) + ")"; cx.lineWidth = 2.5;   // 持ち上げている間は無敵: 白く光る枠
