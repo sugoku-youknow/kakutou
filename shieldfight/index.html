@@ -564,6 +564,11 @@ const CF_CRIT_KB = 1.75;
 // スパッタリー（2026-10-24）: 地上で左右を押しながらジャンプボタンを押すと、その方向へステップ（STEP_F フレームで STEP_V × STEP_F px。その間は盾なし）。
 // 続けて 2 回まで。1 回目のあと STEP_CHAIN フレーム 2 回目を出さなければ数え直し、2 回目のあとは STEP_CD フレームの間ステップできない（ジャンプになる）。人は左右＋ジャンプ、CPU は頭脳が決める（aiStp）
 const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
+// ダッシュステップ（2026-11-21、全キャラ。スパッタリーは自分のステップのまま）: 地上で左右を DTAP_F フレーム以内に 2 回押すと、その方向へ DASH_F フレーム DASH_V で進む（約 120px）。
+// 向きは変わらない（後ろへのステップは下がるだけ）。その間は盾が外れる（スパッタリーのステップと同じ p.sp を使う）。終わってから DASH_CD フレームは次のステップを出せない
+const DTAP_F = 12, DASH_V = 15, DASH_F = 8, DASH_CD = 20;
+// 常に相手の方を向く（2026-11-21 のお試し）: 動ける間は、地上でも空中でも、いちばん近い敵の方を向く（攻撃・ため・構えの間は向きを変えない）
+const AUTO_FACE = true;
 // サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
 // 進み終わる（足場の端に着く）とインクを撒き散らして爆発（半径 SR_BLAST、盾は効かない）。途中で吹っ飛ばされる・動けなくなると、爆発せずに終わる。乗っている間は盾なし
 // キャンピングシェルター（2026-10-24）: 攻撃ボタンで前に大きな傘（高さ UMB_H = 体の 1.5 倍）を開く。押している間は開いたまま、UMB_LAUNCH フレームで傘が前へ飛んでいく（離すと閉じる）。
@@ -860,7 +865,7 @@ function newPlayer() {
            dm: 0,                                       // 蓄積ダメージ（%）
            hw: 0, hwr: 0, hwh: [], hmN: 0, hmT: 0,     // … / 勝負師: 出目の吹き出しを出す残り
            um: 0, umR: 0, umHp: UMB_HP, umh: [], aiUm: 0,   // キャンピングシェルター: 傘を開いている長さ（0 = 閉じている）/ 新しい傘が生えるまで / 傘の耐久 / 触れて当てた敵と次に当たれるまで（ホストだけ）/ CPU が攻撃ボタンを押し続ける残り
-           sp: 0, spD: 1, spN: 0, spW: 0, spC: 0, spU: 0, srT: 0, srHit: [], srCar: [], aiStp: 0,   // スパッタリー: ステップの残り / 向き / 続けて出した回数 / 2 回目を出せる残り / 使えない残り / ジャンプボタンを離すまで地上ジャンプしない / サメライドの残り / 当てた相手・押している相手（ホストだけ）/ CPU のステップの指示
+           sp: 0, spD: 1, spV: 0, spN: 0, spW: 0, spC: 0, spU: 0, dtD: 0, dtT: 0, pdir: 0, dsC: 0, srT: 0, srHit: [], srCar: [], aiStp: 0,   // スパッタリー: ステップの残り / 向き / 続けて出した回数 / 2 回目を出せる残り / 使えない残り / ジャンプボタンを離すまで地上ジャンプしない / サメライドの残り / 当てた相手・押している相手（ホストだけ）/ CPU のステップの指示
            vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0, nsh: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
            ub: 0, nc: 0, dr: 0, st: 0, cw: 0, cs: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
            yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
@@ -982,7 +987,7 @@ function spawn(p, slot, n, battle) {
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
   p.nsh = 0; p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0; p.hmT = 0; p.vbT = 0; p.vbTgt = null; p.wgT = 0;
-  p.sp = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
+  p.sp = 0; p.spV = 0; p.dtD = 0; p.dtT = 0; p.pdir = 0; p.dsC = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
   p.um = 0; p.umR = 0; p.umHp = UMB_HP; p.umh = []; p.aiUm = 0;   // キャンピングシェルター
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.wpc = 0; p.spc = 0;
@@ -1042,6 +1047,15 @@ function ents() {
 }
 
 // ---- スキル ----
+function foeSide(p) {                         // いちばん近い（生きている）敵がいる側（-1 / 1。いなければ・真上なら 0）
+  let best = null, bd = 1e9;
+  for (const e of ents()) {
+    if (e === p || ally(e.own, p.own) || !e.al) continue;
+    const d = Math.abs(ecx(e) - ecx(p)) + 1.5 * Math.abs(e.y + phOf(e) - (p.y + phOf(p)));
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best ? Math.sign(ecx(best) - ecx(p)) : 0;
+}
 function aimAtFoe(p) {                       // 居合斬り: 右を向いていても、左に敵がいれば左へ踏み込む
   let best = null, bd = 1e9;
   for (const e of ents()) {
@@ -2028,6 +2042,11 @@ function physics(p, inp, neutral) {
   if (a && !p.ap) p.ba = INPUT_BUF;
   if (jrise) p.bu = INPUT_BUF;
   p.kp = kin ? 1 : 0; p.ap = a ? 1 : 0; p.jp = u ? 1 : 0;
+  let dashDir = 0;                               // ダッシュステップ: 同じ向きを DTAP_F フレーム以内にもう一度押した
+  if (p.dtT > 0) p.dtT--;
+  if (p.dsC > 0) p.dsC--;
+  if (dir && dir !== p.pdir) { if (p.dtT > 0 && p.dtD === dir) { dashDir = dir; p.dtT = 0; } else { p.dtD = dir; p.dtT = DTAP_F; } }
+  p.pdir = dir;
   if (!u) p.spU = 0;
   const kpress = p.bk > 0, apress = a || p.ba > 0, upress = u || p.bu > 0;
   // 魔法使い: ためは、ジャンプ・攻撃を押す、地上で左右を押す（空中で左右を押したまま着地したときも）、吹っ飛ぶ・動けない・詠唱などで止まる（段階は残る）。
@@ -2068,8 +2087,8 @@ function physics(p, inp, neutral) {
     sharkStep(p);
   } else if (p.sp > 0) {                         // スパッタリー: ステップ中（向きは変わらず、攻撃・ジャンプはできない。スキルは使える）
     canSkill = true;
-    p.vx = p.spD * STEP_V;
-    if (--p.sp === 0) p.vx = p.spD * MOVE_BASE * moveMul(S);   // 止まるときは、ふつうに走る速さまで落とす
+    p.vx = p.spD * (p.spV || STEP_V);
+    if (--p.sp === 0) { p.vx = p.spD * MOVE_BASE * moveMul(S); if (p.spV) { p.spV = 0; p.dsC = DASH_CD; } }   // 止まるときは、ふつうに走る速さまで落とす（ダッシュステップは、そのあと少し出せない）
   } else {
     canSkill = true;
     let spm = 1;                                 // 2026-10-18 から、通常攻撃の間も移動は遅くならない（それまでは 0.44 倍）
@@ -2084,7 +2103,8 @@ function physics(p, inp, neutral) {
     // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
     // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
     const turnOk = p.ground || p.jg > 0;
-    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0) p.f = dir;   // 傘を開いている間も向きを変えられる（傘も一緒に回る）
+    const ff = AUTO_FACE && !neutral ? foeSide(p) : 0;   // 常に敵の方を向く（敵がいなければ、ふつうに押した方を向く）
+    if (p.a === 0 && p.ks === 0 && p.cn === 0) { if (ff) p.f = ff; else if (dir && turnOk) p.f = dir; }   // 傘を開いている間も向きを変えられる（傘も一緒に回る）
     const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
     if (p.jh > 0) {                                // 小ジャンプ: 押したフレームを 1 として、SHORT_HOP_F フレーム目までに離したら、上がる勢いを弱める
@@ -2094,7 +2114,10 @@ function physics(p, inp, neutral) {
     // スパッタリー: 地上で左右＋ジャンプボタン（CPU は頭脳の指示）でステップ。使えないとき（2 回目のあとの待ち）はふつうのジャンプになる
     const stepDir = chd.id === "splat" && !p.isClone && !neutral ? (p.cpu ? p.aiStp : (jrise || p.bu > 0) ? dir : 0) : 0;
     if (p.cpu) p.aiStp = 0;
-    if (stepDir && p.ground && p.spC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && !lock) {
+    if (dashDir && chd.id !== "splat" && !p.isClone && p.ground && p.dsC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && p.um === 0 && !lock) {
+      p.sp = DASH_F; p.spD = dashDir; p.spV = DASH_V;   // 向きはそのまま
+      emit("dsh", ecx(p), p.y + phOf(p), dashDir);
+    } else if (stepDir && p.ground && p.spC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && !lock) {
       p.sp = STEP_F; p.spD = stepDir; p.f = stepDir; p.bu = 0; p.jh = 0; p.spU = u ? 1 : 0;
       if (++p.spN >= 2) { p.spC = STEP_F + STEP_CD; p.spW = 0; } else p.spW = STEP_F + STEP_CHAIN;
       emit("stp", ecx(p), p.y + phOf(p), stepDir, p.own);
@@ -4994,6 +5017,9 @@ function fxEvent(e) {
   } else if (k === "us") {                        // ウルトラショットを撃った
     Sfx.throwBomb(); shake(4); const c = colOf(f);
     burst(x, y, 12, { dir: d > 0 ? 0 : Math.PI, spread: 1.2, v0: 2, v1: 6, l0: 12, l1: 22, s0: 3, s1: 7, g: 0.15, round: true, colors: [c, "#f8fafc"] });
+  } else if (k === "dsh") {                       // ダッシュステップ: 足もとから後ろへ砂ぼこり
+    Sfx.jump();
+    burst(x - d * 12, y - 3, 6, { dir: d > 0 ? Math.PI + 0.3 : -0.3, spread: 0.9, v0: 1.5, v1: 4, l0: 10, l1: 18, s0: 3, s1: 6, g: 0.05, round: true, colors: ["#d6d3d1", "#a8a29e"] });
   } else if (k === "stp") {                       // スパッタリーのステップ（d: 向き / f: 持ち主のスロット）。足もとからインクのしぶき
     Sfx.jump(); const c = colOf(f);
     burst(x - d * 10, y - 4, 7, { dir: d > 0 ? Math.PI + 0.4 : -0.4, spread: 1.2, v0: 1.5, v1: 4, l0: 10, l1: 18, s0: 3, s1: 6, g: 0.15, round: true, colors: [c, "#f8fafc"] });
