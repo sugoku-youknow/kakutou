@@ -578,10 +578,10 @@ const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
 //   地上で動ける状態のとき、左右を押した瞬間（何も押していない・反対を押していたところから）、その方向へ飛び出す。向きは変わらない・盾はついたまま・崖の端で止まる（p.sp を使う）
 // 2026-11-21 からスマブラと同じ仕様: 出だしは DASH_F フレーム、走る速さの DASH_MUL 倍。途中で離しても出だしは最後まで進む（止まらない）。
 //   途中で反対を押すと振り向きダッシュ（ダッシュダンス）、ジャンプ・攻撃・スキルで中断できる。押し続けていれば走りへ、離していれば止まる
-const DASH_F = 11, DASH_MUL = 1.1, DASH_CD = 0;
+const DASH_F = 11, DASH_MUL = 1.2, DASH_CD = 0;   // 2026-11-21 に出だしの速さ 1.1 → 1.2 倍
 const dashV = S => MOVE_BASE * moveMul(S) * DASH_MUL;
 // 常に相手の方を向く（2026-11-21 のお試し）: 動ける間は、地上でも空中でも、いちばん近い敵の方を向く（攻撃・ため・構えの間は向きを変えない）
-const AUTO_FACE = true;
+const AUTO_FACE = false;   // 2026-11-21 にやめた（代わりに、攻撃の当たり始めに、届く範囲の後ろに敵がいれば振り向く: turnToFoeInReach）
 // サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
 // 進み終わる（足場の端に着く）とインクを撒き散らして爆発（半径 SR_BLAST、盾は効かない）。途中で吹っ飛ばされる・動けなくなると、爆発せずに終わる。乗っている間は盾なし
 // キャンピングシェルター（2026-10-24）: 攻撃ボタンで前に大きな傘（高さ UMB_H = 体の 1.5 倍）を開く。押している間は開いたまま、UMB_LAUNCH フレームで傘が前へ飛んでいく（離すと閉じる）。
@@ -1068,6 +1068,13 @@ function foeSide(p) {                         // いちばん近い（生きて�
     if (d < bd) { bd = d; best = e; }
   }
   return best ? Math.sign(ecx(best) - ecx(p)) : 0;
+}
+// 攻撃の当たり始めに振り向く（2026-11-21）: 前の当たり判定に敵（人・分身）がいなくて、同じ大きさの後ろ側にいれば、向きを反対にする
+function turnToFoeInReach(p, ak) {
+  const sz = szOf(p), reach = ak.reach * sz, y0 = p.y + 8 * sz, y1 = p.y + (PLH - 8) * sz;
+  const inBox = (x0, x1) => ents().some(e => e !== p && !ally(e.own, p.own) && e.al && !untouchable(e) && !(x1 < hbL(e) || x0 > hbR(e) || y1 < e.y || y0 > e.y + phOf(e)));
+  const front = p.f > 0 ? p.x + PLW * sz : p.x - reach, back = p.f > 0 ? p.x - reach : p.x + PLW * sz;
+  if (!inBox(front, front + reach) && inBox(back, back + reach)) p.f = -p.f;
 }
 function aimAtFoe(p) {                       // 居合斬り: 右を向いていても、左に敵がいれば左へ踏み込む
   let best = null, bd = 1e9;
@@ -2200,6 +2207,7 @@ function physics(p, inp, neutral) {
   const ak = ATKS[p.ak] || ATKS[0];
   if (p.a > 0) {
     p.a++;
+    if (!ak.dash && p.a === ak.on) turnToFoeInReach(p, ak);                    // 当たり始め: 前に敵がいなくて、後ろの届く範囲にいれば振り向く
     if (ak.dash && p.a === ak.dashFrom) { if (ak.aim) aimAtFoe(p); emit("sl", ecx(p), ecy(p), p.ak); }      // 居合斬りは、踏み込む直前にも敵の方向へ向き直す（突進突きは真っすぐ）
     if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) {                         // 居合斬りの踏み込み・突進突きの突進
       p.vx = p.f * ak.dash;
