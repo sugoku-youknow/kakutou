@@ -347,7 +347,7 @@ function layoutFor(n) {
 const LAYOUTS = [layoutFor(2), layoutFor(2), layoutFor(2), layoutFor(3), layoutFor(4)];   // 人数 0〜4
 // ---------- ステージ選び（2026-11-09）----------
 // 0 =「いつもの」（今までどおり、人数で形が変わる）。1〜3 は仕掛けのあるステージ。どれもメインの足場（main）は上面が PY で、
-// 崖・蜘蛛・テレポートなどメインを使う処理はそのまま動く。上には撃墜ラインがないので、ばねで高く飛んでも落ちない。
+// 崖・蜘蛛・テレポートなどメインを使う処理はそのまま動く。上の撃墜ライン（2026-11-21 から、足場の面から 600px）は、ばねで跳んでも届かない高さ。
 // 動く足場の位置は、ラウンドの始めから数えたフレーム（game.stT）だけで決まる（ホストが計算し、スナップショットで届く）
 const STAGES = [
   { name: "いつもの", desc: "人数で形が変わる、ふつうのステージ" },
@@ -422,6 +422,14 @@ for (const k of ATKS) { k.on += STARTUP_ADD; k.off += STARTUP_ADD; k.total += ST
 // 吹っ飛ばしとたまる % は 0.6 倍。STARTUP_ADD の後に足すので、この数字のまま。槍兵・スパッタリーは今までどおり自分の攻撃
 const AIR_AK = ATKS.length;
 ATKS.push({ total: 24, on: 10, off: 16, reach: 46, frac: 0.6, air: true });
+// 吹っ飛ばしの角度（2026-11-21。真横が 0°、上向きが正）: 地上の攻撃は 45°、空中攻撃は 70°。角度はいつも同じで、%・攻撃力で強さ（横も上も）が変わる。
+// 通常攻撃（剣・槍・インク・居合斬り・突進突き）にだけ使う。スキル・爆風などは今までどおり（上向き 9 で一定、横だけ強くなる）
+for (const k of ATKS) k.ang = k.air ? 70 : 45;
+// 空中後ろ攻撃（7 番。2026-11-21）: 剣の人が空中で、向いている反対を押しながら攻撃すると、振り向かずに背中側へ突く。
+// 空中攻撃より少し遅い（13 フレーム目から、全体 28）が、届く距離 50・強さ 0.9 倍・角度 35°（低く後ろへ飛ばす）。back: 当たり判定と剣の向きが背中側
+const BAIR_AK = ATKS.length;
+ATKS.push({ total: 28, on: 13, off: 19, reach: 50, frac: 0.9, air: true, back: true, ang: 35 });
+const LAUNCH_K = Math.SQRT2;   // 角度つきの飛ばし: 速さ = 今までの横の強さ × √2（0% の 45° が、今までの「横 9・上 9」とほぼ同じになる）
 // 攻撃のあと盾が戻るまで: 今まで（当たり判定の終わりから攻撃の終わりまで）の 2 倍。攻撃が終わってから、さらに同じ長さだけ盾が出ない（動くことはできる。p.sl）
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
 
@@ -602,9 +610,10 @@ const withdrawn = p => !p.isClone && (p.cw | 0) > CIG_WD;
 const cigLeft = p => Math.max(0, 1 - (p.cw | 0) / CIG_WD);   // 口のタバコの残り（1 = 火をつけたばかり、0 = 吸い切った）
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
 // メインステージの端から 500px、足場の面から 300px の余裕を持たせる（以前は 340px / 260px で、飛ばされるとすぐ撃墜された）。左右はキャラの中心、下は頭の位置で判定する
-const KO_MARGIN = 500, KO_BOTTOM = 300;
+const KO_MARGIN = 500, KO_BOTTOM = 300, KO_TOP = 600;   // KO_TOP: 2026-11-21 から上にも撃墜ライン（足場の面から 600px = 体の 10 倍。体の全部がこれより上に出ると撃墜）
 const KO_L = CENTER_X - PW * WIDE_SCALE / 2 - KO_MARGIN, KO_R = CENTER_X + PW * WIDE_SCALE / 2 + KO_MARGIN, KO_B = PY + KO_BOTTOM;   // メインの端から 500px（2026-11-21 からステージの広さに合わせる）
-const outOfBounds = p => { const x = p.x + pwOf(p) / 2; return x < KO_L || x > KO_R || p.y > KO_B; };
+const KO_T = PY - KO_TOP;
+const outOfBounds = p => { const x = p.x + pwOf(p) / 2; return x < KO_L || x > KO_R || p.y > KO_B || p.y + phOf(p) < KO_T; };
 
 // ---------- キャラクター ----------
 // A/D/S = 攻撃/防御/スピード。skill.cd = クールタイム(秒)、スキルが強いほど長い。hold = 押している間ためて離すと発動
@@ -2168,9 +2177,10 @@ function physics(p, inp, neutral) {
       emit("umo", ecx(p) + p.f * 28, ecy(p), p.f);
     } else if (apress && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {
       p.ba = 0;
-      if (!p.ground && dir) p.f = dir;                          // 空中では、移動ボタンを押しながら攻撃すると、その方向へ振り向いて攻撃する（2026-10-18）
+      const bair = !p.ground && !chd.atk && dir === -p.f;          // 空中後ろ攻撃（剣の人だけ。振り向かない）
+      if (!p.ground && dir && !bair) p.f = dir;                 // 空中では、移動ボタンを押しながら攻撃すると、その方向へ振り向いて攻撃する（剣の人は、後ろを押すと空中後ろ攻撃）
       if (zone && inZone(zone, p)) zoneWarp(p, zone);           // 円の中なら、敵の背後へ回り込んでから攻撃する
-      p.a = 1; p.ak = chd.atk || (p.ground ? 0 : AIR_AK); p.hit = [];   // 通常攻撃（槍兵は長い槍）。剣は空中なら空中攻撃
+      p.a = 1; p.ak = chd.atk || (p.ground ? 0 : bair ? BAIR_AK : AIR_AK); p.hit = [];   // 通常攻撃（槍兵は長い槍）。剣は空中なら空中攻撃
       emit("s", ecx(p), ecy(p));
     }
   }
@@ -2246,13 +2256,16 @@ function skillInput(p, chd, kin, kpress, dir, zone) {
 
 function breakShield(t) { t.sh = 0; t.sbk = SHIELD_BREAK_FRAMES; t.shi = 0; t.bf = 14; }
 // frac: 盾なしで当たったときの吹っ飛ばしに対する割合（0 なら横には飛ばず、少し浮いてよろけるだけ）
-function knock(att, t, frac, dir, cap, dmgAmt) {                 // cap: 強さの上限（ふだんは 1.3。究極魔法だけ上げる）/ dmgAmt: たまる % を決めて渡す（吸血鬼。省くとふつうの計算）
+function knock(att, t, frac, dir, cap, dmgAmt, ang) {   // ang: 吹っ飛ばしの角度（度。通常攻撃だけ。省くと上向き 9 で一定）                 // cap: 強さの上限（ふだんは 1.3。究極魔法だけ上げる）/ dmgAmt: たまる % を決めて渡す（吸血鬼。省くとふつうの計算）
   if (att.wa) { frac *= ZONE_WARP_MUL; att.wa = 0; }               // スワッパーの回り込み攻撃
   frac = Math.min(cap || 1.3, frac);
   const mul = dzMul(t);                                          // 土下座中は飛びにくい（2026-10-18 まであった「透過中の攻撃は 1.5 倍」はなくした）
   t.vx = (dir === undefined ? att.f : dir) * KNOCK_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul * dmgMul(t);
   addDmg(t, dmgAmt !== undefined ? dmgAmt : DMG_BASE * atkMul(effA(att)) * defMul(effD(t)) * frac * mul);
-  t.vy = -9; t.s = Math.max(1, Math.round(Math.abs(t.vx) * STUN_SPEED));   // 攻撃力・防御力・ため量・透過・土下座などで速さが変わると、硬直もそのぶん変わる
+  if (ang !== undefined) {                                       // 角度つき: 横も上も強さに比例する（硬直は今までと同じく、横の強さ × STUN_SPEED）
+    const M = Math.abs(t.vx), r = ang * Math.PI / 180, sg = Math.sign(t.vx) || 1;
+    t.vx = sg * M * LAUNCH_K * Math.cos(r); t.vy = -M * LAUNCH_K * Math.sin(r); t.s = Math.max(1, Math.round(M * STUN_SPEED));
+  } else { t.vy = -9; t.s = Math.max(1, Math.round(Math.abs(t.vx) * STUN_SPEED)); }   // 攻撃力・防御力・ため量・透過・土下座などで速さが変わると、硬直もそのぶん変わる
   grabBroken(t);
   const fz0 = t.fz, dz0 = t.dz;
   t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.fz = 0; t.dz = 0; t.mc = 0;   // 魔法使いの詠唱も取り消し（耐久は減らない）
@@ -2287,7 +2300,7 @@ function flyOut(t) {
     vy = Math.min(18, vy + 0.6);
     const pb = y + h; x += vx; y += vy;
     if (vy >= 0) for (const pl of pls) if (pb <= pl.y + 0.01 && y + h >= pl.y && x + w > pl.x && x < pl.x + pl.w) return false;   // 足場に着地する
-    if (x + w / 2 < KO_L || x + w / 2 > KO_R || y > KO_B) return true;
+    if (x + w / 2 < KO_L || x + w / 2 > KO_R || y > KO_B || y + h < KO_T) return true;
   }
   return true;
 }
@@ -2318,7 +2331,7 @@ function strike(att, t, o) {
   if (t.cn > 0 && att.al) { counterHit(t, att); return; }
   if (umbrellaBlock(att, t, o)) return;                      // キャンピングシェルターの傘（前からの攻撃）
   const open = !shieldUp(t) || t.f !== -o.dir;               // 盾がない・外れている・背後から → 盾は効かない
-  if (open) { knock(att, t, o.frac, o.dir, o.cap, o.dmf ? DMG_BASE * atkMul(effA(att)) * defMul(effD(t)) * o.dmf * dzMul(t) : undefined); impact("h", att, t, o.frac, o.dir); return; }   // dmf: たまる % だけ別の倍率（CF のクリティカル）
+  if (open) { knock(att, t, o.frac, o.dir, o.cap, o.dmf ? DMG_BASE * atkMul(effA(att)) * defMul(effD(t)) * o.dmf * dzMul(t) : undefined, o.ang); impact("h", att, t, o.frac, o.dir); return; }   // dmf: たまる % だけ別の倍率（CF のクリティカル）
   if (o.breaker) {                                           // 居合斬り: 盾を壊すだけで、吹っ飛ばしはしない
     breakShield(t); impact("k", att, t, 0, o.dir); return;
   }
@@ -2336,7 +2349,8 @@ function resolveHits(list) {
     const ak = ATKS[p.ak] || ATKS[0];
     if (!p.al || p.a < ak.on || p.a > ak.off) continue;
     const sz = szOf(p), reach = ak.reach * sz;                       // 巨大化中は射程も 2 倍
-    const hx0 = p.f > 0 ? p.x + PLW * sz : p.x - reach, hx1 = hx0 + reach;
+    const hf = ak.back ? -p.f : p.f;                                 // 当たる側（空中後ろ攻撃は背中側）
+    const hx0 = hf > 0 ? p.x + PLW * sz : p.x - reach, hx1 = hx0 + reach;
     const hy0 = p.y + 8 * sz, hy1 = p.y + (PLH - 8) * sz;
     for (const t of list) {
       if (t === p || ally(t.own, p.own) || p.hit.includes(t) || !t.al || untouchable(t)) continue;
@@ -2344,13 +2358,13 @@ function resolveHits(list) {
       p.hit.push(t);
       const hs0 = t.s, hd0 = t.dm;
       if (ak.hammer) hammerHit(p, t);
-      else if (!p.isClone && !p.ground && chOf(p).id === "cf" && !(hx0 + (p.f > 0 ? CF_ROOT * sz : reach) < hbL(t) || hx0 + (p.f > 0 ? 0 : reach - CF_ROOT * sz) > hbR(t))) {
+      else if (!ak.back && !p.isClone && !p.ground && chOf(p).id === "cf" && !(hx0 + (p.f > 0 ? CF_ROOT * sz : reach) < hbL(t) || hx0 + (p.f > 0 ? 0 : reach - CF_ROOT * sz) > hbR(t))) {
         // CF の空中攻撃の根元（体に近い CF_ROOT px）が当たった: クリティカル（2 倍の威力と吹っ飛ばし。盾で受けられたらふつうの盾の削り）
         const s0 = t.s;
-        strike(p, t, { dir: p.f, frac: CF_CRIT_KB, cap: CF_CRIT, dmf: CF_CRIT, recoil: true });
+        strike(p, t, { dir: p.f, frac: CF_CRIT_KB, cap: CF_CRIT, dmf: CF_CRIT, recoil: true, ang: ak.ang });
         if (t.s > 0 && t.s !== s0) { game.hs = Math.max(game.hs, Math.round(CF_HS * (8 + 3 * CF_CRIT))); emit("crit", ecx(t), ecy(t), p.f); }
       }
-      else strike(p, t, { dir: p.f, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker });
+      else strike(p, t, { dir: hf, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker, ang: ak.ang });
       if (t.dm !== hd0 || (t.s > 0 && t.s !== hs0)) p.ahit = 1;   // 体に当たった（盾で受けられた・弾かれたときは数えない）
     }
     if (!(ak.hammer && (p.hmN | 0) <= 1)) hitObjs(p.own, hx0, hy0, hx1, hy1, p.hit);   // 手下とクロスボウにも当たる（クロスボウは 1 回の攻撃で 1 回だけ削る。ハンマーの 1 は何にも当たらない）
@@ -4218,7 +4232,7 @@ function swordTip(a, ak) {
   return Math.max(4, ak.reach * (1 - (a - ak.off) / Math.max(1, ak.total - ak.off)));
 }
 function drawSword(c, p, ak, col) {
-  const f = p.f, front = f > 0 ? p.x + PLW : p.x;
+  const f = p.a > 0 && ak.back ? -p.f : p.f, front = f > 0 ? p.x + PLW : p.x;   // 空中後ろ攻撃は背中側へ突く
   c.save(); c.lineCap = "round";
   if (!(p.a > 0)) {                                                               // ふだん: 前の手で上向きに立てる
     const hx = p.x + PLW / 2 + f * 15, hy = p.y + 36;
@@ -6191,13 +6205,14 @@ function render() {
     }
   }
   // 撃墜ライン: この外へ出ると脱落する。崖の外まで映っているときだけ、うっすら見える
-  if (game.ph !== "lobby" && (camView.x0 < KO_L || camView.x1 > KO_R || camView.y1 > KO_B)) {
-    const v = camView, top = Math.min(v.y0, KO_B);
+  if (game.ph !== "lobby" && (camView.x0 < KO_L || camView.x1 > KO_R || camView.y1 > KO_B || camView.y0 < KO_T)) {
+    const v = camView, top = Math.max(KO_T, Math.min(v.y0, KO_B));
     cx.save(); cx.strokeStyle = "rgba(248,113,113,0.38)"; cx.lineWidth = 2 / cam.s; cx.setLineDash([12 / cam.s, 9 / cam.s]);
     cx.beginPath();
     if (v.x0 < KO_L) { cx.moveTo(KO_L, top); cx.lineTo(KO_L, KO_B); }
     if (v.x1 > KO_R) { cx.moveTo(KO_R, top); cx.lineTo(KO_R, KO_B); }
     if (v.y1 > KO_B) { cx.moveTo(Math.max(v.x0, KO_L), KO_B); cx.lineTo(Math.min(v.x1, KO_R), KO_B); }
+    if (v.y0 < KO_T) { cx.moveTo(Math.max(v.x0, KO_L), KO_T); cx.lineTo(Math.min(v.x1, KO_R), KO_T); }   // 上の撃墜ライン
     cx.stroke(); cx.restore();
   }
   for (const k of inks) {                          // スパッタリーのインクの跡（足場の上面に平たく。終わりの 1 秒で薄くなる）
