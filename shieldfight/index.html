@@ -437,6 +437,9 @@ ATKS.push({ total: 28, on: 13, off: 19, reach: 82, frac: 0.9, air: true, back: t
 const LAUNCH_K = Math.SQRT2;   // 角度つきの飛ばし: 速さ = 今までの横の強さ × √2（0% の 45° が、今までの「横 9・上 9」とほぼ同じになる）
 // 攻撃のあと盾が戻るまで: 今まで（当たり判定の終わりから攻撃の終わりまで）の 2 倍。攻撃が終わってから、さらに同じ長さだけ盾が出ない（動くことはできる。p.sl）
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
+// テレポーターのスキルボタンのスライド（2026-11-21 改）: 方向キーとは別のビットで送る（クールタイム中にスライドしても動かない）。
+//   (入力 >> AIM_SHIFT) & 15 = 向き（1〜9 = (横+1)×3 + (縦+1) + 1、0 = スライドなし）/ (入力 >> MAG_SHIFT) & 7 = 長さ（1〜7。7 でいちばん遠く）
+const AIM_SHIFT = 6, MAG_SHIFT = 10, IN_MASK = 8191;
 
 // 性能: 攻撃 / 防御 / スピード（各 0〜6、2 が標準）
 const MIN_STAT = 0, MAX_STAT = 6, BASE_STAT = 2;
@@ -640,7 +643,7 @@ const CHARS = [
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 4, tag: "遠くから矢を放つ",
     skill: { name: "弓矢", cd: 0.1, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ。長くためるほど速く強い。矢は5本まで（1秒に1本回復）" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 5, tag: "瞬間移動で間合いを支配する",
-    skill: { name: "テレポート", cd: 2, cdText: "1〜3.5秒（遠いほど長い）", hold: true, maxCharge: 60, text: "押している間ためて、離すと瞬間移動する。スキルボタンを押したまま指をスライドした方向（上下・斜めも）へ飛ぶ（スライドしなければ向いている方。キーボードはためている間の方向キー）。長くためるほど遠くへ飛ぶ（最大でステージの端から端まで）が、そのぶんクールタイムが長い" } },
+    skill: { name: "テレポート", cd: 2, cdText: "1〜3.5秒（遠いほど長い）", hold: true, maxCharge: 60, text: "スキルボタンを押したまま指をスライドして離すと、その方向（上下・斜めも）へ瞬間移動する。指を動かした長さで距離が決まり、遠いほどクールタイムが長い（1〜3.5秒）。スライドしなければ、押していた長さで向いている方へ飛ぶ（キーボードはためている間の方向キー）" } },
   { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 3, tag: "盾なし。スキルで攻撃と速さが上がる", noShield: true,
     skill: { name: "狂化", cd: 14, text: "6秒間、攻撃とスピードが上がるが、防御が下がる" } },
   { id: "knight", name: "騎士", A: 3, D: 4, S: 2, tag: "とても硬い。攻撃を跳ね返す",
@@ -902,7 +905,7 @@ function newPlayer() {
            hw: 0, hwr: 0, hwh: [], hmN: 0, hmT: 0,     // … / 勝負師: 出目の吹き出しを出す残り
            um: 0, umR: 0, umHp: UMB_HP, umh: [], aiUm: 0,   // キャンピングシェルター: 傘を開いている長さ（0 = 閉じている）/ 新しい傘が生えるまで / 傘の耐久 / 触れて当てた敵と次に当たれるまで（ホストだけ）/ CPU が攻撃ボタンを押し続ける残り
            sp: 0, spD: 1, spV: 0, spK: 0, dtF: 1, spN: 0, spW: 0, spC: 0, spU: 0, dtD: 0, dtT: 0, pdir: 0, dsC: 0, srT: 0, srHit: [], srCar: [], aiStp: 0,   // スパッタリー: ステップの残り / 向き / 続けて出した回数 / 2 回目を出せる残り / 使えない残り / ジャンプボタンを離すまで地上ジャンプしない / サメライドの残り / 当てた相手・押している相手（ホストだけ）/ CPU のステップの指示
-           vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0, nsh: 0, bsl: 0, tpAx: 0, tpAy: 0, msw: MSW_MAX, msA: 0, mswT: 0, sl: 0, ws: 0, wsK: 0, mi: 0, bnd: 0, esc: 0, ahit: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
+           vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0, nsh: 0, bsl: 0, tpAx: 0, tpAy: 0, tpM: 0, msw: MSW_MAX, msA: 0, mswT: 0, sl: 0, ws: 0, wsK: 0, mi: 0, bnd: 0, esc: 0, ahit: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
            ub: 0, nc: 0, dr: 0, st: 0, cw: 0, cs: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
            yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
            cpu: false, cpuLv: 1,                        // CPU 戦の相手か / 強さ（AI_LEVELS の番号）
@@ -1170,7 +1173,8 @@ function useSkill(p) {                       // 押した瞬間に発動する�
 }
 const tpDist = c => TP_MIN + (TP_MAX - TP_MIN) * c;   // テレポートで動く距離（c: ため量 0〜1）
 function fireHold(p) {                       // ためて離すスキル
-  const sk = chOf(p).skill, c = Math.min(1, p.ks / sk.maxCharge), id = chOf(p).id, ks = p.ks;
+  const sk = chOf(p).skill, id = chOf(p).id, ks = p.ks;
+  let c = Math.min(1, p.ks / sk.maxCharge);   // ため量（テレポーターはスライドの長さで上書き）
   p.ks = 0;
   if (id === "swapper") { openZone(p, ks); return; }   // ゾーンを張る（クールタイムは円が消えてから）
   if (id === "bomber") {                               // 低い山なりに投げる。ためるほど遠くへ（ため中に見えている道すじ bombPath のとおりに飛ぶ）
@@ -1188,6 +1192,7 @@ function fireHold(p) {                       // ためて離すスキル
     emit("sk", ecx(p), ecy(p), p.ch);
   } else if (id === "teleporter") {
     const x0 = ecx(p), y0 = ecy(p);
+    if (p.tpM) c = p.tpM / 7;                                     // スライドした長さで距離（とクールタイム）が決まる（ためた長さは使わない）
     const ax = p.tpAx || 0, ay = p.tpAy || 0;                     // 向き（2026-11-21 から: スキルボタンをスライドした方向。スライドしなければ向いている方）
     if (!ay) {
       const hx = ax || p.f; p.f = hx;
@@ -1202,9 +1207,9 @@ function fireHold(p) {                       // ためて離すスキル
       p.y = Math.max(KO_T + 40, Math.min(KO_B - 80 - PLH, p.y + ay * n * d));
       p.ground = false; p.vy = 0;
     }
-    p.vx = 0; p.tpAx = p.tpAy = 0;
+    p.vx = 0; p.tpAx = p.tpAy = 0; p.tpM = 0;
     emit("tp", x0, y0, ecx(p), ecy(p));
-    p.kc = p.km = Math.round((TP_CD0 + TP_CD1 * c) * 60 * cdMul());   // クールタイムは飛ぶ距離（ため量）しだい
+    p.kc = p.km = Math.round((TP_CD0 + TP_CD1 * c) * 60 * cdMul());   // クールタイムは飛ぶ距離（スライドの長さ・ため量）しだい: 近くへ 1 秒〜いちばん遠くへ 3.5 秒
     return;
   }
   p.kc = skCd(p);
@@ -2125,7 +2130,11 @@ function physics(p, inp, neutral) {
     else if (p.hw < HW_MAX && (p.hw += late() ? 2 : 1) >= HW_MAX) { p.hw = HW_MAX; const o = hwPos(p); emit("hwu", o.x, o.y, o.r); }
   }
   const tpAim = chd.id === "teleporter" && !p.isClone && p.ks > 0;   // テレポーター: ためている間は、方向キー（スキルボタンのスライド）で向きを決める。動かず跳ばない
-  if (tpAim && kin) { p.tpAx = dir; p.tpAy = (d ? 1 : 0) - (u ? 1 : 0); }   // 離したフレームは、直前の向きのまま（指を離すとスライドも消えるため）
+  if (tpAim && kin) {                              // スライドしていれば、その向きと長さ。していなければ（キーボード）方向キーと、ためた長さ
+    const ai = (inp >> AIM_SHIFT) & 15;
+    if (ai) { p.tpAx = Math.floor((ai - 1) / 3) - 1; p.tpAy = (ai - 1) % 3 - 1; p.tpM = (inp >> MAG_SHIFT) & 7; }
+    else { p.tpAx = dir; p.tpAy = (d ? 1 : 0) - (u ? 1 : 0); p.tpM = 0; }
+  }   // 離したフレームは、直前の向きのまま（指を離すとスライドも消えるため）
   if (tpAim) p.bu = 0;
   if (p.bk > 0) p.bk--;
   if (p.ba > 0) p.ba--;
@@ -3389,6 +3398,7 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.srT > 0) o.sr = p.srT;                                  // スパッタリー: サメライドの残り（サメを描く）
   if (p.msT > 0) o.ms = p.msT;
   if (p.ks > 0 && (p.tpAx || p.tpAy)) o.ta = (p.tpAx + 1) * 3 + (p.tpAy + 1);   // テレポーターの向き
+  if (p.ks > 0 && p.tpM) o.tm = p.tpM;                          // スライドの長さ
   if (p.msw !== undefined && chOf(p).id === "wizard") { o.mw = p.msw; if (p.msA) o.ma = 1; }   // 魔法使いの魔法の剣の残り回数 / 今の攻撃が魔法の剣か
   if (p.ws > 0) o.ws = p.ws;                                    // スキルの構え（「！」を出す）                                  // CF: 宙返りの残り                                  // 吸血鬼: 羽を広げている残り
   if (p.vbT > 0) o.vb = p.vbT;                                  // 吸血鬼: 噛みついている残り      // 勝負師: 出目（吹き出しを出している間と、振っている間）                                      // ヤニ猫: 最後にタバコを拾ってからのフレーム（禁断症状の表示と性能用）      // ヤク猫の注射器: 性能ごとの上乗せ（攻撃・防御・スピード）と、いちばん長い残り
@@ -3671,7 +3681,7 @@ function startHost() {
 // 参加者の入力。番号（q）が前に使ったもの以下なら、遅れて届いた古い入力なので使わない（番号のない古い版の参加者は、届いた順に使う）
 function takeInput(slot, d) {
   if (d.q !== undefined) { const q = Number(d.q); if (!(q > inQs[slot])) return; inQs[slot] = q; }
-  held[slot] = d.k & 63; latch[slot] |= held[slot] | (d.l & 63);   // l: 直前に押したボタン（短いタップ）
+  held[slot] = d.k & IN_MASK; latch[slot] |= held[slot] | (d.l & 63);   // l: 直前に押したボタン（短いタップ）
 }
 
 function startClient(code) {
@@ -3755,7 +3765,7 @@ function readEnt(p, n) {                                     // スナップシ�
     if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
   }
   p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
-  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; { const ta = n.ta === undefined ? 4 : n.ta; p.tpAx = Math.floor(ta / 3) - 1; p.tpAy = ta % 3 - 1; } p.msw = n.mw | 0; p.msA = n.ma | 0; p.ws = n.ws | 0; p.vbT = n.vb | 0; p.sp = n.sp | 0; p.srT = n.sr | 0; p.um = n.um | 0; p.umR = n.umR | 0; p.umHp = n.umHp === undefined ? UMB_HP : n.umHp | 0;
+  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; { const ta = n.ta === undefined ? 4 : n.ta; p.tpAx = Math.floor(ta / 3) - 1; p.tpAy = ta % 3 - 1; } p.tpM = n.tm | 0; p.msw = n.mw | 0; p.msA = n.ma | 0; p.ws = n.ws | 0; p.vbT = n.vb | 0; p.sp = n.sp | 0; p.srT = n.sr | 0; p.um = n.um | 0; p.umR = n.umR | 0; p.umHp = n.umHp === undefined ? UMB_HP : n.umHp | 0;
   p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
@@ -3824,7 +3834,7 @@ const keyMap = { ArrowLeft: "l", KeyA: "l", ArrowRight: "r", KeyD: "r", ArrowUp:
 const down = new Set();                      // キーボードで押しているボタン
 // テレポーターのスキルボタンのスライド（2026-11-21）: slide = 押した指と場所 / aimBits = スライドの向き（方向キーとして送る。ためている間は動かないので、向きにだけ使われる）
 let slide = null, aimBits = 0;
-const SLIDE_MIN = 18;
+const SLIDE_MIN = 18, SLIDE_FULL = 130;   // スライドとみなす長さ / これ以上動かすといちばん遠く（px）
 const myTeleporter = () => { const me = game.p[myId]; return !!me && chOf(me).id === "teleporter"; };
 const touchDown = new Map();                 // 画面のボタン: 指（pointerId）ごとに、押しているボタン
 function recalcKeys() {
@@ -3879,7 +3889,9 @@ document.querySelectorAll(".tb").forEach(el => {
   if (k === "k") el.addEventListener("pointermove", e => {
     if (!slide || e.pointerId !== slide.id) return;
     const dx = e.clientX - slide.x, dy = e.clientY - slide.y, m = Math.hypot(dx, dy);
-    aimBits = m < SLIDE_MIN ? 0 : (Math.abs(dx) > m * 0.38 ? (dx > 0 ? KEY.r : KEY.l) : 0) | (Math.abs(dy) > m * 0.38 ? (dy > 0 ? KEY.d : KEY.u) : 0);
+    if (m < SLIDE_MIN) aimBits = 0;
+    else { const ax = Math.abs(dx) > m * 0.38 ? Math.sign(dx) : 0, ay = Math.abs(dy) > m * 0.38 ? Math.sign(dy) : 0, mag = Math.max(1, Math.min(7, Math.ceil((m - SLIDE_MIN) / (SLIDE_FULL - SLIDE_MIN) * 7)));
+      aimBits = (((ax + 1) * 3 + (ay + 1) + 1) << AIM_SHIFT) | (mag << MAG_SHIFT); }
     recalcKeys();
   });
   ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, e => {
@@ -5630,7 +5642,7 @@ function drawPlayer(p, i, me, now) {
     cx.beginPath(); cx.arc(p.x + PLW / 2, p.y + PLH / 2, 38, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); cx.stroke();
     if (chd.id === "teleporter") {
       cx.globalAlpha = 0.55 * alpha; cx.strokeStyle = "#22d3ee"; cx.lineWidth = 2; cx.setLineDash([4, 3]);
-      { const ax = p.tpAx || 0, ay = p.tpAy || 0, n = ax && ay ? Math.SQRT1_2 : 1, d = ay ? tpDist(c) * TP_V_MUL : tpDist(c), hx = ay ? ax : (ax || p.f);   // 行き先（スライドした向き）
+      { const cc = p.tpM ? p.tpM / 7 : c, ax = p.tpAx || 0, ay = p.tpAy || 0, n = ax && ay ? Math.SQRT1_2 : 1, d = ay ? tpDist(cc) * TP_V_MUL : tpDist(cc), hx = ay ? ax : (ax || p.f);   // 行き先（スライドした向き）
         cx.strokeRect(p.x + hx * n * d + 0.5, p.y + ay * n * d + 0.5, PLW - 1, PLH - 1); } cx.setLineDash([]);
     }
     if (chd.id === "bomber") {                                    // ボマー: 爆弾が飛ぶ道すじ（点線）と、落ちる場所の爆風の範囲
