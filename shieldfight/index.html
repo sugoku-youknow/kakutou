@@ -418,6 +418,10 @@ const ATKS = [
 // 2026-11-21: 人が見てから反応できるよう、全部の攻撃の出を STARTUP_ADD フレーム遅くする（当たり始め・終わり・全体・踏み込みを同じだけずらす。通常攻撃は 7 → 13 フレーム目から）
 const STARTUP_ADD = 15;   // 2026-11-21 に 6 → 15（構えを見てからステップでよけられるように。通常攻撃は 22 フレーム目に当たる）
 for (const k of ATKS) { k.on += STARTUP_ADD; k.off += STARTUP_ADD; k.total += STARTUP_ADD; if (k.dash) { k.dashFrom += STARTUP_ADD; k.dashTo += STARTUP_ADD; } }
+// 空中攻撃（6 番。2026-11-21）: 剣の通常攻撃（0 番）を空中で出すと、こちらになる。出が早く（10 フレーム目から。地上は 22）後隙も短い（全体 24。地上は 41）が、
+// 吹っ飛ばしとたまる % は 0.6 倍。STARTUP_ADD の後に足すので、この数字のまま。槍兵・スパッタリーは今までどおり自分の攻撃
+const AIR_AK = ATKS.length;
+ATKS.push({ total: 24, on: 10, off: 16, reach: 46, frac: 0.6, air: true });
 // 攻撃のあと盾が戻るまで: 今まで（当たり判定の終わりから攻撃の終わりまで）の 2 倍。攻撃が終わってから、さらに同じ長さだけ盾が出ない（動くことはできる。p.sl）
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
 
@@ -2180,7 +2184,7 @@ function physics(p, inp, neutral) {
       p.ba = 0;
       if (!p.ground && dir) p.f = dir;                          // 空中では、移動ボタンを押しながら攻撃すると、その方向へ振り向いて攻撃する（2026-10-18）
       if (zone && inZone(zone, p)) zoneWarp(p, zone);           // 円の中なら、敵の背後へ回り込んでから攻撃する
-      p.a = 1; p.ak = chd.atk || 0; p.hit = [];                 // 通常攻撃（槍兵は長い槍）
+      p.a = 1; p.ak = chd.atk || (p.ground ? 0 : AIR_AK); p.hit = [];   // 通常攻撃（槍兵は長い槍）。剣は空中なら空中攻撃
       emit("s", ecx(p), ecy(p));
     }
   }
@@ -4218,36 +4222,34 @@ function deco(c, id, x, y, f, o) {
     }
   }
 }
-// 剣を描く（p.a: 攻撃の経過フレーム）。角度は「前へ真横 = 0」、上が負。手は体の中心から前へ 10px・上から 30px
-//   ふだん: 前の下（70°） / 構え（1〜当たり始めの前）: 下から後ろへ回して、頭の後ろの上（210° = -150°）まで振りかぶる。終わりぎわは刃先が光る /
-//   当たる間: 頭の後ろ（-150°）から真上を通って前の少し下（25°）へ振り下ろし、通った跡を残す / 戻り: 25° → 70°
-const SWORD_IDLE = 70, SWORD_BACK = 210, SWORD_FROM = -150, SWORD_TO = 25;
-function swordAngle(a, ak) {
-  if (a <= 0) return SWORD_IDLE;
-  if (a < ak.on) { const k = a / ak.on; return SWORD_IDLE + (SWORD_BACK - SWORD_IDLE) * (1 - (1 - k) * (1 - k)); }   // 振りかぶる（はじめ速く、だんだんゆっくり）
-  if (a <= ak.off) { const k = (a - ak.on + 1) / (ak.off - ak.on + 1); return SWORD_FROM + (SWORD_TO - SWORD_FROM) * k; }
-  return SWORD_TO + (SWORD_IDLE - SWORD_TO) * Math.min(1, (a - ak.off) / Math.max(1, ak.total - ak.off));
+// 剣を描く（2026-11-21。槍兵の槍と同じ考え方）: ふだんは前の手で上向きに立てて持つ。攻撃を押すと横向きに寝かせ、
+//   構え（当たり始めの前）: 手を後ろへ引いて、刃先が体の前のふちまで下がる（後半は刃先が黄色く光る）/ 当たる間: 前へ突き出して、届く距離いっぱいまで伸びる（跡を出す）/
+//   戻り: だんだん引いて、攻撃が終わると上向きに戻す。swordTip: 体の前のふちから刃先までの長さ
+const SWORD_LEN = 40;   // 刃の長さ（太さは 2026-11-21 に 2 倍の 6px）
+function swordTip(a, ak) {
+  if (a < ak.on) return 12 * (1 - a / ak.on);                                   // 構え: 少し出ているところから、体のふちまで引く
+  if (a <= ak.off) return ak.reach;
+  return Math.max(4, ak.reach * (1 - (a - ak.off) / Math.max(1, ak.total - ak.off)));
 }
 function drawSword(c, p, ak, col) {
-  const f = p.f, hx = p.x + PLW / 2 + f * 14, hy = p.y + 30, L = PLW / 2 - 14 + ak.reach + 6;
-  const deg = swordAngle(p.a | 0, ak), r = deg * Math.PI / 180, ux = Math.cos(r) * f, uy = Math.sin(r);
-  const act = p.a >= ak.on && p.a <= ak.off, wind = p.a > 0 && p.a < ak.on;
+  const f = p.f, front = f > 0 ? p.x + PLW : p.x;
   c.save(); c.lineCap = "round";
-  if (act) {                                                   // 振った跡（扇形）
-    if (deg < -70) { /* 真上を過ぎるまでは跡を出さない */ } else {
-    const r0 = Math.max(-70, deg - 95) * Math.PI / 180;
-    c.fillStyle = p.ak === 1 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)";
-    c.beginPath(); c.moveTo(hx, hy);
-    if (f > 0) c.arc(hx, hy, L, r0, r, false); else c.arc(hx, hy, L, Math.PI - r0, Math.PI - r, true);
-    c.closePath(); c.fill(); }
+  if (!(p.a > 0)) {                                                               // ふだん: 前の手で上向きに立てる
+    const hx = p.x + PLW / 2 + f * 15, hy = p.y + 36;
+    c.strokeStyle = "#78350f"; c.lineWidth = 7; c.beginPath(); c.moveTo(hx, hy + 6); c.lineTo(hx, hy - 4); c.stroke();          // 柄
+    c.strokeStyle = "#a16207"; c.lineWidth = 5; c.beginPath(); c.moveTo(hx - 9, hy - 4); c.lineTo(hx + 9, hy - 4); c.stroke();  // 鍔
+    c.strokeStyle = "#cbd5e1"; c.lineWidth = 6; c.beginPath(); c.moveTo(hx, hy - 4); c.lineTo(hx, hy - 4 - SWORD_LEN); c.stroke();   // 刃
+    c.restore(); return;
   }
-  const bx = hx + ux * 7, by = hy + uy * 7, tx = hx + ux * L, ty = hy + uy * L;
-  c.strokeStyle = "#78350f"; c.lineWidth = 4; c.beginPath(); c.moveTo(hx - ux * 4, hy - uy * 4); c.lineTo(bx, by); c.stroke();   // 柄
-  c.strokeStyle = "#a16207"; c.lineWidth = 3; c.beginPath(); c.moveTo(bx - uy * 6, by + ux * 6); c.lineTo(bx + uy * 6, by - ux * 6); c.stroke();   // 鍔（刃と直角）
-  c.strokeStyle = act ? "#ffffff" : "#cbd5e1"; c.lineWidth = act ? 4 : 3; c.beginPath(); c.moveTo(bx, by); c.lineTo(tx, ty); c.stroke();   // 刃
-  if (wind && p.a > ak.on * 0.5) {                             // 構えの後半: 刃先が光る（もうすぐ振る）
-    const k = (p.a - ak.on * 0.5) / (ak.on * 0.5);
-    c.fillStyle = "rgba(253,224,71," + (0.35 + 0.6 * k).toFixed(2) + ")"; c.beginPath(); c.arc(tx, ty, 3 + 4 * k, 0, 6.2832); c.fill();
+  const a = p.a, act = a >= ak.on && a <= ak.off, ext = swordTip(a, ak), sy = p.y + 30;
+  const tip = front + f * ext, guard = tip - f * SWORD_LEN, grip = guard - f * 9;
+  if (act) { c.fillStyle = p.ak === 1 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)"; c.fillRect(f > 0 ? front : front - ak.reach, p.y + 18, ak.reach, 22); }   // 届く範囲
+  c.strokeStyle = "#78350f"; c.lineWidth = 7; c.beginPath(); c.moveTo(grip, sy); c.lineTo(guard, sy); c.stroke();           // 柄
+  c.strokeStyle = "#a16207"; c.lineWidth = 5; c.beginPath(); c.moveTo(guard, sy - 9); c.lineTo(guard, sy + 9); c.stroke();   // 鍔
+  c.strokeStyle = act ? "#ffffff" : "#e5e7eb"; c.lineWidth = act ? 8 : 6; c.beginPath(); c.moveTo(guard, sy); c.lineTo(tip, sy); c.stroke();   // 刃
+  if (a < ak.on && a > ak.on * 0.5) {                                             // 構えの後半: 刃先が光る（もうすぐ突く）
+    const k = (a - ak.on * 0.5) / (ak.on * 0.5);
+    c.fillStyle = "rgba(253,224,71," + (0.35 + 0.6 * k).toFixed(2) + ")"; c.beginPath(); c.arc(tip, sy, 5 + 5 * k, 0, 6.2832); c.fill();
   }
   c.restore();
 }
