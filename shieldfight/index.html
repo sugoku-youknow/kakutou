@@ -428,12 +428,12 @@ for (const k of ATKS) k.ang = k.air ? 70 : 45;
 // 空中後ろ攻撃（7 番。2026-11-21）: 剣の人が空中で、向いている反対を押しながら攻撃すると、振り向かずに背中側へ突く。
 // 空中攻撃より少し遅い（13 フレーム目から、全体 28）が、届く距離 50・強さ 0.9 倍・角度 35°（低く後ろへ飛ばす）。back: 当たり判定と剣の向きが背中側
 const BAIR_AK = ATKS.length;
-ATKS.push({ total: 28, on: 13, off: 19, reach: 50, frac: 0.9, air: true, back: true, ang: 35 });
+ATKS.push({ total: 28, on: 13, off: 19, reach: 50, frac: 0.9, air: true, back: true, ang: 35, lowY: 15 });   // lowY: 2026-11-21 から、体の中ほど（上から 30px）ではなく、下から 4 分の 1（上から 45px）の高さから出る
 // 槍兵の空中攻撃（8 番）・空中後ろ攻撃（9 番）（2026-11-21）: 剣の空中攻撃と同じ速さ・強さ・角度で、届く距離だけ槍の長さ（82）
 const LANCE_AIR_AK = ATKS.length;
 ATKS.push({ total: 24, on: 10, off: 16, reach: 82, frac: 0.6, air: true, ang: 70, spear: true });
 const LANCE_BAIR_AK = ATKS.length;
-ATKS.push({ total: 28, on: 13, off: 19, reach: 82, frac: 0.9, air: true, back: true, ang: 35, spear: true });
+ATKS.push({ total: 28, on: 13, off: 19, reach: 82, frac: 0.9, air: true, back: true, ang: 35, spear: true, lowY: 15 });
 const LAUNCH_K = Math.SQRT2;   // 角度つきの飛ばし: 速さ = 今までの横の強さ × √2（0% の 45° が、今までの「横 9・上 9」とほぼ同じになる）
 // 攻撃のあと盾が戻るまで: 今まで（当たり判定の終わりから攻撃の終わりまで）の 2 倍。攻撃が終わってから、さらに同じ長さだけ盾が出ない（動くことはできる。p.sl）
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
@@ -599,7 +599,7 @@ const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
 //   地上で動ける状態のとき、左右を押した瞬間（何も押していない・反対を押していたところから）、その方向へ飛び出す。向きは変わらない・盾はついたまま・崖の端で止まる（p.sp を使う）
 // 2026-11-21 からスマブラと同じ仕様: 出だしは DASH_F フレーム、走る速さの DASH_MUL 倍。途中で離しても出だしは最後まで進む（止まらない）。
 //   途中で反対を押すと振り向きダッシュ（ダッシュダンス）、ジャンプ・攻撃・スキルで中断できる。押し続けていれば走りへ、離していれば止まる
-const DASH_F = 11, DASH_MUL = 1.2, DASH_CD = 0;   // 2026-11-21 に出だしの速さ 1.1 → 1.2 倍
+const DASH_F = 11, DASH_MUL = 1.2, DASH_CD = 0;   // 2026-11-21 に出だしの速さ 1.1 → 1.2 倍。同じ日にダッシュの出だし（飛び出し）自体をなくした（左右を押せば、ふつうに走るだけ）
 // 2 回押しのステップ（2026-11-21 にもう一度）: 地上で同じ左右を DTAP_F フレーム以内に 2 回押すと、動く向きと反対を向いたまま、その方向へ STEP2_F フレーム STEP2_V で動く（約 120px）。
 // 1 回目はふつうのダッシュの出だし（向きも変わる）で、2 回目でステップに変わり、向きが元に戻る。ステップ中は盾つき・崖の端で止まる・中断できない。終わって STEP2_CD フレームは次のステップを出せない
 const DTAP_F = 12, STEP2_V = 15, STEP2_F = 8, STEP2_CD = 20;
@@ -2206,9 +2206,6 @@ function physics(p, inp, neutral) {
     if (p.cpu) p.aiStp = 0;
     if (dtap && chd.id !== "splat" && !p.isClone && p.ground && p.dsC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && p.um === 0 && !lock) {
       startStep2(p, dtap);                                 // 2 回押しのステップ（1 回目の出だしが終わってから 2 回目を押したとき）
-    } else if (dashDir && chd.id !== "splat" && !p.isClone && p.ground && p.dsC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && p.um === 0 && !lock) {
-      p.sp = DASH_F; p.spD = dashDir; p.spV = dashV(S); p.spK = 1;   // 向きはそのまま（足が速い人は、走る速さの 1.3 倍）
-      emit("dsh", ecx(p), p.y + phOf(p), dashDir);
     } else if (stepDir && p.ground && p.spC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && !lock) {
       p.sp = STEP_F; p.spD = stepDir; p.f = stepDir; p.bu = 0; p.jh = 0; p.spU = u ? 1 : 0;
       if (++p.spN >= 2) { p.spC = STEP_F + STEP_CD; p.spW = 0; } else p.spW = STEP_F + STEP_CHAIN;
@@ -2408,7 +2405,7 @@ function resolveHits(list) {
     const sz = szOf(p), reach = ak.reach * sz;                       // 巨大化中は射程も 2 倍
     const hf = ak.back ? -p.f : p.f;                                 // 当たる側（空中後ろ攻撃は背中側）
     const hx0 = hf > 0 ? p.x + PLW * sz : p.x - reach, hx1 = hx0 + reach;
-    const hy0 = p.y + 8 * sz, hy1 = p.y + (PLH - 8) * sz;
+    const yo = (ak.lowY || 0) * sz, hy0 = p.y + 8 * sz + yo, hy1 = p.y + (PLH - 8) * sz + yo;   // lowY: 空後は低い位置から出る（当たり判定を下げる）
     for (const t of list) {
       if (t === p || ally(t.own, p.own) || p.hit.includes(t) || !t.al || untouchable(t)) continue;
       if (hx1 < hbL(t) || hx0 > hbR(t) || hy1 < t.y || hy0 > t.y + phOf(t)) continue;
@@ -4330,9 +4327,9 @@ function drawSword(c, p, ak, col) {
     if (magic) bolt(c, hx, hy - 4, hx, hy - 4 - SWORD_LEN);
     c.restore(); return;
   }
-  const a = p.a, act = a >= ak.on && a <= ak.off, ext = swordTip(a, ak), sy = p.y + 30;
+  const a = p.a, act = a >= ak.on && a <= ak.off, ext = swordTip(a, ak), sy = p.y + 30 + (ak.lowY || 0);
   const tip = front + f * ext, guard = tip - f * SWORD_LEN, grip = guard - f * 9;
-  if (act) { c.fillStyle = p.ak === 1 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)"; c.fillRect(f > 0 ? front : front - ak.reach, p.y + 18, ak.reach, 22); }   // 届く範囲
+  if (act) { c.fillStyle = p.ak === 1 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)"; c.fillRect(f > 0 ? front : front - ak.reach, p.y + 18 + (ak.lowY || 0), ak.reach, 22); }   // 届く範囲
   c.strokeStyle = "#78350f"; c.lineWidth = 7; c.beginPath(); c.moveTo(grip, sy); c.lineTo(guard, sy); c.stroke();           // 柄
   c.strokeStyle = "#a16207"; c.lineWidth = 5; c.beginPath(); c.moveTo(guard, sy - 9); c.lineTo(guard, sy + 9); c.stroke();   // 鍔
   c.strokeStyle = magic ? "#fde047" : act ? "#ffffff" : "#e5e7eb"; c.lineWidth = act ? 8 : 6; c.beginPath(); c.moveTo(guard, sy); c.lineTo(tip, sy); c.stroke();   // 刃
@@ -5002,7 +4999,6 @@ if (PARTY && window.ykgLobby && !isOffline()) {
 const UPNOTE_VER = "2026-11-21b";   // b: 文章を直したので、前の版を見た人にももう一度出す
 const UPNOTE = [
   ["動き", [
-    "ダッシュの加速を早くした",
     "同じ移動方向を素早く2回押すと、後ろ向きにステップ",
     "ステージの広さ・全キャラの走る速さ・ジャンプの調整",
   ]],
@@ -5576,8 +5572,8 @@ function drawPlayer(p, i, me, now) {
   if (spear) {                                                    // 槍兵: 槍を前へ突き出す（当たる間は、届く距離いっぱいまで伸びる）
     const ak = ATKS[p.ak], act = p.a >= ak.on && p.a <= ak.off, sf = ak.back ? -p.f : p.f;   // sf: 槍を出す向き（空中後ろ攻撃は背中側）
     const len = act ? ak.reach : p.a < ak.on ? 16 : Math.max(16, ak.reach * (1 - (p.a - ak.off) / (ak.total - ak.off)));
-    const front = sf > 0 ? p.x + PLW : p.x, tip = front + sf * len, back = sf > 0 ? p.x + 4 : p.x + PLW - 4, sy = p.y + 30;
-    if (act) { cx.fillStyle = p.ak === 3 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)"; cx.fillRect(sf > 0 ? front : front - ak.reach, p.y + 18, ak.reach, 22); }
+    const front = sf > 0 ? p.x + PLW : p.x, tip = front + sf * len, back = sf > 0 ? p.x + 4 : p.x + PLW - 4, sy = p.y + 30 + (ak.lowY || 0);
+    if (act) { cx.fillStyle = p.ak === 3 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)"; cx.fillRect(sf > 0 ? front : front - ak.reach, p.y + 18 + (ak.lowY || 0), ak.reach, 22); }
     cx.strokeStyle = "#92400e"; cx.lineWidth = 3.5; cx.beginPath(); cx.moveTo(back, sy); cx.lineTo(tip - sf * 10, sy); cx.stroke();
     cx.fillStyle = act ? "#ffffff" : "#e5e7eb"; cx.beginPath(); cx.moveTo(tip, sy); cx.lineTo(tip - sf * 12, sy - 5); cx.lineTo(tip - sf * 12, sy + 5); cx.fill();
     if (p.ak === 3 && p.a < ak.dashFrom) {                        // 突進突きの構え: 橙の枠が締まっていく
