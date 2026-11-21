@@ -576,7 +576,7 @@ const hwC = hw => Math.min(1, hw / HW_MAX), hwR = c => 8 + 12 * c, hwV = c => 7 
 // 自分は CF_FLIP フレームかけて宙返りする（少し浮く）。パッシブ: 空中で通常攻撃の根元（体に近い CF_ROOT px）が当たるとクリティカル（威力と吹っ飛ばしが CF_CRIT 倍、ヒットストップはふつうの CF_HS 倍）
 const CF_REACH = 44, CF_LIFT = 268, CF_STUN = 60, CF_DMG = 8, CF_FLIP = 18, CF_ROOT = 14, CF_CRIT = 2, CF_HS = 1.2;
 // 2026-11-18: 蹴り上げた相手は動けるが、着地するまで盾が使えない（nsh）。CF_STUN は使わなくなった。根元のクリティカルは、威力 CF_CRIT 倍・吹っ飛ばし CF_CRIT_KB 倍
-const CF_CRIT_KB = 1.75;
+const CF_CRIT_KB = 1.75, CF_CRIT_ANG = 30;   // CF_CRIT_ANG: 根元のクリティカルの吹っ飛ばし角度（ふつうの空中攻撃は 70°）
 // 2026-11-21: すぐ出ていたスキル（CF のムーンサルト・ヤニ猫の臭い息）は、押してから SK_WIND フレーム構えてから出る（頭の上に赤い「！」。殴られる・拘束されると出ない）
 const SK_WIND = 12;
 // スパッタリー（2026-10-24）: 地上で左右を押しながらジャンプボタンを押すと、その方向へステップ（STEP_F フレームで STEP_V × STEP_F px。その間は盾なし）。
@@ -698,7 +698,7 @@ const CHARS = [
   // 31 体目（必ず末尾に足す）
   { id: "camp", name: "キャンピングシェルター", A: 2, D: 3, S: 2, tag: "大きな傘で守りながら押し込み、傘を飛ばす",
     skill: { name: "ウルトラショット", cd: 10, text: "大きなインクの塊を撃つ。敵に当たるか遠くまで飛ぶと爆発する（盾は効かない）" },
-    auto: "攻撃ボタンで前に大きな傘を開く（押している間ずっと）。傘は前からの攻撃を防ぎ、触れた敵の盾を削る。1.25秒開くと傘が前へ飛んでいき、5秒で新しい傘が生える" },
+    auto: "攻撃ボタンで前に大きな傘を開く（押している間ずっと。開いている間は向きを変えられない）。傘は前からの攻撃を防ぎ、触れた敵の盾を削る。1.25秒開くと傘が前へ飛んでいき、5秒たち、飛ばした傘がなくなると新しい傘を開ける" },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
@@ -1841,7 +1841,8 @@ function hurtUmbrella(b, amt) {
   const o = game.p[b.own]; if (o) o.umR = Math.max(o.umR, UMB_BREAK_LOCK);
   emit("umx", b.x, b.y, b.pw);
 }
-const umbrellasOf = own => game.pj.filter(b => b.k === 8 && !b.dead && !ally(b.own, own));   // own から見て敵の、飛ばした傘
+const umbrellasOf = own => game.pj.filter(b => b.k === 8 && !b.dead && !ally(b.own, own));
+const umbOut = p => game.pj.some(b => b.k === 8 && !b.dead && b.own === p.own);   // 自分が飛ばした傘がまだ残っている（2026-11-21 から、その間は次の傘を開けない）   // own から見て敵の、飛ばした傘
 function hitObjs(own, x0, y0, x1, y1, done, noMinion, cbPad) {
   let any = false;
   for (const b of umbrellasOf(own)) {                       // 敵の飛ばした傘（近接攻撃は 1 回の振りで 1 回。飛び道具は傘に当たって消える）
@@ -2140,7 +2141,7 @@ function physics(p, inp, neutral) {
     // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
     // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
     const turnOk = p.ground || p.jg > 0;
-    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0) p.f = dir;   // 傘を開いている間も向きを変えられる（傘も一緒に回る）
+    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0 && p.um === 0) p.f = dir;   // 傘を開いている間は向きを変えられない（2026-11-21 から）
     const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
     if (p.jh > 0) {                                // 小ジャンプ: 押したフレームを 1 として、SHORT_HOP_F フレーム目までに離したら、上がる勢いを弱める
@@ -2171,7 +2172,7 @@ function physics(p, inp, neutral) {
     const camp = chd.id === "camp" && !p.isClone && !neutral;
     if (camp && p.um > 0) {                      // キャンピングシェルター: 押している間は傘を開いたまま。離すと閉じる
       if (a) umbrellaStep(p); else { p.um = 0; p.umh = []; p.cd = ATK_COOLDOWN; }
-    } else if (apress && camp && p.umR === 0 && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {
+    } else if (apress && camp && p.umR === 0 && !umbOut(p) && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {   // 飛ばした傘が残っている間は開けない（ふつうの通常攻撃になる）
       p.ba = 0; p.um = 1; p.umh = [];
       if (!p.ground && dir) p.f = dir;
       emit("umo", ecx(p) + p.f * 28, ecy(p), p.f);
@@ -2361,7 +2362,7 @@ function resolveHits(list) {
       else if (!ak.back && !p.isClone && !p.ground && chOf(p).id === "cf" && !(hx0 + (p.f > 0 ? CF_ROOT * sz : reach) < hbL(t) || hx0 + (p.f > 0 ? 0 : reach - CF_ROOT * sz) > hbR(t))) {
         // CF の空中攻撃の根元（体に近い CF_ROOT px）が当たった: クリティカル（2 倍の威力と吹っ飛ばし。盾で受けられたらふつうの盾の削り）
         const s0 = t.s;
-        strike(p, t, { dir: p.f, frac: CF_CRIT_KB, cap: CF_CRIT, dmf: CF_CRIT, recoil: true, ang: ak.ang });
+        strike(p, t, { dir: p.f, frac: CF_CRIT_KB, cap: CF_CRIT, dmf: CF_CRIT, recoil: true, ang: CF_CRIT_ANG });   // 根元のクリティカルだけ 30°（2026-11-21）
         if (t.s > 0 && t.s !== s0) { game.hs = Math.max(game.hs, Math.round(CF_HS * (8 + 3 * CF_CRIT))); emit("crit", ecx(t), ecy(t), p.f); }
       }
       else strike(p, t, { dir: hf, frac: ak.frac || 1, recoil: true, breaker: !!ak.breaker, ang: ak.ang });
@@ -3192,7 +3193,7 @@ function aiInput(c, owner, B) {                                // 毎フレー�
 function aiUmbrella(c, B, inp) {
   if (c.aiUm > 0) { c.aiUm--; return inp | KEY.a; }
   const t = c.aiTgt;
-  if (!t || !t.al || c.umR > 0 || c.um > 0 || c.a > 0 || c.s > 0 || c.fz > 0) return inp;
+  if (!t || !t.al || c.umR > 0 || umbOut(c) || c.um > 0 || c.a > 0 || c.s > 0 || c.fz > 0) return inp;
   const dx = ecx(t) - ecx(c), sg = Math.sign(dx) || c.f, gap = Math.abs(dx) - (pwOf(t) + pwOf(c)) / 2;
   if (c.f !== sg || Math.abs(t.y + phOf(t) - c.y - phOf(c)) > 40) return inp;
   const tAk = ATKS[t.ak] || ATKS[0];
@@ -5473,7 +5474,7 @@ function drawPlayer(p, i, me, now) {
       drawUmbrella(front + p.f * 2, cyU, p.f, Math.min(1, p.um / 6), hot, p.umHp);
     } else {
       const g = p.umR > 0 ? 1 - p.umR / UMB_REGEN : 1, bx = p.f > 0 ? p.x + 4 : p.x + PLW - 4;
-      cx.save(); cx.globalAlpha *= p.umR > 0 ? 0.5 : 1; cx.strokeStyle = "#4d7c0f"; cx.lineWidth = 6;
+      cx.save(); cx.globalAlpha *= p.umR > 0 || umbOut(p) ? 0.5 : 1; cx.strokeStyle = "#4d7c0f"; cx.lineWidth = 6;
       cx.beginPath(); cx.moveTo(bx, p.y + 46); cx.lineTo(bx - p.f * 6, p.y + 46 - 40 * g); cx.stroke(); cx.restore();
     }
   }
