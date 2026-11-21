@@ -587,6 +587,10 @@ const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
 // 2026-11-21 からスマブラと同じ仕様: 出だしは DASH_F フレーム、走る速さの DASH_MUL 倍。途中で離しても出だしは最後まで進む（止まらない）。
 //   途中で反対を押すと振り向きダッシュ（ダッシュダンス）、ジャンプ・攻撃・スキルで中断できる。押し続けていれば走りへ、離していれば止まる
 const DASH_F = 11, DASH_MUL = 1.2, DASH_CD = 0;   // 2026-11-21 に出だしの速さ 1.1 → 1.2 倍
+// 2 回押しのステップ（2026-11-21 にもう一度）: 地上で同じ左右を DTAP_F フレーム以内に 2 回押すと、1 回目を押す前の向きのまま、その方向へ STEP2_F フレーム STEP2_V で動く（約 120px）。
+// 1 回目はふつうのダッシュの出だし（向きも変わる）で、2 回目でステップに変わり、向きが元に戻る。ステップ中は盾つき・崖の端で止まる・中断できない。終わって STEP2_CD フレームは次のステップを出せない
+const DTAP_F = 12, STEP2_V = 15, STEP2_F = 8, STEP2_CD = 20;
+function startStep2(p, d) { p.sp = STEP2_F; p.spD = d; p.spV = STEP2_V; p.spK = 2; p.f = p.dtF || p.f; p.dtT = 0; emit("dsh", ecx(p), p.y + phOf(p), d); }
 const dashV = S => MOVE_BASE * moveMul(S) * DASH_MUL;
 // 2026-11-21: 自動で敵の方を向く仕組み（常に向く・攻撃のときに向く・居合斬りで向く）は、すべてなくした。向きは押した方向だけで決まる
 // サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
@@ -886,7 +890,7 @@ function newPlayer() {
            dm: 0,                                       // 蓄積ダメージ（%）
            hw: 0, hwr: 0, hwh: [], hmN: 0, hmT: 0,     // … / 勝負師: 出目の吹き出しを出す残り
            um: 0, umR: 0, umHp: UMB_HP, umh: [], aiUm: 0,   // キャンピングシェルター: 傘を開いている長さ（0 = 閉じている）/ 新しい傘が生えるまで / 傘の耐久 / 触れて当てた敵と次に当たれるまで（ホストだけ）/ CPU が攻撃ボタンを押し続ける残り
-           sp: 0, spD: 1, spV: 0, spN: 0, spW: 0, spC: 0, spU: 0, dtD: 0, dtT: 0, pdir: 0, dsC: 0, srT: 0, srHit: [], srCar: [], aiStp: 0,   // スパッタリー: ステップの残り / 向き / 続けて出した回数 / 2 回目を出せる残り / 使えない残り / ジャンプボタンを離すまで地上ジャンプしない / サメライドの残り / 当てた相手・押している相手（ホストだけ）/ CPU のステップの指示
+           sp: 0, spD: 1, spV: 0, spK: 0, dtF: 1, spN: 0, spW: 0, spC: 0, spU: 0, dtD: 0, dtT: 0, pdir: 0, dsC: 0, srT: 0, srHit: [], srCar: [], aiStp: 0,   // スパッタリー: ステップの残り / 向き / 続けて出した回数 / 2 回目を出せる残り / 使えない残り / ジャンプボタンを離すまで地上ジャンプしない / サメライドの残り / 当てた相手・押している相手（ホストだけ）/ CPU のステップの指示
            vbT: 0, vbTgt: null, vbAmt: 0, wgT: 0, msT: 0, nsh: 0, sl: 0, ws: 0, wsK: 0, mi: 0, bnd: 0, esc: 0, ahit: 0,   // … / CF: 宙返りの残り（見た目用）        // 吸血鬼: 噛みついている残り / 噛みついている相手 / まだ移していない % / 羽を広げている残り              // 波動士: ため量 / ためが進んでいるか / ためている玉が当てた相手（ホストだけ）。勝負師: 今のハンマーの出目
            ub: 0, nc: 0, dr: 0, st: 0, cw: 0, cs: 0,          // … / cw: ヤニ猫が最後にタバコを拾ってからのフレーム（CIG_WD を超えると禁断症状）
            yb: [], ybs: [0, 0, 0], ybt: 0,              // ヤク猫: 注射器の強化の一覧 [性能の番号, 残り]（ホストだけ）/ 性能ごとの上乗せ / いちばん長い残り（見た目用）                  // 全性能 +1 の残り / スピード −1 の残り（敵のタバコ）/ 画面が揺れる残り（注射器）/ 臭い息で動けない残り（見た目用。動けないのは fz）
@@ -1008,7 +1012,7 @@ function spawn(p, slot, n, battle) {
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;
   p.mg = 0; p.mgr = 0; p.bm = 0; p.mc = 0; p.ml = 0; p.bd = BOOK_MAX; p.bdT = 0; p.mb = 0; p.mbv = null;
   p.nsh = 0; p.sl = 0; p.ws = 0; p.bnd = 0; p.esc = 0; p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0; p.hmT = 0; p.vbT = 0; p.vbTgt = null; p.wgT = 0;
-  p.sp = 0; p.spV = 0; p.dtD = 0; p.dtT = 0; p.pdir = 0; p.dsC = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
+  p.sp = 0; p.spV = 0; p.spK = 0; p.dtD = 0; p.dtT = 0; p.pdir = 0; p.dsC = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
   p.um = 0; p.umR = 0; p.umHp = UMB_HP; p.umh = []; p.aiUm = 0;   // キャンピングシェルター
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.wpc = 0; p.spc = 0;
@@ -2072,6 +2076,9 @@ function physics(p, inp, neutral) {
   if (jrise) p.bu = INPUT_BUF;
   p.kp = kin ? 1 : 0; p.ap = a ? 1 : 0; p.jp = u ? 1 : 0;
   const dashDir = dir && dir !== p.pdir ? dir : 0;   // ダッシュの出だし: 左右を押した瞬間（反対からの切り替えも）
+  let dtap = 0;                                    // 2 回押し: 同じ向きを DTAP_F フレーム以内にもう一度押した
+  if (p.dtT > 0) p.dtT--;
+  if (dashDir) { if (p.dtT > 0 && p.dtD === dashDir) dtap = dashDir; else { p.dtD = dashDir; p.dtT = DTAP_F; p.dtF = p.f; } }   // dtF: 1 回目を押す前の向き
   if (p.dsC > 0) p.dsC--;
   p.pdir = dir;
   if (!u) p.spU = 0;
@@ -2118,14 +2125,15 @@ function physics(p, inp, neutral) {
   } else if (p.sp > 0) {                         // スパッタリー: ステップ中（向きは変わらず、攻撃・ジャンプはできない。スキルは使える）
     canSkill = true;
     let go = true;
-    if (p.spV) {                                 // ダッシュの出だし: 離したら止まる / 反対で切り返す / ジャンプ・攻撃・スキルで終わる（押したボタンは先行入力で次のフレームに出る）
-      if (dir === -p.spD) { p.spD = dir; p.sp = DASH_F; p.spV = dashV(S); emit("dsh", ecx(p), p.y + phOf(p), dir); }   // 離しても止まらない（出だしは最後まで）
+    if (p.spV && p.spK !== 2) {                  // ダッシュの出だし: 2 回押しでステップに変わる / 反対で切り返す / ジャンプ・攻撃・スキルで終わる（押したボタンは先行入力で次のフレームに出る）
+      if (dtap && p.dsC === 0 && p.ground && chd.id !== "splat") startStep2(p, dtap);
+      else if (dir === -p.spD) { p.spD = dir; p.sp = DASH_F; p.spV = dashV(S); emit("dsh", ecx(p), p.y + phOf(p), dir); }   // 離しても止まらない（出だしは最後まで）
       else if (upress || apress || kpress) { p.sp = 0; p.spV = 0; go = false; }
     }
     if (go) {
       p.vx = p.spD * (p.spV || STEP_V);
       { const pl = p.ground ? platformUnder(p) : null; if (pl) p.vx = Math.max(pl.x - p.x, Math.min(pl.x + pl.w - pwOf(p) - p.x, p.vx)); }   // 崖の端で止まる（2026-11-21）
-      if (--p.sp === 0) { p.vx = dir === p.spD ? p.spD * MOVE_BASE * moveMul(S) : p.vx * 0.3; if (p.spV) { p.spV = 0; p.dsC = DASH_CD; } }   // 押し続けていれば走りへ、離していれば止まる   // 止まるときは、ふつうに走る速さまで落とす
+      if (--p.sp === 0) { p.vx = dir === p.spD ? p.spD * MOVE_BASE * moveMul(S) : p.vx * 0.3; if (p.spV) { p.dsC = p.spK === 2 ? STEP2_CD : DASH_CD; p.spV = 0; p.spK = 0; } }   // 押し続けていれば走りへ、離していれば止まる   // 止まるときは、ふつうに走る速さまで落とす
     }
   } else {
     canSkill = true;
@@ -2151,8 +2159,10 @@ function physics(p, inp, neutral) {
     // スパッタリー: 地上で左右＋ジャンプボタン（CPU は頭脳の指示）でステップ。使えないとき（2 回目のあとの待ち）はふつうのジャンプになる
     const stepDir = chd.id === "splat" && !p.isClone && !neutral ? (p.cpu ? p.aiStp : (jrise || p.bu > 0) ? dir : 0) : 0;
     if (p.cpu) p.aiStp = 0;
-    if (dashDir && chd.id !== "splat" && !p.isClone && p.ground && p.dsC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && p.um === 0 && !lock) {
-      p.sp = DASH_F; p.spD = dashDir; p.spV = dashV(S);   // 向きはそのまま（足が速い人は、走る速さの 1.3 倍）
+    if (dtap && chd.id !== "splat" && !p.isClone && p.ground && p.dsC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && p.um === 0 && !lock) {
+      startStep2(p, dtap);                                 // 2 回押しのステップ（1 回目の出だしが終わってから 2 回目を押したとき）
+    } else if (dashDir && chd.id !== "splat" && !p.isClone && p.ground && p.dsC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && p.um === 0 && !lock) {
+      p.sp = DASH_F; p.spD = dashDir; p.spV = dashV(S); p.spK = 1;   // 向きはそのまま（足が速い人は、走る速さの 1.3 倍）
       emit("dsh", ecx(p), p.y + phOf(p), dashDir);
     } else if (stepDir && p.ground && p.spC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && !lock) {
       p.sp = STEP_F; p.spD = stepDir; p.f = stepDir; p.bu = 0; p.jh = 0; p.spU = u ? 1 : 0;
