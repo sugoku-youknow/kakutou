@@ -606,7 +606,7 @@ const DTAP_F = 15, STEP2_V = 15, STEP2_F = 8, STEP2_CD = 0, STEP2_LAG = 12;   //
 function startStep2(p, d) { p.sp = STEP2_F; p.spD = d; p.spV = STEP2_V; p.spK = 2; p.f = -d; p.dtT = 0;   // 2026-11-21 から: 動く向きと反対を向いて（後ろ向きに）動く
   emit("dsh", ecx(p), p.y + phOf(p), d); }
 const dashV = S => MOVE_BASE * moveMul(S) * DASH_MUL;
-// 2026-11-21: 自動で敵の方を向く仕組み（常に向く・攻撃のときに向く・居合斬りで向く）は、すべてなくした。向きは押した方向だけで決まる
+// 2026-11-21: 自動で敵の方を向く仕組みはいったんすべてなくしたあと、地上でだけ常に敵の方を向くように戻した（foeSide。空中・攻撃中・ため中・傘を開いている間は向かない）
 // サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
 // 進み終わる（足場の端に着く）とインクを撒き散らして爆発（半径 SR_BLAST、盾は効かない）。途中で吹っ飛ばされる・動けなくなると、爆発せずに終わる。乗っている間は盾なし
 // キャンピングシェルター（2026-10-24）: 攻撃ボタンで前に大きな傘（高さ UMB_H = 体の 1.5 倍）を開く。押している間は開いたまま、UMB_LAUNCH フレームで傘が前へ飛んでいく（離すと閉じる）。
@@ -1099,6 +1099,15 @@ function dashStop(p, vx) {
     lim = Math.min(lim, Math.max(0, p.f > 0 ? hbL(e) - front : front - hbR(e)));
   }
   return p.f * lim;
+}
+function foeSide(p) {                         // いちばん近い（生きている）敵がいる側（-1 / 1。いなければ・真上なら 0）。味方は数えない
+  let best = null, bd = 1e9;
+  for (const e of ents()) {
+    if (e === p || ally(e.own, p.own) || !e.al) continue;
+    const d = Math.abs(ecx(e) - ecx(p)) + 1.5 * Math.abs(e.y + phOf(e) - (p.y + phOf(p)));
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best ? Math.sign(ecx(best) - ecx(p)) : 0;
 }
 function useSkill(p) {                       // 押した瞬間に発動するスキル
   const id = chOf(p).id;
@@ -2194,7 +2203,8 @@ function physics(p, inp, neutral) {
     // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
     // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
     const turnOk = p.ground || p.jg > 0;
-    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0 && p.um === 0) p.f = dir;   // 傘を開いている間は向きを変えられない（2026-11-21 から）
+    const ff = p.ground && !neutral ? foeSide(p) : 0;   // 2026-11-21: 地上では、いつもいちばん近い敵の方を向く（敵の通常攻撃を盾で受けられる）。空中では向かない（押した方向だけ）
+    if (p.a === 0 && p.ks === 0 && p.cn === 0 && p.um === 0) { if (ff) p.f = ff; else if (dir && turnOk) p.f = dir; }   // 傘を開いている間は向きを変えられない（2026-11-21 から）
     const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
     if (p.jh > 0) {                                // 小ジャンプ: 押したフレームを 1 として、SHORT_HOP_F フレーム目までに離したら、上がる勢いを弱める
