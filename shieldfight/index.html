@@ -334,7 +334,7 @@ const MAIN_PLAT = { x: PX, y: PY, w: PW, main: true };
 //   2人: メインだけ / 3人: 上に台が1つ（漢字の「二」の形）/ 4人: 上に台が2つ
 // 上の台は下からは通り抜けられ、上からは乗れる（メインも同じ）
 // 3 人・4 人のときは、足場の横幅を 1.2 倍にする（中央を基準に広げる。高さの間隔は変えない）
-const WIDE_SCALE = 1.8, CENTER_X = PX + PW / 2;   // 2026-11-21 に 1.2 → 1.8（今までの 1.5 倍の広さ）
+const WIDE_SCALE = 1.25, CENTER_X = PX + PW / 2;   // 2026-11-21: 1.2 → 1.8 → 1.25（スマブラの終点とマリオの比率: 足場の幅が体の高さの約 12 倍 = 725px）
 const widen = (pl, k) => Object.assign({}, pl, { x: CENTER_X + (pl.x - CENTER_X) * k, w: pl.w * k });
 function layoutFor(n) {
   const y = PY - UP_GAP, k = WIDE_SCALE;                 // 2 人のときも、3〜4 人と同じ幅（2026-10-16 から）
@@ -356,13 +356,13 @@ const STAGES = [
   { name: "ばねばね工場", desc: "ばねを踏むと高く跳ぶ。崖の下にもばね" },
 ];
 const MAIN_W = { x: CENTER_X - PW * WIDE_SCALE / 2, y: PY, w: PW * WIDE_SCALE, main: true };   // 1.2 倍のメイン（132〜828）
-const FLOAT_T = 600, FLOAT_RX = 495, FLOAT_RY = 75, FLOAT_W = 210;   // 2026-11-21 に横の半径と幅を 1.5 倍   // 浮島: 1 周 10 秒 / 横・縦の半径 / 幅
+const FLOAT_T = 600, FLOAT_RX = 427, FLOAT_RY = 75, FLOAT_W = 180;   // 2026-11-21: メインの幅に合わせる   // 浮島: 1 周 10 秒 / 横・縦の半径 / 幅
 const WARP_R = 30, WARP_CD = 40;                                     // ゲートの半径 / 出たあと、次に入れるまで（フレーム。ゲートの中にいる間は待ちが続く）
 const SPRING_CD = 12;                                                // ばねで跳んだあと、次に跳べるまで
 const ST_PAD_W = 80, ST_PAD_Y = PY + 110;                            // ばねばね工場: 崖の下の小さな足場（全体がばね）
 function stageBase(st, nf, t) {                                      // 縮む前の足場（上から順）。id は動く足場の見分け
   if (st === 1) {
-    const a = t * 2 * Math.PI / FLOAT_T, m = { x: CENTER_X - 420, y: PY, w: 840, main: true };   // 2026-11-21 に 1.5 倍（560 → 840）
+    const a = t * 2 * Math.PI / FLOAT_T, m = { x: CENTER_X - 362, y: PY, w: 724, main: true };   // 2026-11-21: ほかのステージと同じ比率（体の高さの約 12 倍）
     const fl = [0, Math.PI].map((o, k) => ({ x: CENTER_X + FLOAT_RX * Math.cos(a + o) - FLOAT_W / 2, y: PY - 170 + FLOAT_RY * Math.sin(a + o), w: FLOAT_W, mv: 1, id: k + 1 }));
     return fl.sort((p, q) => p.y - q.y).concat([m]);
   }
@@ -432,17 +432,17 @@ const STATS = [
   { label: "防御", color: "#22d3ee" },
   { label: "スピード", color: "#c084fc" },
 ];
-const KNOCK_BASE = 11.3, MOVE_BASE = 6 * 0.7;   // 性能 2 のときの値（移動速度は、以前の 6px/フレームの 70%）
+const KNOCK_BASE = 11.3, MOVE_BASE = 6.05;   // 性能 2 のときの値。走る速さ（2026-11-21 から: スピード 2 でステージの端から端まで約 2 秒）
 const atkMul = a => 1 + 0.15 * (a - BASE_STAT);    // 与える吹っ飛ばし力
 const defMul = d => 1 - 0.10 * (d - BASE_STAT);    // 受ける吹っ飛ばし力（小さいほど飛ばされにくい）
 // スピード: 2 を基準（移動 6）にして、上げるほど急に速くなる
-//   移動速度  : 6 で基準の 2.8 倍（最高 16.8）。2 未満は 1 ポイントごとに 10% 減
-//   ジャンプ  : 高さがスピード 0 で 100px、6 で 200px（1 ポイントごとに約 17px）。空中でもう 1 回だけ、地上の 75% の高さで跳べる（二段ジャンプ）
-const moveMul = s => s >= BASE_STAT ? 1 + 1.8 * (s - BASE_STAT) / (MAX_STAT - BASE_STAT) : 1 + 0.10 * (s - BASE_STAT);
+//   走る速さ  : 2026-11-21 から 1 ポイントごとに 17%（moveMul）。ジャンプはスピードで変わらない（JUMP_H）
+const moveMul = s => Math.max(0.4, 1 + 0.17 * (s - BASE_STAT));   // 2026-11-21: 1 ポイントで 17%（スピード 4 で 1.34 倍 = ステージを約 1.5 秒。0 で 0.66 倍・6 で 1.68 倍）
 const JUMP_MIN = 100, JUMP_MAX = 200, AIR_JUMP = 1;        // ジャンプの高さ(px): スピード 0 / 6 のとき / 二段目の割合（2026-10-18 に 0.75 → 1。地上と同じ高さ）
 // 小ジャンプ（2026-10-18）: 地上でジャンプボタンを押してから SHORT_HOP_F フレーム以内に離すと、上がる勢いを弱めて、ふつうの SHORT_HOP_H 倍の高さで止める（人のプレイヤーだけ。CPU と分身は使わない）
 const SHORT_HOP_F = 5, SHORT_HOP_H = 0.45;
-const jumpHeight = s => JUMP_MIN + (JUMP_MAX - JUMP_MIN) * Math.max(0, Math.min(MAX_STAT, s)) / MAX_STAT;
+const JUMP_H = 150;                                         // 2026-11-21: ジャンプの高さは全員、体の高さ（60px）の約 2.5 倍。スピードでは変わらない
+const jumpHeight = s => JUMP_H;
 const jumpVel = h => 0.3 + Math.sqrt(0.09 + 1.2 * h);       // 高さ h(px) に届く初速（重力 0.6 を 1 フレームずつ足す計算に合わせた式）
 const SHIELD_HITS = 3;               // 盾が壊れるまでの回数（攻撃・防御の差に関係なく全員一律）
 const SHIELD_BREAK_FRAMES = 450;     // 壊れた盾が元に戻るまで（7.5 秒。2026-11-21 に 5 秒から 1.5 倍）
@@ -553,7 +553,7 @@ const CIG_EVERY = 180, CIG_MAX = 3, CIG_LIFE = 900, CIG_HALF = 9, CIG_SLOW = 480
 const CIG_WD = 300, CIG_WD_BY = 2, CIG_WD_TICK = 12, CIG_STOCK = 5;   // 2026-10-18 に 3 秒 → 5 秒。CIG_STOCK: 吸っている最中に拾ったタバコを持っておける本数（吸い切ったら次に火をつける）
 // 吸血鬼（2026-10-18）: 吸血は、体の前 VAMP_REACH の敵に噛みつく（盾・騎士のカウンターの構えは効かない）。与える % = VAMP_BASE + 相手の % × VAMP_PCT、同じだけ自分の % が減る。
 // 吹っ飛ばしは通常攻撃の VAMP_FRAC 倍。空振りしたときのクールタイムは VAMP_WHIFF。羽: 二段ジャンプが、スピード VAMP_AIR_S の地上ジャンプと同じ高さ
-const VAMP_REACH = 44, VAMP_BASE = 8, VAMP_PCT = 0.2, VAMP_FRAC = 0.5, VAMP_WHIFF = 120, VAMP_AIR_S = 6, VAMP_FALL = 0.6;   // … / 二段ジャンプの高さはスピード 6 と同じ（2026-10-18 に 4 から）/ 落ちている間の速さの倍率
+const VAMP_REACH = 44, VAMP_BASE = 8, VAMP_PCT = 0.2, VAMP_FRAC = 0.5, VAMP_WHIFF = 120, VAMP_AIR_S = 6, VAMP_FALL = 0.6, VAMP_AIR_H = 200;   // VAMP_AIR_H: 羽の二段ジャンプの高さ（2026-11-21 から。ほかの人は 150）   // … / 二段ジャンプの高さはスピード 6 と同じ（2026-10-18 に 4 から）/ 落ちている間の速さの倍率
 // 2026-10-18 から、吸血は吹っ飛ばさずに VAMP_BITE フレーム噛みつく（相手はその間動けず、% は VAMP_TICK ごとに少しずつ移る）。二段ジャンプでは羽を VAMP_WING フレーム広げる
 const VAMP_BITE = 30, VAMP_TICK = 6, VAMP_WING = 24;
 // 波動士（2026-10-18）: 波動弾は魔法使いと同じ「1 回目でため始め、もう 1 回で撃つ」（地上で動く・跳ぶ・攻撃・吹っ飛ぶなどでためが止まり、押すと再開。最大でたまると自動で止まる）。
@@ -574,11 +574,12 @@ const SK_WIND = 12;
 // スパッタリー（2026-10-24）: 地上で左右を押しながらジャンプボタンを押すと、その方向へステップ（STEP_F フレームで STEP_V × STEP_F px。その間は盾なし）。
 // 続けて 2 回まで。1 回目のあと STEP_CHAIN フレーム 2 回目を出さなければ数え直し、2 回目のあとは STEP_CD フレームの間ステップできない（ジャンプになる）。人は左右＋ジャンプ、CPU は頭脳が決める（aiStp）
 const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
-// ダッシュの出だし（2026-11-21。スマブラの「ダッシュの始めのステップ」。それまでの左右 2 回押しのステップの代わり。スパッタリーは自分のステップのまま）:
-//   地上で動ける状態のとき、左右を押した瞬間（何も押していない・反対を押していたところから）、その方向へ最大 DASH_F フレーム、DASH_V（足が速い人は走る速さの 1.3 倍）で飛び出す（最大約 120px）。
-//   押し続ければそのまま走る。途中で離すとすぐ止まる（短く押せば少しだけ動く）。途中で反対を押すと、その場で切り返す（ダッシュダンス）。ジャンプ・攻撃・スキルを押すと、勢いを残して終わる（次のフレームで出る）。
-//   向きは変わらない・盾はついたまま・崖の端で止まる（p.sp を使う）
-const DASH_V = 15, DASH_F = 8, DASH_CD = 0;
+// ダッシュの出だし（2026-11-21。スマブラの「ダッシュの始め」。それまでの左右 2 回押しのステップの代わり。スパッタリーは自分のステップのまま）:
+//   地上で動ける状態のとき、左右を押した瞬間（何も押していない・反対を押していたところから）、その方向へ飛び出す。向きは変わらない・盾はついたまま・崖の端で止まる（p.sp を使う）
+// 2026-11-21 からスマブラと同じ仕様: 出だしは DASH_F フレーム、走る速さの DASH_MUL 倍。途中で離しても出だしは最後まで進む（止まらない）。
+//   途中で反対を押すと振り向きダッシュ（ダッシュダンス）、ジャンプ・攻撃・スキルで中断できる。押し続けていれば走りへ、離していれば止まる
+const DASH_F = 11, DASH_MUL = 1.1, DASH_CD = 0;
+const dashV = S => MOVE_BASE * moveMul(S) * DASH_MUL;
 // 常に相手の方を向く（2026-11-21 のお試し）: 動ける間は、地上でも空中でも、いちばん近い敵の方を向く（攻撃・ため・構えの間は向きを変えない）
 const AUTO_FACE = true;
 // サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
@@ -2129,14 +2130,13 @@ function physics(p, inp, neutral) {
     canSkill = true;
     let go = true;
     if (p.spV) {                                 // ダッシュの出だし: 離したら止まる / 反対で切り返す / ジャンプ・攻撃・スキルで終わる（押したボタンは先行入力で次のフレームに出る）
-      if (!dir) { p.sp = 0; p.spV = 0; p.vx *= 0.25; go = false; }
-      else if (dir === -p.spD) { p.spD = dir; p.sp = DASH_F; p.spV = Math.max(DASH_V, MOVE_BASE * moveMul(S) * 1.3); emit("dsh", ecx(p), p.y + phOf(p), dir); }
+      if (dir === -p.spD) { p.spD = dir; p.sp = DASH_F; p.spV = dashV(S); emit("dsh", ecx(p), p.y + phOf(p), dir); }   // 離しても止まらない（出だしは最後まで）
       else if (upress || apress || kpress) { p.sp = 0; p.spV = 0; go = false; }
     }
     if (go) {
       p.vx = p.spD * (p.spV || STEP_V);
       { const pl = p.ground ? platformUnder(p) : null; if (pl) p.vx = Math.max(pl.x - p.x, Math.min(pl.x + pl.w - pwOf(p) - p.x, p.vx)); }   // 崖の端で止まる（2026-11-21）
-      if (--p.sp === 0) { p.vx = p.spD * MOVE_BASE * moveMul(S); if (p.spV) { p.spV = 0; p.dsC = DASH_CD; } }   // 止まるときは、ふつうに走る速さまで落とす
+      if (--p.sp === 0) { p.vx = dir === p.spD ? p.spD * MOVE_BASE * moveMul(S) : p.vx * 0.3; if (p.spV) { p.spV = 0; p.dsC = DASH_CD; } }   // 押し続けていれば走りへ、離していれば止まる   // 止まるときは、ふつうに走る速さまで落とす
     }
   } else {
     canSkill = true;
@@ -2164,7 +2164,7 @@ function physics(p, inp, neutral) {
     const stepDir = chd.id === "splat" && !p.isClone && !neutral ? (p.cpu ? p.aiStp : (jrise || p.bu > 0) ? dir : 0) : 0;
     if (p.cpu) p.aiStp = 0;
     if (dashDir && chd.id !== "splat" && !p.isClone && p.ground && p.dsC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && p.um === 0 && !lock) {
-      p.sp = DASH_F; p.spD = dashDir; p.spV = Math.max(DASH_V, MOVE_BASE * moveMul(S) * 1.3);   // 向きはそのまま（足が速い人は、走る速さの 1.3 倍）
+      p.sp = DASH_F; p.spD = dashDir; p.spV = dashV(S);   // 向きはそのまま（足が速い人は、走る速さの 1.3 倍）
       emit("dsh", ecx(p), p.y + phOf(p), dashDir);
     } else if (stepDir && p.ground && p.spC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && !lock) {
       p.sp = STEP_F; p.spD = stepDir; p.f = stepDir; p.bu = 0; p.jh = 0; p.spU = u ? 1 : 0;
@@ -2174,7 +2174,7 @@ function physics(p, inp, neutral) {
       p.vy = -jumpVel(jumpHeight(S) * wm.jp); p.ground = false; p.bu = 0; p.jg = JUMP_TURN; p.jh = (p.cpu || p.isClone || neutral) ? 0 : 1; p.jy0 = p.y;   // jh: 小ジャンプを見るため、押し続けているフレームを数える
       if (!p.isClone) emit("j", ecx(p), p.y + PLH);
     } else if ((jrise || p.bu > 0) && !p.ground && !p.dj && p.cn === 0 && !lock) {     // 二段ジャンプ: 空中で 1 回だけ（押した瞬間に左右を押していれば、その方向を向く）。先行入力でも出る
-      const airH = chd.id === "vamp" && !p.isClone && !neutral ? jumpHeight(VAMP_AIR_S) : jumpHeight(S) * AIR_JUMP;   // 吸血鬼の羽: スピード 6 の地上ジャンプと同じ高さ
+      const airH = chd.id === "vamp" && !p.isClone && !neutral ? VAMP_AIR_H : jumpHeight(S) * AIR_JUMP;   // 吸血鬼の羽: スピード 6 の地上ジャンプと同じ高さ
       p.jh = 0;
       p.vy = Math.min(p.vy, -jumpVel(airH * wm.jp)); p.dj = 1; p.bu = 0;   // 上昇中に押しても、いまの勢いより弱くはならない
       if (chd.id === "vamp" && !p.isClone) p.wgT = VAMP_WING;   // 吸血鬼: 羽を広げて跳ぶ
