@@ -580,8 +580,7 @@ const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
 //   途中で反対を押すと振り向きダッシュ（ダッシュダンス）、ジャンプ・攻撃・スキルで中断できる。押し続けていれば走りへ、離していれば止まる
 const DASH_F = 11, DASH_MUL = 1.2, DASH_CD = 0;   // 2026-11-21 に出だしの速さ 1.1 → 1.2 倍
 const dashV = S => MOVE_BASE * moveMul(S) * DASH_MUL;
-// 常に相手の方を向く（2026-11-21 のお試し）: 動ける間は、地上でも空中でも、いちばん近い敵の方を向く（攻撃・ため・構えの間は向きを変えない）
-const AUTO_FACE = false;   // 2026-11-21 にやめた（代わりに、攻撃を出した瞬間と当たり始めに、いちばん近い敵の方を向く: aimAtFoe）
+// 2026-11-21: 自動で敵の方を向く仕組み（常に向く・攻撃のときに向く・居合斬りで向く）は、すべてなくした。向きは押した方向だけで決まる
 // サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
 // 進み終わる（足場の端に着く）とインクを撒き散らして爆発（半径 SR_BLAST、盾は効かない）。途中で吹っ飛ばされる・動けなくなると、爆発せずに終わる。乗っている間は盾なし
 // キャンピングシェルター（2026-10-24）: 攻撃ボタンで前に大きな傘（高さ UMB_H = 体の 1.5 倍）を開く。押している間は開いたまま、UMB_LAUNCH フレームで傘が前へ飛んでいく（離すと閉じる）。
@@ -1060,25 +1059,6 @@ function ents() {
 }
 
 // ---- スキル ----
-function foeSide(p) {                         // いちばん近い（生きている）敵がいる側（-1 / 1。いなければ・真上なら 0）
-  let best = null, bd = 1e9;
-  for (const e of ents()) {
-    if (e === p || ally(e.own, p.own) || !e.al) continue;
-    const d = Math.abs(ecx(e) - ecx(p)) + 1.5 * Math.abs(e.y + phOf(e) - (p.y + phOf(p)));
-    if (d < bd) { bd = d; best = e; }
-  }
-  return best ? Math.sign(ecx(best) - ecx(p)) : 0;
-}
-function aimAtFoe(p) {                       // 居合斬り: 右を向いていても、左に敵がいれば左へ踏み込む
-  let best = null, bd = 1e9;
-  for (const e of ents()) {
-    if (ally(e.own, p.own) || untouchable(e)) continue;
-    const d = Math.abs(ecx(e) - ecx(p)) + 1.5 * Math.abs(e.y + phOf(e) - (p.y + phOf(p)));
-    if (d < bd) { bd = d; best = e; }
-  }
-  const sg = best ? Math.sign(ecx(best) - ecx(p)) : 0;
-  if (sg) p.f = sg;
-}
 // 踏み込み（stop のある攻撃）: 向かう先の敵（透過中・復活直後・巻き戻し中・つかまれている人は除く）の体に触れたら、その手前で止まる（すり抜けない）。手下・クロスボウでは止まらない
 function dashStop(p, vx) {
   const front = p.f > 0 ? p.x + pwOf(p) : p.x;
@@ -1095,8 +1075,7 @@ function dashStop(p, vx) {
 function useSkill(p) {                       // 押した瞬間に発動するスキル
   const id = chOf(p).id;
   if (id === "samurai") {
-    p.a = 1; p.ak = 1; p.hit = [];           // 居合斬り（ためてから踏み込み、盾を一撃で壊す）
-    aimAtFoe(p);                             // いちばん近い敵のほうを向く
+    p.a = 1; p.ak = 1; p.hit = [];           // 居合斬り（ためてから踏み込み、盾を一撃で壊す）。2026-11-21 から敵の方へは向き直さない
   } else if (id === "okure") {
     if (!plantFlower(p)) return false;
   } else if (id === "copern") {
@@ -2152,8 +2131,7 @@ function physics(p, inp, neutral) {
     // 向きを変えられるのは地面にいるとき（ため・構え中は固定）。ジャンプした直後の JUMP_TURN フレームだけは、空中でも向きを変えられ、
     // 横の動きも地上と同じくらい素早く切り返せる（右へ走ってジャンプ＋左、が少しずれても左を向く「反転ジャンプ」）
     const turnOk = p.ground || p.jg > 0;
-    const ff = AUTO_FACE && !neutral ? foeSide(p) : 0;   // 常に敵の方を向く（敵がいなければ、ふつうに押した方を向く）
-    if (p.a === 0 && p.ks === 0 && p.cn === 0) { if (ff) p.f = ff; else if (dir && turnOk) p.f = dir; }   // 傘を開いている間も向きを変えられる（傘も一緒に回る）
+    if (dir && p.a === 0 && turnOk && p.ks === 0 && p.cn === 0) p.f = dir;   // 傘を開いている間も向きを変えられる（傘も一緒に回る）
     const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
     if (p.jh > 0) {                                // 小ジャンプ: 押したフレームを 1 として、SHORT_HOP_F フレーム目までに離したら、上がる勢いを弱める
@@ -2200,8 +2178,7 @@ function physics(p, inp, neutral) {
   const ak = ATKS[p.ak] || ATKS[0];
   if (p.a > 0) {
     p.a++;
-    if (!ak.dash && (p.a === 2 || p.a === ak.on)) aimAtFoe(p);                // 2026-11-21: 攻撃を出した瞬間と当たり始めに、距離に関係なくいちばん近い敵の方を向く（構えの間に敵が後ろへ回ったときも）
-    if (ak.dash && p.a === ak.dashFrom) { if (ak.aim) aimAtFoe(p); emit("sl", ecx(p), ecy(p), p.ak); }      // 居合斬りは、踏み込む直前にも敵の方向へ向き直す（突進突きは真っすぐ）
+    if (ak.dash && p.a === ak.dashFrom) { emit("sl", ecx(p), ecy(p), p.ak); }      // 踏み込み・突進の始まり（向きは変えない）
     if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) {                         // 居合斬りの踏み込み・突進突きの突進
       p.vx = p.f * ak.dash;
       if (ak.stop) p.vx = dashStop(p, p.vx);
