@@ -602,7 +602,7 @@ const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
 const DASH_F = 11, DASH_MUL = 1.2, DASH_CD = 0;   // 2026-11-21 に出だしの速さ 1.1 → 1.2 倍。同じ日にダッシュの出だし（飛び出し）自体をなくした（左右を押せば、ふつうに走るだけ）
 // 2 回押しのステップ（2026-11-21 にもう一度）: 地上で同じ左右を DTAP_F フレーム以内に 2 回押すと、動く向きと反対を向いたまま、その方向へ STEP2_F フレーム STEP2_V で動く（約 120px）。
 // 1 回目はふつうのダッシュの出だし（向きも変わる）で、2 回目でステップに変わり、向きが元に戻る。ステップ中は盾つき・崖の端で止まる・中断できない。終わって STEP2_CD フレームは次のステップを出せない
-const DTAP_F = 12, STEP2_V = 15, STEP2_F = 8, STEP2_CD = 20;
+const DTAP_F = 12, STEP2_V = 15, STEP2_F = 8, STEP2_CD = 0, STEP2_LAG = 12;   // 2026-11-21: 終わりに STEP2_LAG フレームの硬直（スマブラの横回避の終わりの隙くらい。動けず盾もない）。硬直が解けたらすぐ次のステップを出せる（STEP2_CD 20 → 0）
 function startStep2(p, d) { p.sp = STEP2_F; p.spD = d; p.spV = STEP2_V; p.spK = 2; p.f = -d; p.dtT = 0;   // 2026-11-21 から: 動く向きと反対を向いて（後ろ向きに）動く
   emit("dsh", ecx(p), p.y + phOf(p), d); }
 const dashV = S => MOVE_BASE * moveMul(S) * DASH_MUL;
@@ -2177,7 +2177,7 @@ function physics(p, inp, neutral) {
     if (go) {
       p.vx = p.spD * (p.spV || STEP_V) * (p.bsl > 0 ? BREATH_SLOW : 1);
       { const pl = p.ground ? platformUnder(p) : null; if (pl) p.vx = Math.max(pl.x - p.x, Math.min(pl.x + pl.w - pwOf(p) - p.x, p.vx)); }   // 崖の端で止まる（2026-11-21）
-      if (--p.sp === 0) { p.vx = dir === p.spD ? p.spD * MOVE_BASE * moveMul(S) : p.vx * 0.3; if (p.spV) { p.dsC = p.spK === 2 ? STEP2_CD : DASH_CD; p.spV = 0; p.spK = 0; } }   // 押し続けていれば走りへ、離していれば止まる   // 止まるときは、ふつうに走る速さまで落とす
+      if (--p.sp === 0) { p.vx = dir === p.spD ? p.spD * MOVE_BASE * moveMul(S) : p.vx * 0.3; if (p.spV) { if (p.spK === 2) { p.fz = Math.max(p.fz, STEP2_LAG); p.vx = 0; } p.dsC = p.spK === 2 ? STEP2_CD : DASH_CD; p.spV = 0; p.spK = 0; } }   // 押し続けていれば走りへ、離していれば止まる   // 止まるときは、ふつうに走る速さまで落とす
     }
   } else {
     canSkill = true;
