@@ -574,9 +574,11 @@ const SK_WIND = 12;
 // スパッタリー（2026-10-24）: 地上で左右を押しながらジャンプボタンを押すと、その方向へステップ（STEP_F フレームで STEP_V × STEP_F px。その間は盾なし）。
 // 続けて 2 回まで。1 回目のあと STEP_CHAIN フレーム 2 回目を出さなければ数え直し、2 回目のあとは STEP_CD フレームの間ステップできない（ジャンプになる）。人は左右＋ジャンプ、CPU は頭脳が決める（aiStp）
 const STEP_V = 19, STEP_F = 8, STEP_CHAIN = 30, STEP_CD = 30;
-// ダッシュステップ（2026-11-21、全キャラ。スパッタリーは自分のステップのまま）: 地上で左右を DTAP_F フレーム以内に 2 回押すと、その方向へ DASH_F フレーム DASH_V で進む（約 120px）。
-// 向きは変わらない（後ろへのステップは下がるだけ）。その間は盾が外れる（スパッタリーのステップと同じ p.sp を使う）。終わってから DASH_CD フレームは次のステップを出せない
-const DTAP_F = 12, DASH_V = 15, DASH_F = 8, DASH_CD = 20;
+// ダッシュの出だし（2026-11-21。スマブラの「ダッシュの始めのステップ」。それまでの左右 2 回押しのステップの代わり。スパッタリーは自分のステップのまま）:
+//   地上で動ける状態のとき、左右を押した瞬間（何も押していない・反対を押していたところから）、その方向へ最大 DASH_F フレーム、DASH_V（足が速い人は走る速さの 1.3 倍）で飛び出す（最大約 120px）。
+//   押し続ければそのまま走る。途中で離すとすぐ止まる（短く押せば少しだけ動く）。途中で反対を押すと、その場で切り返す（ダッシュダンス）。ジャンプ・攻撃・スキルを押すと、勢いを残して終わる（次のフレームで出る）。
+//   向きは変わらない・盾はついたまま・崖の端で止まる（p.sp を使う）
+const DASH_V = 15, DASH_F = 8, DASH_CD = 0;
 // 常に相手の方を向く（2026-11-21 のお試し）: 動ける間は、地上でも空中でも、いちばん近い敵の方を向く（攻撃・ため・構えの間は向きを変えない）
 const AUTO_FACE = true;
 // サメライド: SR_F フレームの間サメに乗って前へ進み（1 フレームに SR_V px。地上では足場の端で止まる）、体の前 SR_REACH にぶつかった敵に 1 回ずつ当てる（SR_HIT 倍。盾で受けられる。盾なしで当たった敵は、爆発までサメが押していく）。
@@ -2079,10 +2081,8 @@ function physics(p, inp, neutral) {
   if (a && !p.ap) p.ba = INPUT_BUF;
   if (jrise) p.bu = INPUT_BUF;
   p.kp = kin ? 1 : 0; p.ap = a ? 1 : 0; p.jp = u ? 1 : 0;
-  let dashDir = 0;                               // ダッシュステップ: 同じ向きを DTAP_F フレーム以内にもう一度押した
-  if (p.dtT > 0) p.dtT--;
+  const dashDir = dir && dir !== p.pdir ? dir : 0;   // ダッシュの出だし: 左右を押した瞬間（反対からの切り替えも）
   if (p.dsC > 0) p.dsC--;
-  if (dir && dir !== p.pdir) { if (p.dtT > 0 && p.dtD === dir) { dashDir = dir; p.dtT = 0; } else { p.dtD = dir; p.dtT = DTAP_F; } }
   p.pdir = dir;
   if (!u) p.spU = 0;
   const kpress = p.bk > 0, apress = a || p.ba > 0, upress = u || p.bu > 0;
@@ -2127,9 +2127,17 @@ function physics(p, inp, neutral) {
     sharkStep(p);
   } else if (p.sp > 0) {                         // スパッタリー: ステップ中（向きは変わらず、攻撃・ジャンプはできない。スキルは使える）
     canSkill = true;
-    p.vx = p.spD * (p.spV || STEP_V);
-    { const pl = p.ground ? platformUnder(p) : null; if (pl) p.vx = Math.max(pl.x - p.x, Math.min(pl.x + pl.w - pwOf(p) - p.x, p.vx)); }   // 崖の端で止まる（2026-11-21）
-    if (--p.sp === 0) { p.vx = p.spD * MOVE_BASE * moveMul(S); if (p.spV) { p.spV = 0; p.dsC = DASH_CD; } }   // 止まるときは、ふつうに走る速さまで落とす（ダッシュステップは、そのあと少し出せない）
+    let go = true;
+    if (p.spV) {                                 // ダッシュの出だし: 離したら止まる / 反対で切り返す / ジャンプ・攻撃・スキルで終わる（押したボタンは先行入力で次のフレームに出る）
+      if (!dir) { p.sp = 0; p.spV = 0; p.vx *= 0.25; go = false; }
+      else if (dir === -p.spD) { p.spD = dir; p.sp = DASH_F; p.spV = Math.max(DASH_V, MOVE_BASE * moveMul(S) * 1.3); emit("dsh", ecx(p), p.y + phOf(p), dir); }
+      else if (upress || apress || kpress) { p.sp = 0; p.spV = 0; go = false; }
+    }
+    if (go) {
+      p.vx = p.spD * (p.spV || STEP_V);
+      { const pl = p.ground ? platformUnder(p) : null; if (pl) p.vx = Math.max(pl.x - p.x, Math.min(pl.x + pl.w - pwOf(p) - p.x, p.vx)); }   // 崖の端で止まる（2026-11-21）
+      if (--p.sp === 0) { p.vx = p.spD * MOVE_BASE * moveMul(S); if (p.spV) { p.spV = 0; p.dsC = DASH_CD; } }   // 止まるときは、ふつうに走る速さまで落とす
+    }
   } else {
     canSkill = true;
     let spm = 1;                                 // 2026-10-18 から、通常攻撃の間も移動は遅くならない（それまでは 0.44 倍）
@@ -2156,7 +2164,7 @@ function physics(p, inp, neutral) {
     const stepDir = chd.id === "splat" && !p.isClone && !neutral ? (p.cpu ? p.aiStp : (jrise || p.bu > 0) ? dir : 0) : 0;
     if (p.cpu) p.aiStp = 0;
     if (dashDir && chd.id !== "splat" && !p.isClone && p.ground && p.dsC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && p.um === 0 && !lock) {
-      p.sp = DASH_F; p.spD = dashDir; p.spV = DASH_V;   // 向きはそのまま
+      p.sp = DASH_F; p.spD = dashDir; p.spV = Math.max(DASH_V, MOVE_BASE * moveMul(S) * 1.3);   // 向きはそのまま（足が速い人は、走る速さの 1.3 倍）
       emit("dsh", ecx(p), p.y + phOf(p), dashDir);
     } else if (stepDir && p.ground && p.spC === 0 && p.a === 0 && p.cn === 0 && p.ks === 0 && !lock) {
       p.sp = STEP_F; p.spD = stepDir; p.f = stepDir; p.bu = 0; p.jh = 0; p.spU = u ? 1 : 0;
