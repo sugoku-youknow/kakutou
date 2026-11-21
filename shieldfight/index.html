@@ -2194,7 +2194,7 @@ function physics(p, inp, neutral) {
       if (ak.stop) p.vx = dashStop(p, p.vx);
       if (ak.hover && !p.ground) p.vy = Math.min(p.vy, 1);
     } else if (ak.stop && p.a > ak.dashTo && p.vx * p.f > 0) p.vx = dashStop(p, p.vx);   // 踏み込みのあとの惰性でも、敵の体にめりこまない（向きが逆・0 のときはそのまま）
-    if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ak.cd !== undefined ? ak.cd : ATK_COOLDOWN; p.wa = 0; p.sl = ak.total - ak.off; }   // sl: 盾が戻るまで   // スパッタリーは攻撃後の待ちも半分
+    if (p.a > ak.total) { p.a = 0; p.ak = 0; p.cd = ak.cd !== undefined ? ak.cd : ATK_COOLDOWN; p.wa = 0; p.sl = ak.total + 2 * (ak.total - ak.off); }   // sl: 盾が戻るまで（2026-11-21: 押してから盾が戻るまでを、その前の 2 倍に。通常攻撃は 45 → 90 フレーム）   // スパッタリーは攻撃後の待ちも半分
   }
   if (p.cd > 0) p.cd--;
   const gk = ((chd.id === "wizard" && (p.mgr || p.mc > 0 || p.bm > 0)) || (chd.id === "hadou" && p.hwr)) && !p.ground ? 0.6
