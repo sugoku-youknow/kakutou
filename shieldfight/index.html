@@ -434,12 +434,31 @@ const LANCE_AIR_AK = ATKS.length;
 ATKS.push({ total: 24, on: 10, off: 16, reach: 82, frac: 0.6, air: true, ang: 70, spear: true });
 const LANCE_BAIR_AK = ATKS.length;
 ATKS.push({ total: 28, on: 13, off: 19, reach: 82, frac: 0.9, air: true, back: true, ang: 35, spear: true, lowY: 15 });
+// 2026-11-22: 攻撃ボタンを長押しする「ため攻撃」（侍・騎士。地上の通常攻撃だけ）。押して ACH_START フレーム目にまだ押していたら、構えたまま ためる（p.ach = ためたフレーム）。
+//   離すと（騎士は最大までたまっても）出る。ためている間は動けず、盾もない。ACH_START より前に離せば、ふつうの通常攻撃
+const ACH_START = 12;
+// 侍の居合（10 番）: すぐ踏み込んで斬る。ためた長さで 3 段階（SAM_LV フレーム以上）。強さ SAM_FRAC / 色 SAM_COL（黄 → 橙 → 赤）。
+//   盾で受けられたとき: 1 段階 = 盾を 2 発分削る / 2 段階 = 盾を壊す / 3 段階 = 盾を壊して、そのまま斬り抜ける（吹っ飛ばす）。出す瞬間に、いちばん近い敵の方を向く
+const IAI_AK = ATKS.length;
+ATKS.push({ total: 40, on: 5, off: 11, reach: 74, dash: 15.6, dashFrom: 2, dashTo: 11, frac: 1.1, stop: true, ang: 45, iai: true });
+const SAM_LV = [0, 40, 90], SAM_FRAC = [1.1, 1.35, 1.6], SAM_COL = ["#fde047", "#f97316", "#ef4444"];
+const samLv = n => n >= SAM_LV[2] ? 3 : n >= SAM_LV[1] ? 2 : 1;
+// 騎士のため突き（11 番。スマブラのマルスの通常必殺技のような技）: 少し前へ踏み込んで突く。ため量 c（0〜1、KN_FULL フレームで最大。最大になると自動で出る）で強くなる。
+//   剣の先端（届く距離の KN_TIP より先）で当てると、強さ KN_TIP_MUL 倍。盾には 1 発分 + ため半分以上で 1 発 + 先端で 1 発（3 発で壊れる）
+const KNB_AK = ATKS.length;
+ATKS.push({ total: 40, on: 5, off: 10, reach: 64, dash: 3, dashFrom: 2, dashTo: 6, stop: true, ang: 40, nb: true });   // 踏み込みは少しだけ（約 15px。間合いを測って先端を当てる技）
+const KN_FULL = 60, KN_TIP = 0.55, KN_TIP_MUL = 1.35;
+// 侍のスキル「ツバメ返し」（12 番）: 素早く斬る。当たると（盾で受けられても）相手の剣を奪い、DISARM_F フレームのあいだ相手は通常攻撃ができない
+const TSUBAME_AK = ATKS.length;
+ATKS.push({ total: 42, on: 14, off: 22, reach: 58, frac: 0.7, ang: 45, disarm: true });
+const DISARM_F = 180;
+const BZ_HEAL = 3;   // バーサーカーのパッシブ: 通常攻撃を相手の体に当てるたびに、自分の % がこれだけ減る（2026-11-22）
 const LAUNCH_K = Math.SQRT2;   // 角度つきの飛ばし: 速さ = 今までの横の強さ × √2（0% の 45° が、今までの「横 9・上 9」とほぼ同じになる）
 // 攻撃のあと盾が戻るまで: 今まで（当たり判定の終わりから攻撃の終わりまで）の 2 倍。攻撃が終わってから、さらに同じ長さだけ盾が出ない（動くことはできる。p.sl）
 const KEY = { l: 1, r: 2, u: 4, d: 8, a: 16, k: 32 };
 // テレポーターのスキルボタンのスライド（2026-11-21 改）: 方向キーとは別のビットで送る（クールタイム中にスライドしても動かない）。
-//   (入力 >> AIM_SHIFT) & 15 = 向き（1〜9 = (横+1)×3 + (縦+1) + 1、0 = スライドなし）/ (入力 >> MAG_SHIFT) & 7 = 長さ（1〜7。7 でいちばん遠く）
-const AIM_SHIFT = 6, MAG_SHIFT = 10, IN_MASK = 8191;
+//   2026-11-22 から細かく: (入力 >> AIM_SHIFT) & 63 = 向き（1〜32 = 右から時計回りに 11.25° ずつ、0 = スライドなし）/ (入力 >> MAG_SHIFT) & 15 = 長さ（1〜15。15 でいちばん遠く）
+const AIM_SHIFT = 6, MAG_SHIFT = 12, IN_MASK = 65535, AIM_N = 32, MAG_N = 15;
 
 // 性能: 攻撃 / 防御 / スピード（各 0〜6、2 が標準）
 const MIN_STAT = 0, MAX_STAT = 6, BASE_STAT = 2;
@@ -472,23 +491,40 @@ const SD_MIN_W = 120;                // 縮みきったメインステージの�
 const SD_HOLD_FRAMES = 6 * 60;       // 最小幅になってから、足場がすべて崩れるまで
 
 // スキルの数値（60fps 換算）
-const BOMB_FUSE = 120, BOMB_R = 9, BOMB_BLAST = 85;     // ボム: 導火線の長さ（2 秒）/ 大きさ / 爆風の半径
+const BOMB_FUSE = 150, BOMB_R = 9, BOMB_BLAST = 85;     // ボム: 導火線の長さ（2026-11-22 から 2.5 秒。スキルボタンを押した瞬間から数える）/ 大きさ / 爆風の半径
 const BOMB_KNOCK = 0.855, BOMB_LIFT = 5.5;              // ボムの吹っ飛び（横の強さ / 上向きの初速）。2026-10-16 に 0.475 → 0.57 → 0.855（1.5 倍）
-// ボムの投げ方（ためて離す）: 横の初速は BOMB_VX0 + BOMB_VX1 × ため量（0〜1）、上向きの初速 BOMB_VY（低い山なり。上の台の下から投げても台に乗らない）
-const BOMB_VX0 = 3.5, BOMB_VX1 = 6, BOMB_VY = 5.5, BOMB_CHARGE = 48, BOMB_MAX = 2;   // … / 最大までためる時間（0.8 秒）/ 画面に置ける数（クールタイムはない。ラストスパート中は LATE_BOMBS）
+// ボムの投げ方（2026-11-22 から）: スキルボタンを押すと爆弾を手に持ち（導火線はもう燃えている）、離すと投げる。飛ぶ距離は、離すときの方向キーで決まる:
+//   向いている反対 = 手前に放る（BOMB_NEAR）/ なし = ステージの 4 分の 1（BOMB_MID）/ 向いている方 = ステージの半分（BOMB_FAR）。距離は体の中心から、同じ高さの地面に落ちるまで
+//   上向きの初速はそれぞれ BOMB_THROW の vy。横の初速は、その距離に落ちるように計算する（bombVx）。持ったまま 2.5 秒たつと、手の中で爆発する（自分は無傷）
+const BOMB_NEAR = 70, BOMB_MID = Math.round(PW * WIDE_SCALE / 4), BOMB_FAR = Math.round(PW * WIDE_SCALE / 2), BOMB_MAX = 2;   // … / 画面に置ける数（持っている 1 個も数える。クールタイムはない。ラストスパート中は LATE_BOMBS）
+function bombVx(d, vy) {                   // 投げた位置（体の中心から前へ 18px・上から 14px）から、足もとの高さに落ちるまでに横へ d px 進む初速
+  let lo = 0, hi = 40;
+  for (let it = 0; it < 40; it++) {
+    const m = (lo + hi) / 2; let x = 18, y = 0, vx = m, v = -vy;
+    for (let f = 0; f < 300; f++) { v += 0.5; vx *= 0.995; x += vx; y += v; if (v > 0 && y >= 60 - 14 - BOMB_R) break; }
+    if (x < d) lo = m; else hi = m;
+  }
+  return (lo + hi) / 2;
+}
+const BOMB_THROW = { "-1": { vx: bombVx(BOMB_NEAR, 7.5), vy: 7.5 }, "0": { vx: bombVx(BOMB_MID, 6), vy: 6 }, "1": { vx: bombVx(BOMB_FAR, 7), vy: 7 } };
 const BOMB_HIT_FRAC = 0.35, BOMB_RECOIL = 2.5;          // 飛んでいる爆弾が人に当たったときの吹っ飛ばし（盾なら 1 段階削る）/ 盾に当たって跳ね返る横の速さの最低値
 const FLOWER_ARM = 20, FLOWER_LIFE = 600, FLOWER_ROOT = 120;   // 花: 咲くまで / 残る時間 / 踏んだ人が動けない時間（2 秒。花で動けない間は、ほかの花は効かない）
 const FLOWER_HALF = 9, FLOWER_BIG_P = 0.2, FLOWER_BIG_ROOT = 240, FLOWER_BIG_SCALE = 1.6, FLOWER_BIG_HALF = 14;   // 花を踏む判定の幅（半分）/ 大きな花になる確率 / 大きな花で動けない時間（3 秒）/ 見た目の倍率 / 判定の幅（半分）
 const DOGEZA_KNOCK = 0.5;            // 花で動けない（土下座）間に受ける吹っ飛びの倍率
 const CLONE_LIFE = 420;              // 分身が消えるまで
 const ARROW_SPEED = 0.7;              // 矢の速さの倍率（13〜22px/フレームに掛ける）
+// 2026-11-22: アーチャーの矢は重力で落ちながら飛ぶ（ARROW_G）。ためるほど速く、少し上向きに放つので遠くまで届く（ため 0 で約 150px、最大で約 600px）。
+//   横の初速 ARROW_VX0 + ARROW_VX1 × ため量 / 上向きの初速 ARROW_VY0 + ARROW_VY1 × ため量。足場に落ちた矢は刺さったまま ARROW_STK フレーム残り、アーチャー本人が触れると 1 本拾える（上限はそのまま）。
+//   体に当たると、相手は少し浮く（ARROW_POP_*。矢 → 矢 → 攻撃とつなげられる）。いちばん強い矢（威力 ARROW_POP_PW 以上）だけは、ふつうに吹っ飛ばす。クロスボウの矢は今までどおり真横へ飛ぶ
+const ARROW_G = 0.3, ARROW_VX0 = 8, ARROW_VX1 = 10, ARROW_VY0 = 1, ARROW_VY1 = 3, ARROW_STK = 600, ARROW_STK_MAX = 5;
+const ARROW_POP_VY = 6, ARROW_POP_VX = 0.5, ARROW_POP_S = 30, ARROW_POP_PW = 1.1;
 const ARROW_MAX = 5, ARROW_REGEN = 60;   // アーチャーの矢: 持てる本数（ラウンド開始時の本数。ラストスパート中の上限は LATE_ARROW_MAX）/ 1 本回復するまで（1 秒）。矢がないと撃てない
 const CLONE_STATS = { A: 2, D: 1, S: 2 };   // コペルニウムの分身の性能（本体とは別）
 const BZ_FRAMES = 360, BZ_BONUS = { A: 2, D: -2, S: 2 }; // 狂化: 続く時間 / 攻撃・防御・スピードに足す値（防御は下がる）
 const CN_FRAMES = 24, CN_WHIFF = 18, CN_MUL = 1.2; // カウンター: 構えている時間 / 空振りしたときの隙 / 返す吹っ飛ばしの倍率（相手自身の攻撃の 1.2 倍。2026-10-17 に 1.5 → 1.2）
 const TP_V_MUL = 0.5;   // 上・下・斜めのテレポートの距離（横の何倍か。2026-11-21）
 const TP_MIN = 90, TP_MAX = PW * WIDE_SCALE - PLW; // テレポートの距離: いちばん近く / いちばん遠く（ステージの端から端まで = 656px）
-const TP_CD0 = 1, TP_CD1 = 2.5;      // テレポーターのクールタイム（秒）= TP_CD0 + TP_CD1 × ため量（近くへ 1 秒〜いちばん遠くへ 3.5 秒）
+const TP_CD0 = 0.7, TP_CD1 = 1.75;   // テレポーターのクールタイム（秒）= TP_CD0 + TP_CD1 × ため量（近くへ 0.7 秒〜いちばん遠くへ 2.45 秒。2026-11-22 に今までの 70%）
 const GH_FRAMES = 240;               // 透過が続く時間（4 秒）
 const GIANT_FRAMES = 360, GIANT_BONUS = 5, GIANT_SCALE = 2, GIANT_LOCK = 600;   // 巨大化: 続く時間（6 秒。2026-10-18 に 8 秒から）/ 全性能に足す値 / 大きさの倍率 / ラウンド開始から使えない時間（10 秒）
 const RESPAWN_INV = 120;             // 残機で復活したあとの無敵時間
@@ -638,17 +674,20 @@ const outOfBounds = p => { const x = p.x + pwOf(p) / 2; return x < KO_L || x > K
 const CHARS = [
   { id: "normal", name: "ノーマル", A: 2, D: 2, S: 2, tag: "練習用。スキルはない", skill: null },
   { id: "bomber", name: "ボマー", A: 2, D: 2, S: 4, tag: "爆弾で周りを吹っ飛ばす",
-    skill: { name: "ボム", cd: 0, cdText: "なし（爆弾は2個まで）", hold: true, maxCharge: BOMB_CHARGE, text: "押している間ためて、離すと爆弾を投げる。長くためるほど遠くへ飛び、2秒後に爆発して周りを吹っ飛ばす（盾は効かない）" } },
-  { id: "samurai", name: "侍", A: 5, D: 1, S: 4, tag: "攻撃力が高く、盾を一撃で割れる",
-    skill: { name: "居合斬り", cd: 4, text: "少しためてから、近い敵へ踏み込んで斬る。盾を一撃で壊す" } },
+    skill: { name: "ボム", cd: 0, cdText: "なし（爆弾は2個まで）", hold: true, maxCharge: BOMB_FUSE, text: "押すと爆弾を持ち、離すと投げる。爆弾は押してから2.5秒で爆発して周りを吹っ飛ばす（盾は効かない。持ったままでも爆発する）。離すときに、向いている方を押すとステージの半分、何も押さないと4分の1、反対を押すと手前に放る" } },
+  { id: "samurai", name: "侍", A: 5, D: 1, S: 4, tag: "居合で盾を割り、ツバメ返しで剣を奪う",
+    skill: { name: "ツバメ返し", cd: 6, text: "素早く斬りつける。当たると（盾で受けられても）相手の剣を奪い、相手は3秒間、通常攻撃ができない" },
+    auto: "居合: 攻撃ボタンを長押しすると構えてためる。離すと敵の方を向いて踏み込んで斬る。ためるほど強く、光の色が 黄→橙→赤 と変わる（黄: 盾を2発分削る / 橙: 盾を壊す / 赤: 盾を壊してそのまま斬る）" },
   { id: "archer", name: "アーチャー", A: 2, D: 1, S: 4, tag: "遠くから矢を放つ",
-    skill: { name: "弓矢", cd: 0.1, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ。長くためるほど速く強い。矢は5本まで（1秒に1本回復）" } },
+    skill: { name: "弓矢", cd: 0.1, hold: true, maxCharge: 36, openShield: true, text: "押している間ためて、離すと矢を放つ。矢は山なりに落ちながら飛び、長くためるほど遠く・強い。当たった相手は少し浮く（矢→矢→攻撃とつなげられる）。矢は5本まで（1秒に1本回復）。地面に刺さった矢は拾える" } },
   { id: "teleporter", name: "テレポーター", A: 2, D: 1, S: 5, tag: "瞬間移動で間合いを支配する",
-    skill: { name: "テレポート", cd: 2, cdText: "1〜3.5秒（遠いほど長い）", hold: true, maxCharge: 60, text: "スキルボタンを押したまま指をスライドして離すと、その方向（上下・斜めも）へ瞬間移動する。指を動かした長さで距離が決まり、遠いほどクールタイムが長い（1〜3.5秒）。スライドしなければ、押していた長さで向いている方へ飛ぶ（キーボードはためている間の方向キー）" } },
+    skill: { name: "テレポート", cd: 2, cdText: "0.7〜2.5秒（遠いほど長い）", hold: true, maxCharge: 60, text: "スキルボタンを押したまま指をスライドして離すと、その方向（どの角度でも）へ瞬間移動する。指を動かした長さで距離が決まり、遠いほどクールタイムが長い（0.7〜2.5秒）。押している間も歩ける。地面にめりこむ場所へ飛んだときは、地面の上に出る。スライドしなければ、押していた長さで向いている方へ飛ぶ（キーボードはためている間の方向キー）" } },
   { id: "berserker", name: "バーサーカー", A: 4, D: 2, S: 3, tag: "盾なし。スキルで攻撃と速さが上がる", noShield: true,
-    skill: { name: "狂化", cd: 14, text: "6秒間、攻撃とスピードが上がるが、防御が下がる" } },
+    skill: { name: "狂化", cd: 14, text: "6秒間、攻撃とスピードが上がるが、防御が下がる" },
+    auto: "通常攻撃を相手の体に当てるたびに、自分の%が3減る" },
   { id: "knight", name: "騎士", A: 3, D: 4, S: 2, tag: "とても硬い。攻撃を跳ね返す",
-    skill: { name: "カウンター", cd: 4, text: "構えている間に攻撃を受けると、相手を1.2倍の力で吹っ飛ばす。空振りすると隙ができる" } },
+    skill: { name: "カウンター", cd: 4, text: "構えている間に攻撃を受けると、相手を1.2倍の力で吹っ飛ばす。空振りすると隙ができる" },
+    auto: "ため突き: 攻撃ボタンを長押しすると構えてためる（1秒で最大。最大になると自動で突く）。ためるほど強い。剣の先端で当てると威力が上がり、盾も壊しやすい" },
   { id: "ghost", name: "ゴースト", A: 2, D: 2, S: 4, tag: "透明になって攻撃をすり抜ける",
     skill: { name: "透過", cd: 8, text: "4秒間、攻撃を受けなくなる。透明のまま何度でも攻撃できる" } },
   { id: "giant", name: "巨人", A: 1, D: 2, S: 2, tag: "ふだんは弱いが、巨大化して暴れる",
@@ -1021,7 +1060,7 @@ function spawn(p, slot, n, battle) {
   p.f = (p.x + PLW / 2 < PX + PW / 2) ? 1 : -1; p.hit = [];
   p.sh = 1; p.sbk = 0; p.shi = 0;
   p.kc = 0; p.ks = 0; p.kp = 0; p.gh = 0; p.bz = 0; p.cn = 0; p.cnHit = false; p.fz = 0; p.iv = 0; p.gt = 0; p.dz = 0; p.gb = 0; p.dj = 0;
-  p.rwHit = []; p.tl = []; p.rw = 0; p.rwN = 0; p.rwE = null; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0;
+  p.rwHit = []; p.tl = []; p.rw = 0; p.rwN = 0; p.rwE = null; p.rwPath = null; releaseGrab(p); p.hd = 0; p.km = 0; p.rmSw = 0; p.bk = p.ba = p.bu = p.jg = 0; p.am = ARROW_MAX; p.amT = 0; p.wa = 0; p.nsw = 0; p.ach = 0;
   p.bt = 0; p.fm = 0; p.wk = [0, 0, 0]; p.wkm = [0, 0, 0]; stopWeb(p); p.slw = 0;   // リバーシはラウンドの始めは攻撃形態
   p.yr = 0; p.yrc = 0; p.yry = 0; p.yrvy = 0; p.yrg = false;
   p.gk = 0; p.gq = 0; p.sm = 0; p.smT = 0;
@@ -1100,6 +1139,30 @@ function dashStop(p, vx) {
   }
   return p.f * lim;
 }
+// ため攻撃（侍の居合・騎士のため突き）: held = 攻撃ボタンを押している
+function achStep(p, chd, held) {
+  const kn = chd.id === "knight";
+  if (held && p.ground && (!kn || p.ach < KN_FULL)) {
+    p.ach++;
+    if (!kn && samLv(p.ach) !== samLv(p.ach - 1)) emit("acl", ecx(p), ecy(p), samLv(p.ach));   // 侍: 段階が上がった
+    if (kn && p.ach === KN_FULL) emit("acl", ecx(p), ecy(p), 9);
+    return;
+  }
+  const n = p.ach; p.ach = 0; p.hit = []; p.a = 1;
+  if (kn) { p.ak = KNB_AK; p.achC = Math.min(1, n / KN_FULL); p.achL = 0; }
+  else { p.ak = IAI_AK; p.achL = samLv(n); p.achC = 0; const ff = foeSide(p); if (ff) p.f = ff; }   // 侍の居合は、出す瞬間にいちばん近い敵の方を向く
+  emit("sl", ecx(p), ecy(p), p.ak);
+}
+// 通常攻撃が当たったときの強さなど（strike に渡す）。侍の居合・騎士のため突きは、ため量で変わる
+function atkOpts(p, ak, hf, t, front, reach) {
+  const o = { dir: hf, frac: (ak.frac || 1) * (p.msA ? MSW_MUL : 1), cap: p.msA ? 1.3 * MSW_MUL : undefined, recoil: true, breaker: !!ak.breaker, ang: ak.ang };   // 魔法の剣は 1.5 倍
+  if (ak.iai) { const L = Math.max(1, Math.min(3, p.achL | 0)); o.frac = SAM_FRAC[L - 1]; o.cap = Math.max(1.3, o.frac); o.shDmg = L >= 2 ? SHIELD_HITS : 2; o.pierce = L >= 3; }
+  if (ak.nb) {
+    const c = p.achC || 0, gap = hf > 0 ? hbL(t) - front : front - hbR(t), tip = gap >= reach * KN_TIP;   // 先端: 敵の手前のふちが、届く距離の KN_TIP より先
+    o.frac = (0.8 + 0.7 * c) * (tip ? KN_TIP_MUL : 1); o.cap = Math.max(1.3, o.frac); o.shDmg = 1 + (c >= 0.5 ? 1 : 0) + (tip ? 1 : 0); o.tip = tip;
+  }
+  return o;
+}
 function foeSide(p) {                         // いちばん近い（生きている）敵がいる側（-1 / 1。いなければ・真上なら 0）。味方は数えない
   let best = null, bd = 1e9;
   for (const e of ents()) {
@@ -1112,7 +1175,7 @@ function foeSide(p) {                         // いちばん近い（生きて�
 function useSkill(p) {                       // 押した瞬間に発動するスキル
   const id = chOf(p).id;
   if (id === "samurai") {
-    p.a = 1; p.ak = 1; p.hit = [];           // 居合斬り（ためてから踏み込み、盾を一撃で壊す）。2026-11-21 から敵の方へは向き直さない
+    p.a = 1; p.ak = TSUBAME_AK; p.hit = [];  // ツバメ返し（2026-11-22 から。それまでは居合斬り）
   } else if (id === "okure") {
     if (!plantFlower(p)) return false;
   } else if (id === "copern") {
@@ -1182,18 +1245,31 @@ function useSkill(p) {                       // 押した瞬間に発動する�
   return true;
 }
 const tpDist = c => TP_MIN + (TP_MAX - TP_MIN) * c;   // テレポートで動く距離（c: ため量 0〜1）
+// テレポートの行き先が足場にめりこんでいたら、その足場の上に乗せる（2026-11-22）。足場の見た目の厚み（メイン 52px・崖下のばね 40px・上の台 UP_H）に
+// 体が重なっていたら上に乗る（それより下は、ふつうに空中。ステージの下から上へ抜けて戻ることはできない）。いくつも重なっていたら、いちばん上の足場
+// また、メインの足場の上面より上から、上面の下へ飛んだとき（床を突き抜けるとき）も、メインの上に乗る。feet0: 飛ぶ前の足もとの高さ
+function tpLand(p, feet0) {
+  const w = pwOf(p), h = phOf(p);
+  let best = null;
+  for (const pl of platforms()) {
+    if (p.x + w <= pl.x || p.x >= pl.x + pl.w) continue;
+    const bottom = pl.main && feet0 <= pl.y + 1 ? Infinity : pl.y + (pl.main ? 52 : pl.pad ? 40 : UP_H);
+    if (p.y + h > pl.y + 0.5 && p.y < bottom && (!best || pl.y < best.y)) best = pl;
+  }
+  if (best) { p.y = best.y - h; p.vy = 0; }
+}
 function fireHold(p) {                       // ためて離すスキル
   const sk = chOf(p).skill, id = chOf(p).id, ks = p.ks;
   let c = Math.min(1, p.ks / sk.maxCharge);   // ため量（テレポーターはスライドの長さで上書き）
   p.ks = 0;
   if (id === "swapper") { openZone(p, ks); return; }   // ゾーンを張る（クールタイムは円が消えてから）
-  if (id === "bomber") {                               // 低い山なりに投げる。ためるほど遠くへ（ため中に見えている道すじ bombPath のとおりに飛ぶ）
-    const b = bombStart(p, c);
-    game.pj.push({ k: 0, x: b.x, y: b.y, vx: b.vx, vy: b.vy, own: p.own, t: 0 });
-    emit("sk", ecx(p), ecy(p), p.ch);
+  if (id === "bomber") {                               // 持っている爆弾を投げる（方向キーで 3 通り。持っている間に見えている道すじ bombPath のとおりに飛ぶ）
+    const b = game.pj.find(q => q.k === 0 && q.hold && q.own === p.own);
+    if (b) { const st = bombStart(p, p.bcl | 0); b.hold = 0; b.x = st.x; b.y = st.y; b.vx = st.vx; b.vy = st.vy; emit("sk", ecx(p), ecy(p), p.ch); }
+    p.bcl = 0;
   } else if (id === "archer") {
     p.am = Math.max(0, p.am - 1);
-    game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * ARROW_SPEED * 2 * (13 + 9 * c), vy: 0, own: p.own, pw: 0.35 + 0.85 * c, t: 0 });
+    game.pj.push({ k: 1, x: ecx(p) + p.f * 24, y: p.y + 24, vx: p.f * (ARROW_VX0 + ARROW_VX1 * c), vy: -(ARROW_VY0 + ARROW_VY1 * c), own: p.own, pw: 0.35 + 0.85 * c, t: 0, g: 1 });   // g: 重力で落ちる矢
     emit("ar", ecx(p) + p.f * 24, p.y + 24, p.f, c);
   } else if (id === "tengu") {                         // 風の場（2026-11-21 から、ためるスキル）: ためるほど広い（最大で幅・高さとも WIND_GROW 倍）
     const k = 1 + (WIND_GROW - 1) * c, ww = WIND_W * k, wh = WIND_H * k, feet = p.y + phOf(p), x = p.f > 0 ? ecx(p) - 30 : ecx(p) + 30 - ww;
@@ -1201,22 +1277,23 @@ function fireHold(p) {                       // ためて離すスキル
     game.wd.push({ own: p.own, x, y: feet + 60 - wh, w: ww, h: wh, d: p.f, t: 0 });
     emit("sk", ecx(p), ecy(p), p.ch);
   } else if (id === "teleporter") {
-    const x0 = ecx(p), y0 = ecy(p);
-    if (p.tpM) c = p.tpM / 7;                                     // スライドした長さで距離（とクールタイム）が決まる（ためた長さは使わない）
-    const ax = p.tpAx || 0, ay = p.tpAy || 0;                     // 向き（2026-11-21 から: スキルボタンをスライドした方向。スライドしなければ向いている方）
+    const x0 = ecx(p), y0 = ecy(p), feet0 = p.y + phOf(p);
+    if (p.tpM) c = p.tpM / MAG_N;                                 // スライドした長さで距離（とクールタイム）が決まる（ためた長さは使わない）
+    const ax = p.tpAx || 0, ay = Math.abs(p.tpAy || 0) < 0.01 ? 0 : p.tpAy;   // 向き（スキルボタンをスライドした方向。2026-11-22 から 32 方向。スライドしなければ向いている方）
     if (!ay) {
-      const hx = ax || p.f; p.f = hx;
+      const hx = Math.sign(ax) || p.f; p.f = hx;
       const dest = p.x + hx * tpDist(c);
       const pl = p.ground ? platforms().find(s => Math.abs(p.y + PLH - s.y) < 2 && ecx(p) > s.x && ecx(p) < s.x + s.w) : null;
       // 横へ: 地上からは、いま立っている足場の端までしか飛ばない（うっかり場外へ飛ばないように）。空中では撃墜ラインの内側まで
       p.x = pl ? Math.max(pl.x, Math.min(pl.x + pl.w - PLW, dest)) : Math.max(KO_L, Math.min(KO_R - PLW, dest));
-    } else {                                                      // 上・下・斜め: 撃墜ラインの内側（ふちから 40px）までの空中へ
-      const n = ax ? Math.SQRT1_2 : 1, d = tpDist(c) * TP_V_MUL;
-      if (ax) p.f = ax;
-      p.x = Math.max(KO_L + 40, Math.min(KO_R - 40 - PLW, p.x + ax * n * d));
-      p.y = Math.max(KO_T + 40, Math.min(KO_B - 80 - PLH, p.y + ay * n * d));
+    } else {                                                      // 上・下・斜め: 撃墜ラインの内側（ふちから 40px）までの空中へ。横は横の距離、縦はその TP_V_MUL 倍（だ円）
+      const d = tpDist(c);
+      if (Math.abs(ax) > 0.2) p.f = Math.sign(ax);
+      p.x = Math.max(KO_L + 40, Math.min(KO_R - 40 - PLW, p.x + ax * d));
+      p.y = Math.max(KO_T + 40, Math.min(KO_B - 80 - PLH, p.y + ay * d * TP_V_MUL));
       p.ground = false; p.vy = 0;
     }
+    tpLand(p, feet0);                                             // 地面にめりこむ場所（床を突き抜ける場所）なら、地面の上に出る
     p.vx = 0; p.tpAx = p.tpAy = 0; p.tpM = 0;
     emit("tp", x0, y0, ecx(p), ecy(p));
     p.kc = p.km = Math.round((TP_CD0 + TP_CD1 * c) * 60 * cdMul());   // クールタイムは飛ぶ距離（スライドの長さ・ため量）しだい: 近くへ 1 秒〜いちばん遠くへ 3.5 秒
@@ -1225,8 +1302,16 @@ function fireHold(p) {                       // ためて離すスキル
   p.kc = skCd(p);
 }
 
-// ボマーの爆弾の投げ始め（位置と速度）。c: ため量（0〜1）
-const bombStart = (p, c) => ({ x: ecx(p) + p.f * 18, y: p.y + 14, vx: p.f * (BOMB_VX0 + BOMB_VX1 * c), vy: -BOMB_VY });
+// 落ちる矢が、放った高さ（体の上から 24px）から足もとの高さまで落ちるあいだに、横へ進む距離（体の中心から）。c: ため量
+function arrowRange(c) {
+  let x = 24, y = 0, vy = -(ARROW_VY0 + ARROW_VY1 * c);
+  const vx = ARROW_VX0 + ARROW_VX1 * c;
+  for (let f = 0; f < 200; f++) { x += vx; vy += ARROW_G; y += vy; if (vy > 0 && y >= 36) break; }
+  return x;
+}
+// ボマーの爆弾の投げ始め（位置と速度）。cl: 投げ方（1 = 遠く / 0 = ふつう / -1 = 手前）。bombHand: 持っている爆弾の位置
+const bombHand = p => ({ x: ecx(p) + p.f * 18, y: p.y + 14 });
+const bombStart = (p, cl) => { const t = BOMB_THROW[cl] || BOMB_THROW[0], h = bombHand(p); return { x: h.x, y: h.y, vx: p.f * t.vx, vy: -t.vy }; };
 // 爆弾が最初に足場に落ちるまでの道すじ（ため中に表示する）。updateProjectiles のボムと同じ計算。足場に落ちなければ、撃墜ラインの下まで
 function bombPath(p, c) {
   const b = bombStart(p, c), pls = platforms(), pts = [[b.x, b.y]];
@@ -1394,7 +1479,7 @@ const bindMul = t => { const d = t.dm || 0; return d <= 100 ? 0.3 + 0.014 * d : 
 const bindLen = (t, f) => Math.round(f * bindMul(t));
 // レバガチャ（physics の最初で毎フレーム）。CPU はときどき押す
 function mashStep(p, inp) {
-  const press = p.cpu ? (Math.random() < 0.2 ? 1 : 0) : (inp & ~(p.mi | 0)); p.mi = inp;
+  const press = p.cpu ? (Math.random() < 0.2 ? 1 : 0) : (inp & 63 & ~(p.mi | 0)); p.mi = inp;   // ボタンだけを数える（スライドの向きは数えない）
   if (!press) return;
   if (p.hd > 0) {
     for (const q of ents()) {
@@ -1407,7 +1492,7 @@ function mashStep(p, inp) {
   if (p.bnd && p.fz > 1) { p.fz = Math.max(1, p.fz - MASH_F); if (p.dz > 0) p.dz = Math.max(1, p.dz - MASH_F); }
 }
 function grabBroken(t) {
-  if (t.a > 0 && (t.ak === 1 || (t.ak === 3 && t.a <= ATKS[3].dashTo))) t.kc = 0;
+  if (t.a > 0 && (t.ak === 1 || t.ak === TSUBAME_AK || (t.ak === 3 && t.a <= ATKS[3].dashTo))) t.kc = 0;
 }
 // おくれたんの花で動けない（土下座の）相手は、殴られても飛ばされるだけで、残りの時間は動けないまま（花→攻撃→落ちた先の花… とつなげられる）。
 // ただし、崖の外まで飛ぶ当たり（flyOut）なら、復帰できるように解く。fz0 / dz0: 当たる前の値
@@ -2054,7 +2139,7 @@ function physics(p, inp, neutral) {
   if (!p.dz) p.rk = 0;
   else if (p.rk && !p.ground && !overStage(p)) { p.fz = 0; p.dz = 0; p.rk = 0; }   // 花で動けないまま殴られて、空中で崖の外（「\＿/」の範囲の外）へ出た: 崖から戻れるよう、すぐ動けるようにする
 
-  if (p.a === 0) { p.gb = 0; p.ahit = 0; }
+  if (p.a === 0) { p.gb = 0; p.ahit = 0; p.ach = 0; }   // ach: ため攻撃のため（攻撃が終わった・止められたら消える）
   if (p.gt > 0 && --p.gt === 0) { p.x += PLW / 2; p.y += PLH; }     // 巨大化が終わる（足もとの中心を保つ）
   if (p.cn > 0 && --p.cn === 0 && !p.cnHit) p.fz = CN_WHIFF;       // 構えが空振りに終わると隙ができる
   if (p.slw > 0) p.slw--;
@@ -2078,6 +2163,7 @@ function physics(p, inp, neutral) {
     p.ybs = ybs; p.ybt = ybt;
   }
   if (p.nc > 0) p.nc--;
+  if (p.nsw > 0) p.nsw--;                          // ツバメ返しで剣を奪われている残り
   if (p.dr > 0) p.dr--;
   if (p.st > 0) p.st--;
   if (p.bsl > 0) p.bsl--;
@@ -2141,9 +2227,9 @@ function physics(p, inp, neutral) {
   }
   const tpAim = chd.id === "teleporter" && !p.isClone && p.ks > 0;   // テレポーター: ためている間は、方向キー（スキルボタンのスライド）で向きを決める。動かず跳ばない
   if (tpAim && kin) {                              // スライドしていれば、その向きと長さ。していなければ（キーボード）方向キーと、ためた長さ
-    const ai = (inp >> AIM_SHIFT) & 15;
-    if (ai) { p.tpAx = Math.floor((ai - 1) / 3) - 1; p.tpAy = (ai - 1) % 3 - 1; p.tpM = (inp >> MAG_SHIFT) & 7; }
-    else { p.tpAx = dir; p.tpAy = (d ? 1 : 0) - (u ? 1 : 0); p.tpM = 0; }
+    const ai = (inp >> AIM_SHIFT) & 63;
+    if (ai) { const th = (ai - 1) * 2 * Math.PI / AIM_N, cx0 = Math.cos(th), cy0 = Math.sin(th); p.tpAx = Math.abs(cx0) < 1e-6 ? 0 : cx0; p.tpAy = Math.abs(cy0) < 1e-6 ? 0 : cy0; p.tpM = (inp >> MAG_SHIFT) & 15; }
+    else { const vy = (d ? 1 : 0) - (u ? 1 : 0), n = Math.hypot(dir, vy) || 1; p.tpAx = dir / n; p.tpAy = vy / n; p.tpM = 0; }
   }   // 離したフレームは、直前の向きのまま（指を離すとスライドも消えるため）
   if (tpAim) p.bu = 0;
   if (p.bk > 0) p.bk--;
@@ -2194,8 +2280,9 @@ function physics(p, inp, neutral) {
     const ak0 = ATKS[p.ak] || ATKS[0];
     const lock = (p.a > 0 && ak0.lock) || p.mc > 0 || p.bm > 0;   // 突進突き: 構え・突進・そのあとの隙の間は動けない（突進だけ進む）。魔法使いの詠唱中も動けない
     if (p.a > 0 && ak0.dash && p.a < ak0.dashFrom) spm = 0;     // 居合斬りのため中は動けない
+    if (p.ach > 0) spm = 0;                                     // ため攻撃をためている間も動けない
     if (lock) spm = 0;
-    if (p.ks > 0) spm = Math.min(spm, tpAim ? 0 : 0.45);     // ためている間は動きが鈍る（テレポーターは止まる）
+    if (p.ks > 0 && !tpAim) spm = Math.min(spm, 0.45);      // ためている間は動きが鈍る（テレポーターは 2026-11-22 から、ふつうに歩ける。ジャンプはできない）
     if (p.um > 0) spm = Math.min(spm, UMB_SLOW); // 傘を開いている間も少し遅い
     if (p.bsl > 0) spm *= BREATH_SLOW;           // ヤニ猫の臭い息
     if (p.cn > 0) spm = 0;                       // カウンターの構え中は動かない
@@ -2234,11 +2321,11 @@ function physics(p, inp, neutral) {
     const camp = chd.id === "camp" && !p.isClone && !neutral;
     if (camp && p.um > 0) {                      // キャンピングシェルター: 押している間は傘を開いたまま。離すと閉じる
       if (a) umbrellaStep(p); else { p.um = 0; p.umh = []; p.cd = ATK_COOLDOWN; }
-    } else if (apress && camp && p.umR === 0 && !umbOut(p) && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {   // 飛ばした傘が残っている間は開けない（ふつうの通常攻撃になる）
+    } else if (apress && camp && !p.nsw && p.umR === 0 && !umbOut(p) && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {   // 飛ばした傘が残っている間は開けない（ふつうの通常攻撃になる）
       p.ba = 0; p.um = 1; p.umh = [];
       if (!p.ground && dir) p.f = dir;
       emit("umo", ecx(p) + p.f * 28, ecy(p), p.f);
-    } else if (apress && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {
+    } else if (apress && !p.nsw && p.a === 0 && p.cd === 0 && p.ks === 0 && p.cn === 0 && p.mc === 0) {   // nsw: 剣を奪われている間は攻撃できない
       p.ba = 0;
       const bair = !p.ground && (!chd.atk || chd.atk === 2) && dir === -p.f;   // 空中後ろ攻撃（剣の人と槍兵。振り向かない）
       if (!p.ground && dir && !bair) p.f = dir;                 // 空中では、移動ボタンを押しながら攻撃すると、その方向へ振り向いて攻撃する（剣の人は、後ろを押すと空中後ろ攻撃）
@@ -2251,7 +2338,9 @@ function physics(p, inp, neutral) {
   if (canSkill && sk && !neutral && !p.isClone && chd.id !== "clock" && skillInput(p, chd, kin, kpress, dir, zone)) p.bk = 0;   // スキル（時計師は上で処理する）
   const ak = ATKS[p.ak] || ATKS[0];
   if (p.a > 0) {
-    p.a++;
+    if (!p.ach && p.a === ACH_START && a && p.ak === 0 && p.ground && !p.isClone && !neutral && (chd.id === "samurai" || chd.id === "knight")) p.ach = 1;   // 押したまま: ために変わる
+    if (p.ach > 0) achStep(p, chd, a);           // ためている間は p.a は進まない（離すと、ため攻撃が p.a = 1 から始まる）
+    else p.a++;
     if (ak.dash && p.a === ak.dashFrom) { emit("sl", ecx(p), ecy(p), p.ak); }      // 踏み込み・突進の始まり（向きは変えない）
     if (ak.dash && p.a >= ak.dashFrom && p.a <= ak.dashTo) {                         // 居合斬りの踏み込み・突進突きの突進
       p.vx = p.f * ak.dash;
@@ -2309,8 +2398,14 @@ function skillInput(p, chd, kin, kpress, dir, zone) {
     aim(); fireHadou(p); return true;
   }
   if (sk.hold) {
-    if (p.ks > 0) { if (kin) p.ks = Math.min(p.ks + 1, sk.maxCharge); else { aim(); fireHold(p); } return false; }
-    if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0 && (chd.id !== "archer" || p.am > 0) && (chd.id !== "bomber" || bombsOf(p).length < bombMax())) { aim(); p.ks = 1; emit("sc", ecx(p), ecy(p), p.ch); return true; }   // ボマー: 爆弾が画面に 2 個ある間は ため始められない
+    if (chd.id === "bomber" && p.ks > 0) p.bcl = dir === 0 ? 0 : dir === p.f ? 1 : -1;   // ボマー: いま離したら、どう投げるか（向いている方 1 / なし 0 / 反対 -1）。向きは変えない
+    if (p.ks > 0) { if (kin) p.ks = Math.min(p.ks + 1, sk.maxCharge); else { if (chd.id !== "bomber") aim(); fireHold(p); } return false; }
+    if (kpress && p.kc === 0 && p.a === 0 && p.cn === 0 && (chd.id !== "archer" || p.am > 0) && (chd.id !== "bomber" || bombsOf(p).length < bombMax())) {   // ボマー: 爆弾が画面に 2 個ある間は持てない
+      aim(); p.ks = 1;
+      if (chd.id === "bomber") { const h = bombHand(p); p.bcl = dir === 0 ? 0 : dir === p.f ? 1 : -1; game.pj.push({ k: 0, x: h.x, y: h.y, vx: 0, vy: 0, own: p.own, t: 0, hold: 1 }); }   // 爆弾を手に持つ（導火線はもう燃えている）
+      else emit("sc", ecx(p), ecy(p), p.ch);
+      return true;
+    }
     return false;
   }
 
@@ -2395,12 +2490,19 @@ function strike(att, t, o) {
   if (t.cn > 0 && att.al) { counterHit(t, att); return; }
   if (umbrellaBlock(att, t, o)) return;                      // キャンピングシェルターの傘（前からの攻撃）
   const open = !shieldUp(t) || t.f !== -o.dir;               // 盾がない・外れている・背後から → 盾は効かない
-  if (open) { knock(att, t, o.frac, o.dir, o.cap, o.dmf ? DMG_BASE * atkMul(effA(att)) * defMul(effD(t)) * o.dmf * dzMul(t) : undefined, o.ang); impact("h", att, t, o.frac, o.dir); return; }   // dmf: たまる % だけ別の倍率（CF のクリティカル）
+  if (open) {
+    knock(att, t, o.frac, o.dir, o.cap, o.dmf ? DMG_BASE * atkMul(effA(att)) * defMul(effD(t)) * o.dmf * dzMul(t) : undefined, o.ang);
+    if (o.pop && !t.mb && t.s > 0) { t.vx = o.dir * ARROW_POP_VX; t.vy = -ARROW_POP_VY; t.s = ARROW_POP_S; }   // アーチャーの矢: 少しだけ浮かせる（吹っ飛ばさない）
+    impact("h", att, t, o.frac, o.dir); return;
+  }   // dmf: たまる % だけ別の倍率（CF のクリティカル）
   if (o.breaker) {                                           // 居合斬り: 盾を壊すだけで、吹っ飛ばしはしない
     breakShield(t); impact("k", att, t, 0, o.dir); return;
   }
+  if (o.pierce) {                                            // 侍の 3 段階の居合: 盾を壊して、そのまま斬り抜ける
+    breakShield(t); knock(att, t, o.frac, o.dir, o.cap, undefined, o.ang); impact("h", att, t, o.frac, o.dir); emit("k", t.f > 0 ? t.x + pwOf(t) + 4 : t.x - 4, ecy(t), o.dir, 0); return;
+  }
   t.shi = 0;                                                 // 盾で受けた（攻撃・防御に関係なく 3 回で壊れる）
-  t.sh -= 1 / SHIELD_HITS;
+  t.sh -= (o.shDmg || 1) / SHIELD_HITS;                    // shDmg: 一度に削る数（侍の居合・騎士のため突き）
   const broke = t.sh <= 0.001;
   if (broke) breakShield(t); else t.bf = 10;
   t.vx += o.dir * 3;
@@ -2428,8 +2530,19 @@ function resolveHits(list) {
         strike(p, t, { dir: p.f, frac: CF_CRIT_KB, cap: CF_CRIT, dmf: CF_CRIT, recoil: true, ang: CF_CRIT_ANG });   // 根元のクリティカルだけ 30°（2026-11-21）
         if (t.s > 0 && t.s !== s0) { game.hs = Math.max(game.hs, Math.round(CF_HS * (8 + 3 * CF_CRIT))); emit("crit", ecx(t), ecy(t), p.f); }
       }
-      else strike(p, t, { dir: hf, frac: (ak.frac || 1) * (p.msA ? MSW_MUL : 1), cap: p.msA ? 1.3 * MSW_MUL : undefined, recoil: true, breaker: !!ak.breaker, ang: ak.ang });   // 魔法の剣は 1.5 倍
-      if (t.dm !== hd0 || (t.s > 0 && t.s !== hs0)) p.ahit = 1;   // 体に当たった（盾で受けられた・弾かれたときは数えない）
+      else {
+        const o = atkOpts(p, ak, hf, t, hf > 0 ? p.x + PLW * sz : p.x, reach), cn0 = t.cn > 0;
+        strike(p, t, o);
+        if (o.tip) emit("tip", ecx(t), ecy(t), hf);                   // 騎士: 先端で当てた
+        if (ak.disarm && !cn0 && t.al) {                              // ツバメ返し: 盾で受けられても、剣を奪う（騎士のカウンターには返される）
+          t.nsw = DISARM_F; if (t.a > 0 && t.ak !== IAI_AK) { t.a = 0; t.ach = 0; }
+          emit("dsa", ecx(t), t.y + 20, hf);
+        }
+      }
+      if (t.dm !== hd0 || (t.s > 0 && t.s !== hs0)) {                 // 体に当たった（盾で受けられた・弾かれたときは数えない）
+        p.ahit = 1;
+        if (chOf(p).id === "berserker" && !p.isClone && p.dm > 0) { p.dm = Math.max(0, p.dm - BZ_HEAL); emit("bzh", ecx(p), p.y + 10); }   // バーサーカー: 当てるたびに回復
+      }
     }
     if (!(ak.hammer && (p.hmN | 0) <= 1)) hitObjs(p.own, hx0, hy0, hx1, hy1, p.hit);   // 手下とクロスボウにも当たる（クロスボウは 1 回の攻撃で 1 回だけ削る。ハンマーの 1 は何にも当たらない）
     cutFlowers(p.own, hx0, hy0, hx1, hy1);
@@ -2474,6 +2587,13 @@ function updateProjectiles(list) {
   for (let i = game.pj.length - 1; i >= 0; i--) {
     const b = game.pj[i];
     b.t++;
+    if (b.k === 0 && b.hold) {                               // 持っているボム（2026-11-22）: 当たり判定はない
+      const o = game.p[b.own];
+      if (o && o.al && o.ks > 0 && chOf(o).id === "bomber") { const h = bombHand(o); b.x = h.x; b.y = h.y; b.vx = o.vx; b.vy = o.vy; }
+      else { b.hold = 0; b.vx = o ? o.vx * 0.5 : 0; b.vy = 0; }   // 吹っ飛ばされた・動けなくなった・やられた: その場に落とす
+      if (b.t >= BOMB_FUSE) { if (o && b.hold) { o.ks = 0; o.bcl = 0; } explode(b, list); game.pj.splice(i, 1); }   // 持ったまま爆発（自分は無傷）
+      continue;
+    }
     if (b.k === 0) {                                         // ボム
       b.vy += 0.5; b.vx *= 0.995;
       const oy = b.y;
@@ -2654,8 +2774,24 @@ function updateProjectiles(list) {
       }
       if (hitObjs(b.own, xa, ya, xb, yb, null, false, CB_PAD)) game.pj.splice(i, 1);   // 手下・クロスボウに当たったら消える
     } else {                                                 // 矢
-      const ox = b.x;
+      if (b.stk) {                                           // 足場に刺さった矢: アーチャー本人が触れると拾える（矢が上限のときは拾わない）。ARROW_STK フレームで消える
+        const o = game.p[b.own];
+        if (o && o.al && chOf(o).id === "archer" && o.am < arrowMax() && b.x > hbL(o) - 8 && b.x < hbR(o) + 8 && b.y > o.y - 4 && b.y < o.y + phOf(o) + 8) {
+          o.am++; emit("arp", b.x, b.y); game.pj.splice(i, 1); continue;
+        }
+        if (b.t > ARROW_STK) game.pj.splice(i, 1);
+        continue;
+      }
+      const ox = b.x, oy = b.y;
       b.x += b.vx;
+      if (b.g) {                                             // 落ちる矢: 足場の上面を上から横切ったら刺さる
+        b.vy += ARROW_G; b.y += b.vy;
+        let stuck = false;
+        if (b.vy > 0) for (const pl of pls) if (oy <= pl.y && b.y >= pl.y && b.x > pl.x && b.x < pl.x + pl.w) { b.y = pl.y - 3; b.stk = 1; b.t = 0; stuck = true; break; }
+        if (stuck) { const mine = game.pj.filter(q => q.k === 1 && q.stk && q.own === b.own); if (mine.length > ARROW_STK_MAX) { const j = game.pj.indexOf(mine[0]); game.pj.splice(j, 1); if (j < i) i--; } }   // 刺さった矢は 1 人 ARROW_STK_MAX 本まで（古いものから消える。送る量を抑える）
+        if (stuck) continue;
+        if (b.y > KO_B + 80) { game.pj.splice(i, 1); continue; }
+      }
       const xa = Math.min(ox, b.x) - 4, xb = Math.max(ox, b.x) + 4;
       let hit = null;
       for (const e of list) {
@@ -2666,12 +2802,12 @@ function updateProjectiles(list) {
         if (b.xid) autoStrike(b.own, hit, { dir: Math.sign(b.vx), frac: b.pw, recoil: false }, () => { const c = game.cb.find(q => q.id === b.xid); if (c) removeCb(c); });   // クロスボウの矢: 騎士のカウンターでは、クロスボウが壊れるだけ
         else {
           const owner = game.p[b.own] || { ch: 0, bz: 0, f: Math.sign(b.vx), al: false };
-          strike(owner, hit, { dir: Math.sign(b.vx), frac: b.pw, recoil: false });
+          strike(owner, hit, { dir: Math.sign(b.vx), frac: b.pw, recoil: false, pop: b.g && b.pw < ARROW_POP_PW });   // 少し浮かせる
         }
         game.pj.splice(i, 1); continue;
       }
       if (hitObjs(b.own, xa, b.y - 1, xb, b.y + 1, null, false, CB_PAD)) { game.pj.splice(i, 1); continue; }   // 人に当たらなければ、手下・クロスボウに当たる（高さ CB_BOLT の矢は、同じ足場の手下の上を通る）
-      if (b.x < KO_L - 60 || b.x > KO_R + 60 || b.t > 200) game.pj.splice(i, 1);
+      if (b.x < KO_L - 60 || b.x > KO_R + 60 || (!b.g && b.t > 200)) game.pj.splice(i, 1);
     }
   }
 }
@@ -2880,15 +3016,15 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
   switch (id) {
     case "bomber": {                                                                                                    // 敵の足もとに落ちるだけためて投げる（爆弾が 2 個ある間は投げない）
       if (!g || !face || !sameLevel || gap < 40 || gap > 300 || bombsOf(c).length >= bombMax()) return 0;
-      let best = 1, bd = 1e9;
-      for (let k = 1; k <= BOMB_CHARGE; k += 2) {
-        const bp = bombPath(c, k / BOMB_CHARGE), e = bp.pts[bp.pts.length - 1];
+      let best = 0, bd = 1e9;
+      for (const k of [-1, 0, 1]) {
+        const bp = bombPath(c, k), e = bp.pts[bp.pts.length - 1];
         const d = bp.land ? Math.abs(e[0] - ecx(t)) : 1e9;
         if (d < bd) { bd = d; best = k; }
       }
-      c.aiCh = best; return KEY.k;
+      c.aiCh = 40 + Math.floor(Math.random() * 30); c.aiBd = best; return KEY.k;   // 持つ長さ（0.7〜1.2 秒）。落ちてから少しして爆発する
     }
-    case "samurai": return g && sameLevel && gap > 18 && gap < 200 && shieldUp(t) && tFaces && t.a === 0 && t.cd === 0 ? KEY.k : 0;   // 盾で固めた敵を、盾ごと割る
+    case "samurai": return g && sameLevel && gap < ATKS[TSUBAME_AK].reach - 6 && !t.nsw && (t.a > 0 || (shieldUp(t) && tFaces)) ? KEY.k : 0;   // ツバメ返し: 間合いの中で、攻撃しようとしている・盾で固めている敵の剣を奪う
     case "berserker": return sameLevel && gap < 230 ? KEY.k : 0;
     case "knight": return g && face && t.a >= 1 && t.a < (ATKS[t.ak] || ATKS[0]).on && !(ATKS[t.ak] || ATKS[0]).dash && gap <= tr + 10 ? KEY.k : 0;                // 敵が振りかぶった瞬間にカウンター
     case "ghost": return sameLevel && gap > 50 && gap < 280 && (t.a > 0 || (shieldUp(t) && tFaces)) ? KEY.k : 0;
@@ -2952,7 +3088,7 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
       c.aiCh = zoneNeed(c, t); return KEY.k;
     }
     case "archer":                                                                                                      // 遠いほど長くためる
-      if (c.am > 0 && g && face && Math.abs(dyFeet) < 40 && gap >= 150 && gap <= 480) { c.aiCh = gap > 300 ? 36 : gap > 200 ? 24 : 14; return KEY.k; }
+      if (c.am > 0 && g && face && Math.abs(dyFeet) < 40 && gap >= 100 && gap <= 560) { let k = 1; while (k < 36 && arrowRange(k / 36) < gap + sd * 2 + 10) k++; c.aiCh = k; return KEY.k; }
       return 0;
     case "teleporter":                                                                                                  // 盾を向けた敵の向こう側（背中）へ出る
       if (g && face && sameLevel && tFaces && gap > 90 && gap < 300) {
@@ -3020,8 +3156,10 @@ function aiDodge(c, inp, ccx, feet) {                  // 爆弾（ボマーの�
     if (b.k === 3) {                                     // 幽霊の置いた爆弾: 爆発の前に、近くにあれば（横 YUREI_BLAST+20px 以内で、高さもおおむね重なる）そこから離れる
       if (b.t < YUREI_FUSE && Math.abs(ccx - b.x) < YUREI_BLAST + 20 && Math.abs(cy - b.y) < YUREI_BLAST + 30) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
     } else if (b.k === 0) {
+      if (b.hold) continue;
       if (BOMB_FUSE - b.t < 50 && Math.abs(ccx - b.x) < BOMB_BLAST + 30 && Math.abs(cy - b.y) < BOMB_BLAST + 30) inp = (inp & ~(KEY.l | KEY.r)) | (ccx >= b.x ? KEY.r : KEY.l);
     } else {                                             // 矢と、ブーメラン使いの盾: 向かってくるものを跳んでよける
+      if (b.stk) continue;                               // 刺さった矢
       const dx = ccx - b.x;
       if (Math.sign(dx) === Math.sign(b.vx) && Math.abs(dx) > 70 && Math.abs(dx) < 280 && b.y > c.y - 6 && b.y < feet + 6) inp |= KEY.u;
     }
@@ -3158,6 +3296,9 @@ function aiThink(c, owner, pls, B) {
     }
   }
   if (sk && B.skill > 0) { const k = aiSkill(c, t, { gap, sgn, sd, dyFeet, sameLevel, tr }, B); if (k) { inp |= k; inp &= ~KEY.a; } }   // スキルを使うときは、通常攻撃を押さない
+  if ((id === "samurai" || id === "knight") && !c.isClone && B.skill > 0 && c.ground && c.a === 0 && c.cd === 0 && !c.nsw && !(inp & KEY.k) && sameLevel && c.f === sgn && shieldUp(t) && tFaces && gap > 30 && gap < 130 && Math.random() < B.skill * 0.5) {
+    inp = (inp & ~(KEY.l | KEY.r)) | KEY.a; c.aiAH = id === "samurai" ? 30 + Math.floor(Math.random() * 80) : 25 + Math.floor(Math.random() * 40);   // 盾で固めた敵に、ため攻撃（押し続けるフレーム）
+  }
   // 蜘蛛: 盾をこちらへ向けた敵の少し手前で跳び、空中から急降下して盾ごと吹っ飛ばす
   if (id === "spider" && B.skill > 0 && c.ground && !(inp & KEY.k) && c.wk[2] === 0 && sameLevel && c.f === sgn && gap > 60 && gap < 150 && shieldUp(t) && tFaces && Math.random() < B.skill * 0.5) inp = (inp & ~KEY.a) | KEY.u;
   if (id === "swapper" && B.skill > 0) { const k = aiZone(c, t, B); if (k) inp = (inp & ~(KEY.a | KEY.k)) | k; }   // スワッパー: ゾーンの中では、回り込み攻撃と入れ替え
@@ -3231,7 +3372,11 @@ function aiInput(c, owner, B) {                                // 毎フレー�
   }
   if (clock && c.rw > 0 && c.rwN >= (c.aiRw | 0)) { inp &= ~KEY.k; c.aiIn &= ~KEY.k; }   // 時計師: 狙った時点まで戻ったら離す
   if (chOf(c).id === "hadou" && c.hwr && c.ground) inp &= ~(KEY.l | KEY.r | KEY.u | KEY.a);   // 波動士: ためている間は、地上で動かない（動くと玉が消える）
-  if (c.aiCh > 0 && c.ks >= c.aiCh && (inp & KEY.k)) { inp &= ~KEY.k; c.aiIn &= ~KEY.k; c.aiCh = 0; }   // ためる長さに届いた: 離して発動する
+  if (c.aiCh > 0 && c.ks >= c.aiCh && (inp & KEY.k)) {   // ためる長さに届いた: 離して発動する
+    inp &= ~KEY.k; c.aiIn &= ~KEY.k; c.aiCh = 0;
+    if (chOf(c).id === "bomber") { inp &= ~(KEY.l | KEY.r); if (c.aiBd) inp |= (c.aiBd * c.f > 0) ? KEY.r : KEY.l; }   // ボマー: 投げ方の方向を押しながら離す（考えない間でも）
+  }
+  if (c.aiAH > 0) { c.aiAH--; if (c.a > 0) inp |= KEY.a; }   // 侍・騎士のため攻撃: 決めた長さだけ攻撃ボタンを押し続ける（考えない間も）
   if ((inp & (KEY.l | KEY.r)) && c.ground && !c.aiDrop && !c.gr) {   // 足場の端から落ちない（つかみ中の左右は、投げる向きなので消さない）
     const pl = platformUnder(c), x = ecx(c);
     if (pl) {
@@ -3405,12 +3550,17 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.sp > 0) o.sp = p.sp;                                    // スパッタリー: ステップの残り（見た目用）
   if (p.srT > 0) o.sr = p.srT;                                  // スパッタリー: サメライドの残り（サメを描く）
   if (p.msT > 0) o.ms = p.msT;
-  if (p.ks > 0 && (p.tpAx || p.tpAy)) o.ta = (p.tpAx + 1) * 3 + (p.tpAy + 1);   // テレポーターの向き
-  if (p.ks > 0 && p.tpM) o.tm = p.tpM;                          // スライドの長さ
+  if (p.ks > 0 && (p.tpAx || p.tpAy)) o.ta = [Math.round(p.tpAx * 100) / 100, Math.round(p.tpAy * 100) / 100];   // テレポーターの向き（横・縦）
+  if (p.ks > 0 && p.tpM) o.tm = p.tpM;
+  if (p.ks > 0 && p.bcl) o.bc = p.bcl;                          // ボマー: いま離したときの投げ方（1 = 遠く / -1 = 手前。0 は送らない）                          // スライドの長さ
   if (p.msw !== undefined && chOf(p).id === "wizard") { o.mw = p.msw; if (p.msA) o.ma = 1; }   // 魔法使いの魔法の剣の残り回数 / 今の攻撃が魔法の剣か
   if (p.ws > 0) o.ws = p.ws;                                    // スキルの構え（「！」を出す）                                  // CF: 宙返りの残り                                  // 吸血鬼: 羽を広げている残り
   if (p.vbT > 0) o.vb = p.vbT;                                  // 吸血鬼: 噛みついている残り      // 勝負師: 出目（吹き出しを出している間と、振っている間）                                      // ヤニ猫: 最後にタバコを拾ってからのフレーム（禁断症状の表示と性能用）      // ヤク猫の注射器: 性能ごとの上乗せ（攻撃・防御・スピード）と、いちばん長い残り
-  if (p.nc > 0) o.nc = p.nc;                                  // 敵のタバコでスピード −1 の残り
+  if (p.nc > 0) o.nc = p.nc;
+  if (p.nsw > 0) o.nw = p.nsw;                                  // 剣を奪われている残り
+  if (p.ach > 0) o.ac = p.ach;                                  // ため攻撃をためている長さ
+  if (p.a > 0 && p.ak === IAI_AK) o.acl = p.achL;               // 侍の居合の段階（色）
+  if (p.a > 0 && p.ak === KNB_AK) o.acc = Math.round(p.achC * 10);   // 騎士のため突きのため量                                  // 敵のタバコでスピード −1 の残り
   if (p.dr > 0) o.dr = p.dr;                                  // 注射器で画面が揺れる残り（揺れるのは本人の画面だけ）
   if (p.st > 0) o.st = p.st;                                  // 臭い息で動けない残り（見た目用）
   // 2026-11-18: いつもの値（0・盾が満タン・生きていない）は送らない。参加者は、ないものをいつもの値として読む（readEnt）。
@@ -3440,7 +3590,7 @@ function snapshot() {
       metaOf(p, i, inGame), p.kc ? { kc: p.kc } : null, chOf(p).id === "archer" ? { am: p.am, amT: p.amT } : null,
       inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
     cl: game.cl.map(c => c ? Object.assign(serEnt(c), { ch: c.ch }) : null),
-    pj: game.pj.filter(b => !b.dead).map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 || b.k === 4 || b.k === 7 ? Math.round(b.pw * 10) : b.k === 5 ? b.lv * 10 : b.k === 6 ? b.dir * 10 : b.k === 8 ? b.pw * 10 : 0, b.own].concat(b.k === 8 && b.dm ? [b.dm] : [])),   // 飛ばした傘は、9 番目に削られた %   // 魔法（k: 5）は、7 番目に段階 × 10
+    pj: game.pj.filter(b => !b.dead).map(b => [b.k, r1(b.x), r1(b.y), r1(b.vx), r1(b.vy), b.t, b.k === 1 || b.k === 4 || b.k === 7 ? Math.round(b.pw * 10) : b.k === 5 ? b.lv * 10 : b.k === 6 ? b.dir * 10 : b.k === 8 ? b.pw * 10 : 0, b.own].concat(b.k === 8 && b.dm ? [b.dm] : b.k === 0 && b.hold ? [1] : b.k === 1 && b.stk ? [1] : [])),   // 持っている爆弾・刺さった矢は、9 番目が 1   // 飛ばした傘は、9 番目に削られた %   // 魔法（k: 5）は、7 番目に段階 × 10
     fl: game.fl.map(f => f.air ? [r1(f.x), r1(f.y), f.t, f.big ? 1 : 0, 1, r1(f.vy)] : [r1(f.x), r1(f.y), f.t, f.big ? 1 : 0]),   // 落ちている花は、5 番目が 1、6 番目が縦の速さ
     cb: game.cb.map(c => [r1(c.x), r1(c.y), c.f, c.t, c.hp, c.own, c.g ? c.rl : -1, r1(c.vy)]),   // クロスボウ: 位置・向き・経過・耐久・持ち主・次の矢まで（-1 は落下中）・縦の速さ
     mn: game.mn.map(m => [r1(m.x), r1(m.y), r1(m.vx), r1(m.vy), m.f, m.a, m.t, m.own]),          // ゴブGの手下: 位置・速度・向き・斬りの経過・経過・持ち主
@@ -3476,7 +3626,7 @@ function hostLoop() {
   while (hostAcc >= STEP_MS - 0.5 && n < 4) {
     hostAcc -= STEP_MS; n++;
     held[0] = myKeys;
-    for (let i = 0; i < MAX_PLAYERS; i++) { inputs[i] = held[i] | latch[i]; latch[i] = 0; }
+    for (let i = 0; i < MAX_PLAYERS; i++) { inputs[i] = held[i] | (latch[i] & 63); latch[i] = 0; }   // latch はボタンだけ（テレポーターの向きのビットを混ぜない）
     hostTick(); tickCount++;
   }
   // スナップショットは、計算を進めたら毎回送る（1 秒に最大 60 回。2026-10-17 までは計算 2 回に 1 回 = 30 回）。まとめて計算したときも 1 回だけ
@@ -3773,7 +3923,7 @@ function readEnt(p, n) {                                     // スナップシ�
     if (Math.abs(p.yrx - n.yrx) > 120 || Math.abs(p.yry - n.yry) > 120) { p.yrx = n.yrx; p.yry = n.yry; }
   }
   p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
-  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; { const ta = n.ta === undefined ? 4 : n.ta; p.tpAx = Math.floor(ta / 3) - 1; p.tpAy = ta % 3 - 1; } p.tpM = n.tm | 0; p.msw = n.mw | 0; p.msA = n.ma | 0; p.ws = n.ws | 0; p.vbT = n.vb | 0; p.sp = n.sp | 0; p.srT = n.sr | 0; p.um = n.um | 0; p.umR = n.umR | 0; p.umHp = n.umHp === undefined ? UMB_HP : n.umHp | 0;
+  p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; { const ta = Array.isArray(n.ta) ? n.ta : [0, 0]; p.tpAx = +ta[0] || 0; p.tpAy = +ta[1] || 0; } p.tpM = n.tm | 0; p.bcl = n.bc | 0; p.nsw = n.nw | 0; p.ach = n.ac | 0; p.achL = n.acl | 0; p.achC = (n.acc | 0) / 10; p.msw = n.mw | 0; p.msA = n.ma | 0; p.ws = n.ws | 0; p.vbT = n.vb | 0; p.sp = n.sp | 0; p.srT = n.sr | 0; p.um = n.um | 0; p.umR = n.umR | 0; p.umHp = n.umHp === undefined ? UMB_HP : n.umHp | 0;
   p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
@@ -3815,7 +3965,7 @@ function applySnapshot(s) {
       readEnt(c, cn);
     }
   }
-  game.pj = s.pj.map(a => ({ k: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], t: a[5], pw: a[6] / 10, own: a[7] | 0, lv: a[0] === 5 ? Math.round(a[6] / 10) : 0, dm: a[8] | 0 }));
+  game.pj = s.pj.map(a => ({ k: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], t: a[5], pw: a[6] / 10, own: a[7] | 0, lv: a[0] === 5 ? Math.round(a[6] / 10) : 0, dm: a[0] === 8 ? a[8] | 0 : 0, hold: a[0] === 0 ? a[8] | 0 : 0, stk: a[0] === 1 ? a[8] | 0 : 0 }));
   game.fl = s.fl.map(a => ({ x: a[0], y: a[1], t: a[2], big: a[3] | 0, air: a[4] | 0, vy: a[5] || 0 }));
 
   game.wd = (s.wd || []).map(a => ({ x: a[0], y: a[1], w: a[2], h: a[3], d: a[4], t: a[5], own: a[6] }));   // 古い版のホストは送らない
@@ -3898,8 +4048,8 @@ document.querySelectorAll(".tb").forEach(el => {
     if (!slide || e.pointerId !== slide.id) return;
     const dx = e.clientX - slide.x, dy = e.clientY - slide.y, m = Math.hypot(dx, dy);
     if (m < SLIDE_MIN) aimBits = 0;
-    else { const ax = Math.abs(dx) > m * 0.38 ? Math.sign(dx) : 0, ay = Math.abs(dy) > m * 0.38 ? Math.sign(dy) : 0, mag = Math.max(1, Math.min(7, Math.ceil((m - SLIDE_MIN) / (SLIDE_FULL - SLIDE_MIN) * 7)));
-      aimBits = (((ax + 1) * 3 + (ay + 1) + 1) << AIM_SHIFT) | (mag << MAG_SHIFT); }
+    else { const idx = ((Math.round(Math.atan2(dy, dx) / (2 * Math.PI / AIM_N)) % AIM_N) + AIM_N) % AIM_N, mag = Math.max(1, Math.min(MAG_N, Math.ceil((m - SLIDE_MIN) / (SLIDE_FULL - SLIDE_MIN) * MAG_N)));
+      aimBits = ((idx + 1) << AIM_SHIFT) | (mag << MAG_SHIFT); }   // 2026-11-22 から 32 方向・15 段階
     recalcKeys();
   });
   ["pointerup", "pointercancel", "pointerleave"].forEach(ev => el.addEventListener(ev, e => {
@@ -4325,6 +4475,23 @@ function bolt(c, x0, y0, x1, y1) {
     c.lineTo(x1, y1); c.stroke();
   }
 }
+// ため攻撃の光: 侍は段階の色（黄 → 橙 → 赤）で体を包む / 騎士は、たまるほど大きくなる青白い光（最大で白く点滅）
+function drawAch(c, p, chd, now) {
+  const cxp = p.x + PLW / 2, cyp = p.y + PLH / 2;
+  c.save();
+  if (chd.id === "samurai") {
+    const L = p.ach > 0 ? samLv(p.ach) : Math.max(1, p.achL | 0), col = SAM_COL[L - 1], pulse = 0.5 + 0.5 * Math.sin(now / 70);
+    c.globalAlpha = p.ach > 0 ? 0.25 + 0.25 * pulse : 0.35; c.fillStyle = col;
+    c.beginPath(); c.ellipse(cxp, cyp, PLW * 0.9 + 4 * L, PLH * 0.75 + 4 * L, 0, 0, 6.2832); c.fill();
+    c.globalAlpha = 0.9; c.strokeStyle = col; c.lineWidth = 2 + L;
+    c.beginPath(); c.ellipse(cxp, cyp, PLW * 0.9 + 4 * L, PLH * 0.75 + 4 * L, 0, 0, 6.2832); c.stroke();
+  } else {
+    const k = p.ach > 0 ? Math.min(1, p.ach / KN_FULL) : (p.achC || 0), full = k >= 1 && Math.floor(now / 80) % 2 === 0;
+    c.globalAlpha = 0.25 + 0.4 * k; c.fillStyle = full ? "#ffffff" : "#7dd3fc";
+    c.beginPath(); c.arc(p.f > 0 ? p.x + PLW + 6 : p.x - 6, p.y + 30, 6 + 14 * k, 0, 6.2832); c.fill();
+  }
+  c.restore();
+}
 function drawSword(c, p, ak, col) {
   const f = p.a > 0 && ak.back ? -p.f : p.f, front = f > 0 ? p.x + PLW : p.x;   // 空中後ろ攻撃は背中側へ突く
   const magic = chOf(p).id === "wizard" && !p.isClone && (p.a > 0 ? p.msA : p.msw > 0);   // 魔法使いの魔法の剣（雷）
@@ -4339,7 +4506,7 @@ function drawSword(c, p, ak, col) {
   }
   const a = p.a, act = a >= ak.on && a <= ak.off, ext = swordTip(a, ak), sy = p.y + 30 + (ak.lowY || 0);
   const tip = front + f * ext, guard = tip - f * SWORD_LEN, grip = guard - f * 9;
-  if (act) { c.fillStyle = p.ak === 1 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)"; c.fillRect(f > 0 ? front : front - ak.reach, p.y + 18 + (ak.lowY || 0), ak.reach, 22); }   // 届く範囲
+  if (act) { c.fillStyle = p.ak === IAI_AK ? SAM_COL[Math.max(1, p.achL | 0) - 1] + "66" : p.ak === 1 ? "rgba(254,202,202,0.35)" : "rgba(253,230,138,0.35)"; c.fillRect(f > 0 ? front : front - ak.reach, p.y + 18 + (ak.lowY || 0), ak.reach, 22); }   // 届く範囲
   c.strokeStyle = "#78350f"; c.lineWidth = 7; c.beginPath(); c.moveTo(grip, sy); c.lineTo(guard, sy); c.stroke();           // 柄
   c.strokeStyle = "#a16207"; c.lineWidth = 5; c.beginPath(); c.moveTo(guard, sy - 9); c.lineTo(guard, sy + 9); c.stroke();   // 鍔
   c.strokeStyle = magic ? "#fde047" : act ? "#ffffff" : "#e5e7eb"; c.lineWidth = act ? 8 : 6; c.beginPath(); c.moveTo(guard, sy); c.lineTo(tip, sy); c.stroke();   // 刃
@@ -5004,34 +5171,17 @@ if (PARTY && window.ykgLobby && !isOffline()) {
   if (PARTY.role === "host") ykgLobby.open({ title: "シールドファイト", rules, mine, button: { label: "スタート", onClick: () => ykgLobby.closeAll() } });
   else ykgLobby.open({ title: "シールドファイト", rules, mine, wait: PARTY.spec ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" });
 }
-// アップデートのお知らせ（2026-11-21）: この版をまだ見ていない人にだけ、開いたときに 1 回出す（localStorage の shieldfight-upnote に見た版を覚える）。
+// アップデートのお知らせ（2026-11-21 から）: この版をまだ見ていない人にだけ、開いたときに 1 回出す（localStorage の shieldfight-upnote に見た版を覚える）。
 // 次にお知らせを出すときは UPNOTE_VER を変えて、UPNOTE の中身を書きかえる
-const UPNOTE_VER = "2026-11-21b";   // b: 文章を直したので、前の版を見た人にももう一度出す
+const UPNOTE_VER = "2026-11-22";   // 6 キャラの調整（ボマー・侍・騎士・アーチャー・テレポーター・バーサーカー）
 const UPNOTE = [
-  ["動き", [
-    "同じ移動方向を素早く2回押すと、後ろ向きにステップ",
-    "ステージの広さ・全キャラの走る速さ・ジャンプの調整",
-  ]],
-  ["攻撃", [
-    "全員が剣を持つ。攻撃の前に構えるので、見てからステップでよけられる",
-    "空前、空後の追加。空前は発生が早いが威力は弱め。空後は空前より発生が遅いが威力は高い。(発生の速さ:空前＞空後＞通常、威力:通常＞空後＞空前)",
-    "攻撃にリスクを付けるため盾の戻りを遅くした",
-    "吹っ飛ぶ角度は、地上の攻撃45°・空中攻撃70°。上にも撃墜ラインができた",
-    "盾が壊れている時間は7.5秒",
-  ]],
-  ["つかみ・拘束", [
-    "つかみは構えてからダッシュ。攻撃している相手には弾かれ、空中の相手はつかめない",
-    "つかみ・拘束は%が高いほど長い。ボタン連打（レバガチャ）で早く抜けられる",
-  ]],
   ["キャラ", [
-    "テレポーター: スキルボタンを押したまま指をスライドした方向・長さで瞬間移動",
-    "魔法使い: 雷の剣（1.5倍・10回、8秒で戻る）。魔法が相手を追いかける",
-    "天狗: ためるほど風が広い。風の中では相手がぶっ飛びやすく、自分はぶっ飛びにくい",
-    "槍兵: 攻撃が剣と同じ速さに。",
-    "アーチャー: 矢が2倍速い",
-    "時計師: クールタイム4倍",
-    "ヤク猫: 注射器で相手の性能が1つ下がる",
-    "ヤニ猫: 息で相手がとても遅くなる",
+    "ボマー: スキルボタンを押すと爆弾を持ち、離すと投げる。離すときに向いている方を押すとステージの半分、何も押さないと4分の1、反対を押すと手前に放る。爆弾は押してから2.5秒で爆発（持ったままでも爆発）",
+    "侍: スキルが「ツバメ返し」に。当たると相手の剣を奪い、3秒間通常攻撃ができなくなる。攻撃ボタン長押しで居合。ためるほど強く、色が黄→橙→赤に変わる（黄: 盾2発分 / 橙: 盾破壊 / 赤: 盾破壊＋貫通）",
+    "騎士: 攻撃ボタン長押しでため突き。剣の先端で当てると威力アップ＋盾を壊しやすい",
+    "アーチャー: 矢が山なりに落ちる。ためるほど遠くへ。地面に刺さった矢は拾える。当たった相手は少し浮く（矢→矢→攻撃とつながる）",
+    "テレポーター: スライドの方向をなめらかに。地面にめりこむ場所へ飛ぶと地面の上に出る。スキル中も歩ける。クールタイム70%",
+    "バーサーカー: パッシブスキル追加。攻撃を当てるたびに自分の%が3回復",
   ]],
 ];
 function showUpnote() {
@@ -5256,6 +5406,20 @@ function fxEvent(e) {
       const pl = platforms().filter(s => ix > s.x && ix < s.x + s.w && s.y >= y - 40 && s.y <= y + d).sort((a, b) => a.y - b.y)[0];
       if (pl) inks.push({ x: ix, y: pl.y + 2, r: 12 + Math.random() * 16, c, t: 0 });
     }
+  } else if (k === "acl") {                        // ため攻撃の段階が上がった（侍: d = 段階 1〜3 / 騎士: 9 = 最大）
+    const col = d === 9 ? "#ffffff" : SAM_COL[Math.max(1, Math.min(3, d)) - 1];
+    Sfx.charge(); rings.push({ x, y, t: 0, max: 12, c: col, r0: 14, sp: 3 });
+    burst(x, y, 8, { v0: 1, v1: 3, l0: 10, l1: 18, s0: 2, s1: 4, g: -0.05, colors: [col, "#ffffff"] });
+  } else if (k === "tip") {                        // 騎士のため突きを先端で当てた
+    Sfx.shieldBreak(); shake(8); rings.push({ x, y, t: 0, max: 16, c: "#7dd3fc", r0: 8, sp: 6 });
+    burst(x, y, 18, { dir: d > 0 ? 0 : Math.PI, spread: 1.4, v0: 4, v1: 10, l0: 12, l1: 24, s0: 2, s1: 5, colors: ["#e0f2fe", "#7dd3fc", "#ffffff"] });
+  } else if (k === "dsa") {                        // ツバメ返しで剣を奪った: 剣が跳ねる
+    Sfx.slash(); rings.push({ x, y, t: 0, max: 10, c: "#e5e7eb", r0: 6, sp: 4 });
+    burst(x, y, 10, { dir: -Math.PI / 2, spread: 1.2, v0: 2, v1: 6, l0: 14, l1: 26, s0: 2, s1: 4, g: 0.2, colors: ["#e5e7eb", "#cbd5e1", "#ffffff"] });
+  } else if (k === "bzh") {                        // バーサーカーが当てて回復した
+    burst(x, y, 6, { v0: 0.5, v1: 2, l0: 12, l1: 20, s0: 2, s1: 4, g: -0.08, colors: ["#4ade80", "#bbf7d0"] });
+  } else if (k === "arp") {                        // アーチャーが刺さった矢を拾った
+    Sfx.pop(); burst(x, y, 5, { v0: 0.5, v1: 2, l0: 8, l1: 14, s0: 2, s1: 3, g: -0.05, colors: ["#fde68a", "#ffffff"] });
   } else if (k === "crit") {                       // CF のクリティカル: 画面が光り、白と金の大きな輪と、はじける粒
     Sfx.shieldBreak(); shake(12); flashA = Math.max(flashA, 0.4);
     rings.push({ x, y, t: 0, max: 18, c: "#ffffff", r0: 10, sp: 7 }); rings.push({ x, y, t: 0, max: 22, c: "#facc15", r0: 6, sp: 5 });
@@ -5599,14 +5763,23 @@ function drawPlayer(p, i, me, now) {
       for (let j = 0; j < 4; j++) { const dd = (j * 8 + k * 10) % ak.reach; cx.beginPath(); cx.arc(front + p.f * (4 + dd), p.y + (j % 2 ? 42 : 32) + (j - 1.5) * 1.5, 4 - dd / ak.reach * 1.5, 0, 6.2832); cx.fill(); }
       cx.fillStyle = "rgba(255,255,255,0.45)"; cx.beginPath(); cx.arc(front + p.f * 3, p.y + 32 + (p.a % 2) * 10, 4, 0, 6.2832); cx.fill();   // 銃口の光
     }
-  } else if (p.al && p.ak !== 4 && ![2, 5].includes(chd.atk | 0)) {   // 剣（2026-11-21。全員が持つ）: ふだんは前の手で下向きに持つ。構え → 振り下ろし → 戻り
+  } else if (p.al && p.ak !== 4 && ![2, 5].includes(chd.atk | 0) && !(p.nsw > 0)) {   // 剣（2026-11-21。全員が持つ）: ふだんは前の手で下向きに持つ。構え → 振り下ろし → 戻り（ツバメ返しで奪われている間は持っていない）
     const ak = ATKS[p.ak] || ATKS[0];
+    if (p.ach > 0 || (p.a > 0 && (p.ak === IAI_AK || p.ak === KNB_AK))) drawAch(cx, p, chd, now);   // ため攻撃の光
     if (p.a > 0 && p.ak === 1 && p.a < ak.dashFrom) {           // 居合斬りのため: 赤い枠が締まっていく
       const k = p.a / ak.dashFrom;
       cx.strokeStyle = "rgba(248,113,113," + (0.4 + 0.5 * k).toFixed(2) + ")"; cx.lineWidth = 3;
       cx.strokeRect(p.x - 8 + 6 * k, p.y - 8 + 6 * k, PLW + 16 - 12 * k, PLH + 16 - 12 * k);
     }
     drawSword(cx, p, ak, col);
+  }
+  if (p.al && p.nsw > 0) {                                        // ツバメ返しで剣を奪われている: 手の位置に赤い ×（残りが少ないと点滅）
+    if (p.nsw > 40 || Math.floor(now / 100) % 2 === 0) {
+      const hx = p.x + PLW / 2 + p.f * 15, hy = p.y + 22;
+      cx.save(); cx.lineCap = "round";
+      for (const [col, w] of [["#ffffff", 8], ["#dc2626", 4]]) { cx.strokeStyle = col; cx.lineWidth = w; cx.beginPath(); cx.moveTo(hx - 7, hy - 7); cx.lineTo(hx + 7, hy + 7); cx.moveTo(hx + 7, hy - 7); cx.lineTo(hx - 7, hy + 7); cx.stroke(); }   // 白いふちどり（赤いキャラの上でも見える）
+      cx.restore();
+    }
   }
   if (chd.id === "camp" && !clone && p.al) {                      // キャンピングシェルター: 開いた傘（前）/ 閉じた傘（背中。生えている途中は短い）
     if (p.um > 0) {
@@ -5696,11 +5869,12 @@ function drawPlayer(p, i, me, now) {
     cx.beginPath(); cx.arc(p.x + PLW / 2, p.y + PLH / 2, 38, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * c); cx.stroke();
     if (chd.id === "teleporter") {
       cx.globalAlpha = 0.55 * alpha; cx.strokeStyle = "#22d3ee"; cx.lineWidth = 2; cx.setLineDash([4, 3]);
-      { const cc = p.tpM ? p.tpM / 7 : c, ax = p.tpAx || 0, ay = p.tpAy || 0, n = ax && ay ? Math.SQRT1_2 : 1, d = ay ? tpDist(cc) * TP_V_MUL : tpDist(cc), hx = ay ? ax : (ax || p.f);   // 行き先（スライドした向き）
-        cx.strokeRect(p.x + hx * n * d + 0.5, p.y + ay * n * d + 0.5, PLW - 1, PLH - 1); } cx.setLineDash([]);
+      { const cc = p.tpM ? p.tpM / MAG_N : c, ax = p.tpAx || 0, ay = Math.abs(p.tpAy || 0) < 0.01 ? 0 : p.tpAy, d = tpDist(cc);   // 行き先（スライドした向き。fireHold と同じ: 真横は横の距離、ほかはだ円）
+        const dx = ay ? ax * d : (Math.sign(ax) || p.f) * d, dy = ay ? ay * d * TP_V_MUL : 0;
+        cx.strokeRect(p.x + dx + 0.5, p.y + dy + 0.5, PLW - 1, PLH - 1); } cx.setLineDash([]);
     }
     if (chd.id === "bomber") {                                    // ボマー: 爆弾が飛ぶ道すじ（点線）と、落ちる場所の爆風の範囲
-      const bp = bombPath(p, c), pts = bp.pts, end = pts[pts.length - 1];
+      const bp = bombPath(p, p.bcl | 0), pts = bp.pts, end = pts[pts.length - 1];
       cx.globalAlpha = (me ? 0.8 : 0.45) * alpha; cx.strokeStyle = "#fde68a"; cx.lineWidth = 2; cx.setLineDash([5, 5]);
       cx.beginPath(); cx.moveTo(pts[0][0], pts[0][1]); for (const q of pts) cx.lineTo(q[0], q[1]); cx.stroke(); cx.setLineDash([]);
       if (bp.land) {
@@ -5738,6 +5912,13 @@ function drawBomb(b, now) {
   cx.fillStyle = Math.floor(now / 60) % 2 ? "#fde047" : "#fb923c"; cx.fillRect(b.x + 5, b.y - BOMB_R - 8, 3, 3);
 }
 function drawArrow(b) {
+  if (b.k === 1 && (b.stk || b.vy)) {                    // 落ちる矢（2026-11-22）: 速さの向きに傾けて描く
+    if (b.stk && b.t > ARROW_STK - 90 && Math.floor(b.t / 6) % 2 === 0) return;
+    cx.save(); cx.translate(b.x, b.y); cx.rotate(Math.atan2(b.vy, b.vx)); cx.scale(1, Math.sign(b.vx) || 1);
+    const sb = Object.assign({}, b, { x: 0, y: 0, vx: 1, vy: 0, stk: 0, k: -1 });
+    if (b.stk) { cx.translate(6, 0); }
+    drawArrow(sb); cx.restore(); return;
+  }
   const d = Math.sign(b.vx) || 1, L = 26, strong = b.pw >= 1;
   cx.strokeStyle = strong ? "#fde047" : "#e5e7eb"; cx.lineWidth = 2.5;
   cx.beginPath(); cx.moveTo(b.x - d * L, b.y); cx.lineTo(b.x, b.y); cx.stroke();
