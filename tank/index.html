@@ -95,6 +95,7 @@ table.res{width:100%;border-collapse:collapse;margin:8px 0;font-size:15px}
 table.res td{padding:6px 4px;border-bottom:1px solid #3d382e}
 table.res td:last-child{text-align:right;color:#ffd21a;letter-spacing:1px}
 .dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.tmcols{display:flex;gap:8px;margin:8px 0}.tmcol{flex:1;border:2px solid;border-radius:12px;padding:6px;background:#1a1814;min-width:0}.tmh{border-radius:8px;color:#fff;font-weight:800;text-align:center;padding:3px 0;font-size:13px}.tmp{padding:5px 4px;font-size:14px;overflow:hidden;text-overflow:ellipsis}.tmpb{background:#2a2620;color:#fff;border:1px solid #555;border-radius:8px;padding:4px 8px;width:100%;text-align:left}
 .tmb{border:none;border-radius:8px;padding:2px 10px;font-weight:800;margin-left:6px;min-width:2.6em;color:#fff}
 .tmb:disabled{opacity:1;cursor:default}
 
@@ -221,7 +222,7 @@ const isOffline = () => FORCE_OFF || !navigator.onLine || typeof Peer === "undef
 
 // ================= ゲームの設定 =================
 const MAX_PLAYERS = 4, WIN_ROUNDS = 3, ROUND_TIME = 90, COUNT_SEC = 3;
-const TANK_R = 0.36;
+const TANK_R = 0.18;   // 2026-11-27: 戦車を半分の大きさに（ステージは変えない）
 const CRATE_HP = 2;                       // 木箱: 弾 2 発か地雷で壊れる
 const MINE_MAX = 2, MINE_FUSE = 10, MINE_R = 1.4, MINE_ARM = 0.6, MINE_TRIG = 0.75;
 const COLORS = [0xe8463c, 0x3a7be8, 0x3cb55a, 0xf0b428];
@@ -532,6 +533,7 @@ let myId = 0, errMsg = "", lobbyPs = [], lobbySpecs = [], spectating = false, pa
 let G = null;             // ホストだけが持つ正式な状態
 let overInfo = null, roundInfo = null;
 let practiceBots = Math.min(3, Math.max(1, +(store.get("tank-bots") || 1))), practiceStage = STAGES[store.get("tank-stage")] ? store.get("tank-stage") : "random";
+let practiceSide = store.get("tank-side") === "1" ? 1 : 0;
 let practiceTeam = store.get("tank-team") === "1", practiceLv = clamp(+(store.get("tank-lv") || 1), 0, 2);
 host.cpuLv = practiceLv;
 // 画面に出すもの（ホストは G から写す。参加者はスナップショットから）
@@ -583,7 +585,14 @@ function assignTeams(list) {
     p.tm = host.tm.get(p.id);
   }
 }
-function swapTeam(id) { if (!host.tm.has(id)) return; host.tm.set(id, 1 - host.tm.get(id)); hostLobby(); }
+function goLobby() { clearGame(); host.playing = false; host.match = null; screen = "lobby"; hostLobby(); }
+// to: 0=赤 1=青（省略すると反対側へ）。試合が終わった画面からでも変えられる（部屋にもどる）
+function swapTeam(id, to) {
+  if (!host.tm.has(id)) return;
+  if (host.playing && overInfo) goLobby();
+  if (host.playing) return;
+  host.tm.set(id, to === 0 || to === 1 ? to : 1 - host.tm.get(id)); hostLobby(); if (screen === "lobby") renderUI();
+}
 const teamCount = k => lobbyPs.filter(p => p.tm === k).length;
 const teamsReady = () => !host.team || (teamCount(0) >= 1 && teamCount(1) >= 1);   // 2026-11-19: 1 対 3 など、自由に分けられる（赤と青に 1 人以上ずつ）
 
@@ -674,7 +683,7 @@ function hostFire(id, a, cid) {
   const gun = gunOf(t);
   if (G.time < t.cdUntil) return false;
   if (G.bullets.filter(b => b.ow === id).length >= gun.max) return false;
-  const sx = t.x + Math.cos(a) * (TANK_R + 0.14), sz = t.z + Math.sin(a) * (TANK_R + 0.14);
+  const sx = t.x + Math.cos(a) * (TANK_R + 0.07), sz = t.z + Math.sin(a) * (TANK_R + 0.07);
   if (solidAt(sx, sz)) return false;   // 砲身が壁にめりこんでいるときは撃てない
   t.cdUntil = G.time + gun.cd; t.tu = a;
   G.bullets.push({ id: G.nextB++, ow: id, tm: t.tm, cid: cid || 0, ty: t.load.g, x: sx, z: sz, vx: Math.cos(a) * gun.spd, vz: Math.sin(a) * gun.spd, bnc: gun.bnc, age: 0, r: gun.r, life: gun.life || 0, home: gun.home || 0, hd: gun.homeDelay || .25 });
@@ -885,7 +894,7 @@ const canFire = t => G.time >= t.cdUntil && G.bullets.filter(b => b.ow === t.id)
 function findShot(t, foes, all, gun, L) {
   const reach = gun.life ? gun.spd * gun.life : 24;
   const test = (a, far) => {
-    const sx = t.x + Math.cos(a) * (TANK_R + .14), sz = t.z + Math.sin(a) * (TANK_R + .14);
+    const sx = t.x + Math.cos(a) * (TANK_R + .07), sz = t.z + Math.sin(a) * (TANK_R + .07);
     const r = trace(sx, sz, a, gun.bnc, far || reach, gun.r);
     const h = pathHits(r.pts, all, t.id, TANK_R + gun.r + .03);
     if (!h || h.t.id === t.id || (G.team && h.t.tm === t.tm)) return null;
@@ -1051,7 +1060,7 @@ function beginRoundView(m) {
   for (const p of m.ps) {
     const load = fixLoad(p.load);
     const t = { id: p.id, name: p.name, tm: p.tm, color: p.color, load, st: tankStats(load), x: p.x, z: p.z, h: p.h, tu: p.h, tx: p.x, tz: p.z, th: p.h, ttu: p.h, vx: 0, vz: 0, alive: !!p.alive, roll: 0 };
-    t.mesh = makeTank(load, p.color); t.mesh.root.scale.setScalar(1.15); scene.add(t.mesh.root);
+    t.mesh = makeTank(load, p.color); t.mesh.root.scale.setScalar(.58); scene.add(t.mesh.root);
     t.label = makeNameLabel(p.name, p.color, p.id === myId && !spectating); scene.add(t.label);
     S.tanks.set(p.id, t);
   }
@@ -1163,7 +1172,7 @@ function startHost() {
         host.loads.set(id, fixLoad(m.load));
         host.conns.set(id, conn); conn.send({ t: "welcome", you: id }); sfx("join"); hostLobby(); return;
       }
-      if (m && m.t === "team") { if (conn.pid && !conn.spec && host.team && !host.playing) swapTeam(conn.pid); return; }
+      if (m && m.t === "team") { if (conn.pid && !conn.spec && host.team) swapTeam(conn.pid, m.to); return; }
       if (conn.pid && !conn.spec) hostHandle(conn.pid, m);
     });
     conn.on("close", () => { if (conn.pid && (host.conns.get(conn.pid) === conn || host.specs.get(conn.pid) === conn)) { sfx("leave"); hostDrop(conn.pid); } });
@@ -1200,7 +1209,7 @@ function startPractice() {
   host.loads.clear(); host.loads.set(0, LOAD);
   lobbyPs = [{ id: 0, name: myName() }];
   for (let i = 0; i < practiceBots; i++) lobbyPs.push({ id: 100 + i, name: "CPU-" + "ABC"[i], bot: true });
-  if (practiceTeam) lobbyPs.forEach((p, i) => host.tm.set(p.id, i % 2));
+  if (practiceTeam) { const c = [0, 0]; c[practiceSide]++; host.tm.set(0, practiceSide); for (const p of lobbyPs.slice(1)) { const k = c[0] <= c[1] ? 0 : 1; c[k]++; host.tm.set(p.id, k); } }
   assignTeams(lobbyPs);
   hostStart();
 }
@@ -1372,8 +1381,8 @@ function makeTank(load, color) {
 function makeBulletMesh(b) {
   const gun = PARTS.g[b.ty] || PARTS.g[0], t = S.tanks.get(b.ow), col = t ? lighten(t.color, .55) : 0xffffff;
   const g = new THREE.Group();
-  const s = part(geo("bs" + gun.r, () => new THREE.SphereGeometry(Math.max(.13, gun.r * 1.5), 12, 8)), mat(col, "b"), g, 0, .32, 0); s.castShadow = false;
-  const sh = new THREE.Mesh(geo("bsh" + gun.r, () => new THREE.CircleGeometry(Math.max(.12, gun.r * 1.4), 12)), MAT.shadow); sh.rotation.x = -PI / 2; sh.position.y = .015; g.add(sh);
+  const s = part(geo("bs" + gun.r, () => new THREE.SphereGeometry(Math.max(.07, gun.r * 1.1), 12, 8)), mat(col, "b"), g, 0, .32, 0); s.castShadow = false;
+  const sh = new THREE.Mesh(geo("bsh" + gun.r, () => new THREE.CircleGeometry(Math.max(.07, gun.r * 1.1), 12)), MAT.shadow); sh.rotation.x = -PI / 2; sh.position.y = .015; g.add(sh);
   g.position.set(b.x, 0, b.z); scene.add(g);
   return g;
 }
@@ -1389,7 +1398,7 @@ function makeNameLabel(name, color, me) {
   x.fillStyle = me ? "#ffd21a" : "#fff"; x.fillText(txt, 128, 33, 232);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sp.renderOrder = 10; sp.scale.set(2.1, .525, 1);
+  sp.renderOrder = 10; sp.scale.set(1.6, .4, 1);
   return sp;
 }
 function removeNameLabel(t) { if (t.label) { scene.remove(t.label); t.label.material.map.dispose(); t.label.material.dispose(); t.label = null; } }
@@ -1469,7 +1478,7 @@ const aimLine = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color: 0xf
 aimLine.renderOrder = 9;
 aimLine.visible = false; aimLine.frustumCulled = false; scene.add(aimLine);
 function updAimLine(t) {
-  const gun = gunOf(t), a = IN.aimA, sx = t.x + Math.cos(a) * (TANK_R + .14), sz = t.z + Math.sin(a) * (TANK_R + .14);
+  const gun = gunOf(t), a = IN.aimA, sx = t.x + Math.cos(a) * (TANK_R + .07), sz = t.z + Math.sin(a) * (TANK_R + .07);
   const r = trace(sx, sz, a, gun.bnc, gun.life ? Math.min(gun.spd * gun.life, 8) : 8, gun.r);
   const pos = aimGeo.attributes.position, n = Math.min(AIM_MAX, r.pts.length);
   for (let i = 0; i < n; i++) pos.setXYZ(i, r.pts[i][0], .32, r.pts[i][1]);
@@ -1541,7 +1550,7 @@ function fireLocal() {
   const gun = gunOf(t), now = performance.now() / 1000;
   const mine = [...S.bullets.values()].filter(b => b.ow === myId).length + S.pred.size;
   if (now < localCd || mine >= gun.max) return;
-  const sx = t.x + Math.cos(a) * (TANK_R + .14), sz = t.z + Math.sin(a) * (TANK_R + .14);
+  const sx = t.x + Math.cos(a) * (TANK_R + .07), sz = t.z + Math.sin(a) * (TANK_R + .07);
   if (solidAt(sx, sz)) return;
   localCd = now + gun.cd;
   const c = predCid++;
@@ -1823,6 +1832,12 @@ function partyLobbyOpts() {
   partySet.querySelector('[data-g="who"]').innerHTML = host.team ? lobbyPs.map(p => `<button data-b="sw-${p.id}" style="background:${TEAM_CSS[p.tm]};color:#fff;flex:0 1 auto">${esc(p.name)}</button>`).join("") : "";
   return { rules, members, mine, settings: partySet, status, button: { label: "スタート", disabled: lobbyPs.length < 2 || !teamsReady(), onClick: () => { if (lobbyPs.length >= 2 && teamsReady()) { hostStart(); renderUI(); } } } };
 }
+function teamCols(isHost) {
+  const me = lobbyPs.find(p => p.id === myId);
+  return `<div class="tmcols">${[0, 1].map(k => `<div class="tmcol" style="border-color:${TEAM_CSS[k]}"><div class="tmh" style="background:${TEAM_CSS[k]}">${TEAM_NAME[k]}チーム（${teamCount(k)}人）</div>
+    ${lobbyPs.filter(p => p.tm === k).map(p => `<div class="tmp">${isHost ? `<button class="tmpb" data-a="sw-${p.id}" title="反対のチームへ">${esc(p.name)}${p.id === myId ? "（自分）" : ""}${p.bot ? " CPU" : ""} ⇄</button>` : `${esc(p.name)}${p.id === myId ? "（自分）" : ""}${p.bot ? " CPU" : ""}`}</div>`).join("") || `<div class="tmp" style="opacity:.5">だれもいない</div>`}
+    ${spectating || !me ? "" : `<button class="btn sub" style="margin-top:6px" data-a="in-${k}" ${me.tm === k ? "disabled" : ""}>${me.tm === k ? "ここにいます" : "ここに入る"}</button>`}</div>`).join("")}</div>${isHost ? `<div class="note">名前を押すと反対のチームへ動かせる（CPUも）</div>` : ""}`;
+}
 function renderUI() {
   const s = $("screen");
   const inGame = screen === "game", lay = layEdit;
@@ -1863,7 +1878,7 @@ function renderUI() {
       <label>CPUの強さ</label>${segH(LV.map((l, i) => [i, l.name]), practiceLv, "pl")}
       <label>ステージ</label>${segH(Object.entries(STAGES), practiceStage, "ps")}<div class="note" style="margin-top:2px">${STAGE_NOTE[practiceStage]}</div>
       ${segH([[0, "個人戦"], [1, "チーム戦"]], +practiceTeam, "pt")}
-      ${practiceTeam ? `<div class="note">チーム戦: あなたは赤チーム。CPUは青・赤に分かれる</div>` : ""}
+      ${practiceTeam ? `<label>あなたのチーム（CPUは人数が合うように分かれる）</label>${segH([[0, "赤チーム"], [1, "青チーム"]], practiceSide, "pm")}` : ""}
       <button class="btn sub" data-a="practice">CPUと対戦する</button></div>
       <details class="rd"><summary>ルール・遊び方</summary>${RULES}</details>
       <div class="row" id="sndrow"></div>
@@ -1874,15 +1889,14 @@ function renderUI() {
     h = `<div class="card"><h2>接続中…</h2><button class="btn sub" data-a="leave">やめる</button></div>`;
   } else if (screen === "lobby") {
     const isHost = mode === "host";
-    const badge = p => host.team ? `<button class="tmb" style="background:${TEAM_CSS[p.tm] || "#556"}" data-a="sw-${p.id}" ${isHost || p.id === myId ? "" : "disabled"}>${TEAM_NAME[p.tm] ?? "?"}</button>` : "";
     h = `<div class="card"><h2>部屋番号</h2><div class="code">${esc(host.code)}</div>
       ${isHost ? `<button class="btn sub" data-a="share">招待リンクを送る</button>` : ""}
-      <ul class="plist">${lobbyPs.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}</span><span>${p.id === 0 ? "ホスト" : p.bot ? "CPU" : ""} ${badge(p)}</span></li>`).join("")}</ul>
+      ${host.team ? teamCols(isHost) : `<ul class="plist">${lobbyPs.map(p => `<li><span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}</span><span>${p.id === 0 ? "ホスト" : p.bot ? "CPU" : ""}</span></li>`).join("")}</ul>`}
       ${isHost ? `<label>ステージ</label>${segH(Object.entries(STAGES), host.stage, "hs")}
         ${segH([[0, "個人戦"], [1, "チーム戦"]], +host.team, "ht")}
         <label>CPUの強さ</label>${segH(LV.map((l, i) => [i, l.name]), host.cpuLv, "hl")}
         <div class="row"><button class="btn sub" style="margin-top:0" data-a="bot+" ${lobbyPs.length >= MAX_PLAYERS ? "disabled" : ""}>CPUを追加</button><button class="btn sub" style="margin-top:0" data-a="bot-" ${host.bots ? "" : "disabled"}>CPUを減らす</button></div>`
-        : `<div class="note">ステージ: <b>${STAGES[host.stage] || "ランダム"}</b> ・ ${host.team ? "チーム戦（赤／青を押すとチームを変えられる）" : "個人戦"} ・ CPU ${LV[host.cpuLv].name}</div>`}
+        : `<div class="note">ステージ: <b>${STAGES[host.stage] || "ランダム"}</b> ・ ${host.team ? "チーム戦（好きなほうの「ここに入る」を押す）" : "個人戦"} ・ CPU ${LV[host.cpuLv].name}</div>`}
       <div class="note">${lobbyPs.length} / ${MAX_PLAYERS}人 ・ 3本先取</div>
       ${isHost ? `<button class="btn red" data-a="start" ${lobbyPs.length < 2 || !teamsReady() ? "disabled" : ""}>スタート</button>
         ${lobbyPs.length < 2 ? `<div class="note">2人以上（CPUを含む）で始められます</div>` : !teamsReady() ? `<div class="note">チーム戦は、赤と青に1人以上ずつ必要です</div>` : ""}`
@@ -1894,8 +1908,9 @@ function renderUI() {
     if (wt != null) title = wt < 0 ? "引き分け" : `<span style="color:${TEAM_CSS[wt]}">${TEAM_NAME[wt]}チーム</span>の勝ち！${iWon ? " 🏆" : ""}`;
     h = `<div class="card"><h2>${title}</h2>${wt != null ? `<div class="note">赤 ${o.ts[0]} − ${o.ts[1]} 青</div>` : ""}
       <table class="res">${o.ps.map((p, i) => `<tr><td>${i + 1}. <span class="dot" style="background:${css(p.color)}"></span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}${p.gone ? "（退出）" : ""}</td><td>${stars(p.wins)}</td></tr>`).join("")}</table>
-      ${mode === "local" ? `<button class="btn red" data-a="again">もう一度</button>`
-        : mode === "host" ? `<button class="btn red" data-a="tolobby">部屋にもどる</button>` : `<div class="note">ホストが部屋にもどるのを待っています…</div>`}
+      ${mode === "local" ? `<button class="btn red" data-a="again">もう一度</button>${wt != null ? `<button class="btn sub" data-a="myside">チームを変えてもう一度（今: ${TEAM_NAME[practiceSide]}）</button>` : ""}`
+        : mode === "host" ? `<button class="btn red" data-a="tolobby">部屋にもどる</button>${wt != null ? `<button class="btn sub" data-a="tolobby">チームを変える</button>` : ""}`
+        : `<div class="note">ホストが部屋にもどるのを待っています…</div>${wt != null && !spectating ? `<button class="btn sub" data-a="sw-${myId}">チームを変える（部屋にもどります）</button>` : ""}`}
       <button class="btn sub" data-a="leave">${PARTY ? "ゲーム一覧へ" : "メニューへ"}</button></div>`;
   } else if (inGame && roundInfo) {
     const r = roundInfo, w = S.players.find(p => p.id === r.win);
@@ -1928,11 +1943,12 @@ $("screen").addEventListener("click", async e => {
   else if (a === "unready") readyLocal(false);
   else if (a === "force") { if (mode === "host") checkReady(true); }
   else if (a === "games") toGames();
-  else if (/^(pb|ps|pt|pl)-/.test(a)) {
+  else if (/^(pb|ps|pt|pl|pm)-/.test(a)) {
     const nm = $("name") && $("name").value, v = a.slice(3);
     if (a === "pb-" + v && a[1] === "b") { practiceBots = clamp(+v, 1, 3); store.set("tank-bots", practiceBots); }
     else if (a[1] === "s") { practiceStage = STAGES[v] ? v : "random"; store.set("tank-stage", practiceStage); }
     else if (a[1] === "t") { practiceTeam = v === "1"; store.set("tank-team", practiceTeam ? "1" : "0"); }
+    else if (a[1] === "m") { practiceSide = v === "1" ? 1 : 0; store.set("tank-side", String(practiceSide)); }
     else if (a[1] === "l") { practiceLv = clamp(+v, 0, 2); store.set("tank-lv", practiceLv); }
     renderUI(); if (nm != null && $("name")) $("name").value = nm;
   }
@@ -1940,12 +1956,14 @@ $("screen").addEventListener("click", async e => {
   else if (a.startsWith("ht-") && mode === "host" && !host.playing) { host.team = a === "ht-1"; hostLobby(); }
   else if (a.startsWith("hl-") && mode === "host" && !host.playing) { host.cpuLv = clamp(+a.slice(3), 0, 2); hostLobby(); }
   else if (a.startsWith("sw-")) { const id = Number(a.slice(3)); if (mode === "host") swapTeam(id); else if (id === myId) sendHost({ t: "team" }); }
+  else if (a.startsWith("in-")) { const k = Number(a.slice(3)); if (mode === "host") swapTeam(myId, k); else sendHost({ t: "team", to: k }); }
+  else if (a === "myside") { practiceSide = 1 - practiceSide; store.set("tank-side", String(practiceSide)); startPractice(); }
   else if (a === "leave") leave();
   else if (a === "bot+") { if (lobbyPs.length < MAX_PLAYERS) { host.bots++; hostLobby(); } }
   else if (a === "bot-") { host.bots = Math.max(0, host.bots - 1); hostLobby(); }
   else if (a === "start") { if (lobbyPs.length >= 2 && teamsReady()) hostStart(); }
   else if (a === "again") startPractice();
-  else if (a === "tolobby") { clearGame(); host.playing = false; host.match = null; screen = "lobby"; hostLobby(); }
+  else if (a === "tolobby") goLobby();
   else if (a === "share") {
     const url = shareUrl();
     try { if (navigator.share) { await navigator.share({ title: "タンクファイト", text: `部屋番号 ${host.code} で遊ぼう`, url }); return; } } catch (err) { return; }
@@ -2130,7 +2148,7 @@ function updateView(dt) {
   for (const t of S.tanks.values()) {
     const m = t.mesh; if (!m) continue;
     m.root.visible = t.alive;
-    if (t.label) { t.label.visible = t.alive; t.label.position.set(t.x, 1.0, t.z - .25); }
+    if (t.label) { t.label.visible = t.alive; t.label.position.set(t.x, .62, t.z - .15); }
     if (!t.alive) continue;
     const dx = t.x - m.root.position.x, dz = t.z - m.root.position.z;
     const mv = dx * Math.cos(t.h) + dz * Math.sin(t.h);
