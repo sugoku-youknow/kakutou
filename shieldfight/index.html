@@ -285,6 +285,111 @@
     .panel h1{font-size:22px}
     .code{font-size:40px}
   }
+  /* ===== 新しいメニュー（2026-11-27）: ホーム・キャラ選択・ステージ選択・キャラ説明 ===== */
+  body.ym #home, body.ym #quit, body.ym #rot{display:none}
+  .ym-root{position:absolute;inset:0;pointer-events:auto;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#eef1f6 0%,#dfe4ec 55%,#f3e6da 100%);color:#15171c;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Meiryo",sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;text-align:left}
+  .ym-root svg{width:100%;height:100%;display:block}
+  .ym-heavy{font-weight:900;letter-spacing:.02em;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Meiryo",sans-serif}
+  .ym-ui{font-weight:700;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Meiryo",sans-serif}
+  .ym-tile{cursor:pointer}
+  .ym-tile:hover .ym-face,.ym-tile:focus .ym-face{filter:brightness(1.08)}
+  .ym-tile:active{opacity:.85}
+  .ym-tile:focus{outline:none}
+  .ym-tile.off{opacity:.38;cursor:default}
+  .ym-st{position:relative;flex:none;transform-origin:center;display:flex;flex-direction:column}
+  .ym-st *{box-sizing:border-box}
+  .ym-out{color:#fff;text-shadow:3px 3px 0 #15171c,-1.5px -1.5px 0 #15171c,1.5px -1.5px 0 #15171c,-1.5px 1.5px 0 #15171c,1.5px 1.5px 0 #15171c}
+  /* 上の帯 */
+  .ym-top{flex:none;position:relative;height:66px}
+  .ym-top::before,.ym-bar::before{content:"";position:absolute;top:0;bottom:0;left:-2000px;right:-2000px;background:#15171c}
+  .ym-seg{position:absolute;top:8px;height:50px;display:flex;align-items:center;justify-content:center;gap:10px;clip-path:polygon(16px 0,100% 0,calc(100% - 16px) 100%,0 100%);cursor:pointer;font-weight:900}
+  .ym-back{left:-14px;width:96px;background:#ffcc2e;font-size:30px;color:#15171c}
+  .ym-mode{left:74px;width:250px;background:#e8463c;font-size:32px;color:#fff;text-shadow:2px 2px 0 #15171c}
+  .ym-mode.team{background:#2f7df5}
+  .ym-mode.train{background:#ff8f1f;font-size:26px}
+  .ym-mode .sw{font-size:20px;background:rgba(0,0,0,.25);border-radius:50%;width:32px;height:32px;display:grid;place-items:center;text-shadow:none}
+  .ym-rounds{left:316px;width:270px;background:#c9ced8;font-size:24px;color:#15171c;cursor:default}
+  .ym-rounds b{font-size:30px}
+  .ym-rounds span{font-size:22px;color:#4b5260;padding:4px 10px;cursor:pointer}
+  .ym-title{left:78px;width:330px;background:#d7dbe3;font-size:28px;color:#15171c;cursor:default}
+  .ym-num{left:400px;width:120px;background:#3a414e;color:#fff;font-size:22px;cursor:default}
+  .port .ym-mode{width:220px;font-size:28px}.port .ym-rounds{left:286px;width:230px;font-size:20px}
+  .port .ym-title{width:300px}.port .ym-num{left:370px;width:110px}
+  /* キャラの一覧 */
+  .ym-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(8,1fr);grid-auto-rows:1fr;gap:4px;padding:8px 22px 6px}
+  .port .ym-grid{grid-template-columns:repeat(4,1fr);padding:8px 14px 6px}
+  .ym-cell{position:relative;background:linear-gradient(#ffd27a,#f3a63a);border:2px solid #15171c;overflow:hidden;cursor:pointer;min-height:0}
+  .ym-cell canvas{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;object-position:top}
+  .ym-cell span{position:absolute;left:0;right:0;bottom:0;background:#15171c;color:#fff;font-size:11px;font-weight:800;text-align:center;line-height:16px;white-space:nowrap;overflow:hidden}
+  .ym-cell span.sm{font-size:9px;letter-spacing:-.04em}
+  .ym-cell.rand{background:#9aa2ae}.ym-cell.rand b{position:absolute;inset:0 0 16px;display:grid;place-items:center;font-size:40px;color:#fff;font-weight:900}
+  .ym-cell.sel{box-shadow:inset 0 0 0 4px var(--sc,#ffb020);border-color:var(--sc,#ffb020)}
+  /* コイン（1P・CPU のカーソル） */
+  .ym-coin{position:absolute;top:4px;z-index:2;width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 50% 45%,var(--c) 0 58%,color-mix(in srgb,var(--c) 70%,#000) 60% 100%);border:3px solid #fff;box-shadow:0 0 0 2px #15171c,3px 4px 0 rgba(0,0,0,.3);display:grid;place-items:center;color:#fff;font-weight:900;font-style:italic;font-size:16px;text-shadow:1px 1px 0 rgba(0,0,0,.45);cursor:grab;touch-action:none}
+  .ym-coin.cpu{font-size:12px}
+  .ym-coin.fly{position:fixed;z-index:50;pointer-events:none;margin:0}
+  /* バトル開始の帯 */
+  .ym-band{flex:none;height:52px;margin:2px -40px 6px;background:#15171c;transform:rotate(-.6deg);display:flex;align-items:center;justify-content:center;gap:36px;cursor:pointer;border-top:5px solid #ff9a1f;border-bottom:5px solid #ff9a1f}
+  .ym-band .t{font-size:34px;font-weight:900;font-style:italic;color:#ffcf2e;text-shadow:3px 3px 0 #b4430a}
+  .ym-band .s{font-size:19px;color:#fff;font-weight:800;background:#ff7a1a;padding:6px 18px;border-radius:20px}
+  .ym-band.wait{background:#4b5260;border-color:#9aa2ae;cursor:default;transform:none}
+  .ym-band.wait span{color:#fff;font-size:17px;font-weight:800}
+  /* 下のパネル */
+  .ym-panels{flex:none;height:146px;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 12px 6px}
+  .port .ym-panels{height:296px;grid-template-columns:repeat(2,1fr);grid-auto-rows:1fr}
+  .ym-pn{position:relative;border:3px solid #15171c;border-radius:18px 18px 10px 10px;overflow:hidden;background:linear-gradient(115deg,color-mix(in srgb,var(--c) 22%,#fff) 0 58%,var(--c) 58%);cursor:pointer}
+  .ym-pn .art{position:absolute;left:0;top:0;width:110px;height:145px}
+  .ym-pn .slot{position:absolute;right:10px;top:4px;font-size:28px;font-style:italic;font-weight:900;color:#fff;text-shadow:2px 2px 0 #15171c}
+  .ym-pn .cn{position:absolute;left:104px;right:6px;top:46px;line-height:1.05;font-weight:900;color:#fff;text-shadow:3px 3px 0 #15171c,-1.5px -1.5px 0 #15171c,1.5px -1.5px 0 #15171c,-1.5px 1.5px 0 #15171c,1.5px 1.5px 0 #15171c}
+  .ym-pn .hint{position:absolute;left:8px;top:6px;z-index:2;font-size:11px;font-weight:900;color:#fff;background:#15171c;padding:2px 9px;border-radius:10px}
+  .ym-pn .plate{position:absolute;left:8px;right:8px;bottom:8px;height:34px;border-radius:17px;background:#fff;border:3px solid #15171c;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#15171c;overflow:hidden}
+  .ym-pn .plate i{font-style:normal;font-size:11px;color:#6b7280;margin-left:6px;font-weight:700}
+  .ym-pn .plate input{width:100%;height:100%;margin:0;padding:0 8px;border:0;background:transparent;text-align:center;font:inherit;font-size:16px;font-weight:800;color:#15171c;box-shadow:none;outline:none}
+  .ym-pn.empty{background:rgba(255,255,255,.55);border-style:dashed}
+  .ym-pn.empty .slot{color:#c3c8d2;text-shadow:none}
+  .ym-pn.empty .plate{background:#eef0f4;color:#6b7280;border-style:dashed}
+  .ym-pn.empty .add{position:absolute;left:0;right:0;top:30px;text-align:center;font-size:15px;font-weight:800;color:#6b7280}
+  .ym-pn.empty .add b{display:block;font-size:34px;line-height:1;color:#9aa2ae}
+  .port .ym-pn .art{width:110px;height:145px}
+  .ym-pn.hidden .art{filter:brightness(0) opacity(.75)}
+  .ym-pn .q{position:absolute;left:30px;top:30px;font-size:44px;font-weight:900;color:#fff;text-shadow:2px 2px 0 #15171c}
+  .ym-pn .stamp{position:absolute;left:100px;top:46px;transform:rotate(-8deg);background:#fff;color:#e8463c;border:3px solid #e8463c;border-radius:10px;padding:2px 10px;font-size:18px;font-weight:900}
+  .ym-pn .wait{position:absolute;left:100px;top:52px;font-size:14px;font-weight:800;color:#fff;text-shadow:1px 1px 0 #15171c;line-height:1.3}
+  .ym-pn .wait.dark{color:#15171c;text-shadow:none;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:8px}
+  .ym-coin.ro{cursor:default}
+  .ym-code{left:578px;width:220px;background:#3a414e;color:#e5e7eb;font-size:15px;flex-direction:column;gap:0;line-height:1.1}
+  .ym-code b{color:#ffd24a;font-size:24px}
+  .ym-code small{font-size:10px;font-weight:700;color:#cbd2dc}
+  .port .ym-code{left:auto;right:-14px;top:66px;width:150px;height:40px;z-index:3}
+  /* CPU の強さを選ぶ小窓 */
+  .ym-pop{position:absolute;z-index:7;width:230px;background:#fff;border:3px solid #15171c;border-radius:14px;padding:10px;box-shadow:6px 6px 0 rgba(0,0,0,.25)}
+  .ym-pop h3{margin:0 0 6px;font-size:15px;font-weight:900;color:#15171c}
+  .ym-pop .b{margin:6px 0 0;padding:7px 10px;border:3px solid #15171c;border-radius:10px;font-size:17px;font-weight:900;color:#fff;cursor:pointer}
+  .ym-pop .b small{display:block;font-size:10px;font-weight:700;opacity:.9;line-height:1.3}
+  /* ステージ選択 */
+  .ym-sbody{flex:1;min-height:0;position:relative}
+  .ym-big{position:absolute;left:20px;top:16px;width:520px;height:300px;border:4px solid #15171c;border-radius:6px;overflow:hidden;background:#000}
+  .ym-big canvas,.ym-tl canvas{width:100%;height:100%;display:block}
+  .ym-sname{position:absolute;left:28px;top:326px;font-size:52px;line-height:1;font-weight:900;font-style:italic;color:#fff;text-shadow:4px 4px 0 #15171c,-2px -2px 0 #15171c,2px -2px 0 #15171c,-2px 2px 0 #15171c,2px 2px 0 #15171c}
+  .ym-sdesc{position:absolute;left:30px;top:392px;width:510px;font-size:17px;font-weight:700;background:rgba(255,255,255,.85);border-left:6px solid #e8463c;padding:6px 12px}
+  .ym-tiles{position:absolute;left:566px;top:16px;display:grid;grid-template-columns:repeat(2,204px);grid-auto-rows:122px;gap:10px}
+  .ym-tl{position:relative;border:4px solid #15171c;border-radius:6px;overflow:hidden;cursor:pointer;background:#000}
+  .ym-tl span{position:absolute;left:0;right:0;bottom:0;background:rgba(21,23,28,.85);color:#fff;font-size:14px;font-weight:800;text-align:center;line-height:22px}
+  .ym-tl.on{outline:5px solid #ffb020;outline-offset:2px}
+  .ym-bar{flex:none;height:70px;position:relative}
+  .ym-b2{position:absolute;left:20px;top:22px;font-size:16px;font-weight:700;color:#cbd2dc;cursor:pointer}
+  .ym-go{right:20px;left:auto;top:7px;width:260px;height:56px;background:#ff8a1f;font-size:28px;color:#fff;text-shadow:3px 3px 0 #15171c}
+  .port .ym-big{left:20px;top:14px;width:560px;height:320px}
+  .port .ym-sname{top:346px;font-size:46px}.port .ym-sdesc{top:404px;width:560px}
+  .port .ym-tiles{left:20px;top:470px;grid-template-columns:repeat(3,180px);grid-auto-rows:108px}
+  /* キャラ説明 */
+  .ym-ibody{flex:1;min-height:0;display:flex;gap:10px;padding:0 12px 10px 0}
+  .ym-info .ym-grid{flex:1;grid-template-columns:repeat(6,1fr);padding:8px 0 0 16px}
+  .ym-detail{width:330px;margin-top:8px;background:#1c2636;color:#e5e7eb;border:3px solid #15171c;border-radius:14px;padding:12px 14px;overflow:auto;font-size:13px;line-height:1.5}
+  .ym-detail h2{margin:0 0 2px;font-size:22px}
+  .port .ym-ibody{flex-direction:column;padding:0 12px 10px}
+  .port.ym-info .ym-grid{grid-template-columns:repeat(4,1fr);padding:8px 0 0}
+  .port .ym-detail{width:auto;height:330px;flex:none}
 </style>
 </head>
 <body>
@@ -961,7 +1066,8 @@ function sanitizeProfile(d) {
   const n = Array.from(String(d.n || "").replace(/[\u0000-\u001f\u007f]/g, "").trim()).slice(0, 8).join("");
   let c = Math.round(Number(d.c));
   if (d.c == null || !Number.isFinite(c) || c < 0 || c >= CHARS.length) c = 0;
-  return { n, c, tg: sanitizeTeam(d.tg) };   // tg: チーム（古い版の参加者は送らない → チームなし。メッセージの種類 t と重ならない名前にする）
+  const pc = Math.round(Number(d.pc));
+  return Object.assign({ n, c, tg: sanitizeTeam(d.tg) }, d.pc != null && pc >= 0 && pc <= 3 ? { pc } : null);   // pc: 選んだ色（2026-11-27）   // tg: チーム（古い版の参加者は送らない → チームなし。メッセージの種類 t と重ならない名前にする）
 }
 function loadProfile() {
   try { const j = JSON.parse(localStorage.getItem("shieldfight-profile2") || "null"); if (j) return sanitizeProfile(j); } catch (e) {}
@@ -989,6 +1095,7 @@ const canEdit = p => game.ph === "lobby" || !p.lk;
 function applyProfile(p, prof) {
   if (!canEdit(p)) return;
   p.n = prof.n; p.ch = prof.c; p.tg = prof.tg | 0; p.rd = true;
+  if (prof.pc != null) p.pc = prof.pc;
 }
 // チーム。own（スロット）から、その人のチームを返す（分身・飛び道具・置き物も持ち主の own で引ける）
 const tgOf = own => { const p = game.p[own]; return p ? p.tg | 0 : 0; };
@@ -999,8 +1106,8 @@ const sideOf = i => tgOf(i) ? "t" + tgOf(i) : "p" + i;
 const sidesOf = list => new Set(list.map(sideOf)).size;
 // スロット i の人の色。チーム戦ならチームの色の濃淡（同じチームの中で、スロットの小さい順に 1 番目・2 番目…）、そうでなければ席の色
 function colOf(i) {
-  const t = tgOf(i);
-  if (!t) return COLORS[i] || "#ffffff";
+  const t = tgOf(i), pp = game.p[i];
+  if (!t) return COLORS[pp && pp.pc != null ? pp.pc : i] || "#ffffff";   // 個人戦: 選んだ色（p.pc。2026-11-27）、なければ席の色
   let k = 0; for (let j = 0; j < i; j++) if (game.p[j] && game.p[j].c && tgOf(j) === t) k++;
   return TEAM_SHADES[t][k % 4];
 }
@@ -3575,6 +3682,8 @@ const metaSig = [], metaLeft = [0, 0, 0, 0];
 let metaConnN = -1;
 function metaOf(p, i, inGame) {
   const m = { w: p.w, c: p.c ? 1 : 0, n: p.n, tg: p.tg | 0, rd: p.rd ? 1 : 0, lk: p.lk ? 1 : 0, km: p.km, lv: p.lv };
+  if (p.pc != null) m.pc = p.pc;   // 選んだ色（2026-11-27）
+  if (p.cpu) m.cp = (p.cpuLv | 0) + 1;   // CPU の席（強さ + 1）
   if (inGame) m.ch = p.ch;
   const sig = JSON.stringify(m);
   if (sig !== metaSig[i]) { metaSig[i] = sig; metaLeft[i] = 8; }
@@ -3585,7 +3694,7 @@ function snapshot() {
   const inGame = game.ph !== "lobby";         // キャラは試合が始まるまで他のプレイヤーに送らない
   const cn = conns.filter(c => c && c.open).length + specConns.length;
   if (cn !== metaConnN) { metaConnN = cn; metaLeft.fill(8); }
-  const s = { t: "s", ph: game.ph, tm: game.tm, win: game.win, wt: game.wt | 0, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr, st: game.st | 0, stT: game.stT | 0, ss: game.ss,
+  const s = { t: "s", tmd: game.tmd ? 1 : 0, sp: soloStage && !solo ? 1 : 0, ph: game.ph, tm: game.tm, win: game.win, wt: game.wt | 0, nf: game.nf, rt: game.rt, sd: game.sd, hs: game.hs > 0 ? 1 : 0, wr: game.wr, st: game.st | 0, stT: game.stT | 0, ss: game.ss,
     p: game.p.map((p, i) => p ? Object.assign(serEnt(p),
       metaOf(p, i, inGame), p.kc ? { kc: p.kc } : null, chOf(p).id === "archer" ? { am: p.am, amT: p.amT } : null,
       inGame && chOf(p).id === "spider" ? { wk: p.wk.slice(), wkm: p.wkm.slice(), wm: webMode(p) } : null) : null),   // 蜘蛛: 効果ごとのクールタイムと、今の居場所で使う効果
@@ -3653,6 +3762,7 @@ function hostLoop() {
     }
     else evq.length = 0;                   // 参加者がいない（CPU 戦など）ときは、出来事をためない
   }
+  if (n > 0 && role === "host" && !solo && game.ph === "lobby" && tickCount % 15 < n) ymSendTeamInfo();   // 味方のキャラを、その人にだけ送る
   if (n >= 4) hostAcc = Math.min(hostAcc, STEP_MS);   // 大きく遅れたとき（端末が重い等）は、追いつこうとしない
   if (game.ph !== lastPh) { lastPh = game.ph; renderUI(); }
   refreshHud();
@@ -3663,40 +3773,50 @@ function hostLoop() {
 let solo = false;
 // トレーニング（CPU 戦の一種）: 相手は一切動かない練習用の人形。制限時間もサドンデスもなく、落ちたら誰でもすぐ復活する（ラウンドの区切りがない）。trainKO: 相手を落とした回数
 let training = false, trainKO = 0;
-const soloCfg = { n: 1, lv: 1, chars: [-1, -1, -1], teams: [0, 0, 0] };      // CPU の数 / 強さ（AI_LEVELS の番号）/ CPU ごとのキャラ（-1 = ランダム）/ CPU ごとのチーム
+// 2026-11-27: 席ごとの CPU（空いた席があってもよい）。slots[k] は席 k+1 の CPU（null = なし）: { lv: 強さ, ch: キャラ（-1 = おまかせ）, pc: 色（個人戦）, tg: チーム（チーム戦）}
+// team: チーム戦か / myPc・myTg・myCh: 自分（1P）の色・チーム・キャラ（-1 = おまかせ）
+const soloCfg = { slots: [{ lv: 1, ch: -1, pc: 1, tg: 2 }, null, null], team: false, myPc: 0, myTg: 1, myCh: 0 };
+const ymInt = (v, lo, hi, def) => { const n = Math.round(Number(v)); return v != null && Number.isFinite(n) && n >= lo && n <= hi ? n : def; };
 function sanitizeSolo(d) {
   d = d || {};
-  const n = Math.max(1, Math.min(MAX_PLAYERS - 1, Math.round(Number(d.n)) || 1));
-  let lv = Math.round(Number(d.lv)); if (!Number.isFinite(lv) || lv < 0 || lv >= AI_LEVELS.length) lv = 1;
-  const chars = [0, 1, 2].map(k => { const v = d.chars ? d.chars[k] : -1, c = Math.round(Number(v)); return v != null && Number.isFinite(c) && c >= 0 && c < CHARS.length ? c : -1; });
-  const teams = [0, 1, 2].map(k => sanitizeTeam(d.teams ? d.teams[k] : 0));
-  return { n, lv, chars, teams };
+  let slots;
+  if (Array.isArray(d.slots)) slots = [0, 1, 2].map(k => { const v = d.slots[k]; return v && typeof v === "object" ? { lv: ymInt(v.lv, 0, AI_LEVELS.length - 1, 1), ch: ymInt(v.ch, -1, CHARS.length - 1, -1), pc: ymInt(v.pc, 0, 3, k + 1), tg: ymInt(v.tg, 1, 4, k % 2 ? 1 : 2) } : null; });
+  else {                                                  // 古い形（n: CPU の数, lv, chars, teams）から作り直す
+    const n = ymInt(d.n, 1, MAX_PLAYERS - 1, 1), lv = ymInt(d.lv, 0, AI_LEVELS.length - 1, 1);
+    slots = [0, 1, 2].map(k => k < n ? { lv, ch: ymInt(d.chars && d.chars[k], -1, CHARS.length - 1, -1), pc: k + 1, tg: ymInt(d.teams && d.teams[k], 1, 4, k % 2 ? 1 : 2) } : null);
+  }
+  return { slots, team: !!d.team, myPc: ymInt(d.myPc, 0, 3, 0), myTg: ymInt(d.myTg, 1, 4, 1), myCh: ymInt(d.myCh, -1, CHARS.length - 1, draft ? draft.c : 0) };
 }
 function loadSolo() { try { const j = JSON.parse(localStorage.getItem("shieldfight-cpu") || "null"); if (j) Object.assign(soloCfg, sanitizeSolo(j)); } catch (e) {} }
 function saveSolo() { try { localStorage.setItem("shieldfight-cpu", JSON.stringify(soloCfg)); } catch (e) {} }
 loadSolo();
 function applySoloCfg() {                  // ロビーで、CPU の席を設定に合わせて作り直す
+  const me = game.p[0];
+  if (me) { me.pc = soloCfg.myPc; me.tg = soloCfg.team ? soloCfg.myTg : 0; if (soloCfg.myCh >= 0) me.ch = soloCfg.myCh; }
   for (let i = 1; i < MAX_PLAYERS; i++) {
-    if (i > soloCfg.n) { game.p[i] = null; continue; }
+    const sl = soloCfg.slots[i - 1];
+    if (!sl) { game.p[i] = null; continue; }
     const p = game.p[i] || (game.p[i] = newPlayer());
-    p.own = i; p.c = true; p.rd = true; p.cpu = true; p.cpuLv = soloCfg.lv; p.n = "CPU" + i;
-    p.cpuCh = soloCfg.chars[i - 1];
-    p.ch = Math.max(0, soloCfg.chars[i - 1]);                // 「ランダム」は、始めるときに決める（それまではノーマルの見た目）
-    p.tg = soloCfg.teams[i - 1] | 0;
+    p.own = i; p.c = true; p.rd = true; p.cpu = true; p.cpuLv = sl.lv; p.n = "CPU" + i;
+    p.cpuCh = sl.ch;
+    p.ch = Math.max(0, sl.ch);                              // 「おまかせ」は、始めるときに決める（それまではノーマルの見た目）
+    p.tg = soloCfg.team ? sl.tg : 0; p.pc = sl.pc;
   }
   const slots = connectedSlots();
   slots.forEach((s, idx) => { spawn(game.p[s], idx, slots.length); game.p[s].al = true; });
 }
 function rollCpuChars() {
-  for (let i = 1; i <= soloCfg.n; i++) {
-    const p = game.p[i];
-    if (p && p.cpu) { p.cpuCh = soloCfg.chars[i - 1]; rollCpuCh(p); }
+  for (let i = 1; i < MAX_PLAYERS; i++) {
+    const p = game.p[i], sl = soloCfg.slots[i - 1];
+    if (p && p.cpu && sl) { p.cpuCh = sl.ch; rollCpuCh(p); }
   }
+  const me = game.p[0];                                     // 1P の「おまかせ」も、始めるときに決める
+  if (me && soloCfg.myCh < 0) me.ch = Math.floor(Math.random() * CHARS.length);
 }
 function startTraining() { training = true; trainKO = 0; startSolo(true); }
 function startSolo(keepTraining) {
   if (!keepTraining) training = false;
-  solo = true; role = "host"; net = "ready"; myId = 0; roomCode = ""; game.wr = winRounds;
+  solo = true; role = "host"; net = "ready"; myId = 0; roomCode = ""; game.wr = winRounds; soloStage = false;
   document.body.classList.add("solo");
   const me = game.p[0] = newPlayer(); me.own = 0; me.n = draft.n; me.ch = draft.c; me.tg = draft.tg | 0; me.al = true;
   applySoloCfg();
@@ -3752,7 +3872,8 @@ function goTitle() {
   try { if (peer) { if (peer.removeAllListeners) peer.removeAllListeners(); peer.destroy(); } } catch (e) {}
   peer = null; conns = []; hostConn = null; fastConns = []; fastConn = null; hostTries = 0;
   lastSnapQ = 0; pauseQ = 0; lastEv = 0; evHist.length = 0;
-  role = null; myId = -1; net = "idle"; netMsg = ""; roomCode = ""; solo = false; training = false;
+  role = null; myId = -1; net = "idle"; netMsg = ""; roomCode = ""; solo = false; training = false; soloStage = false; ymCharInfo = false; ymJoin = false;
+  game.tmd = 0; game.sp = 0; ymTeamCh = {}; ymMyRand = false; ymTmLast.length = 0;
   document.body.classList.remove("solo");
   game.p = [null, null, null, null]; game.ph = "lobby"; game.tm = 0; game.win = -1; game.nf = 0; game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0; game.hsf = false; game.st = 0; game.stT = 0;   // 2026-11-09: タイトルへ戻ったらステージもいつものへ
   clearEntities(); evq.length = 0;
@@ -3821,7 +3942,7 @@ function startHost() {
       conn.on("data", d => {
         if (!d) return;
         if (d.t === "in") takeInput(slot, d);
-        else if (d.t === "prof") { applyProfile(p, sanitizeProfile(d)); renderUI(); }
+        else if (d.t === "prof") { applyProfile(p, sanitizeProfile(d)); if (d.r === 0 && canEdit(p)) p.rd = false; renderUI(); }   // r: 0 = まだキャラを決めていない（2026-11-27）
         else if (d.t === "pname") p.pn = String(d.n || "").slice(0, 12);   // パーティの名前（成績用）
         else if (d.t === "unprof") { if (canEdit(p)) p.rd = false; renderUI(); }
         else if (d.t === "pg") conn.send({ t: "po", c: d.c });   // 往復時間の測定: そのまま返す
@@ -3875,6 +3996,7 @@ function startClient(code) {
         });
       }
       else if (d.t === "po") { const r = performance.now() - d.c; if (r >= 0 && r < 10000) pingMs = pingMs ? pingMs * 0.7 + r * 0.3 : r; }
+      else if (d.t === "tmc") ymTakeTeamInfo(d.m);
       else if (d.t === "full") { net = "error"; netMsg = "この部屋は満員です（最大4人）"; renderUI(); }
       else if (d.t === "s") applySnapshot(d);
       else if (d.t === "pause") { hostPause = !!d.v; if (d.v) pauseQ = d.q | 0; }   // ホストが画面を離れた / 戻った
@@ -3936,6 +4058,7 @@ function applySnapshot(s) {
   curTk = s.tk;
   if (s.q === undefined || s.q > pauseQ) hostPause = false;           // スナップショットが届くのは、ホストが動いているとき（一時停止の知らせの取りこぼし対策。止まる前に送られたものが、知らせより後に届いた場合は除く）
   const phChanged = game.ph !== s.ph;
+  game.tmd = s.tmd | 0; game.sp = s.sp | 0;   // チーム戦か・ホストがステージを選んでいるか（2026-11-27）
   game.ph = s.ph; game.tm = s.tm; game.win = s.win; game.wt = s.wt | 0; game.nf = s.nf | 0; game.rt = s.rt | 0; game.sd = s.sd | 0; game.hsf = !!s.hs;
   const st = s.st | 0;                                                 // ステージ（古い版のホストは送らない → いつもの）
   game.st = st >= 0 && st < STAGES.length ? st : 0; game.stT = s.stT | 0;
@@ -3954,7 +4077,7 @@ function applySnapshot(s) {
     let p = game.p[i];
     if (!p) { p = game.p[i] = newPlayer(); p.x = n.x; p.y = n.y; }
     readEnt(p, n);
-    if (n.c !== undefined) { p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.tg = n.tg | 0; p.rd = !!n.rd; p.lk = !!n.lk; p.km = n.km | 0; p.lv = n.lv | 0; }   // 名前など: 届いたときだけ（ふだんは送らない）
+    if (n.c !== undefined) { p.pc = n.pc == null ? undefined : n.pc | 0; p.ymCpu = n.cp | 0; p.w = n.w; p.c = !!n.c; p.n = n.n || ""; p.tg = n.tg | 0; p.rd = !!n.rd; p.lk = !!n.lk; p.km = n.km | 0; p.lv = n.lv | 0; }   // 名前など: 届いたときだけ（ふだんは送らない）
     p.kc = n.kc | 0; p.am = n.am === undefined ? arrowMax() : n.am | 0; p.amT = n.amT | 0; p.own = i;
     p.wk = n.wk || [0, 0, 0]; p.wkm = n.wkm || [0, 0, 0]; p.wm = n.wm | 0;
     const cn = s.cl[i];
@@ -3980,7 +4103,7 @@ function applySnapshot(s) {
     for (const b of game.pj) { b.x -= b.vx * back; b.y -= b.vy * back; }
     for (const m of game.mn) m.x -= m.vx * back;
   }
-  const sig = game.p.map(p => p ? (p.c ? 1 : 0) + "," + (p.rd ? 1 : 0) + "," + p.n + "," + (p.tg | 0) : "-").join("|");
+  const sig = (game.tmd | 0) + "/" + (game.sp | 0) + "/" + game.p.map(p => p ? (p.c ? 1 : 0) + "," + (p.rd ? 1 : 0) + "," + p.n + "," + (p.tg | 0) + "," + p.pc + "," + (p.ymCpu | 0) : "-").join("|");
   if (phChanged || wrChanged || ssChanged || sig !== lastSig) renderUI();
   lastSig = sig;
   refreshHud();
@@ -4703,76 +4826,6 @@ function removeRoomCpu(i) {
   game.p[i] = null; renderUI();
 }
 const cpuOpts = `<option value="-1">ランダム</option>` + CHARS.map((c, i) => `<option value="${i}">${esc(c.name)}</option>`).join("");
-function showSolo() {                       // CPU 戦の設定（自分の名前・キャラ、CPU の数・強さ・キャラ、何本先取か）
-  const chips = CHARS.map((c, i) => `<button class="chip" data-i="${i}"><canvas width="72" height="100"></canvas><span>${esc(c.name)}</span></button>`).join("");
-  ui.innerHTML = `<div class="panel setup"><div class="cols"><div class="colL"><h1>${training ? "トレーニング" : "CPU戦"}</h1>
-    <p>${training ? "相手は一切動きません。制限時間はなく、落ちてもすぐ復活します（ネット不要）" : "名前とキャラを選んで、ひとりで CPU と対戦します（ネット不要）"}</p>
-    <input id="pname" maxlength="8" placeholder="${esc("プレイヤー1")}" value="${esc(draft.n)}">
-    <div class="chips">${chips}</div></div><div class="colR">
-    <div class="detail" id="detail"></div>
-    <div class="cpuset">
-      <div class="row"><span>${training ? "相手の数" : "CPU の数"}</span><span class="seg" id="segN">${[1, 2, 3].map(v => `<button data-v="${v}">${v}</button>`).join("")}</span></div>
-      <div class="row"><span>あなたのチーム</span>${teamSeg("segT", draft.tg | 0)}</div>
-      <div class="row"${training ? ' style="display:none"' : ""}><span>強さ</span><span class="seg" id="segLv">${AI_LEVELS.map((l, v) => `<button data-v="${v}">${esc(l.name)}</button>`).join("")}</span></div>
-      <div class="hint" id="lvHint"${training ? ' style="display:none"' : ""}></div>
-      <div id="cpuRows"></div>
-      <div class="row"${training ? ' style="display:none"' : ""}><span>何本先取</span>${roundsHtml("wr")}</div>
-      <div class="row"><span>ステージ</span>${stageSelHtml()}</div>
-      <div class="hint" id="stHint"></div>
-      <div class="hint" id="teamHint" style="color:#fca5a5"></div>
-    </div>
-    <div class="btns"><button id="bGo">${training ? "練習開始" : "戦闘開始"}</button>
-    <button id="bBack" class="sub">タイトルへ</button></div></div></div></div>`;
-  const root = ui.querySelector(".setup");
-  root.querySelectorAll(".chip").forEach(b => {
-    const i = Number(b.dataset.i);
-    drawPreview(b.querySelector("canvas"), i);
-    b.onclick = () => { draft.c = i; game.p[0].ch = i; paintSelect(); };
-  });
-  const name = root.querySelector("#pname");
-  name.oninput = () => { draft.n = name.value; };
-  const opts = `<option value="-1">ランダム</option>` + CHARS.map((c, i) => `<option value="${i}">${esc(c.name)}</option>`).join("");
-  const paintCfg = () => {
-    root.querySelectorAll("#segN button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === soloCfg.n));
-    root.querySelectorAll("#segLv button").forEach(b => b.classList.toggle("on", Number(b.dataset.v) === soloCfg.lv));
-    root.querySelector("#lvHint").textContent = AI_LEVELS[soloCfg.lv].desc;
-    root.querySelector("#cpuRows").innerHTML = Array.from({ length: soloCfg.n }, (_, k) =>
-      `<div class="row"><span>${training ? "相手" : "CPU"}${k + 1}</span><select data-k="${k}">${opts}</select><select data-tk="${k}">${TEAM_NAMES.map((nm, t) => `<option value="${t}">チーム: ${nm}</option>`).join("")}</select></div>`).join("");
-    root.querySelectorAll("#cpuRows select[data-k]").forEach(sel => {
-      const k = Number(sel.dataset.k);
-      sel.value = String(soloCfg.chars[k]);
-      sel.onchange = () => { soloCfg.chars[k] = Number(sel.value); saveSolo(); applySoloCfg(); };
-    });
-    root.querySelectorAll("#cpuRows select[data-tk]").forEach(sel => {           // CPU ごとのチーム
-      const k = Number(sel.dataset.tk);
-      sel.value = String(soloCfg.teams[k] | 0);
-      sel.onchange = () => { soloCfg.teams[k] = sanitizeTeam(sel.value); saveSolo(); applySoloCfg(); paintTeamHint(); };
-    });
-    paintTeamHint();
-  };
-  const paintTeamHint = () => {                    // 全員が同じチームなら始められない
-    const h = root.querySelector("#teamHint"), same = sidesOf(connectedSlots()) < 2;
-    h.textContent = same ? "全員が同じチームです。チームを分けてください" : "";
-    root.querySelector("#bGo").disabled = same;
-  };
-  bindRounds(root, "wr", () => paintRounds(root, "wr"));
-  bindStageSel(root);
-  bindTeamSeg(root, "segT", v => { draft.tg = v; game.p[0].tg = v; paintTeamHint(); });
-  root.querySelectorAll("#segN button").forEach(b => b.onclick = () => { soloCfg.n = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
-  root.querySelectorAll("#segLv button").forEach(b => b.onclick = () => { soloCfg.lv = Number(b.dataset.v); saveSolo(); applySoloCfg(); paintCfg(); });
-  root.querySelector("#bGo").onclick = () => {
-    autoFs();
-    const prof = sanitizeProfile(draft);
-    draft = prof; saveProfile();
-    applyProfile(game.p[0], prof);
-    rollCpuChars();
-    hostStartMatch();
-  };
-  root.querySelector("#bBack").onclick = goTitle;
-  paintCfg();
-  paintSelect();
-}
-
 function showLobby() {
   const list = game.p.map((p, i) => p && p.c
     ? `<div class="pl" style="color:${colOf(i)}"><b>${esc(nameOf(i))}</b>${teamLabel(p)}${i === myId ? "（あなた）" : ""}<span class="${p.rd ? "ok" : "wt"}">${p.rd ? "✔ 準備OK" : "選択中…"}</span></div>` : "").join("");
@@ -4818,57 +4871,562 @@ function showLobby() {
   }
 }
 
+// ================= 新しいメニュー（2026-11-27）: ホーム・キャラ選択（CPU 戦）・ステージ選択・キャラ説明 =================
+// 並び方だけ対戦ゲームの定番（左に大きいタイル、右に丸と斜めの帯、下に説明の帯）を借り、印・色・言葉はシールドファイトのもの。
+// 画面は「設計の大きさ」（横 1000×600 / 縦 600×1000）で作り、端末に合わせて拡大・縮小する（.ym-st）。
+let ymCharInfo = false, ymCharSel = 0;            // キャラ説明を開いているか / そこで選んでいるキャラ
+let soloStage = false;                            // CPU 戦: キャラ選択のあと、ステージ選択にいる
+let ymJoin = false;                               // ホーム: 「部屋に入る」の番号入力を開いている
+const ymPort = () => window.innerHeight > window.innerWidth * 1.1;
+const YM = { ink: "#15171c", red: "#e8463c", red2: "#c9372e", orange: "#ff8f1f", green: "#8fd630", blue: "#2fa6f5", violet: "#b45cf0", teal: "#22c7b8", yellow: "#ffcc2e" };
+const YM_PAL = ["#e8463c", "#2f7df5", "#2fb44a", "#e0a800"];   // 個人戦の色（COLORS と同じ並び: 赤・青・緑・黄）
+// 設計の大きさの画面を、いまの画面いっぱいに合わせる
+function ymFit() {
+  const st = document.getElementById("ymSt"); if (!st) return;
+  const w = +st.dataset.w, h = +st.dataset.h, r = ui.getBoundingClientRect();
+  st.style.transform = `scale(${Math.min(r.width / w, r.height / h)})`;
+}
+addEventListener("resize", () => {
+  if (uiKey === "title" || uiKey === "stage" || uiKey === "chars" || uiKey === "solo" || uiKey === "online") {
+    const st = document.getElementById("ymSt"), want = ymPort() ? "p" : "l";
+    if (uiKey !== "title" && st && st.dataset.o === want) { ymFit(); return; }
+    const root = document.getElementById("ymRoot");
+    if (root && root.contains(document.activeElement) && document.activeElement.tagName === "INPUT") { ymFit(); return; }   // 名前の入力中（キーボードで画面の高さが変わる）は作り直さない
+    uiKey = ""; renderUI();                       // 縦・横が変わった: 並べ直す
+  }
+});
+
+// ---------- ホーム ----------
+const YM_DESC = {
+  brawl: "CPUと戦う、基本の大乱闘！ キャラとステージを選んで、何本先取かも決められる",
+  train: "動かない相手で、技やコンボをためせる",
+  host: "部屋を作って、友だちを待つ（最大 4 人）",
+  join: "友だちの部屋に、1 けたの番号で入る",
+  pad: "スマホの操作ボタンの位置と大きさを変える",
+  chars: "キャラごとの技とスキルを見る",
+  back: "ミニゲーム集（you know games）の一覧へ戻る",
+};
+const YMI = {
+  target: (x, y, s) => `<g transform="translate(${x},${y}) scale(${s})" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"><circle r="34"/><circle r="18"/><circle r="4" fill="#fff"/><path d="M0-48V-26M0 26V48M-48 0H-26M26 0H48"/></g>`,
+  house: (x, y, s) => `<g transform="translate(${x},${y}) scale(${s})" fill="${YM.ink}"><path d="M-34 0 0-30 34 0V34H-34Z"/><rect x="-8" y="6" width="16" height="28" rx="2" fill="#fff"/><path d="M0 10V30M-10 20H10" stroke="${YM.ink}" stroke-width="5"/></g>`,
+  door: (x, y, s) => `<g transform="translate(${x},${y}) scale(${s})"><rect x="-6" y="-34" width="40" height="68" rx="4" fill="${YM.ink}"/><circle cx="24" cy="2" r="4" fill="#fff"/><path d="M-40 0H4M-10-16 6 0-10 16" fill="none" stroke="${YM.ink}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></g>`,
+  pad: (x, y, s) => `<g transform="translate(${x},${y}) scale(${s})" fill="#fff"><rect x="-38" y="-20" width="76" height="40" rx="20"/><g fill="${YM.violet}"><rect x="-28" y="-4" width="20" height="8" rx="2"/><rect x="-22" y="-10" width="8" height="20" rx="2"/><circle cx="16" cy="-6" r="5"/><circle cx="26" cy="5" r="5"/></g></g>`,
+  book: (x, y, s) => `<g transform="translate(${x},${y}) scale(${s})"><path d="M0-22C-12-30-26-30-38-26V26C-26 22-12 22 0 30 12 22 26 22 38 26V-26C26-30 12-30 0-22Z" fill="#fff"/><path d="M0-22V30" stroke="${YM.teal}" stroke-width="4"/></g>`,
+  back: (x, y, s) => `<g transform="translate(${x},${y}) scale(${s})" fill="none" stroke="${YM.ink}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M24 0H-22M-6-17-24 0-6 17"/></g>`,
+};
+// シールドファイトの印（アプリのアイコンと同じ「赤い四角のキャラ + 白い盾 + 足場」）
+const ymEmblem = (x, y, s) => `<g transform="translate(${x},${y}) scale(${s})"><circle r="100" fill="${YM.ink}"/><circle r="88" fill="none" stroke="#fff" stroke-width="5" opacity=".25"/>
+  <rect x="-62" y="46" width="124" height="16" fill="#6b7686"/><rect x="-48" y="62" width="96" height="10" fill="#4d5664"/>
+  <rect x="-42" y="-50" width="54" height="96" rx="4" fill="${YM.red}"/><rect x="-6" y="-34" width="11" height="11" fill="${YM.ink}"/><rect x="22" y="-42" width="13" height="88" rx="3" fill="#f2f4f8"/></g>`;
+// 文字: 黒い影を右下にずらして置き、本体は細いふちだけ（太いふちだと漢字のすき間がつぶれる）
+function ymTxt(x, y, s, t, o = {}) {
+  const base = `font-size="${s}" text-anchor="${o.anchor || "middle"}" class="${o.cls || "ym-heavy"}"`;
+  if (o.out === false) return `<text x="${x}" y="${y}" ${base} fill="${o.fill || "#fff"}">${t}</text>`;
+  const d = Math.max(2, s * 0.06), w = Math.max(2, s * 0.05);
+  return `<text x="${x + d}" y="${y + d}" ${base} fill="${YM.ink}" stroke="${YM.ink}" stroke-width="${w}" stroke-linejoin="round">${t}</text>`
+    + `<text x="${x}" y="${y}" ${base} fill="${o.fill || "#fff"}" stroke="${YM.ink}" stroke-width="${w}" stroke-linejoin="round" paint-order="stroke">${t}</text>`;
+}
+const ymShape = (d, fill, sw = 14) => `<path d="${d}" fill="${YM.ink}" stroke="${YM.ink}" stroke-width="${sw}" stroke-linejoin="round"/><path class="ym-face" d="${d}" fill="${fill}"/>`;
+const ymTile = (k, inner, off) => `<g class="ym-tile${off ? " off" : ""}" tabindex="0" role="button" data-k="${k}" aria-label="${YM_DESC[k]}">${inner}</g>`;
+function ymBg(w, h) {
+  let s = `<rect x="-800" y="-400" width="${w + 1600}" height="${h + 800}" fill="#e9edf3"/>`;
+  for (let i = -6; i < 12; i++) s += `<path d="M${i * 220} ${h + 400} L${i * 220 + (h + 800) * 0.55} -400 H${i * 220 + (h + 800) * 0.55 + 70} L${i * 220 + 70} ${h + 400}Z" fill="#dde3ec"/>`;
+  return s;
+}
+function ymHomeSvg() {
+  const off = isOffline(), port = ymPort(), touch = coarseMq.matches || landForce === "1";
+  const backTab = ymTile("back", ymShape("M-20 14 H262 L240 72 H-20Z", YM.yellow, 12) + YMI.back(36, 43, 0.9) + ymTxt(158, 55, 28, "ゲーム一覧へ", { fill: YM.ink, out: false }));
+  let s, W, H, barY;
+  if (!port) {
+    W = 1000; H = 600; barY = 548;
+    const big = "M70 96 H596 Q616 96 606 116 L486 450 Q478 470 458 470 H40 Q20 470 26 450 L56 112 Q58 96 70 96Z";
+    s = ymBg(W, H) + backTab
+      + ymTile("brawl", ymShape(big, "#fff", 18) + `<clipPath id="ymCb"><path d="${big}"/></clipPath><g clip-path="url(#ymCb)"><path d="M0 0 H700 V140 L0 350Z" fill="${YM.red}"/><path d="M0 350 L700 140 V170 L0 380Z" fill="${YM.red2}"/></g>`
+        + ymEmblem(330, 200, 0.92) + ymTxt(250, 392, 104, "大乱闘") + ymTxt(250, 440, 26, "CPUと戦う", { fill: YM.ink, out: false, cls: "ym-ui" }))
+      + ymTile("train", `<circle cx="800" cy="138" r="104" fill="${YM.ink}"/><circle class="ym-face" cx="800" cy="138" r="94" fill="${YM.orange}"/><path d="M706 160 A94 94 0 0 0 894 160Z" fill="#ffd2a3"/>` + YMI.target(800, 112, 1.05) + ymTxt(800, 196, 28, "トレーニング"))
+      + ymTile("host", ymShape("M622 262 H962 Q992 262 984 290 L974 320 Q966 344 936 344 H562 Z", YM.green, 16) + `<path d="M622 262 H962 Q992 262 984 290 L980 302 H600Z" fill="#c7ef8f"/>` + YMI.house(652, 303, 0.85) + ymTxt(820, 322, 48, "部屋を作る"), off)
+      + ymTile("join", ymShape("M592 362 H962 Q992 362 984 390 L974 420 Q966 444 936 444 H532 Z", YM.blue, 16) + `<path d="M592 362 H962 Q992 362 984 390 L980 402 H570Z" fill="#a9dcff"/>` + YMI.door(622, 403, 0.8) + ymTxt(800, 422, 48, "部屋に入る"), off)
+      + (touch ? ymTile("pad", ymShape("M556 462 H730 Q746 462 746 478 V520 Q746 536 730 536 H556 Q540 536 540 520 V478 Q540 462 556 462Z", YM.violet, 12) + YMI.pad(581, 499, 0.55) + ymTxt(680, 509, 26, "ボタン配置")) : "")
+      + ymTile("chars", ymShape("M780 462 H954 Q970 462 970 478 V520 Q970 536 954 536 H780 Q764 536 764 520 V478 Q764 462 780 462Z", YM.teal, 12) + YMI.book(802, 499, 0.5) + ymTxt(902, 509, 26, "キャラ説明"))
+      + (off ? ymTxt(790, 254, 20, "オフラインのため、部屋は使えません", { fill: YM.ink, out: false, cls: "ym-ui" }) : "");
+  } else {
+    W = 520; H = 1000; barY = 900;
+    const big = "M44 98 H486 Q502 98 500 114 L482 408 Q480 424 464 424 H36 Q20 424 20 408 V114 Q20 98 44 98Z";
+    s = ymBg(W, H) + backTab
+      + ymTile("brawl", ymShape(big, "#fff", 18) + `<clipPath id="ymCbp"><path d="${big}"/></clipPath><g clip-path="url(#ymCbp)"><path d="M0 0 H520 V150 L0 300Z" fill="${YM.red}"/><path d="M0 300 L520 150 V178 L0 328Z" fill="${YM.red2}"/></g>`
+        + ymEmblem(260, 200, 0.85) + ymTxt(260, 372, 96, "大乱闘") + ymTxt(260, 410, 24, "CPUと戦う", { fill: YM.ink, out: false, cls: "ym-ui" }))
+      + ymTile("train", ymShape("M40 448 H480 Q500 448 498 468 L494 524 Q492 544 472 544 H48 Q28 544 26 524 L22 468 Q20 448 40 448Z", YM.orange, 14) + YMI.target(78, 496, 0.75) + ymTxt(290, 514, 42, "トレーニング"))
+      + ymTile("host", ymShape("M52 568 H498 L470 656 H24 Z", YM.green, 16) + `<path d="M52 568 H498 L488 600 H42Z" fill="#c7ef8f"/>` + YMI.house(82, 612, 0.8) + ymTxt(285, 632, 46, "部屋を作る"), off)
+      + ymTile("join", ymShape("M52 678 H498 L470 766 H24 Z", YM.blue, 16) + `<path d="M52 678 H498 L488 710 H42Z" fill="#a9dcff"/>` + YMI.door(84, 722, 0.75) + ymTxt(285, 742, 46, "部屋に入る"), off)
+      + (touch ? ymTile("pad", ymShape("M40 790 H236 Q252 790 252 806 V858 Q252 874 236 874 H40 Q24 874 24 858 V806 Q24 790 40 790Z", YM.violet, 12) + YMI.pad(70, 832, 0.6) + ymTxt(166, 842, 28, "ボタン配置")) : "")
+      + ymTile("chars", ymShape("M284 790 H480 Q496 790 496 806 V858 Q496 874 480 874 H284 Q268 874 268 858 V806 Q268 790 284 790Z", YM.teal, 12) + YMI.book(312, 832, 0.55) + ymTxt(406, 842, 28, "キャラ説明"))
+      ;   // 縦: オフラインの知らせは下の説明の帯に出す（タイルのすき間には入らないので）
+  }
+  // 下の説明の帯（PC はマウスを乗せたタイルの説明に変わる）・アプリとして入れる・iPhone と LINE の案内
+  const h = H - barY;
+  s += `<rect x="-800" y="${barY}" width="${W + 1600}" height="${h + 400}" fill="#f7f8fb"/><rect x="-800" y="${barY}" width="${W + 1600}" height="4" fill="${YM.ink}"/><rect x="${W * 0.06}" y="${H - 7}" width="${W + 800}" height="5" fill="${YM.red}"/>`;
+  const d0 = YM_DESC.brawl;
+  s += port ? `<text id="ymDesc" x="${W * 0.05}" y="${barY + 36}" class="ym-ui" font-size="20" fill="${YM.ink}"><tspan x="${W * 0.05}">${off ? "オフラインのため、部屋は使えません" : "CPUと戦う、基本の大乱闘！"}</tspan><tspan x="${W * 0.05}" dy="28">キャラとステージを選んで、何本先取かも決められる</tspan></text>`
+    : `<text id="ymDesc" x="${W * 0.05}" y="${barY + 32}" class="ym-ui" font-size="21" fill="${YM.ink}">${d0}</text>`;
+  if (installEvt && !standalone) s += `<g class="ym-tile" data-k="install"><rect x="${W - 230}" y="${barY + 10}" width="210" height="34" rx="17" fill="${YM.ink}"/><text x="${W - 125}" y="${barY + 33}" class="ym-ui" text-anchor="middle" font-size="17" fill="#fff">アプリとして入れる</text></g>`;
+  const hint = isLineApp ? "LINE の中では横画面・全画面にできません。右上のメニューから「ブラウザで開く」を選んでください"
+    : isIPhone && !standalone ? "画面を広く使うには：共有ボタン（□↑）→「ホーム画面に追加」" : "";
+  let vbH = H;
+  if (hint) { s += `<rect x="-800" y="${H}" width="${W + 1600}" height="48" fill="#fff4c2"/><text x="${W / 2}" y="${H + 30}" text-anchor="middle" class="ym-ui" font-size="${port ? 14 : 17}" fill="#5a4300">${esc(hint)}</text>`; vbH += 48; }
+  if (ymJoin) s += ymJoinPop(W, vbH);
+  return `<svg viewBox="0 0 ${W} ${vbH}" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+}
+// 部屋に入る: 1 けたの番号を押すだけ
+function ymJoinPop(W, H) {
+  const cx = W / 2, cy = H / 2, w = Math.min(W - 60, 460), h = 300, bw = (w - 60) / 5;
+  let s = `<rect x="-800" y="-400" width="${W + 1600}" height="${H + 800}" fill="rgba(10,12,18,.55)" data-k="joinx"/>`
+    + `<rect x="${cx - w / 2 - 7}" y="${cy - h / 2 - 7}" width="${w + 14}" height="${h + 14}" rx="26" fill="${YM.ink}"/><rect x="${cx - w / 2}" y="${cy - h / 2}" width="${w}" height="${h}" rx="20" fill="${YM.blue}"/>`
+    + `<rect x="${cx - w / 2}" y="${cy - h / 2}" width="${w}" height="70" rx="20" fill="#a9dcff"/>` + ymTxt(cx, cy - h / 2 + 50, 32, "部屋の番号は？");
+  for (let i = 0; i < 10; i++) {
+    const r = Math.floor(i / 5), c = i % 5, x = cx - w / 2 + 20 + c * (bw + 5), y = cy - h / 2 + 96 + r * 82, d = (i + 1) % 10;
+    s += `<g class="ym-tile" data-k="d${d}"><rect x="${x}" y="${y}" width="${bw}" height="70" rx="14" fill="${YM.ink}"/><rect class="ym-face" x="${x + 4}" y="${y + 4}" width="${bw - 8}" height="62" rx="11" fill="#fff"/>${ymTxt(x + bw / 2, y + 50, 38, d, { fill: YM.ink, out: false })}</g>`;
+  }
+  return s + `<g class="ym-tile" data-k="joinx"><rect x="${cx - 90}" y="${cy + h / 2 - 50}" width="180" height="40" rx="20" fill="${YM.ink}"/><text x="${cx}" y="${cy + h / 2 - 23}" text-anchor="middle" class="ym-ui" font-size="18" fill="#fff">やめる</text></g>`;
+}
+function showHome() {
+  ui.innerHTML = `<div class="ym-root ym-home" id="ymRoot">${ymHomeSvg()}</div>`;
+  const root = document.getElementById("ymRoot");
+  const desc = k => { const d = document.getElementById("ymDesc"); if (d && YM_DESC[k] && !ymPort()) d.textContent = YM_DESC[k]; };
+  root.querySelectorAll(".ym-tile[data-k]").forEach(t => { t.addEventListener("mouseenter", () => desc(t.dataset.k)); t.addEventListener("focus", () => desc(t.dataset.k)); });
+  const act = k => {
+    if (k === "brawl") { autoFs(); startSolo(); }
+    else if (k === "train") { autoFs(); startTraining(); }
+    else if (k === "host") { autoFs(); startHost(); }
+    else if (k === "join") { ymJoin = true; uiKey = ""; renderUI(); }
+    else if (k === "joinx") { ymJoin = false; uiKey = ""; renderUI(); }
+    else if (/^d\d$/.test(k)) { ymJoin = false; autoFs(); startClient(k.slice(1)); }
+    else if (k === "pad") openLayoutEditor();
+    else if (k === "chars") { ymCharInfo = true; uiKey = ""; renderUI(); }
+    else if (k === "back") { if (typeof ykgToGames === "function") ykgToGames(); else location.href = "../"; }
+    else if (k === "install") { const e = installEvt; if (!e) return; e.prompt(); (e.userChoice || Promise.resolve()).then(() => { installEvt = null; uiKey = ""; renderUI(); }); }
+  };
+  root.addEventListener("click", e => { const t = e.target.closest("[data-k]"); if (t && !t.classList.contains("off")) act(t.dataset.k); });
+  root.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { const t = e.target.closest("[data-k]"); if (t) { e.preventDefault(); act(t.dataset.k); } } });
+}
+
+// ---------- キャラの絵（一覧・パネル）----------
+function ymCellArt(cv, i) { const c = cv.getContext("2d"); c.setTransform(3, 0, 0, 3, 47, 14); drawChar(c, i, 0, 0, 1, "#5d6a80", false); }
+function ymPanelArt(cv, i, col) {
+  const c = cv.getContext("2d");
+  if (i < 0) { c.fillStyle = col; c.font = "900 170px sans-serif"; c.fillText("?", 40, 220); return; }
+  c.setTransform(3.6, 0, 0, 3.6, 24, 48); drawChar(c, i, 0, 0, 1, col, false);
+}
+const ymCellsHtml = () => CHARS.map((c, i) => `<div class="ym-cell" data-ch="${i}"><canvas width="232" height="148"></canvas><span${c.name.length > 7 ? ' class="sm"' : ""}>${esc(c.name)}</span></div>`).join("");
+function ymStageWrap(cls, inner) {
+  const port = ymPort(), w = port ? 600 : 1000, h = port ? 1000 : 600;
+  ui.innerHTML = `<div class="ym-root" id="ymRoot"><div class="ym-st ${cls}${port ? " port" : ""}" id="ymSt" data-w="${w}" data-h="${h}" data-o="${port ? "p" : "l"}" style="width:${w}px;height:${h}px">${inner}</div></div>`;
+  ymFit();
+  return document.getElementById("ymSt");
+}
+
+// ---------- CPU 戦のキャラ選択（コインを動かしてキャラを選ぶ）----------
+// コイン（1P・CPU）を一覧の上へ動かすとキャラが変わる。キャラを押しても 1P のコインがそこへ動く。CPU のコインは最初「おまかせ」の上。
+// 下のパネルを押すと色（チーム戦ならチーム）が変わる。名前の札で CPU を外す。「なし」を押すと強さを選んで CPU を足す。
+// 全員が選べていて、陣営が 2 つ以上あれば「バトル開始！」の帯が出る → ステージ選択へ
+function showSoloSelect() {
+  const st = ymStageWrap("ym-sel", `<div class="ym-top">
+      <div class="ym-seg ym-back" data-a="back">←</div>
+      <div class="ym-seg ym-mode${training ? " train" : ""}" data-a="mode"></div>
+      ${training ? "" : `<div class="ym-seg ym-rounds"><span data-a="r-">◀</span><b id="ymR"></b>本先取<span data-a="r+">▶</span></div>`}</div>
+    <div class="ym-grid">${ymCellsHtml()}<div class="ym-cell rand" data-ch="-1"><b>?</b><span>おまかせ</span></div></div>
+    <div class="ym-band" id="ymBand"></div>
+    <div class="ym-panels" id="ymPanels"></div>`);
+  st.querySelectorAll(".ym-cell canvas").forEach((cv, i) => ymCellArt(cv, i));
+  st.addEventListener("click", ymSelClick);
+  ymSelPaint();
+}
+const ymTeamMode = () => soloCfg.team;
+// スロット i の色（パネル・コインの色）
+function ymSlotCol(i) {
+  if (ymTeamMode()) { const t = i === 0 ? soloCfg.myTg : (soloCfg.slots[i - 1] || {}).tg; return TEAM_SHADES[t || 1][0]; }
+  const pc = i === 0 ? soloCfg.myPc : (soloCfg.slots[i - 1] || {}).pc;
+  return YM_PAL[pc | 0];
+}
+const ymSlotCh = i => i === 0 ? soloCfg.myCh : (soloCfg.slots[i - 1] ? soloCfg.slots[i - 1].ch : null);
+function ymSelPaint() {
+  const st = document.getElementById("ymSt"); if (!st) return;
+  const team = ymTeamMode();
+  const m = st.querySelector(".ym-mode");
+  m.classList.toggle("team", team && !training);
+  m.innerHTML = training ? `${team ? "練習・チーム" : "トレーニング"}<span class="sw">⇄</span>` : `${team ? "チーム戦" : "大乱闘"}<span class="sw">⇄</span>`;
+  const r = st.querySelector("#ymR"); if (r) r.textContent = winRounds;
+  // 選ばれているキャラのわくとコイン
+  st.querySelectorAll(".ym-cell").forEach(c => { c.classList.remove("sel"); c.style.removeProperty("--sc"); c.querySelectorAll(".ym-coin").forEach(x => x.remove()); });
+  const used = {};
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const ch = ymSlotCh(i); if (ch === null) continue;
+    const cell = st.querySelector(`.ym-cell[data-ch="${ch}"]`); if (!cell) continue;
+    const col = ymSlotCol(i);
+    if (!cell.classList.contains("sel")) { cell.classList.add("sel"); cell.style.setProperty("--sc", col); }
+    const n = used[ch] = (used[ch] || 0) + 1;
+    cell.insertAdjacentHTML("beforeend", `<div class="ym-coin${i ? " cpu" : ""}" data-slot="${i}" style="--c:${col};left:${6 + (n - 1) * 30}px">${i ? "CPU" : "1P"}</div>`);
+  }
+  // 下のパネル
+  const pn = st.querySelector("#ymPanels");
+  let h = "";
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const ch = ymSlotCh(i);
+    if (ch === null) { h += `<div class="ym-pn empty" data-slot="${i}"><div class="slot">${i + 1}P</div><div class="add"><b>＋</b>タップで${training ? "相手" : " CPU "}を追加</div><div class="plate">なし</div></div>`; continue; }
+    const col = ymSlotCol(i), nm = ch < 0 ? "おまかせ" : CHARS[ch].name, s = i ? soloCfg.slots[i - 1] : null;
+    const tag = team ? `${TEAM_NAMES[i === 0 ? soloCfg.myTg : s.tg]}チーム ⇄` : "色 ⇄";
+    h += `<div class="ym-pn" data-slot="${i}" style="--c:${col}"><canvas class="art" width="220" height="290"></canvas><div class="hint">${tag}</div>`
+      + `<div class="slot">${i ? "CPU" : "1P"}</div><div class="cn" style="font-size:${nm.length > 4 ? 17 : 23}px">${esc(nm)}</div>`
+      + (i ? `<div class="plate" data-a="rm">${training ? "相手" : "CPU " + esc(AI_LEVELS[s.lv].name)}<i>タップで外す</i></div>`
+           : `<div class="plate"><input id="ymName" maxlength="8" placeholder="プレイヤー1" value="${esc(draft.n)}"></div>`) + `</div>`;
+  }
+  pn.innerHTML = h;
+  pn.querySelectorAll(".ym-pn:not(.empty)").forEach(el => { const i = +el.dataset.slot; ymPanelArt(el.querySelector("canvas"), ymSlotCh(i), ymSlotCol(i)); });
+  const nmIn = pn.querySelector("#ymName");
+  if (nmIn) { nmIn.oninput = () => { draft.n = nmIn.value; }; nmIn.onchange = () => { draft = sanitizeProfile(Object.assign({}, draft, { n: nmIn.value })); saveProfile(); if (game.p[0]) game.p[0].n = draft.n; }; }
+  // バトル開始の帯（だめなときは理由）
+  const sl = [0].concat(soloCfg.slots.map((s, k) => s ? k + 1 : -1).filter(k => k > 0));
+  const sides = new Set(sl.map(i => team ? "t" + (i === 0 ? soloCfg.myTg : soloCfg.slots[i - 1].tg) : "p" + i)).size;
+  const band = st.querySelector("#ymBand");
+  const why = sl.length < 2 ? `「なし」を押して${training ? "相手" : " CPU "}を追加してください` : sides < 2 ? "全員が同じチームです。パネルを押してチームを分けてください" : "";
+  band.className = "ym-band" + (why ? " wait" : "");
+  band.innerHTML = why ? `<span>${why}</span>` : `<span class="t">${training ? "練習開始！" : "バトル開始！"}</span><span class="s">タップでステージ選択へ ▶</span>`;
+  band.dataset.a = why ? "" : "go";
+  game.wr = winRounds;
+}
+function ymSelClick(e) {
+  const st = document.getElementById("ymSt");
+  if (e.target.closest("input") || e.target.closest(".ym-coin")) return;   // コインはドラッグで動かす（押しただけでは何もしない）
+  const pop = e.target.closest(".ym-pop");
+  if (pop) {                                                        // CPU の強さを選ぶ小窓
+    const b = e.target.closest("[data-lv]"); if (!b) return;
+    const k = +pop.dataset.slot, used = [soloCfg.myPc].concat(soloCfg.slots.filter(Boolean).map(s => s.pc));
+    soloCfg.slots[k - 1] = { lv: +b.dataset.lv, ch: -1, pc: [0, 1, 2, 3].find(c => !used.includes(c)) || 0, tg: k % 2 ? 2 : 1 };
+    pop.remove(); ymSoloChanged(); return;
+  }
+  st.querySelectorAll(".ym-pop").forEach(p => p.remove());
+  const a = e.target.closest("[data-a]"), A = a && a.dataset.a;
+  if (A === "back") { goTitle(); return; }
+  if (A === "mode") { soloCfg.team = !soloCfg.team; ymSoloChanged(); return; }   // トレーニングでも、チームあり・なしを切りかえられる
+  if (A === "r-" || A === "r+") { setRounds(winRounds + (A === "r+" ? 1 : -1)); ymSelPaint(); return; }
+  if (A === "go") { ymCommitSolo(); soloStage = true; uiKey = ""; renderUI(); return; }
+  const cell = e.target.closest(".ym-cell");
+  if (cell) { soloCfg.myCh = +cell.dataset.ch; ymSoloChanged(); return; }   // キャラを押すと 1P のコインがそこへ
+  const pnl = e.target.closest(".ym-pn"); if (!pnl) return;
+  const i = +pnl.dataset.slot;
+  if (pnl.classList.contains("empty")) {
+    if (training) { soloCfg.slots[i - 1] = { lv: 0, ch: -1, pc: i, tg: i % 2 ? 2 : 1 }; ymSoloChanged(); return; }
+    const x = (ymPort() ? (i % 2) * 300 : i * 246) + 10, y = ymPort() ? 560 : 286;
+    st.insertAdjacentHTML("beforeend", `<div class="ym-pop" data-slot="${i}" style="left:${Math.min(x, ymPort() ? 360 : 760)}px;top:${y}px"><h3>CPU を追加：強さは？</h3>`
+      + AI_LEVELS.map((l, v) => `<div class="b" data-lv="${v}" style="background:${["#6fbf4a", "#f0a020", "#e8463c"][v] || "#888"}">${esc(l.name)}<small>${esc(l.desc)}</small></div>`).join("") + `</div>`);
+    return;
+  }
+  if (A === "rm") { soloCfg.slots[i - 1] = null; ymSoloChanged(); return; }
+  if (e.target.closest(".plate")) return;
+  // パネル: 色（チーム戦ならチーム）を順に変える。個人戦では、ほかの人が使っている色は飛ばす
+  if (ymTeamMode()) {
+    const cur = i === 0 ? soloCfg.myTg : soloCfg.slots[i - 1].tg, nx = cur % 4 + 1;
+    if (i === 0) soloCfg.myTg = nx; else soloCfg.slots[i - 1].tg = nx;
+  } else {
+    const cur = i === 0 ? soloCfg.myPc : soloCfg.slots[i - 1].pc;
+    const others = [0, 1, 2, 3].filter(j => j !== i).map(j => j === 0 ? soloCfg.myPc : soloCfg.slots[j - 1] && soloCfg.slots[j - 1].pc).filter(v => v != null);
+    let nx = cur; for (let n = 1; n <= 4; n++) { const c = (cur + n) % 4; if (!others.includes(c)) { nx = c; break; } }
+    if (i === 0) soloCfg.myPc = nx; else soloCfg.slots[i - 1].pc = nx;
+  }
+  ymSoloChanged();
+}
+function ymSoloChanged() { saveSolo(); applySoloCfg(); ymSelPaint(); }
+// 名前・キャラを、試合で使う形にして保存する
+function ymCommitSolo() {
+  const nm = document.getElementById("ymName");
+  draft = sanitizeProfile(Object.assign({}, draft, { n: nm ? nm.value : draft.n, c: soloCfg.myCh >= 0 ? soloCfg.myCh : draft.c, tg: soloCfg.team ? soloCfg.myTg : 0 }));
+  saveProfile(); saveSolo();
+  if (game.p[0]) applyProfile(game.p[0], draft);
+  applySoloCfg();
+}
+// コインを指で動かす（1P も CPU も）。動かしている間は、指の下に浮いたコインを出す
+ui.addEventListener("pointerdown", e => {
+  const coin = e.target.closest(".ym-coin"); if (!coin || (uiKey !== "solo" && uiKey !== "online") || coin.classList.contains("ro")) return;
+  e.preventDefault();
+  const slot = +coin.dataset.slot, fly = coin.cloneNode(true);
+  const sc = document.getElementById("ymSt").getBoundingClientRect().width / +document.getElementById("ymSt").dataset.w;
+  fly.className += " fly"; fly.style.left = e.clientX + "px"; fly.style.top = e.clientY + "px"; fly.style.transform = `translate(-50%,-50%) scale(${sc * 1.15})`;
+  document.body.appendChild(fly); coin.style.visibility = "hidden";
+  const move = ev => { fly.style.left = ev.clientX + "px"; fly.style.top = ev.clientY + "px"; };
+  const up = ev => {
+    removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up);
+    fly.remove();
+    const under = document.elementFromPoint(ev.clientX, ev.clientY), cell = under && under.closest(".ym-cell");
+    if (uiKey === "online") {                                   // オンライン: 自分のコインならキャラを決める。ホストは CPU のコインも動かせる
+      if (cell) { const ch = +cell.dataset.ch, q = game.p[slot]; if (slot === myId) { ymPick(ch); return; } if (role === "host" && q && q.cpu) { q.cpuCh = ch; q.ch = Math.max(0, ch); } }
+      renderUI(); return;
+    }
+    if (cell) { const ch = +cell.dataset.ch; if (slot === 0) soloCfg.myCh = ch; else if (soloCfg.slots[slot - 1]) soloCfg.slots[slot - 1].ch = ch; }
+    ymSoloChanged();
+  };
+  addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+});
+
+// ---------- ステージ選択（CPU 戦）----------
+// ステージの小さい絵: 本物の足場（stageBase）・ゲート・ばねの位置で描く
+function ymDrawStage(cv, st, nf) {
+  const c = cv.getContext("2d"), Wc = cv.width, Hc = cv.height;
+  if (st < 0) { c.fillStyle = "#8b5cf6"; c.fillRect(0, 0, Wc, Hc); c.fillStyle = "#fff"; c.font = `900 ${Hc * 0.6}px sans-serif`; c.textAlign = "center"; c.fillText("?", Wc / 2, Hc * 0.72); return; }
+  const bg = STAGE_BG[st] || STAGE_BG[0], g = c.createLinearGradient(0, 0, 0, Hc); g.addColorStop(0, bg[0]); g.addColorStop(1, bg[1]);
+  c.fillStyle = g; c.fillRect(0, 0, Wc, Hc);
+  const pls = stageBase(st, nf, FLOAT_T * 0.15);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const p of pls) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x + p.w); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y + 50); }
+  if (st === 2) for (const w of WARPS) { x0 = Math.min(x0, w[0] - 40); x1 = Math.max(x1, w[0] + 40); y0 = Math.min(y0, w[1] - 40); y1 = Math.max(y1, w[1] + 40); }
+  const s = Math.min(Wc / (x1 - x0 + 160), Hc / (y1 - y0 + 200)), ox = Wc / 2 - (x0 + x1) / 2 * s, oy = Hc * 0.55 - (y0 + y1) / 2 * s;
+  c.save(); c.translate(ox, oy); c.scale(s, s);
+  if (st === 2) WARPS.forEach((w, k) => { c.strokeStyle = WARP_COL[k]; c.lineWidth = 5; c.globalAlpha = w[2] < 0 ? 0.5 : 1; c.beginPath(); c.ellipse(w[0], w[1], WARP_R * 0.75, WARP_R, 0, 0, 6.3); c.stroke(); });
+  c.globalAlpha = 1;
+  for (const pl of pls) {
+    if (pl.mv) { c.fillStyle = "#7fb86a"; c.fillRect(pl.x, pl.y, pl.w, 12); c.fillStyle = "#8b6b4a"; c.beginPath(); c.moveTo(pl.x + 8, pl.y + 12); c.lineTo(pl.x + pl.w - 8, pl.y + 12); c.lineTo(pl.x + pl.w / 2, pl.y + 60); c.fill(); }
+    else if (pl.pad) { c.fillStyle = "#64748b"; c.fillRect(pl.x, pl.y + 10, pl.w, 12); c.fillStyle = "#475569"; c.fillRect(pl.x + 10, pl.y + 22, pl.w - 20, 18); }
+    else if (pl.main) { c.fillStyle = "#8391a8"; c.fillRect(pl.x, pl.y, pl.w, 22); c.fillStyle = "#56657d"; c.fillRect(pl.x + 20, pl.y + 22, Math.max(0, pl.w - 40), 30); c.fillStyle = "#cbd5e1"; c.fillRect(pl.x, pl.y, pl.w, 3); }
+    else { c.fillStyle = "rgba(131,145,168,0.9)"; c.fillRect(pl.x, pl.y, pl.w, UP_H); c.fillStyle = "#cbd5e1"; c.fillRect(pl.x, pl.y, pl.w, 3); }
+  }
+  if (st === 3) for (const sp of SPRINGS) { const half = sp[2] / 2; c.fillStyle = "#f97316"; c.fillRect(sp[0] - half, sp[1] - 12, sp[2], 6); }
+  c.restore();
+}
+function showStageSelect() {
+  const nf = connectedSlots().length, port = ymPort();
+  const st = ymStageWrap("ym-stg", `<div class="ym-top">
+      <div class="ym-seg ym-back" data-a="back">←</div><div class="ym-seg ym-title">ステージ選択</div><div class="ym-seg ym-num">${nf}人</div></div>
+    <div class="ym-sbody"><div class="ym-big"><canvas width="${port ? 1120 : 1040}" height="${port ? 640 : 600}"></canvas></div>
+      <div class="ym-sname" id="ymSName"></div><div class="ym-sdesc" id="ymSDesc"></div>
+      <div class="ym-tiles">${STAGES.map((s, i) => `<div class="ym-tl" data-st="${i}"><canvas width="408" height="244"></canvas><span>${esc(s.name)}</span></div>`).join("")}<div class="ym-tl" data-st="-1"><canvas width="408" height="244"></canvas><span>おまかせ</span></div></div></div>
+    <div class="ym-bar"><div class="ym-b2" data-a="back">← キャラ選択にもどる</div><div class="ym-seg ym-go" data-a="go">決定 ▶</div></div>`);
+  st.querySelectorAll(".ym-tl").forEach(t => ymDrawStage(t.querySelector("canvas"), +t.dataset.st, nf));
+  const paint = () => {
+    st.querySelectorAll(".ym-tl").forEach(t => t.classList.toggle("on", +t.dataset.st === stageSel));
+    ymDrawStage(st.querySelector(".ym-big canvas"), stageSel, nf);
+    st.querySelector("#ymSName").textContent = stageSel < 0 ? "おまかせ" : STAGES[stageSel].name;
+    st.querySelector("#ymSDesc").textContent = stageSel < 0 ? "ラウンドごとに、どれかのステージになる" : STAGES[stageSel].desc;
+  };
+  st.addEventListener("click", e => {
+    const t = e.target.closest(".ym-tl"); if (t) { setStageSel(t.dataset.st); paint(); return; }
+    const a = e.target.closest("[data-a]"); if (!a) return;
+    if (a.dataset.a === "back") { soloStage = false; uiKey = ""; renderUI(); }
+    else if (a.dataset.a === "go") { autoFs(); soloStage = false; if (solo) rollCpuChars(); hostStartMatch(); }   // オンラインは hostStartMatch の中で CPU のキャラを決める
+  });
+  paint();
+}
+
+// ---------- キャラ説明 ----------
+function ymCharDetail(i) {
+  const c = CHARS[i], vals = [c.A, c.D, c.S];
+  const traits = (c.noShield ? "<br><span class=\"trait\">盾を持たない</span>" : "") + (c.lives ? `<br><span class="trait">残機 +${c.lives}（落ちても1回だけ復活する）</span>` : "") +
+    (c.atk ? `<br><span class="trait">通常攻撃の届く距離が約${(ATKS[c.atk].reach / ATKS[0].reach).toFixed(1)}倍（出が遅い）</span>` : "") +
+    (c.forms ? `<br><span class="trait">性能の棒は攻撃形態。守り形態は 攻撃${c.forms[1].A}・防御${c.forms[1].D}・スピード${c.forms[1].S}</span>` : "") +
+    (c.back ? `<br><span class="trait">背中のゴブリンのぶん、当たり判定が後ろへ大きい</span>` : "");
+  return `<h2>${esc(c.name)}</h2><div class="tag">${esc(c.tag)}</div>` +
+    STATS.map((s, k) => `<div class="st-r"><span class="nm" style="color:${s.color}">${s.label}</span>${barHtml(vals[k], s.color)}</div>`).join("") +
+    `<div class="skl">${c.skill ? `<b>スキル「${esc(c.skill.name)}」</b>（クールタイム ${esc(c.skill.cdText || c.skill.cd + "秒")}${c.skill.hold ? "・ためて発動" : ""}）<br>${esc(c.skill.text)}` : "スキルなし"}${c.auto ? `<br><b>パッシブスキル</b><br>${esc(c.auto)}` : ""}${traits}</div>`;
+}
+function showCharInfo() {
+  const st = ymStageWrap("ym-info", `<div class="ym-top"><div class="ym-seg ym-back" data-a="back">←</div><div class="ym-seg ym-title">キャラ説明</div></div>
+    <div class="ym-ibody"><div class="ym-grid">${ymCellsHtml()}</div><div class="ym-detail detail" id="ymDetail"></div></div>`);
+  st.querySelectorAll(".ym-cell canvas").forEach((cv, i) => ymCellArt(cv, i));
+  const paint = () => {
+    st.querySelectorAll(".ym-cell").forEach(c => c.classList.toggle("sel", +c.dataset.ch === ymCharSel));
+    st.querySelector("#ymDetail").innerHTML = ymCharDetail(ymCharSel);
+  };
+  st.addEventListener("click", e => {
+    const c = e.target.closest(".ym-cell"); if (c) { ymCharSel = +c.dataset.ch; paint(); return; }
+    if (e.target.closest("[data-a=back]")) { ymCharInfo = false; uiKey = ""; renderUI(); }
+  });
+  paint();
+}
+
+// ---------- オンラインのキャラ選択（2026-11-27）----------
+// CPU 戦と同じ画面。自分のコインだけ動かせる（ホストは CPU のコインも）。相手のキャラは見えず、みんな同じかげになる。
+// チーム戦では、味方のキャラだけ見える（ホストが味方の分だけを、その人に送る: { t: "tmc" }）。
+// キャラを押す（コインを置く）と「準備OK」。ホストは、全員が準備OKで陣営が 2 つ以上になると「バトル開始！」→ ステージ選択 → 開始。
+let ymMyRand = false;                 // 自分が「おまかせ」を選んだ（送るのは決めたキャラ。自分の画面では ? を出す）
+let ymTeamCh = {};                    // 参加者: ホストから届いた味方のキャラ（席 → キャラ。-1 = おまかせ）
+const ymTmLast = [];                  // ホスト: 席ごとに最後に送った味方の情報
+function ymSendTeamInfo() {           // ホスト: 味方のキャラを、その人にだけ送る
+  for (let i = 1; i < MAX_PLAYERS; i++) {
+    const c = conns[i]; if (!c || !c.open || !game.p[i]) continue;
+    const t = game.tmd ? tgOf(i) : 0;
+    const m = t ? connectedSlots().filter(j => j !== i && tgOf(j) === t).map(j => { const q = game.p[j]; return [j, q.cpu ? q.cpuCh : (q.rd ? q.ch : -2)]; }) : [];
+    const str = JSON.stringify(m); if (ymTmLast[i] === str) continue;
+    ymTmLast[i] = str; try { c.send({ t: "tmc", m }); } catch (e) {}
+  }
+}
+function ymTakeTeamInfo(m) {
+  ymTeamCh = {}; if (Array.isArray(m)) for (const a of m) if (Array.isArray(a)) ymTeamCh[a[0] | 0] = a[1] | 0;
+  if (uiKey === "online") ymOnPaint();
+}
+const ymIsCpu = p => !!(p && (p.cpu || p.ymCpu));
+const ymMate = i => !!game.tmd && i !== myId && tgOf(i) > 0 && tgOf(i) === tgOf(myId);   // 味方か
+// 席 i のキャラが自分に見えるか（見えるならキャラ番号、-1 = おまかせ。見えないなら null）
+function ymSeen(i) {
+  const p = game.p[i]; if (!p || !p.c) return null;
+  if (i === myId) return p.rd ? (ymMyRand ? -1 : p.ch) : null;
+  if (role === "host" && ymIsCpu(p)) return p.cpuCh;
+  if (!ymMate(i)) return null;
+  if (role === "host") return ymIsCpu(p) ? p.cpuCh : (p.rd ? p.ch : null);
+  const v = ymTeamCh[i]; return v == null || v === -2 ? null : v;
+}
+// 自分のプロフィールをホストへ（ホスト自身は直接入れる）
+function ymSendProf(o) {
+  const me = game.p[myId]; if (!me) return;
+  const prof = Object.assign({ n: draft.n, c: me.rd ? me.ch : draft.c, tg: me.tg | 0, pc: me.pc, r: me.rd ? 1 : 0 }, o);
+  if (role === "host") { applyProfile(me, sanitizeProfile(prof)); if (!prof.r) me.rd = false; renderUI(); }
+  else if (hostConn && hostConn.open) {
+    hostConn.send(Object.assign({ t: "prof" }, prof));
+    if (prof.c != null) me.ch = prof.c; if (prof.pc != null) me.pc = prof.pc; if (prof.tg != null) me.tg = prof.tg; if (prof.r) me.rd = true;   // 返事を待たずに自分の画面へ
+    ymOnPaint();
+  }
+}
+function ymPick(ch) {                 // 自分のキャラを決める（-1 = おまかせ。送るのは決めたキャラ）
+  ymMyRand = ch < 0;
+  const c = ch < 0 ? Math.floor(Math.random() * CHARS.length) : ch;
+  draft = sanitizeProfile(Object.assign({}, draft, { c })); saveProfile();
+  ymSendProf({ c, r: 1 });
+}
+function showOnlineSelect() {
+  const st = ymStageWrap("ym-sel", `<div class="ym-top">
+      <div class="ym-seg ym-back" data-a="back">←</div>
+      <div class="ym-seg ym-mode" data-a="mode"></div>
+      <div class="ym-seg ym-rounds"><span data-a="r-">◀</span><b id="ymR"></b>本先取<span data-a="r+">▶</span></div>
+      <div class="ym-seg ym-code" data-a="code">部屋<b>${esc(roomCode)}</b><small id="ymCopy">${role === "host" && !PARTY ? "タップでURLをコピー" : ""}</small></div></div>
+    <div class="ym-grid">${ymCellsHtml()}<div class="ym-cell rand" data-ch="-1"><b>?</b><span>おまかせ</span></div></div>
+    <div class="ym-band" id="ymBand"></div>
+    <div class="ym-panels" id="ymPanels"></div>`);
+  st.querySelectorAll(".ym-cell canvas").forEach((cv, i) => ymCellArt(cv, i));
+  st.addEventListener("click", ymOnClick);
+  ymOnPaint();
+}
+function ymOnPaint() {
+  const st = document.getElementById("ymSt"); if (!st || uiKey !== "online") return;
+  const host = role === "host", team = !!game.tmd, me = game.p[myId];
+  const m = st.querySelector(".ym-mode");
+  m.classList.toggle("team", team); m.style.cursor = host ? "pointer" : "default";
+  m.innerHTML = `${team ? "チーム戦" : "大乱闘"}${host ? '<span class="sw">⇄</span>' : ""}`;
+  st.querySelector("#ymR").textContent = game.wr;
+  st.querySelectorAll(".ym-rounds span").forEach(s => s.style.visibility = host ? "" : "hidden");
+  // わくとコイン（見えるものだけ）
+  st.querySelectorAll(".ym-cell").forEach(c => { c.classList.remove("sel"); c.style.removeProperty("--sc"); c.querySelectorAll(".ym-coin").forEach(x => x.remove()); });
+  const used = {};
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const ch = ymSeen(i); if (ch == null) continue;
+    const cell = st.querySelector(`.ym-cell[data-ch="${ch}"]`); if (!cell) continue;
+    const col = colOf(i), mine = i === myId || (host && ymIsCpu(game.p[i]));
+    if (!cell.classList.contains("sel")) { cell.classList.add("sel"); cell.style.setProperty("--sc", col); }
+    const n = used[ch] = (used[ch] || 0) + 1;
+    cell.insertAdjacentHTML("beforeend", `<div class="ym-coin${ymIsCpu(game.p[i]) ? " cpu" : ""}${mine ? "" : " ro"}" data-slot="${i}" style="--c:${col};left:${6 + (n - 1) * 30}px">${ymIsCpu(game.p[i]) ? "CPU" : (i + 1) + "P"}</div>`);
+  }
+  // パネル
+  let h = "";
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const p = game.p[i];
+    if (!p || !p.c) { h += `<div class="ym-pn empty" data-slot="${i}"><div class="slot">${i + 1}P</div><div class="add">${host ? "<b>＋</b>タップで CPU を追加" : "<b>…</b>募集中"}</div><div class="plate">なし</div></div>`; continue; }
+    const cpu = ymIsCpu(p), ch = ymSeen(i), col = colOf(i), mine = i === myId;
+    const lv = cpu ? (p.cpu ? p.cpuLv : (p.ymCpu || 1) - 1) : 0;
+    const tag = mine || (host && cpu) ? (team ? `${TEAM_NAMES[tgOf(i)] || ""}チーム ⇄` : "色 ⇄") : team && tgOf(i) ? `${TEAM_NAMES[tgOf(i)]}チーム` : "";
+    const hidden = ch == null && !mine;
+    const nm = ch == null ? "" : ch < 0 ? "おまかせ" : CHARS[ch].name;
+    h += `<div class="ym-pn${hidden ? " hidden" : ""}" data-slot="${i}" style="--c:${col}"><canvas class="art" width="220" height="290"></canvas>${tag ? `<div class="hint">${tag}</div>` : ""}`
+      + `<div class="slot">${cpu ? "CPU" : (i + 1) + "P"}</div>`
+      + (hidden ? `<div class="q">?</div>` + (p.rd ? `<div class="stamp">準備OK！</div>` : `<div class="wait">キャラ選択中…</div>`)
+        : mine && !p.rd ? `<div class="wait dark">キャラを押して<br>決めてください</div>`
+        : `<div class="cn" style="font-size:${nm.length > 4 ? 17 : 23}px">${esc(nm)}</div>`)
+      + (mine ? `<div class="plate"><input id="ymName" maxlength="8" placeholder="${esc("プレイヤー" + (i + 1))}" value="${esc(draft.n)}"></div>`
+        : cpu ? `<div class="plate" data-a="rm">CPU ${esc((AI_LEVELS[lv] || AI_LEVELS[1]).name)}${host ? "<i>タップで外す</i>" : ""}</div>`
+        : `<div class="plate">${esc(nameOf(i))}</div>`) + `</div>`;
+  }
+  const pn = st.querySelector("#ymPanels"), focused = document.activeElement && document.activeElement.id === "ymName";
+  if (focused) {   // 名前を入力している間は、パネルを作り直さない（キーボードが閉じないように）
+  } else {
+    pn.innerHTML = h;
+    pn.querySelectorAll(".ym-pn:not(.empty)").forEach(el => { const i = +el.dataset.slot, ch = ymSeen(i); ymPanelArt(el.querySelector("canvas"), ch == null ? (i === myId ? -1 : 0) : ch, colOf(i)); });
+    const nmIn = pn.querySelector("#ymName");
+    if (nmIn) { nmIn.oninput = () => { draft.n = nmIn.value; }; nmIn.onchange = () => { draft = sanitizeProfile(Object.assign({}, draft, { n: nmIn.value })); saveProfile(); ymSendProf({ n: draft.n }); }; }
+  }
+  // 帯
+  const all = connectedSlots(), waitN = all.filter(i => !game.p[i].rd).length, sides = sidesOf(all);
+  let why = "";
+  if (me && !me.rd) why = "キャラを押して決めてください";
+  else if (all.length < 2) why = host ? "友だちを待っています（「なし」を押すと CPU を追加）" : "ほかの人を待っています";
+  else if (waitN) why = `みんながキャラを選ぶのを待っています（あと ${waitN} 人）`;
+  else if (sides < 2) why = "全員が同じチームです。パネルを押してチームを分けてください";
+  else if (!host) why = game.sp ? "ホストがステージを選んでいます…" : "ホストのスタートを待っています…";
+  const band = st.querySelector("#ymBand");
+  band.className = "ym-band" + (why ? " wait" : "");
+  band.innerHTML = why ? `<span>${why}</span>` : `<span class="t">バトル開始！</span><span class="s">タップでステージ選択へ ▶</span>`;
+  band.dataset.a = why ? "" : "go";
+}
+function ymOnClick(e) {
+  const st = document.getElementById("ymSt"), host = role === "host";
+  if (e.target.closest("input") || e.target.closest(".ym-coin")) return;
+  const pop = e.target.closest(".ym-pop");
+  if (pop) {                                              // ホスト: CPU を足す（強さを選ぶ）
+    const b = e.target.closest("[data-lv]"); if (!b) return;
+    pop.remove(); addRoomCpu();
+    const i = connectedSlots().filter(j => game.p[j].cpu).pop();
+    if (i != null) { const p = game.p[i]; p.cpuLv = +b.dataset.lv; if (game.tmd) p.tg = i % 2 ? 2 : 1; }
+    renderUI(); return;
+  }
+  st.querySelectorAll(".ym-pop").forEach(p => p.remove());
+  const a = e.target.closest("[data-a]"), A = a && a.dataset.a;
+  if (A === "back") { if (confirm(host ? "部屋を閉じてタイトルへ戻りますか？" : "部屋をぬけますか？")) goTitle(); return; }
+  if (A === "code") { if (host && !PARTY) { try { navigator.clipboard.writeText(shareUrl()); const c = st.querySelector("#ymCopy"); if (c) c.textContent = "コピーしました"; } catch (x) {} } return; }
+  if (host && A === "mode") {                             // ホスト: 大乱闘 ⇄ チーム戦（チームは席ごとに赤・青を交互に）
+    game.tmd = game.tmd ? 0 : 1;
+    connectedSlots().forEach((j, k) => { game.p[j].tg = game.tmd ? (k % 2) + 1 : 0; });
+    renderUI(); return;
+  }
+  if (host && (A === "r-" || A === "r+")) { setRounds(winRounds + (A === "r+" ? 1 : -1)); renderUI(); return; }
+  if (host && A === "go") { soloStage = true; uiKey = ""; renderUI(); return; }
+  const cell = e.target.closest(".ym-cell");
+  if (cell) { ymPick(+cell.dataset.ch); return; }
+  const pnl = e.target.closest(".ym-pn"); if (!pnl) return;
+  const i = +pnl.dataset.slot, p = game.p[i];
+  if (pnl.classList.contains("empty")) {
+    if (!host || connectedSlots().length >= MAX_PLAYERS) return;
+    const x = (ymPort() ? (i % 2) * 300 : i * 246) + 10, y = ymPort() ? 560 : 286;
+    st.insertAdjacentHTML("beforeend", `<div class="ym-pop" style="left:${Math.min(x, ymPort() ? 360 : 760)}px;top:${y}px"><h3>CPU を追加：強さは？</h3>`
+      + AI_LEVELS.map((l, v) => `<div class="b" data-lv="${v}" style="background:${["#6fbf4a", "#f0a020", "#e8463c"][v] || "#888"}">${esc(l.name)}<small>${esc(l.desc)}</small></div>`).join("") + `</div>`);
+    return;
+  }
+  if (A === "rm") { if (host && p && p.cpu) removeRoomCpu(i); return; }
+  if (e.target.closest(".plate")) return;
+  const mine = i === myId, cpu = host && p && p.cpu;
+  if (!mine && !cpu) return;
+  // パネル: 色（チーム戦ならチーム）を順に変える
+  if (game.tmd) { const nx = (tgOf(i) % 4) + 1; if (mine) ymSendProf({ tg: nx }); else { p.tg = nx; renderUI(); } return; }
+  const pcOf = j => { const q = game.p[j]; return q && q.pc != null ? q.pc : j; };
+  const others = connectedSlots().filter(j => j !== i).map(pcOf), cur = pcOf(i);
+  let nx = cur; for (let n = 1; n <= 4; n++) { const c = (cur + n) % 4; if (!others.includes(c)) { nx = c; break; } }
+  if (mine) ymSendProf({ pc: nx }); else { p.pc = nx; renderUI(); }
+}
+
 let uiKey = "";
 function renderUI() {
   refreshHud();
   const me = game.p[myId];
   let key;
   if (editing) key = "layout";
-  else if (role === null) key = "title";
+  else if (role === null) key = ymCharInfo ? "chars" : "title";
   else if (net === "error") key = "error";
   else if (spectating && net === "ready") key = "spectate";
   else if (net !== "ready" || !me) key = "connecting";
-  else if (solo && game.ph === "lobby") key = "solo";
+  else if (solo && game.ph === "lobby") key = soloStage ? "stage" : "solo";
+  else if (game.ph === "lobby") key = role === "host" && soloStage ? "stage" : "online";   // オンラインの部屋（2026-11-27: 新しいキャラ選択）
   else if (!me.rd) key = "setup";
   else if (game.ph === "lobby") key = "lobby";
   else key = "none";
-  if (key === uiKey && (key === "setup" || key === "solo" || key === "title" || key === "none" || key === "layout")) return;   // 入力中の画面を作り直さない
+  if (key === uiKey && key === "online") { ymOnPaint(); return; }   // 部屋の様子が変わった: 中身だけ塗り直す
+  if (key === uiKey && (key === "setup" || key === "solo" || key === "stage" || key === "chars" || key === "title" || key === "none" || key === "layout")) return;   // 入力中の画面を作り直さない
   uiKey = key;
-  document.body.classList.toggle("inapp", key !== "title");     // タイトル画面以外では、タイトルへ戻るボタンを出す
-  if (key === "title") {
-    const off = isOffline();
-    ui.innerHTML = off ? `<div class="panel"><h1>シールドファイト</h1>
-      <p>オフラインです。CPU戦とトレーニングで遊べます</p>
-      <button id="bSolo">CPUと戦う（ひとりで遊ぶ）</button>
-      <br><button id="bTrain" class="sub">トレーニング（相手は動かない）</button>
-      ${coarseMq.matches || landForce === "1" ? `<br><button id="bLayout" class="sub">操作ボタンの配置</button>` : ""}
-      <p>操作: WASD / 矢印キーで移動（↑・W でジャンプ）、Space で攻撃、X でスキル</p>
-      <br><button id="bGames" class="sub">← ゲーム一覧へ（you know games）</button></div>` : `<div class="panel"><h1>シールドファイト</h1>
-      <p>好きなキャラを選んで戦おう！スキルで逆転もできる<br>盾が外れた隙を突いて、相手をステージから落とせ（最大4人 / 何本先取かは設定できます）<br>制限時間は${ROUND_FRAMES / 60}秒。残り${LATE_FRAMES / 60}秒でラストスパート（スキルのクールタイムが半分、キャラごとの強化）。時間切れになるとステージが縮みます</p>
-      <button id="bHost">部屋を作る（ホスト）</button>
-      <button id="bSolo" class="sub">CPUと戦う（ひとりで遊ぶ）</button>
-      <br><button id="bTrain" class="sub">トレーニング（相手は動かない）</button>
-      <p>— または —</p>
-      <input id="code" inputmode="numeric" maxlength="1" placeholder="部屋番号（1桁）" style="width:200px;text-align:center;font-size:20px" value="${/^\d$/.test(q || "") ? q : ""}">
-      <button id="bJoin">参加する</button>
-      ${coarseMq.matches || landForce === "1" ? `<br><button id="bLayout" class="sub">操作ボタンの配置</button>` : ""}
-      <p>操作: WASD / 矢印キーで移動（↑・W でジャンプ）、Space で攻撃、X でスキル</p>
-      ${installEvt && !standalone ? `<button id="bInstall" class="sub">アプリとして入れる（全画面で遊べる）</button>` : ""}
-      ${isLineApp ? `<p class="linehint">LINE の中のブラウザでは、横画面・全画面にできません。右上のメニュー（︙ や …）から「ブラウザで開く」（iPhone は「Safariで開く」）を選ぶか、<a href="${esc(extUrl())}">ここ</a>を押してください</p>` : ""}
-      ${isIPhone && !standalone ? `<p class="ioshint">画面を広く使うには: 共有ボタン（□↑）→「ホーム画面に追加」で、ホーム画面のアイコンから開いてください（アドレスバーが消えます）</p>` : ""}
-      <br><button id="bGames" class="sub">← ゲーム一覧へ（you know games）</button></div>`;
-    const on = (id, f) => { const el = document.getElementById(id); if (el) el.onclick = f; };   // オフラインの画面には、部屋・参加のボタンがない
-    on("bHost", () => { autoFs(); startHost(); });
-    on("bSolo", () => { autoFs(); startSolo(); });
-    on("bTrain", () => { autoFs(); startTraining(); });
-    on("bGames", () => { if (typeof ykgToGames === "function") ykgToGames(); else location.href = "../"; });   // party-beacon.js が読めなかったときも戻れる   // ミニゲーム集のゲーム一覧へ
-    const join = () => { const c = document.getElementById("code").value.trim(); if (/^\d$/.test(c)) { autoFs(); startClient(c); } else document.getElementById("code").style.borderColor = "#ef4444"; };
-    on("bJoin", join);
-    const bl = document.getElementById("bLayout"); if (bl) bl.onclick = openLayoutEditor;
-    const bi = document.getElementById("bInstall");
-    if (bi) bi.onclick = () => { const e = installEvt; if (!e) return; e.prompt(); (e.userChoice || Promise.resolve()).then(() => { installEvt = null; uiKey = ""; renderUI(); }); };
-    const ci = document.getElementById("code"); if (ci) ci.onkeydown = e => { if (e.key === "Enter") join(); };
-  } else if (key === "layout") {
+  document.body.classList.toggle("inapp", key !== "title");
+  document.body.classList.toggle("ym", key === "title" || key === "solo" || key === "stage" || key === "chars" || key === "online");   // 新しいメニュー（2026-11-27）     // タイトル画面以外では、タイトルへ戻るボタンを出す
+  if (key === "title") showHome();   // 2026-11-27: 新しいホーム画面（ymHomeSvg）
+  else if (key === "layout") {
     showLayoutEditor();
   } else if (key === "connecting") {
     ui.innerHTML = `<div class="panel"><h1>接続中…</h1></div>`;
@@ -4876,7 +5434,10 @@ function renderUI() {
     ui.innerHTML = `<div class="panel"><h1>エラー</h1><p>${esc(netMsg)}</p><button id="bTop">トップへ</button></div>`;
     document.getElementById("bTop").onclick = goTitle;
   } else if (key === "setup") showSelect();
-  else if (key === "solo") showSolo();
+  else if (key === "solo") showSoloSelect();
+  else if (key === "stage") showStageSelect();
+  else if (key === "chars") showCharInfo();
+  else if (key === "online") showOnlineSelect();
   else if (key === "lobby") showLobby();
   else if (key === "spectate") ui.innerHTML = game.ph === "lobby" ? `<div class="panel"><h1>観戦</h1><p>試合が始まるのを待っています（遊ぶ人がキャラを選んでいます）</p></div>` : "";
   else ui.innerHTML = "";
