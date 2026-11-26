@@ -700,7 +700,7 @@ function missLater(winner) { if (!st.missWait) { st.missWait = MISS_GRACE; st.mi
 function launch(hitter, p0, v, w, serve, kind, remote) {
   // n: この点の中での打球の通し番号。自分が打ったときは 1 つ進め、通信で届いたときは、相手の番号にそろえる（同時に 2 人が打ったときも全員が同じ番号になる）
   const n = remote && remote.n != null ? remote.n : st.hits + 1;
-  ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w); st.hold = false; st.tossed = false; st.missWait = 0;
+  ball.p.copy(p0); ball.v.copy(v); ball.w.copy(w); st.hold = false; st.tossed = false; st.missWait = 0; st.swingT0 = 0;
   if (ON && !ON.spec && !remote) sendShot(p0, v, w, serve, kind, n);
   st.lob = kind === "lob"; st.smash = kind === "smash";   // ひょろひょろの山なり球 / スマッシュ
   hitFx(p0, v, w, kind, hitter === 0);
@@ -818,28 +818,40 @@ function makeShot(who, p0, brushGame, serve, mv) {
   return { v, w, e: e.length(), uIn: uLen, canceled, uOut };
 }
 // 指の速さ（画面の高さ/秒）→ こする速さ b（m/s）。遅いとブロック（回転なし）
+const brushMag = sp => 3.5 * Math.pow(clamp((sp - 0.3) / 3.0, 0, 1), 0.9);
 function brushFromFinger() {
   const pts = swP.pts, now = performance.now();
   const l = pts[pts.length - 1];
-  if (!l || now - l.t > 160) return V();
-  // 直近 0.14 秒の中で、いちばん速かった区間（20 ms 以上はなれた 2 点）の向きと速さを使う。
-  // ゆっくりなぞると弱い回転、指をはじく（すばやく払う）と強い回転（2026-11-19）
-  let best = null;
+  if (!l || now - l.t > 220) return V();
+  // 直近 0.2 秒の中で、いちばん速かった区間（12 ms 以上はなれた 2 点）の向きと速さを使う。
+  // ゆっくりなぞると弱い回転、指をはじく（すばやく払う）と強い回転（2026-11-19）。弾くスライドは短いので、少し早めのスライドも拾う（2026-11-27）
+  let best = null, cur = 0;
   for (let i = pts.length - 1; i > 0; i--) {
-    if (now - pts[i].t > 140) break;
+    if (now - pts[i].t > 200) break;
     for (let j = i - 1; j >= 0; j--) {
       const dt = pts[i].t - pts[j].t;
-      if (dt < 20) continue;
+      if (dt < 12) continue;
       if (dt > 90) break;
       const vx = (pts[i].x - pts[j].x) / dt * 1000 / H, vy = (pts[i].y - pts[j].y) / dt * 1000 / H, sp = Math.hypot(vx, vy);
+      if (i === pts.length - 1) cur = sp;
       if (!best || sp > best.sp) best = { vx, vy, sp };
       break;
     }
   }
   if (!best) return V();
-  const t = clamp((best.sp - 0.3) / 3.0, 0, 1), mag = 3.5 * Math.pow(t, 0.9);
+  const mag = brushMag(best.sp);
   if (mag <= 0.02) return V();
-  return V(best.vx / best.sp * mag, -best.vy / best.sp * mag, 0);
+  const r = V(best.vx / best.sp * mag, -best.vy / best.sp * mag, 0);
+  r.cur = brushMag(cur); r.age = now - l.t;   // 今の速さ（こすり方の単位）・最後の点から何 ms
+  return r;
+}
+// 弾くスライドは、指が速くなっている途中で打つと弱い回転になる。速さがピークをすぎる（または指が止まる・はなれる）まで少し待ってから、
+// いちばん速かったときの向き・速さで打つ（待つのは最大 0.08 秒。ボールが落ちそうなどのときは待たない）。2026-11-27
+function swingReady(brush, urgent) {
+  const t = performance.now();
+  if (!st.swingT0) st.swingT0 = t;
+  const peaked = swP.id === null || brush.cur < 0.75 * brush.length() || brush.age > 40;
+  return peaked || urgent || t - st.swingT0 > 80;
 }
 function spinName(parts, mag) {
   const a = [];
@@ -932,7 +944,8 @@ function checkPlayerHit() {
   const dx = ball.p.x - z.c.x, dy = ball.p.y - z.c.y;
   if (!(Math.abs(dx) <= (low ? 0.85 : 0.7) && dy >= -1.05 && dy <= (st.lob ? 1.7 : 0.85))) return;
   const brush = brushFromFinger();
-  if (brush.length() < 0.05) return;   // 指が止まっている・ふれていない
+  if (brush.length() < 0.05) { st.swingT0 = 0; return; }   // 指が止まっている・ふれていない
+  if (!swingReady(brush, ball.p.y < 0.13 || (st.missWait > 0 && st.missWait < 0.1) || u > 0.95 + vz * 0.05)) return;   // スライドの速さのピークを待つ
   st.pTried = true;
   const p0 = ball.p.clone(), late = u > 0.8;
   let s;
@@ -949,7 +962,7 @@ function checkPlayerHit() {
 function doToss(b) {
   const my = clamp(b.y, 0, 3.5), mx = clamp(b.x, -3.5, 3.5);
   const p = serveBallPos(0), v = V(mx * 0.3, 1.6 + 0.75 * my, -0.12 * my);
-  st.tossed = true; st.tossT = 0; ball.p.copy(p); ball.v.copy(v); ball.w.set(0, 0, 0);
+  st.tossed = true; st.tossT = 0; st.swingT0 = 0; ball.p.copy(p); ball.v.copy(v); ball.w.set(0, 0, 0);
   swP.pts = [];   // はじいた指の動きは、トスに使い切る（そのまま打球にならないように）
   P.swingT = 0; P.swingKind = "drive"; P.swingDir = 1;
   Sfx.shot();
@@ -964,11 +977,11 @@ function stepToss(dt) {
 function checkServe() {
   if (st.phase !== "serve" || st.server !== 0 || st.paused || (ON && (ON.spec || st.serverPid !== ON.pid))) return;   // 通信対戦では、サーブ係の人だけ
   const b = brushFromFinger();
-  if (b.length() < 0.05) return;
-  if (!st.tossed) { if (st.serveT > 0.25 && b.y >= 0.5 && b.y >= Math.abs(b.x) * 0.5) doToss(b); return; }
+  if (b.length() < 0.05) { st.swingT0 = 0; return; }
+  if (!st.tossed) { if (st.serveT > 0.25 && b.y >= 0.5 && b.y >= Math.abs(b.x) * 0.5 && swingReady(b, false)) doToss(b); return; }
   if (st.tossT < 0.3) return;
   const c = playerZone().c, d = V().subVectors(ball.p, c);
-  if (Math.abs(d.x) <= 0.75 && d.y >= -0.6 && d.y <= 1.0 && Math.abs(d.z) <= 0.8) playerServe(b);
+  if (Math.abs(d.x) <= 0.75 && d.y >= -0.6 && d.y <= 1.0 && Math.abs(d.z) <= 0.8 && swingReady(b, d.y < -0.45)) playerServe(b);
 }
 function playerServe(brush) {
   const p0 = st.tossed ? ball.p.clone() : serveBallPos(0);
@@ -1101,8 +1114,13 @@ ov.addEventListener("pointermove", e => {
   const now = performance.now();
   swP.x = q.x; swP.y = q.y;
   swipeTrail.push({ x: q.x, y: q.y, t: now });
-  swP.pts.push({ x: q.x, y: q.y, t: now });
-  while (swP.pts.length > 2 && now - swP.pts[0].t > 200) swP.pts.shift();
+  // スマホは、描画が重いと、指の動きの知らせが何個かまとめて届く。そのときの時刻（now）ではなく、指が動いた本当の時刻と、まとめられた途中の点も使う（弾くスライドの速さが正しく測れる）
+  let evs = null; try { evs = e.getCoalescedEvents ? e.getCoalescedEvents() : null; } catch (err) {}
+  for (const ev of (evs && evs.length ? evs : [e])) {
+    const qq = toLocal(ev), tt = ev.timeStamp > 0 && Math.abs(ev.timeStamp - now) < 400 ? ev.timeStamp : now;
+    swP.pts.push({ x: qq.x, y: qq.y, t: tt });
+  }
+  while (swP.pts.length > 2 && now - swP.pts[0].t > 300) swP.pts.shift();
   // サーブ: 上にはじいてトス → 落ちてくるボールを、もう一度すべらせて打つ
   checkServe();
   // 打つ瞬間を逃さないように、指が動いたときにも当たりを調べる
@@ -1112,8 +1130,8 @@ function endPointer(e) {
   if (e.pointerId === moveP.id) moveP.id = null;
   if (e.pointerId === swP.id) {
     // 指を離す直前のスライドも、少しのあいだ有効（離した瞬間に当たっても回転がかかる）
-    swP.pts = swP.pts.slice(-6); swP.id = null;
-    setTimeout(() => { if (swP.id === null) swP.pts = []; }, 200);
+    swP.pts = swP.pts.slice(-10); swP.id = null;
+    setTimeout(() => { if (swP.id === null) swP.pts = []; }, 260);
   }
 }
 ov.addEventListener("pointerup", endPointer);
@@ -1769,7 +1787,7 @@ if (PARTY) {
 }
 
 // 動作確認用
-window.__pp = { camera, onNet, applyShot, hostConfirm, get ON() { return ON; }, netStartHost, netJoin, hostStartMatch, bcast, st, ball, P, C, cfg, stepBall, brushFromFinger, makeLob, makeSmash, shotOutcome, launch, makeShot, playerServe, surfaceVel, faceN, swP, toPhys, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
+window.__pp = { brushFromFinger, camera, onNet, applyShot, hostConfirm, get ON() { return ON; }, netStartHost, netJoin, hostStartMatch, bcast, st, ball, P, C, cfg, stepBall, brushFromFinger, makeLob, makeSmash, shotOutcome, launch, makeShot, playerServe, surfaceVel, faceN, swP, toPhys, run(sec, fast) { for (let i = 0; i < sec * 60; i++) { if (!st.paused && st.phase !== "title" && st.phase !== "over") update(TS / 60, 1 / 60); if (!fast) render(1 / 60); } if (fast) render(1 / 60); }, startMatch, solveShot, shotOutcome, flightSim, makeSpin, V, get cpuPlan() { return cpuPlan; } };
 </script>
 </body>
 </html>
