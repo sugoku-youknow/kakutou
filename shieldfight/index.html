@@ -4252,7 +4252,7 @@ function goTitle() {
   peer = null; conns = []; hostConn = null; fastConns = []; fastConn = null; hostTries = 0;
   lastSnapQ = 0; pauseQ = 0; lastEv = 0; evHist.length = 0;
   role = null; myId = -1; net = "idle"; netMsg = ""; roomCode = ""; solo = false; training = false; soloStage = false; ymCharInfo = false; ymJoin = false;
-  game.tmd = 0; game.sp = 0; ymTeamCh = {}; ymMyRand = false; ymTmLast.length = 0;
+  game.tmd = 0; game.sp = 0; ymTeamCh = {}; ymMyRand = false; ymPicked = false; ymTmLast.length = 0;
   document.body.classList.remove("solo");
   game.p = [null, null, null, null]; game.ph = "lobby"; game.tm = 0; game.win = -1; game.nf = 0; game.rt = ROUND_FRAMES; game.sd = 0; game.hs = 0; game.hsf = false; game.st = 0; game.stT = 0;   // 2026-11-09: タイトルへ戻ったらステージもいつものへ
   clearEntities(); evq.length = 0;
@@ -5773,7 +5773,7 @@ function showStageSelect() {
   st.addEventListener("click", e => {
     const t = e.target.closest(".ym-tl"); if (t) { setStageSel(t.dataset.st); paint(); return; }
     const a = e.target.closest("[data-a]"); if (!a) return;
-    if (a.dataset.a === "back") { soloStage = false; uiKey = ""; renderUI(); }
+    if (a.dataset.a === "back") { soloStage = false; if (!solo && game.p[myId]) game.p[myId].rd = false; uiKey = ""; renderUI(); }   // オンラインは、ホストの準備OKも外す（外さないと、すぐステージ選択へ戻ってしまう）
     else if (a.dataset.a === "go") { autoFs(); soloStage = false; if (solo) rollCpuChars(); hostStartMatch(); }   // オンラインは hostStartMatch の中で CPU のキャラを決める
   });
   paint();
@@ -5809,6 +5809,7 @@ function showCharInfo() {
 // CPU 戦と同じ画面。自分のコインだけ動かせる（ホストは CPU のコインも）。相手のキャラは見えず、みんな同じかげになる。
 // チーム戦では、味方のキャラだけ見える（ホストが味方の分だけを、その人に送る: { t: "tmc" }）。
 // キャラを押す（コインを置く）と「準備OK」。ホストは、全員が準備OKで陣営が 2 つ以上になると「バトル開始！」→ ステージ選択 → 開始。
+let ymPicked = false;                 // 自分がキャラを置いた（準備OKとは別。2026-11-28: 準備OKのボタンを押して初めて準備完了）
 let ymMyRand = false;                 // 自分が「おまかせ」を選んだ（送るのは決めたキャラ。自分の画面では ? を出す）
 let ymTeamCh = {};                    // 参加者: ホストから届いた味方のキャラ（席 → キャラ。-1 = おまかせ）
 const ymTmLast = [];                  // ホスト: 席ごとに最後に送った味方の情報
@@ -5830,7 +5831,7 @@ const ymMate = i => !!game.tmd && i !== myId && tgOf(i) > 0 && tgOf(i) === tgOf(
 // 席 i のキャラが自分に見えるか（見えるならキャラ番号、-1 = おまかせ。見えないなら null）
 function ymSeen(i) {
   const p = game.p[i]; if (!p || !p.c) return null;
-  if (i === myId) return p.rd ? (ymMyRand ? -1 : p.ch) : null;
+  if (i === myId) return ymPicked ? (ymMyRand ? -1 : p.ch) : null;
   if (role === "host" && ymIsCpu(p)) return p.cpuCh;
   if (!ymMate(i)) return null;
   if (role === "host") return ymIsCpu(p) ? p.cpuCh : (p.rd ? p.ch : null);
@@ -5843,15 +5844,16 @@ function ymSendProf(o) {
   if (role === "host") { applyProfile(me, sanitizeProfile(prof)); if (!prof.r) me.rd = false; renderUI(); }
   else if (hostConn && hostConn.open) {
     hostConn.send(Object.assign({ t: "prof" }, prof));
-    if (prof.c != null) me.ch = prof.c; if (prof.pc != null) me.pc = prof.pc; if (prof.tg != null) me.tg = prof.tg; if (prof.r) me.rd = true;   // 返事を待たずに自分の画面へ
+    if (prof.c != null) me.ch = prof.c; if (prof.pc != null) me.pc = prof.pc; if (prof.tg != null) me.tg = prof.tg; me.rd = !!prof.r;   // 返事を待たずに自分の画面へ
     ymOnPaint();
   }
 }
-function ymPick(ch) {                 // 自分のキャラを決める（-1 = おまかせ。送るのは決めたキャラ）
-  ymMyRand = ch < 0;
+function ymPick(ch) {                 // 自分のキャラを決める（-1 = おまかせ。送るのは決めたキャラ）。決め直すと準備OKは外れる
+  if (role !== "host" && game.sp) return;
+  ymPicked = true; ymMyRand = ch < 0;
   const c = ch < 0 ? Math.floor(Math.random() * CHARS.length) : ch;
   draft = sanitizeProfile(Object.assign({}, draft, { c })); saveProfile();
-  ymSendProf({ c, r: 1 });
+  ymSendProf({ c, r: 0 });
 }
 function showOnlineSelect() {
   const st = ymStageWrap("ym-sel", `<div class="ym-top">
@@ -5899,8 +5901,8 @@ function ymOnPaint() {
     h += `<div class="ym-pn${hidden ? " hidden" : ""}" data-slot="${i}" style="--c:${col}"><canvas class="art" width="220" height="290"></canvas>${tag ? `<div class="hint">${tag}</div>` : ""}`
       + `<div class="slot">${cpu ? "CPU" : (i + 1) + "P"}</div>`
       + (hidden ? `<div class="q">?</div>` + (p.rd ? `<div class="stamp">準備OK！</div>` : `<div class="wait">キャラ選択中…</div>`)
-        : mine && !p.rd ? `<div class="wait dark">キャラを押して<br>決めてください</div>`
-        : `<div class="cn" style="font-size:${nm.length > 4 ? 17 : 23}px">${esc(nm)}</div>`)
+        : mine && !ymPicked ? `<div class="wait dark">キャラを押して<br>決めてください</div>`
+        : `<div class="cn" style="font-size:${nm.length > 4 ? 17 : 23}px">${esc(nm)}</div>` + (mine && p.rd ? `<div class="stamp">準備OK！</div>` : ""))
       + (mine ? `<div class="plate"><input id="ymName" maxlength="8" placeholder="${esc("プレイヤー" + (i + 1))}" value="${esc(draft.n)}"></div>`
         : cpu ? `<div class="plate" data-a="rm">CPU ${esc((AI_LEVELS[lv] || AI_LEVELS[1]).name)}${host ? "<i>タップで外す</i>" : ""}</div>`
         : `<div class="plate">${esc(nameOf(i))}</div>`) + `</div>`;
@@ -5916,15 +5918,18 @@ function ymOnPaint() {
   // 帯
   const all = connectedSlots(), waitN = all.filter(i => !game.p[i].rd).length, sides = sidesOf(all);
   let why = "";
-  if (me && !me.rd) why = "キャラを押して決めてください";
+  let act = "";                                        // 帯を押したときの動き: ready = 準備OK / unready = 準備OKを取り消す
+  if (me && !ymPicked) why = "キャラを押して決めてください";
+  else if (me && !me.rd) act = "ready";
   else if (all.length < 2) why = host ? "友だちを待っています（「なし」を押すと CPU を追加）" : "ほかの人を待っています";
   else if (waitN) why = `みんながキャラを選ぶのを待っています（あと ${waitN} 人）`;
   else if (sides < 2) why = "全員が同じチームです。パネルを押してチームを分けてください";
   else if (!host) why = game.sp ? "ホストがステージを選んでいます…" : "ホストのスタートを待っています…";
   const band = st.querySelector("#ymBand");
   band.className = "ym-band" + (why ? " wait" : "");
-  band.innerHTML = why ? `<span>${why}</span>` : `<span class="t">バトル開始！</span><span class="s">タップでステージ選択へ ▶</span>`;
-  band.dataset.a = why ? "" : "go";
+  band.innerHTML = act ? `<span class="t">準備OK</span><span class="s">タップで準備完了 ▶</span>` : why ? `<span>${why}${me && me.rd && !game.sp ? "（タップで準備OKを取り消す）" : ""}</span>` : `<span class="t">全員準備OK！</span>`;
+  band.dataset.a = act || (why && me && me.rd && !game.sp ? "unready" : "");
+  if (!why && !act && host && !soloStage && me && me.rd) { soloStage = true; uiKey = ""; renderUI(); }   // 全員が準備OKになったら、ステージ選択へ
 }
 function ymOnClick(e) {
   const st = document.getElementById("ymSt"), host = role === "host";
@@ -5948,7 +5953,8 @@ function ymOnClick(e) {
     renderUI(); return;
   }
   if (host && (A === "r-" || A === "r+")) { setRounds(winRounds + (A === "r+" ? 1 : -1)); renderUI(); return; }
-  if (host && A === "go") { soloStage = true; uiKey = ""; renderUI(); return; }
+  if (A === "ready") { if (ymPicked) ymSendProf({ r: 1 }); return; }
+  if (A === "unready") { if (!game.sp) ymSendProf({ r: 0 }); return; }
   const cell = e.target.closest(".ym-cell");
   if (cell) { ymPick(+cell.dataset.ch); return; }
   const pnl = e.target.closest(".ym-pn"); if (!pnl) return;
