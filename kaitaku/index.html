@@ -6,7 +6,9 @@
 <meta name="theme-color" content="#7a4520">
 <title>カイタク島</title>
 <!-- ミニゲーム集「you know games」のゲーム（kakutou/kaitaku/）。2026-11-09 作成:
-     六角形の土地が並ぶ島で、サイコロで資源をあつめ、道・村・町をつくって点数を競う（オリジナルのルール）。 -->
+     六角形の土地が並ぶ島で、サイコロで資源をあつめ、道・村・町をつくって点数を競う（オリジナルのルール）。
+     2026-11-28: 見た目をリアル寄りに作り直し（立体の土地・絵・木の台・おはじき風の村と町）。ホームは夕焼けの島、
+     あそぶ のあとに設定画面（勝利点・はじめの村のバー、大きい島・確率表示・バランスマップ・バランスダイス、CPU の追加と強さ）。 -->
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="you know games">
 <link rel="manifest" href="../manifest.json"><link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=3"><link rel="apple-touch-icon" href="../apple-touch-icon.png?v=3">
 <style>
@@ -262,9 +264,136 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .rank{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:var(--deep);font-size:16px}
 .rank.win{background:#5a4512}
 #toast{position:fixed;left:50%;top:40%;transform:translateX(-50%);background:rgba(0,0,0,.85);padding:10px 18px;border-radius:12px;font-size:15px;transition:opacity .3s;opacity:0;pointer-events:none;z-index:60;max-width:90%;text-align:center}
+
+/* =====================================================================
+   2026-11-28 見た目の作り直し（リアル寄り）: 置き場所は今までと同じで、絵と質感だけ変える
+   ===================================================================== */
+:root{--gold:#d9b25a;--gold2:#8a6526;--ink:#1d140c;--plate:linear-gradient(#3b2b1f,#1e150e);
+  --wood:radial-gradient(ellipse at 50% 45%,#0000 40%,#0007 100%),
+    repeating-linear-gradient(0deg,#0000 0 118px,#00000059 118px 121px,#ffffff10 121px 122px),
+    repeating-linear-gradient(1.2deg,#ffffff08 0 2px,#0000 2px 7px,#00000012 7px 9px,#0000 9px 17px),
+    repeating-linear-gradient(-.8deg,#0000 0 31px,#0000001c 31px 34px,#0000 34px 57px),
+    linear-gradient(90deg,#4a2a14,#6e4321 22%,#7c4c26 48%,#62391b 74%,#4a2a14)}
+html,body{background-color:#4a2a14}
+/* 上のボタン: こげ茶の板に金のふち */
+#side button{background:var(--plate);color:#f6e7c4;border:2px solid var(--gold);border-bottom:2px solid var(--gold2);box-shadow:inset 0 1px 0 #ffffff26,0 3px 6px #000a;border-radius:8px}
+#side button.on{background:linear-gradient(#b3402f,#6e1d14);color:#fff;border-color:#ffd27a}
+#ban{background:linear-gradient(#f4e6c2,#d9c08a);color:#3a2412;border:2px solid #8a6526;box-shadow:0 3px 8px #000a,inset 0 1px 0 #fff8}
+#ban.my{background:linear-gradient(#ffe08a,#e8a930);color:#2a1505;border-color:#fff3c4}
+/* 人の札: 肖像（その人の色）+ 勝利点の六角バッジ + 名前の色帯 */
+.pl{background:var(--plate);border:2px solid var(--gold);border-radius:9px;padding:2px;gap:4px;box-shadow:0 4px 10px #000b,inset 0 1px 0 #ffffff1f;align-items:stretch}
+.pl.c1,.pl.c2{flex-direction:row-reverse}
+.pl .av{position:relative;flex:none;width:40px;border-radius:6px;background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--pc) 55%,#fff),var(--pc) 55%,color-mix(in srgb,var(--pc) 55%,#000));border:1px solid #0008;overflow:hidden}
+.pl .av svg{position:absolute;left:50%;bottom:-3px;width:34px;height:34px;translate:-50% 0;filter:drop-shadow(0 1px 1px #0008)}
+.vpb{position:absolute;width:26px;height:24px;border:0;border-radius:0;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:linear-gradient(#ffe9a8,#c9932f);color:#3a1d05;font:900 14px/1 Georgia,serif;z-index:2;box-shadow:none}
+.pl{position:absolute}
+.pl.c0 .vpb,.pl.c3 .vpb{left:-9px;bottom:-9px}.pl.c1 .vpb,.pl.c2 .vpb{right:-9px;bottom:-9px}
+.pl .vpb::before{content:"";position:absolute;inset:2px;clip-path:inherit;background:linear-gradient(#fff3c9,#e7b54a);z-index:-1}
+.pi{margin:0;padding:0;background:none;clip-path:none;box-shadow:none;display:flex;flex-direction:column;gap:1px;min-width:0}
+.pi .nm{background:linear-gradient(90deg,var(--pc),color-mix(in srgb,var(--pc) 45%,#000));border-radius:4px;padding:1px 6px;text-shadow:0 1px 2px #000}
+.pl.c1 .pi .nm,.pl.c2 .pi .nm{background:linear-gradient(270deg,var(--pc),color-mix(in srgb,var(--pc) 45%,#000));text-align:right}
+.pi .st{background:none;color:#e9d7b4;padding:0 3px}
+.pl.c1 .pi .st,.pl.c2 .pi .st{margin-left:auto}
+.pl.cur{border-color:#ffe7a0;box-shadow:0 0 0 2px #ffd54a,0 0 16px #ffc83a,0 4px 10px #000b}
+.pl.cur .vpb{border:0;box-shadow:none}
+.pl.cur::after{display:none}
+@media (orientation:portrait){ .pl .av{width:32px} .pl .av svg{width:28px;height:28px} .vpb{width:22px;height:20px;font-size:12px} .pl.c0 .vpb,.pl.c3 .vpb{left:-7px;bottom:-7px}.pl.c1 .vpb,.pl.c2 .vpb{right:-7px;bottom:-7px} }
+/* 手札: 革のトレイに、絵のついた資源カード */
+#hand{background:linear-gradient(#3a1a10,#1f0d07);border:2px solid var(--gold2);box-shadow:inset 0 3px 8px #000c,0 3px 10px #000a,0 0 0 1px #000;border-radius:10px;gap:5px;padding:5px}
+.rc{background:#f6ecd4;border:0;border-radius:6px;padding:2px 2px 3px;color:#5a3a1e;box-shadow:0 2px 0 #b89a68,0 4px 6px #000a;display:flex;flex-direction:column;align-items:center}
+.rc .art{width:100%;height:34px;border-radius:4px;background:var(--rf);display:grid;place-items:center;box-shadow:inset 0 0 0 1px #0004,inset 0 -6px 10px #0003;overflow:hidden}
+.rc .art svg{width:40px;height:32px;filter:drop-shadow(0 2px 1px #0006)}
+.rc b{font:900 17px/1.1 Georgia,serif;color:#24150a;margin-top:1px}
+.rc .rn{font-size:9px;line-height:1}
+.rc .rt{top:auto;bottom:1px;right:3px;background:#2f7d3a;color:#fff;border-radius:4px;padding:0 2px;font-size:8.5px}
+.rc.cards{background:linear-gradient(#4b3474,#2c1e47);box-shadow:0 2px 0 #1a1030,0 4px 6px #000a;color:#d8ccf2}
+.rc.cards .art{background:radial-gradient(circle,#7d61b5,#3d2a63)}
+.rc.cards b{color:#fff}
+.rc{display:grid;grid-template-columns:auto auto;justify-content:center;align-items:baseline;column-gap:3px}
+.rc .art{grid-column:1/-1;margin-bottom:1px}
+@media (orientation:portrait){ .rc .art{height:32px} .rc b{font-size:17px} .rc .rn{font-size:9.5px} }
+/* ボタン: 黒い板に金のふち（つくる・やり直し・交換）、いちばん大事なボタンは金色 */
+#acts button{background:var(--plate);color:#f6e7c4;border:2px solid var(--gold);border-bottom:2px solid var(--gold2);box-shadow:inset 0 1px 0 #ffffff22,0 3px 6px #000a}
+#acts .bb .cost{display:flex;gap:0;justify-content:center}
+.ri{width:13px;height:13px;flex:none;filter:drop-shadow(0 1px 0 #000)}
+#acts .bb.on{background:linear-gradient(#ffe08a,#e8a930);color:#2a1505}
+#acts .sq{background:var(--plate);color:var(--gold);border:2px solid var(--gold);border-bottom:2px solid var(--gold2)}
+#acts .sq small{color:#f6e7c4}
+#acts .sq.on{background:linear-gradient(#ffe08a,#e8a930);color:#2a1505}#acts .sq.on small{color:#2a1505}
+#acts .go.main,#acts .main.go{background:linear-gradient(#ffe27a 0,#f5c23c 45%,#d99a1c 100%);color:#2a1505;border:3px solid #fff1b8;border-bottom:3px solid #a66d0c;box-shadow:0 0 0 2px #3a2408,0 5px 10px #000b,inset 0 2px 0 #fff8;font-weight:900;letter-spacing:1px}
+#acts button:disabled{opacity:.45;filter:saturate(.4)}
+/* サイコロ: 赤い角のまるいサイコロに白い目 */
+.die{background:radial-gradient(circle at 30% 25%,#f0675a,#c8281f 55%,#8e140f);border-radius:22%;box-shadow:inset -2px -3px 3px #0005,inset 2px 2px 2px #fff5,0 4px 7px #000a}
+.die i.on{background:radial-gradient(circle at 40% 35%,#fff,#e8dcd2);box-shadow:inset 0 1px 1px #0005}
+#bigDice .die{width:72px;height:72px;padding:10px}
+#bigDice .die:first-child{rotate:-12deg}#bigDice .die:last-child{rotate:9deg;translate:0 10px}
+#dice .sum{font-family:Georgia,serif;color:#fff3c4}
+/* 知らせ・小窓も 金ぶちの板に */
+#turnPop,#stealPop.info{background:var(--plate);border:2px solid var(--gold);color:#f6e7c4}
+#modal .box{background:linear-gradient(#3b2b1f,#24180f);border:2px solid var(--gold);box-shadow:0 10px 30px #000c}
+#tradeBox{background:linear-gradient(#3b2b1f,#1e150e);border-color:var(--gold)}
+#tradeBox .tt{background:linear-gradient(#ffe08a,#d99a1c);color:#2a1505;border-color:#fff1b8}
+.ocard,.fc{background:#f6ecd4}
+
+/* ---------------- ホーム画面（夕焼けの島）---------------- */
+#menu.home{padding:0;display:block;overflow:hidden;background:#3a120c}
+#menu.home .scene{position:absolute;inset:0;width:100%;height:100%}
+.hm{position:absolute;inset:0;padding:calc(10px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom));display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto auto 1fr auto auto;grid-template-areas:"prof chips chips" "logo logo logo" "left . right" "opts opts opts" "mode mode play";gap:10px 12px}
+/* 2026-11-28: 左上は ゲーム一覧へもどる ボタン、右上に なまえ と 人の六角 */
+.hm .hbk{grid-area:prof;align-self:start;width:76px;height:60px;min-height:0;padding:4px 0 3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:linear-gradient(#2e2924,#16130f);border:3px solid #0a0806;outline:2px solid #6b5a3e;outline-offset:-6px;border-radius:9px;box-shadow:0 4px 8px #0008}
+.hm .hbk svg{width:38px;height:22px}
+.hm .hbk small{font-size:9.5px;font-weight:800;color:#e8b84a;letter-spacing:0}
+.hm .prof{grid-area:chips;display:flex;align-items:center;gap:8px;justify-self:end}
+.hexav{width:60px;height:66px;flex:none;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:linear-gradient(#ffe9a8,#b98420);display:grid;place-items:center;filter:drop-shadow(0 3px 4px #000a)}
+.hexav i{display:grid;place-items:center;width:52px;height:58px;clip-path:inherit;background:radial-gradient(circle at 50% 30%,#ff8a7a,#ef4444 55%,#8e1d1d)}
+.hexav svg{width:40px;height:40px;margin-top:10px}
+.plate{background:linear-gradient(#2e221a,#17100b);border:2px solid var(--gold);border-radius:8px;box-shadow:inset 0 1px 0 #ffffff1f,0 4px 10px #000a;color:#f6e7c4}
+.hm .nmbox{padding:4px 8px;width:142px}
+.hm .nmbox small{display:block;font-size:10px;color:#cdb68a}
+.hm .nmbox input{background:transparent;border:0;padding:0;font-weight:800;font-size:16px;color:#fff;border-bottom:1px dashed #d9b25a88;border-radius:0}
+.hm .chips{grid-area:chips;display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+.hm .chip{display:flex;align-items:center;gap:6px;padding:3px 10px 3px 12px;font:800 15px/1.2 Georgia,"Hiragino Sans",sans-serif;min-height:0;min-width:86px;justify-content:flex-end}
+.hm .chip svg{width:20px;height:20px}
+.hm .chip small{font:700 10px system-ui;color:#cdb68a;margin-right:auto}
+.hm .logo{grid-area:logo;text-align:center;margin-top:2px}
+.hm .logo h1{margin:0;font-size:46px;font-weight:900;letter-spacing:4px;color:#ffe7a6;-webkit-text-stroke:2px #5a2a0a;paint-order:stroke fill;text-shadow:0 3px 0 #8a4a12,0 6px 12px #000a;line-height:1.1}
+.hm .logo p{margin:2px 0 0;font-size:12.5px;color:#fff3dc;text-shadow:0 1px 3px #000,0 0 6px #000}
+.hm .col{display:flex;flex-direction:column;gap:10px;align-self:center}
+.hm .left{grid-area:left}.hm .right{grid-area:right;align-items:flex-end}
+.hm>*{min-width:0}
+@media (orientation:portrait){ .hm .play{width:150px;min-width:0;font-size:22px;letter-spacing:1px;padding:8px 6px} .hm .play.long{font-size:16px;letter-spacing:0;gap:4px} .hm .play.long svg{width:26px;height:26px} .hm .nmbox{width:128px} }
+.hm .mode button{white-space:nowrap}
+.hm .opts .lb{white-space:nowrap;width:auto;min-width:4.2em}
+.tile{width:82px;min-height:72px;padding:6px 2px 5px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;font-weight:800;letter-spacing:.5px;border-radius:9px;background:linear-gradient(#2e221a,#17100b);border:2px solid var(--gold);border-bottom:2px solid var(--gold2);box-shadow:inset 0 1px 0 #ffffff1f,0 4px 10px #000a;color:#f6e7c4}
+.tile svg{width:36px;height:34px;filter:drop-shadow(0 2px 1px #000a)}
+.hm .opts{grid-area:opts;padding:8px 10px;display:flex;flex-direction:column;gap:6px;background:linear-gradient(#2e221ae6,#17100be6)}
+.hm .opts .lb{font-size:11px;color:#cdb68a;margin-right:4px;width:4.2em;flex:none}
+.hm .orow{display:flex;align-items:center;gap:5px}
+.hm .orow button{flex:1;min-height:34px;padding:4px 0;font-size:13.5px;border-radius:7px;background:#3a2c22;border:1px solid #6b5236;border-bottom:3px solid #0008;color:#f6e7c4}
+.hm .orow button.on{background:linear-gradient(#ffe08a,#e8a930);color:#2a1505;border-color:#fff1b8}
+.hm .orow input{flex:1;min-width:0;background:#0006;border:1px solid #6b5236;text-align:center;letter-spacing:6px;font-size:18px;font-weight:800;padding:6px}
+.hm .mode{grid-area:mode;display:flex;align-self:stretch;padding:0;overflow:hidden;border-width:3px}
+.hm .mode button{flex:1;min-height:0;border:0;border-radius:0;background:transparent;color:#f6e7c4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:4px 10px;font-size:13px;font-weight:900;letter-spacing:1px}
+.hm .mode button svg{width:30px;height:26px}
+.hm .mode button.on{background:linear-gradient(#ffe27a,#f5c23c 50%,#d99a1c);color:#2a1505}
+.hm .play{grid-area:play;min-width:150px;border-radius:10px;font-size:26px;font-weight:900;letter-spacing:3px;background:linear-gradient(#ffe27a 0,#f5c23c 45%,#d99a1c 100%);color:#2a1505;border:3px solid #fff1b8;border-bottom:4px solid #a66d0c;box-shadow:0 0 0 2px #3a2408,0 6px 14px #000b,inset 0 2px 0 #fff8;display:flex;align-items:center;justify-content:center;gap:8px}
+.hm .play svg{width:34px;height:34px}
+.hm .err{grid-area:opts;align-self:start;background:#000a;padding:4px 8px;border-radius:6px}
+/* 横持ち: 左上に人、右上に音、左右に板、左下に ひとり/みんな、右下に あそぶ */
+@media (orientation:landscape){
+  .hm{grid-template-columns:auto 1fr auto auto;grid-template-rows:auto 1fr auto;grid-template-areas:"prof logo chips chips" "left . right right" "mode opts opts play";gap:8px 14px;padding:calc(8px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
+  .hm .logo h1{font-size:34px}.hm .logo p{font-size:11px}
+  .hm .col{flex-direction:column;gap:8px}
+  .tile{width:76px;min-height:62px}
+  .hm .opts{align-self:end;width:min(330px,100%);justify-self:center;padding:6px 8px}
+  .hm .orow button{white-space:nowrap;min-height:30px}
+  .hm .mode{width:240px;height:72px}
+  .hm .play{height:72px;min-width:200px}
+}
 </style>
 </head>
 <body>
+<svg id="defs" width="0" height="0" style="position:absolute" aria-hidden="true"></svg>
 <div id="menu" class="scr hidden"></div>
 <div id="lobby" class="scr hidden"></div>
 <div id="stage">
@@ -302,10 +431,12 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
 // 勝利点・はじめの村は −／＋ で 1 ずつ（2026-11-12）。はじめの村は、島がすぐうまらないよう 4 こまで
 // 勝利点の上限: ふつうの島は 12、大きい島は 15。それより大きいと、4 人だと島がうまって、だれも点をふやせず終わらないことがある
 // 2026-11-18: 勝利点・はじめの村は上限なし（島がうまったら点が多い人の勝ち・500 ターンで終わり）
-const OPT = { target: [3, Infinity], setupN: [1, Infinity], size: { std: "ふつう（19マス）", big: "大きい（37マス）" } };
-const CFG_DEF = { target: 10, setupN: 2, size: "std" };
+// 2026-11-28: 勝利点 7〜15、はじめの村 1〜5（設定画面のバー）
+const OPT = { target: [7, 15], setupN: [1, 5], size: { std: "ふつう（19マス）", big: "大きい（37マス）" } };
+// pm = 確率表示を使える、bmap = バランスマップ（となりに同じ土地・6と8・同じ数がならびにくい）、bdice = バランスダイス（出る目が確率どおりに近づく）
+const CFG_DEF = { target: 10, setupN: 2, size: "std", pm: true, bmap: true, bdice: false };
 const inRange = (v, [lo, hi], def) => Number.isInteger(+v) && v !== null && v !== "" && +v >= lo && +v <= hi ? +v : def;
-const cleanCfg = c => { const size = c && OPT.size[c.size] ? c.size : CFG_DEF.size; return { target: inRange(c && c.target, OPT.target, CFG_DEF.target), setupN: inRange(c && c.setupN, OPT.setupN, CFG_DEF.setupN), size }; };
+const cleanCfg = c => { const size = c && OPT.size[c.size] ? c.size : CFG_DEF.size; return { target: inRange(c && c.target, OPT.target, CFG_DEF.target), setupN: inRange(c && c.setupN, OPT.setupN, CFG_DEF.setupN), size, ...Object.fromEntries(["pm", "bmap", "bdice"].map(k => [k, c && typeof c[k] === "boolean" ? c[k] : CFG_DEF[k]])) }; };
 const tgt = () => (G && G.target) || cfg.target;   // いまの試合（はじまる前はメニューの設定）の勝利点
 const RES = ["wood", "brick", "sheep", "wheat", "ore"];
 const RN = { wood: "木材", brick: "レンガ", sheep: "羊毛", wheat: "小麦", ore: "鉄" };
@@ -335,7 +466,73 @@ const CARD = {
 const COLS = ["#ef4444", "#3b82f6", "#facc15", "#c084fc"];
 const DIFF = { weak: "よわい", norm: "ふつう", strong: "つよい" };
 const RCOL = Object.fromEntries(Object.values(TT).filter(T => T.res).map(T => [T.res, T.col]));   // 手札のカードの色
-const costHtml = c => RES.filter(r => c[r]).map(r => RI[r].repeat(c[r])).join("");
+// ---------------- 2026-11-28: 絵（SVG の部品）。盤を描き直しても消えないよう、別の <svg id="defs"> に 1 回だけ入れる ----------------
+const riSvg = (r, cls = "ri", vb = "-13 -13 26 26") => `<svg class="${cls}" viewBox="${vb}"><use href="#ri-${r}"/></svg>`;
+const costHtml = c => RES.filter(r => c[r]).map(r => riSvg(r).repeat(c[r])).join("");
+// 色を明るく（a>0）・暗く（a<0）
+const shade = (c, a) => { const n = parseInt(c.slice(1), 16), t = a < 0 ? 0 : 255, p = Math.abs(a); const f = x => Math.round(x + (t - x) * p); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
+const RT = { wood: "forest", brick: "hill", sheep: "pasture", wheat: "field", ore: "mountain" };
+const FACE = { forest: ["#5aa648", "#2b6a2a"], hill: ["#dd8a55", "#9a4724"], pasture: ["#b4dc66", "#6fa33a"], field: ["#f5d872", "#c8952a"], mountain: ["#b0b2b7", "#686b72"], volcano: ["#8e4233", "#3e1712"] };
+(function buildDefs() {
+  const at = (id, list, sc = 1) => list.map(([x, y, k = 1]) => `<use href="#${id}" transform="translate(${x},${y}) scale(${k * sc})"/>`).join("");
+  const byY = l => l.slice().sort((a, b) => a[1] - b[1]);
+  const hexAt = k => [...Array(6)].map((_, i) => { const a = Math.PI / 3 * i; return (Math.cos(a) * k * 50).toFixed(1) + "," + (Math.sin(a) * k * 50).toFixed(1); }).join(" ");
+  let d = "";
+  for (const [t, [a, b]] of Object.entries(FACE)) d += `<radialGradient id="f-${t}" cx="38%" cy="30%" r="78%"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></radialGradient>`;
+  d += `<linearGradient id="bevel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".75"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></linearGradient>`
+    + `<linearGradient id="frameg" x1="0" y1="0" x2=".4" y2="1"><stop offset="0" stop-color="#f6ead0"/><stop offset="1" stop-color="#c7ab7a"/></linearGradient>`
+    + `<radialGradient id="seag" cx="45%" cy="40%" r="70%"><stop offset="0" stop-color="#4a9bd0"/><stop offset="1" stop-color="#22598a"/></radialGradient>`
+    + `<radialGradient id="tokg" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#fffbef"/><stop offset="1" stop-color="#e4cf9f"/></radialGradient>`
+    + `<linearGradient id="gloss" x1="0" y1="0" x2=".3" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".45" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#000" stop-opacity=".12"/></linearGradient><radialGradient id="robg" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#7a7a7a"/><stop offset=".6" stop-color="#2b2b2b"/><stop offset="1" stop-color="#0d0d0d"/></radialGradient>`
+    + `<pattern id="waves" width="30" height="16" patternUnits="userSpaceOnUse"><path d="M0 8 q7.5 -5 15 0 t15 0" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width="1.3"/></pattern>`
+    + `<pattern id="furrow" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><rect width="7" height="2.6" fill="#a8761c" fill-opacity=".38"/></pattern>`
+    + `<clipPath id="hclip"><polygon points="${hexAt(0.86)}"/></clipPath>`
+    + `<clipPath id="rclip"><rect x="-20" y="-16" width="40" height="32"/></clipPath>`;
+  // 部品
+  d += `<g id="tree"><ellipse cx="2.5" cy="1" rx="7" ry="2.2" fill="#0003"/><rect x="-1.2" y="-3" width="2.4" height="4" fill="#5a3a1e"/><path d="M0-19L-7-6H0Z" fill="#6cbb52"/><path d="M0-19L7-6H0Z" fill="#2c6a28"/><path d="M0-13L-8.5 0H0Z" fill="#55a243"/><path d="M0-13L8.5 0H0Z" fill="#245a22"/></g>`
+    + `<g id="mound"><path d="M-15 5Q0-17 15 5Z" fill="#a24d26"/><path d="M-15 5Q-5-13 1-6Q-7-2-15 5Z" fill="#d98756"/></g>`
+    + `<g id="bricks" stroke="#5e2410" stroke-width=".6"><rect x="-9" y="-3" width="8" height="4" fill="#c4562f"/><rect x="0" y="-3" width="8" height="4" fill="#b44a28"/><rect x="-5" y="-7" width="8" height="4" fill="#d06438"/><path d="M-9-3l2-1.5h17l-2 1.5z" fill="#e08a5a"/></g>`
+    + `<g id="sheep"><ellipse cx="1.5" cy="1.2" rx="7" ry="1.8" fill="#0003"/><rect x="-3.2" y="-1.5" width="1.3" height="3" fill="#2b2b2b"/><rect x="2.4" y="-1.5" width="1.3" height="3" fill="#2b2b2b"/><circle cx="-2.5" cy="-4.5" r="3.2" fill="#fff"/><circle cx="1.2" cy="-5.5" r="3.4" fill="#fff"/><circle cx="4.2" cy="-3.8" r="3" fill="#ece8de"/><ellipse cx=".6" cy="-3" rx="5.6" ry="3.4" fill="#f6f3ea"/><ellipse cx="-6.3" cy="-4.4" rx="2.3" ry="2.7" fill="#2f2a26"/></g>`
+    + `<g id="tuft" stroke="#4f8a26" stroke-width="1.1" stroke-linecap="round" fill="none"><path d="M0 0l-2.5-4M0 0v-5M0 0l2.5-4"/></g>`
+    + `<g id="sheaf" stroke-linecap="round"><ellipse cx="1.5" cy=".8" rx="5.5" ry="1.6" fill="#0003"/><path d="M0 0L-4.5-11M0 0V-13M0 0L4.5-11M0 0L-2-12.5M0 0L2.2-12.5" stroke="#b07c1c" stroke-width="1.1"/>${[[-4.5, -11, -22], [0, -13, 0], [4.5, -11, 22], [-2.2, -12.6, -10], [2.3, -12.6, 10]].map(([x, y, r]) => `<ellipse cx="${x}" cy="${y - 2}" rx="1.4" ry="3" transform="rotate(${r} ${x} ${y})" fill="#f7d25e" stroke="#a87418" stroke-width=".5"/>`).join("")}<rect x="-2.6" y="-5" width="5.2" height="1.8" rx=".6" fill="#8a5a1a"/></g>`
+    + `<g id="peak"><path d="M-15 0L-2-21L13 0Z" fill="#9a9da4"/><path d="M-2-21L13 0H1Z" fill="#5d6067"/><path d="M-2-21L-6.6-13.5L-4-14.6L-1.5-12.2L1-14.6L2.6-14Z" fill="#fff"/></g>`
+    + `<g id="rock"><path d="M-5 0L-4-4L0-6L4-3L5 0Z" fill="#8a8d94"/><path d="M0-6L4-3L5 0H1Z" fill="#5d6067"/></g>`
+    + `<g id="pawn"><path d="M-9 12Q-9 3-4.5-1H4.5Q9 3 9 12Z"/><ellipse cx="0" cy="-1.5" rx="6.5" ry="2.4"/><circle cy="-9" r="6.2"/></g>`;
+  // 土地の絵（数字のまわりに置く。六角形の中に切り抜く）
+  d += `<g id="t-forest">${at("tree", byY([[-4, -24, .9], [14, -26, .85], [-22, -14], [28, -12], [-34, 4, .9], [34, 8, .9], [-24, 20], [24, 24], [-8, 34, .95], [10, 36, .9], [-38, 22, .8], [40, 26, .8], [0, -36, .75]]))}</g>`
+    + `<g id="t-hill">${at("mound", [[-18, -18, 1.1], [18, -20, 1], [-30, 8, .9], [30, 6, .95], [-14, 30, 1], [16, 32, 1.05]])}${at("bricks", [[0, -24, 1.2], [-26, 24, 1], [30, 26, 1]])}</g>`
+    + `<g id="t-pasture">${at("tuft", [[-30, -18], [24, -26], [36, 0], [-36, 12], [-10, 38], [26, 34], [8, -36], [-20, 32]])}${at("sheep", byY([[-18, -20, 1.25], [16, -22, 1.15], [-30, 6, 1.1], [30, 10, 1.2], [-8, 32, 1.2], [18, 30, 1.05]]))}<path d="M-44 -6 L-30 -6 M-44 -2 L-30 -2" stroke="#8a6a3f" stroke-width="1.2"/></g>`
+    + `<g id="t-field"><rect x="-50" y="-50" width="100" height="100" fill="url(#furrow)"/>${at("sheaf", byY([[-14, -20, 1.15], [16, -22, 1.1], [-30, 6, 1.1], [32, 8, 1.1], [-14, 34, 1.1], [16, 34, 1.15]]))}</g>`
+    + `<g id="t-mountain">${at("peak", [[-14, -16, 1.15], [14, -18, 1.25], [-30, 10, .95], [32, 12, 1], [-4, 40, 1.05]])}${at("rock", [[-22, 32], [24, 36], [0, -38, .8], [40, -10, .8]])}</g>`
+    + `<g id="t-volcano"><ellipse cx="0" cy="22" rx="30" ry="6" fill="#0004"/><path d="M-30 22L-7-12H7L30 22Z" fill="#3a1712"/><path d="M-30 22L-7-12H0L-8 22Z" fill="#6a2c20"/><ellipse cx="0" cy="-12" rx="7" ry="2.4" fill="#ff8a1c"/><path d="M-2-11Q-6 2-3 10Q0 16-1 22M3-11Q5 0 9 8" stroke="#ff7a12" stroke-width="2" fill="none" stroke-linecap="round"/>${[[-3, -22, 5], [4, -30, 6.5], [-2, -39, 7.5]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#7a6e6a" fill-opacity=".75"/>`).join("")}${at("rock", [[-30, -18], [32, -12], [-36, 34, .8], [34, 34]])}</g>`;
+  // 資源のアイコン（手札・コスト・港）
+  d += `<g id="ri-wood">${[[-8, 6], [0, 6], [8, 6], [-4, -1], [4, -1], [0, -8]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4.3" fill="#dcaa6c" stroke="#6e3f18" stroke-width="1.3"/><circle cx="${x}" cy="${y}" r="1.8" fill="none" stroke="#a8743f" stroke-width=".8"/>`).join("")}</g>`
+    + `<g id="ri-brick"><use href="#bricks" transform="translate(0,5) scale(1.35)"/></g>`
+    + `<g id="ri-sheep"><use href="#sheep" transform="translate(0,6) scale(1.55)"/></g>`
+    + `<g id="ri-wheat"><use href="#sheaf" transform="translate(0,10) scale(1.35)"/></g>`
+    + `<g id="ri-ore"><path d="M-11 8L-9-1L-2-6L5-4L10 2L9 8Z" fill="#9a9da4"/><path d="M-2-6L5-4L10 2L9 8H1L-1 0Z" fill="#5d6067"/><path d="M-9-1L-2-6L-1 0Z" fill="#c4c7cd"/><path d="M3-1l2 1-1 2-2-1z" fill="#7fc8ff"/></g>`;
+  // ホームの小さな絵
+  d += `<g id="ic-book"><path d="M-14-9Q-7-12 0-8V10Q-7 6-14 9Z" fill="#f3e3bb" stroke="#d9b25a" stroke-width="1.2"/><path d="M14-9Q7-12 0-8V10Q7 6 14 9Z" fill="#e7d3a3" stroke="#d9b25a" stroke-width="1.2"/><path d="M-11-4q4-2 8 0M-11 0q4-2 8 0M3-4q4-2 8 0M3 0q4-2 8 0" stroke="#a88a5a" stroke-width=".8" fill="none"/></g>`
+    + `<g id="ic-gear" fill="#d9b25a"><path d="M-2.5-13h5l1 3.5 3 1.3 3.2-1.8 3.5 3.5-1.8 3.2 1.3 3 3.5 1v5l-3.5 1-1.3 3 1.8 3.2-3.5 3.5-3.2-1.8-3 1.3-1 3.5h-5l-1-3.5-3-1.3-3.2 1.8-3.5-3.5 1.8-3.2-1.3-3-3.5-1v-5l3.5-1 1.3-3-1.8-3.2 3.5-3.5 3.2 1.8 3-1.3z"/><circle r="4.5" fill="#1d140c"/></g>`
+    + `<g id="ic-grid" fill="#d9b25a">${[[-11, -11], [1, -11], [-11, 1], [1, 1]].map(([x, y]) => `<rect x="${x}" y="${y}" width="10" height="10" rx="2"/>`).join("")}</g>`
+    + `<g id="ic-snd"><path d="M-12-4h5l7-6v20l-7-6h-5z" fill="#d9b25a"/><path d="M4-5q4 5 0 10M8-9q7 9 0 18" stroke="#d9b25a" stroke-width="2.2" fill="none" stroke-linecap="round"/></g>`
+    + `<g id="ic-mute"><path d="M-12-4h5l7-6v20l-7-6h-5z" fill="#d9b25a"/><path d="M5-5l8 10M13-5l-8 10" stroke="#e0533f" stroke-width="2.6" stroke-linecap="round"/></g>`
+    + `<g id="ic-trophy"><path d="M-6-9h12v5a6 6 0 0 1-12 0z" fill="#ffd25a" stroke="#8a5a12"/><path d="M-6-7h-4q0 6 5 6M6-7h4q0 6-5 6" fill="none" stroke="#ffd25a" stroke-width="1.6"/><rect x="-1.5" y="2" width="3" height="4" fill="#d9a22a"/><rect x="-5" y="6" width="10" height="3" rx="1" fill="#8a5a12"/></g>`
+    + `<g id="ic-house"><path d="M-8 9V0L0-8L8 0V9Z" fill="#ef4444" stroke="#3a0d0d" stroke-width="1.2"/><rect x="-2" y="3" width="4" height="6" fill="#3a0d0d"/></g>`
+    + `<g id="ic-one"><circle cy="-6" r="5.5" fill="currentColor"/><path d="M-10 12q0-11 10-11t10 11z" fill="currentColor"/></g>`
+    + `<g id="ic-many"><circle cx="-6" cy="-6" r="5" fill="currentColor"/><path d="M-15 11q0-10 9-10t9 10z" fill="currentColor"/><circle cx="7" cy="-4" r="4.5" fill="currentColor" opacity=".75"/><path d="M0 12q1-9 7-9t8 9z" fill="currentColor" opacity=".75"/></g>`
+    + `<g id="ic-die"><rect x="-11" y="-11" width="22" height="22" rx="5" fill="#fff" stroke="#2a1505" stroke-width="1.6"/>${[[-5, -5], [5, -5], [0, 0], [-5, 5], [5, 5]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.1" fill="#c8281f"/>`).join("")}</g>`;
+  document.getElementById("defs").innerHTML = `<defs>${d}</defs>`;
+})();
+// 2026-11-28: 村・町は もとの形（家の形・町の形）に厚みをつけた おはじき風のコマ（原点が角の位置）
+function tokenSvg(d, c, k = 1) {
+  const e = "#1a1008", side = shade(c, -.48);
+  return `<path d="${d}" transform="translate(${2 * k},${6.5 * k})" fill="#000" fill-opacity=".45"/>`
+    + [4, 3, 2, 1].map(y => `<path d="${d}" transform="translate(0,${y * k})" fill="${side}" ${y === 4 ? `stroke="${e}" stroke-width="1.2"` : ""}/>`).join("")
+    + `<path d="${d}" fill="${c}" stroke="${e}" stroke-width="1.2"/><path d="${d}" fill="url(#gloss)"/>`;
+}
+const vilSvg = c => tokenSvg(VIL_PATH, c);
+const townSvg = c => tokenSvg(TOWN_PATH, c);
 
 // ================= 盤の形（いつも同じ。土地の種類と数字だけ毎回ランダム） =================
 const SQ3 = Math.sqrt(3);
@@ -373,14 +570,30 @@ let G = null;
 // やり直し（2026-11-11）: その番のうちに「つくる（道・村・町）」「銀行・港との交換」をする前の状態をとっておく（ホストだけ）。
 // サイコロ・カード・ほかの人との交換をしたら、もうもどせない。番が終わったら消える。
 let UNDO = [];
+// バランスダイス: 36 とおりの目を袋に入れて 1 つずつ引く（のこり 6 つで入れ直す）。ホストだけが持つ（ゲストに次の目が見えないよう G には入れない）
+let diceBag = [];
+function drawDice() {
+  if (diceBag.length <= 6) { diceBag = []; for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) diceBag.push([a, b]); }
+  return diceBag.splice(Math.floor(Math.random() * diceBag.length), 1)[0];
+}
 function newGame(seats, c) {
-  UNDO = []; c = cleanCfg(c); GEO = geoFor(c.size); const big = c.size === "big";
-  const types = shuffle(Object.entries(TT).flatMap(([t, T]) => Array(big ? T.nb : T.n).fill(t)));
+  UNDO = []; diceBag = []; c = cleanCfg(c); GEO = geoFor(c.size); const big = c.size === "big";
+  // バランスマップ: 同じ土地がとなり合う数がいちばん少ない並びを使う。オフなら完全ランダム
+  const bag = Object.entries(TT).flatMap(([t, T]) => Array(big ? T.nb : T.n).fill(t));
+  let types = shuffle(bag.slice());
+  if (c.bmap) {
+    let bb = Infinity;
+    for (let k = 0; k < 400 && bb > 0; k++) {
+      const ts = shuffle(bag.slice()); let bad = 0;
+      GEO.hex.forEach((h, i) => h.n.forEach(j => { if (j > i && ts[i] === ts[j]) bad++; }));
+      if (bad < bb) { bb = bad; types = ts; }
+    }
+  }
   const tiles = types.map(t => ({ t, n: 0 }));
   // 数字: 6 と 8（よく出る数）どうし、同じ数どうしがとなりにならないように並べ直す（大きい島で無理なときは、いちばん少ない並びを使う）
   const base = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12], pool = big ? base.concat(base.slice(0, -1)) : base;
   let best = null, bestBad = Infinity;
-  for (let tries = 0; tries < 1500 && bestBad > 0; tries++) {
+  for (let tries = 0; tries < (c.bmap ? 1500 : 1) && bestBad > 0; tries++) {
     const nums = shuffle(pool.slice()); let k = 0, bad = 0;
     const ns = types.map(t => t === "volcano" ? 0 : nums[k++]), red = n => n === 6 || n === 8;
     GEO.hex.forEach((h, i) => h.n.forEach(j => { const a = ns[i], b = ns[j]; if (j > i && a && b && ((red(a) && red(b)) || a === b)) bad++; }));
@@ -397,7 +610,7 @@ function newGame(seats, c) {
     tiles, crow: tiles.findIndex(t => t.t === "volcano"), harbors, vb: Array(GEO.verts.length).fill(null), er: Array(GEO.edges.length).fill(-1),
     ps: seats.map((s, i) => ({ name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: emptyHand(), cards: [], newC: [], vpC: 0, used: 0, kn: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
     cur: order[0], phase: "setup", su: { i: 0, order, step: "v", lastV: -1 }, dice: [0, 0], rollN: 0, log: [], winner: -1, free: 0, cardUsed: false, back: "main", victims: [], deck, roadHolder: -1, turnN: 1, trades: 0, ver: 0, offer: null, offN: 0, offerN: 0, undoN: 0,
-    size: c.size, target: c.target, setupN: c.setupN, armyHolder: -1,
+    size: c.size, target: c.target, setupN: c.setupN, pm: c.pm, bmap: c.bmap, bdice: c.bdice, armyHolder: -1,
   };
 }
 const tot = h => RES.reduce((s, r) => s + h[r], 0);
@@ -470,7 +683,7 @@ function produce(sum) {
   addLog(parts.length ? "　→ " + parts.join("、") : "　→ だれも資源なし");
 }
 function doRoll(s) {
-  const d1 = 1 + Math.floor(Math.random() * 6), d2 = 1 + Math.floor(Math.random() * 6), sum = d1 + d2;
+  const [d1, d2] = G.bdice ? drawDice() : [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)], sum = d1 + d2;
   G.dice = [d1, d2]; G.rollN++; UNDO = []; G.undoN = 0;
   addLog(`🎲 ${G.ps[s].name}: ${sum}`);
   if (sum === 7) {
@@ -956,16 +1169,17 @@ document.addEventListener("change", e => {
 });
 function setCfg(k) {   // "ct-10" / "cs-2" / "cz-big"、−／＋ ボタンは "up-target" / "dn-setupN" など
   const [t, v] = k.split("-"), c = { ...cfg };
-  if (t === "ct") c.target = +v; else if (t === "cs") c.setupN = +v; else if (t === "cz") c.size = v;
+  if (t === "ct") c.target = +v; else if (t === "cs") c.setupN = +v; else if (t === "cz") c.size = v; else if (t === "cx") c[v] = !c[v];
   else if ((t === "up" || t === "dn") && OPT[v] && v !== "size") { c[v] = Math.max(OPT[v][0], c[v] + (t === "up" ? 1 : -1)); }
   cfg = cleanCfg(c); store.set("kaitaku-cfg", JSON.stringify(cfg));
 }
-const cfgTxt = c => `勝利点 ${c.target}点 ・ はじめの村 ${c.setupN}こ ・ 島 ${OPT.size[c.size].replace(/（.*/, "")}`;
+const cfgTxt = c => `勝利点 ${c.target}点 ・ はじめの村 ${c.setupN}こ ・ 島 ${OPT.size[c.size].replace(/（.*/, "")}${c.pm ? "" : " ・ 確率表示なし"}${c.bmap ? " ・ バランスマップ" : ""}${c.bdice ? " ・ バランスダイス" : ""}`;
 // 設定のボタン（attr = "data-a" はメニューと部屋、"data-b" はパーティの待ち合わせ画面）
 const stepper = (attr, key, label, unit) => `<div class="note">${label}</div><div class="stepr"><button ${attr}="dn-${key}" ${cfg[key] <= OPT[key][0] ? "disabled" : ""} aria-label="${label}をへらす">−</button><label><input class="cfgIn" data-k="${key}" type="number" inputmode="numeric" min="${OPT[key][0]}" value="${cfg[key]}" aria-label="${label}">${unit}</label><button ${attr}="up-${key}" aria-label="${label}をふやす">＋</button></div>`;
 const cfgButtons = attr => `${stepper(attr, "target", "勝利点（ふつうは 10 点。数字を直接入れてもOK）", "点")}${stepper(attr, "setupN", "はじめに置く村（ふつうは 2 こ）", "こ")}
   <div class="note" style="font-size:11px">大きくしすぎて島がうまったときは、点がいちばん多い人の勝ちで終わります</div>
-  <div class="note">島の大きさ</div><div class="seg">${Object.entries(OPT.size).map(([k, t]) => `<button ${attr}="cz-${k}" class="${k === cfg.size ? "on" : ""}">${t}</button>`).join("")}</div>`;
+  <div class="note">島の大きさ</div><div class="seg">${Object.entries(OPT.size).map(([k, t]) => `<button ${attr}="cz-${k}" class="${k === cfg.size ? "on" : ""}">${t}</button>`).join("")}</div>
+  <div class="seg">${["pm", "bmap", "bdice"].map(k => `<button ${attr}="cx-${k}" class="${cfg[k] ? "on" : ""}">${cfg[k] ? "✓ " : ""}${CHK[k].lb}</button>`).join("")}</div>`;
 try { const n = +store.get("kaitaku-cpus"); if (n >= 1 && n <= 3) cpuN = n; const d = store.get("kaitaku-diff"); if (DIFF[d]) cpuDiff = d; } catch (e) {}
 let meName = PARTY ? String(PARTY.name || "ゲスト").slice(0, 12) : "";
 function myName() { if (meName) return meName; return (($("name") && $("name").value) || store.get("kaitaku-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
@@ -1011,7 +1225,7 @@ function startLocal() {
   fixName(); clearTimeout(cpuTimer);
   mode = "local"; myPid = 0; spectating = false;
   const seats = [{ pid: 0, name: myName() }];
-  for (let i = 0; i < cpuN; i++) seats.push({ name: "CPU-" + "ABC"[i], bot: true, diff: cpuDiff });
+  soloBots.forEach((d, i) => seats.push({ name: "CPU-" + "ABC"[i], bot: true, diff: d }));   // 2026-11-28: 設定画面で CPU ごとに強さをえらぶ
   startGame(shuffle(seats));   // 順番はランダム
 }
 function startGame(seats, c = cfg) {
@@ -1026,7 +1240,7 @@ function sendAll(m) { for (const c of [...host.conns.values(), ...host.specs.val
 function netFail() { errMsg = "オフラインのため通信できません。CPUと対戦で遊べます"; cleanupNet(); mode = "none"; screen = "menu"; renderUI(); }
 function cleanupNet() { try { peer && peer.destroy(); } catch (e) {} peer = null; hostConn = null; host.conns.clear(); host.specs.clear(); host.playing = false; }
 function peerOk() { if (typeof Peer !== "undefined" && !isOffline()) return true; netFail(); return false; }
-function lobbyMsg() { return { t: "lobby", code: host.code, seats: host.seats.map(s => ({ name: s.name, bot: !!s.bot, pid: s.pid })), specs: [...host.specs.values()].map(c => c.pname), diff: host.diff, cfg }; }
+function lobbyMsg() { return { t: "lobby", code: host.code, seats: host.seats.map(s => ({ name: s.name, bot: !!s.bot, pid: s.pid, diff: s.diff || "norm" })), specs: [...host.specs.values()].map(c => c.pname), diff: host.diff, cfg }; }
 function hostLobby() { lobbyInfo = lobbyMsg(); sendAll(lobbyInfo); renderUI(); }
 function startHost() {
   if (!peerOk()) return;
@@ -1079,13 +1293,15 @@ function hostDrop(conn) {
       addLog(`${G.ps[s].name} がぬけたので CPU が代わります`); G.ver++; afterChange(); }
   } else { host.seats = host.seats.filter(x => x.pid !== conn.pid); hostLobby(); }
 }
-function hostAddCpu() { if (host.playing || host.seats.length >= 4) return; const n = host.seats.filter(s => s.bot).length; host.seats.push({ pid: null, name: "CPU-" + "ABC"[n], bot: true }); hostLobby(); }
+function hostAddCpu() { if (host.playing || host.seats.length >= 4) return; const n = host.seats.filter(s => s.bot).length; host.seats.push({ pid: null, name: "CPU-" + "ABC"[n], bot: true, diff: host.diff || "norm" }); hostLobby(); }
+// 2026-11-28: 名前の右の ✕ で、その CPU をはずす（のこりの CPU は A, B, C と付け直す）
+function hostDelCpuAt(i) { if (host.playing || !host.seats[i] || !host.seats[i].bot) return; host.seats.splice(i, 1); let n = 0; host.seats.forEach(s => { if (s.bot) s.name = "CPU-" + "ABC"[n++]; }); hostLobby(); }
 function hostDelCpu() { if (host.playing) return; const i = host.seats.map(s => !!s.bot).lastIndexOf(true); if (i >= 0) host.seats.splice(i, 1); hostLobby(); }
 function hostStart() {
   if (host.playing || host.seats.length < 2) return;
   host.playing = true;
   try { ykgLobby.close(); } catch (e) {}   // 2026-11-10: closeAll だと、部屋にもどったときゲストの待ち合わせ画面が出なかった
-  const seats = shuffle(host.seats.map(s => ({ pid: s.pid, name: s.name, bot: !!s.bot, diff: host.diff })));
+  const seats = shuffle(host.seats.map(s => ({ pid: s.pid, name: s.name, bot: !!s.bot, diff: s.diff || host.diff })));
   startGame(seats);
 }
 function hostBackToLobby() {
@@ -1164,50 +1380,155 @@ function renderUI() {
   }
   if (PARTY) { try { ykgLobby.close(); } catch (e) {} }
   $("menu").classList.toggle("hidden", screen !== "menu");
-  $("lobby").classList.toggle("hidden", screen !== "lobby" && screen !== "connecting");
+  $("lobby").classList.toggle("hidden", screen !== "lobby" && screen !== "connecting" && screen !== "setup");
   $("game").classList.toggle("hidden", screen !== "game");
   if (screen === "menu") renderMenu();
   else if (screen === "lobby" || screen === "connecting") renderLobby();
+  else if (screen === "setup") renderSetup();
   else if (screen === "game") render();
   if (screen !== "game") $("modal").classList.add("hidden");
 }
+// ---------------- 2026-11-28: ホーム（夕焼けの島の景色 + 左右の板 + 下に ひとり/みんな と あそぶ） ----------------
+let homeTab = "solo";
+function homeScene() {
+  // 横 1600 × たて 1000 の絵。たて持ちは まん中（x 570〜1030）、横持ちは下側が見える
+  const house = (x, y, c, k = 1, town = false) => `<g transform="translate(${x},${y}) scale(${k})">${town ? townSvg(c) : vilSvg(c)}</g>`;
+  const tree = (x, y, k) => `<use href="#tree" transform="translate(${x},${y}) scale(${k})"/>`;
+  let w = "";
+  for (let i = 0; i < 70; i++) { const x = 380 + (i * 97) % 1250, y = 860 + (i * 37) % 150; w += `<use href="#sheaf" transform="translate(${x},${y}) scale(${2.2 + (i % 5) * .25})" opacity=".95"/>`; }
+  return `<svg class="scene" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+  <defs><linearGradient id="hsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a0f0c"/><stop offset=".28" stop-color="#a3261a"/><stop offset=".48" stop-color="#e2602a"/><stop offset=".62" stop-color="#ffb347"/></linearGradient>
+  <radialGradient id="hsun"><stop offset="0" stop-color="#fffbe0"/><stop offset=".55" stop-color="#ffe17a"/><stop offset="1" stop-color="#ffb42e"/></radialGradient>
+  <radialGradient id="hglow"><stop offset="0" stop-color="#ffd76a" stop-opacity=".75"/><stop offset="1" stop-color="#ffd76a" stop-opacity="0"/></radialGradient>
+  <linearGradient id="hsea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e98a3a"/><stop offset="1" stop-color="#6a2a2a"/></linearGradient>
+  <linearGradient id="hhill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9922e"/><stop offset="1" stop-color="#6e6a22"/></linearGradient>
+  <linearGradient id="hgrass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9aa63a"/><stop offset="1" stop-color="#3c5a1c"/></linearGradient>
+  <linearGradient id="hpath" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2c27a"/><stop offset="1" stop-color="#b97a3c"/></linearGradient>
+  <linearGradient id="hfade" x1="0" y1="0" x2="0" y2="1"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></linearGradient></defs>
+  <rect width="1600" height="1000" fill="url(#hsky)"/>
+  <circle cx="800" cy="560" r="470" fill="url(#hglow)"/>
+  <circle cx="800" cy="560" r="215" fill="url(#hsun)"/>
+  <g fill="#b0301e" opacity=".55"><ellipse cx="560" cy="300" rx="330" ry="16"/><ellipse cx="1080" cy="250" rx="380" ry="14"/><ellipse cx="900" cy="420" rx="260" ry="9" fill="#ff8a3a"/><ellipse cx="420" cy="470" rx="220" ry="10" fill="#ff7a2a"/><ellipse cx="1260" cy="460" rx="240" ry="9" fill="#ff8a3a"/></g>
+  <rect y="600" width="1600" height="140" fill="url(#hsea)"/>
+  <g fill="#fff1b0" opacity=".8">${[0, 1, 2, 3, 4, 5, 6].map(i => `<rect x="${800 - (120 - i * 14)}" y="${606 + i * 15}" width="${2 * (120 - i * 14)}" height="4" rx="2"/>`).join("")}</g>
+  <path d="M0 620Q200 560 420 600T820 610T1250 590T1600 615V700H0Z" fill="#7a3426" opacity=".85"/>
+  <path d="M0 680Q260 600 520 650T980 640T1600 660V1000H0Z" fill="url(#hhill)"/>
+  <path d="M0 760Q300 690 640 730T1180 720T1600 740V1000H0Z" fill="url(#hgrass)"/>
+  ${tree(470, 742, 5)}${tree(520, 750, 3.8)}${tree(1120, 735, 4.6)}${tree(1170, 745, 3.4)}${tree(1220, 742, 4)}
+  <path d="M690 1000Q760 900 790 840T800 772H815Q840 830 900 900T1000 1000Z" fill="url(#hpath)"/>
+  ${house(740, 760, "#3b82f6", 3)}${house(860, 752, "#ef4444", 3.4, true)}${house(950, 772, "#facc15", 2.6)}
+  <g transform="translate(800,676)"><rect x="-2.5" y="0" width="5" height="88" fill="#4a2a14"/><path d="M2.5 4Q30 0 52 10Q30 18 2.5 26Z" fill="#ef4444" stroke="#6e1414" stroke-width="2"/></g>
+  ${w}
+  <rect width="1600" height="1000" fill="url(#hfade)"/></svg>`;
+}
 function renderMenu() {
-  const off = isOffline();
-  $("menu").innerHTML = `<div class="card">
-    <h1>🏝️ カイタク島<small>サイコロで資源をあつめて、島をひらこう</small></h1>
-    <label class="note">なまえ</label><input id="name" maxlength="12" value="${esc(store.get("kaitaku-name") || "")}" placeholder="ゲスト">
-    <h3>ルール</h3>${cfgButtons("data-a")}
-    <h3>CPUと対戦</h3>
-    <div class="note">CPUの数</div>
-    <div class="seg">${[1, 2, 3].map(n => `<button data-a="n${n}" class="${n === cpuN ? "on" : ""}">${n}人</button>`).join("")}</div>
-    <div class="note">CPUの強さ</div>
-    <div class="seg">${Object.entries(DIFF).map(([k, s]) => `<button data-a="d-${k}" class="${k === cpuDiff ? "on" : ""}">${s}</button>`).join("")}</div>
-    <button class="main" data-a="local">はじめる</button>
-    ${off ? `<div class="note">📴 オフライン: CPUとの対戦だけ遊べます</div>` : `<h3>みんなで（オンライン）</h3>
-    <button data-a="host">部屋をつくる</button>
-    <div class="row"><input id="code" inputmode="numeric" maxlength="4" placeholder="部屋番号（4けた）"><button data-a="join" style="flex:0 0 34%">入る</button></div>`}
+  const off = isOffline(); if (off) homeTab = "solo";
+  const nm = esc(nameDraft != null ? nameDraft : store.get("kaitaku-name") || "");
+  const snd = window.YkgSfx && YkgSfx.muted;
+  const tile = (a, ic, lb) => `<button class="tile" data-a="${a}"><svg viewBox="-16 -15 32 30"><use href="#${ic}"/></svg>${lb}</button>`;
+  // 2026-11-28: CPU の数・強さとルールは「あそぶ」のあとの設定画面へ。ホームの下の板は「みんなで」のときの部屋番号だけ
+  const opts = homeTab === "solo" ? "" : `<div class="orow"><span class="lb">番号で入る</span><input id="code" inputmode="numeric" maxlength="4" placeholder="4けた"><button data-a="join" style="flex:0 0 64px">入る</button></div>`;
+  $("menu").className = "scr home";
+  $("menu").innerHTML = homeScene() + `<div class="hm">
+    <button class="hbk" data-a="games" aria-label="ゲーム一覧へもどる"><svg viewBox="0 0 40 24"><path d="M3 12L15 2v6h22v8H15v6z" fill="#e8b84a" stroke="#4a2a08" stroke-width="2" stroke-linejoin="round"/></svg><small>ゲーム一覧</small></button>
+    <div class="prof"><div class="plate nmbox"><small>なまえ</small><input id="name" maxlength="12" value="${nm}" placeholder="ゲスト"></div>
+      <div class="hexav"><i><svg viewBox="-13 -16 26 30"><use href="#pawn" fill="#6e1414" stroke="#ffb4a8" stroke-width="1.2"/></svg></i></div></div>
+    <div class="logo"><h1>カイタク島</h1><p>サイコロで資源をあつめて、島をひらこう</p></div>
+    <div class="col left">${tile("rules", "ic-book", "あそびかた")}</div>
+    <div class="col right">${tile("snd", snd ? "ic-mute" : "ic-snd", snd ? "音：オフ" : "音：オン")}</div>
+    ${opts ? `<div class="plate opts">${opts}</div>` : ""}
     ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}
-    <div class="row"><button data-a="rules">あそびかた</button><button data-a="games">← ゲーム一覧へ</button></div>
+    <div class="plate mode"><button data-a="tab-solo" class="${homeTab === "solo" ? "on" : ""}"><svg viewBox="-16 -14 32 28"><use href="#ic-one"/></svg>ひとりで</button><button data-a="tab-online" class="${homeTab === "online" ? "on" : ""}" ${off ? "disabled" : ""}><svg viewBox="-16 -14 32 28"><use href="#ic-many"/></svg>みんなで</button></div>
+    <button class="play" data-a="${homeTab === "solo" ? "go-setup" : "host"}">あそぶ<svg viewBox="-13 -13 26 26"><use href="#ic-die"/></svg></button>
   </div>`;
-  if (window.YkgSfx) $("menu").querySelector(".card").appendChild(sfxBtn());   // 音のオン・オフ（全部のゲームで共通）
+}
+// ---------------- 2026-11-28: 設定画面（あそぶ のあと。ひとりでも部屋でも同じ画面） ----------------
+// 左: 勝利点・はじめの村のバー と チェック / まん中: 遊ぶ人（CPU を追加・✕ ではずす・強さ）/ 右: 島のカード / 右下: スタート
+let soloBots = (() => { try { const a = JSON.parse(store.get("kaitaku-bots") || "null"); if (Array.isArray(a) && a.length <= 3 && a.every(d => DIFF[d])) return a; } catch (e) {} return Array(cpuN).fill(cpuDiff); })();
+const saveBots = () => store.set("kaitaku-bots", JSON.stringify(soloBots));
+const CHK = {
+  size: { lb: "大きい島", help: "37マスの大きな島で遊びます（ふつうは19マス）。港も多く、勝負が長くなります" },
+  pm: { lb: "確率表示", help: "ゲーム中に「置場確率」ボタンが使えます。村を置ける角に、まわりの土地が出る確率の合計を表示します" },
+  bmap: { lb: "バランスマップ", help: "同じ土地がかたまらず、6と8・同じ数字がとなりにならない島にします。オフだと完全にランダム" },
+  bdice: { lb: "バランスダイス", help: "出る目が確率どおりに近づくよう調整します（6や8がよく出て、2や12はめったに出ない）。オフだと完全にランダム" },
+};
+const chkOn = (c, k) => k === "size" ? c.size === "big" : !!c[k];
+// 小さな島の見本（土地の色だけ。本当の並びは はじまるときに決まる）
+function islandMini(size) {
+  const geo = geoFor(size), R = geo.R + 1, sea = [];
+  for (let r = -R; r <= R; r++) for (let q = -R; q <= R; q++) if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) === R) sea.push({ x: 1.5 * r, y: SQ3 * (q + r / 2) });
+  const seq = ["forest", "pasture", "field", "hill", "mountain", "field", "forest", "pasture", "mountain", "hill", "pasture", "forest", "field"];
+  const all = sea.concat(geo.hex), xs = all.map(h => h.x), ys = all.map(h => h.y), pad = 1.1;
+  const vb = [(Math.min(...xs) - pad) * 50, (Math.min(...ys) - pad) * 50, (Math.max(...xs) - Math.min(...xs) + 2 * pad) * 50, (Math.max(...ys) - Math.min(...ys) + 2 * pad) * 50].map(n => n.toFixed(0)).join(" ");
+  return `<svg class="mini" viewBox="${vb}">${sea.map(h => `<polygon points="${hexPts(h.x + .08, h.y + .14, 1)}" fill="#0005"/><polygon points="${hexPts(h.x, h.y, .95)}" fill="url(#seag)"/>`).join("")}
+    ${geo.hex.map((h, i) => { const t = i === geo.hex.length >> 1 ? "volcano" : seq[(i * 5 + (i >> 2)) % seq.length]; return `<polygon points="${hexPts(h.x + .05, h.y + .09, .97)}" fill="#0006"/><polygon points="${hexPts(h.x, h.y, .97)}" fill="url(#frameg)"/><polygon points="${hexPts(h.x, h.y, .84)}" fill="url(#f-${t})"/><g transform="translate(${h.x * 50},${h.y * 50}) scale(.85)" clip-path="url(#hclip)"><use href="#t-${t}"/></g>`; }).join("")}</svg>`;
+}
+function renderSetup() {
+  const online = mode === "host" || mode === "client", isHost = mode === "host", L = lobbyInfo;
+  const conn = screen === "connecting";
+  const c = online && !isHost ? cleanCfg(L.cfg) : cfg, edit = !online || isHost;
+  // 遊ぶ人の一覧
+  let seats;
+  if (!online) seats = [{ name: myName(), me: true }].concat(soloBots.map((d, i) => ({ name: "CPU-" + "ABC"[i], bot: true, diff: d, i: i + 1 })));
+  else seats = (L.seats || []).map((x, i) => ({ name: x.name, bot: x.bot, diff: x.diff || L.diff || "norm", i, me: !x.bot && x.pid === myPid, host: x.pid === 0 }));
+  const sl = (k, lb, unit) => { const [lo, hi] = OPT[k], v = c[k], pc = (v - lo) / (hi - lo) * 100;
+    return `<div class="sl"><div class="slt">${lb}：<b id="sv-${k}">${v}</b>${unit}</div><div class="slw"><input type="range" class="cfgR" data-k="${k}" min="${lo}" max="${hi}" step="1" value="${v}" style="--p:${pc}%" ${edit ? "" : "disabled"} aria-label="${lb}"><div class="tk">${[...Array(hi - lo + 1)].map((_, j) => `<i class="${lo + j === v ? "on" : ""}">${lo + j}</i>`).join("")}</div></div></div>`; };
+  const ck = k => `<div class="ck"><button class="box ${chkOn(c, k) ? "on" : ""}" data-a="chk-${k}" ${edit ? "" : "disabled"} aria-label="${CHK[k].lb}" aria-pressed="${chkOn(c, k)}"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span>${CHK[k].lb}</span><button class="q" data-a="help-${k}" aria-label="${CHK[k].lb}とは">?</button></div>`;
+  const diffBtn = x => edit ? `<button class="df" data-a="bdiff-${x.i}">${DIFF[x.diff]}<small>▾</small></button>` : `<span class="df ro">${DIFF[x.diff]}</span>`;
+  const row = (x, k) => `<div class="pr" style="--pc:${COLS[k]}"><div class="hx"><i><svg viewBox="-13 -16 26 30"><use href="#pawn" fill="${shade(COLS[k], -.55)}" stroke="${shade(COLS[k], .5)}" stroke-width="1.2"/></svg></i></div>
+    <div class="pn">${x.bot ? `<span class="nm2">${esc(x.name)}</span>${diffBtn(x)}` : `<span class="nm1">${esc(x.name)}</span><small>${x.me ? "あなた" : ""}${x.host && online ? (x.me ? "・" : "") + "ホスト" : ""}</small>`}</div>
+    ${x.bot && edit ? `<button class="x" data-a="bdel-${x.i}" aria-label="${esc(x.name)}をはずす">✕</button>` : `<span class="x0"></span>`}</div>`;
+  const big = c.size === "big";
+  let h = `<div class="su">
+    <header class="suh"><button class="bk" data-a="su-back" aria-label="もどる"><svg viewBox="0 0 40 24"><path d="M3 12L15 2v6h22v8H15v6z" fill="#e8b84a" stroke="#4a2a08" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <h1>ゲームの設定</h1>${online ? `<div class="rc0"><small>部屋番号</small><b>${conn ? "…" : esc(L.code || host.code)}</b></div>` : `<span class="rc0 sp"></span>`}</header>
+    <div class="suf">
+      <section class="sur">${sl("target", "勝利点", "点")}${sl("setupN", "はじめの村", "こ")}<div class="cks">${["size", "pm", "bmap", "bdice"].map(ck).join("")}</div>
+        <button class="rl" data-a="rules">あそびかた</button></section>
+      <section class="sup"><h3>遊ぶ人 <small>${seats.length} / 4人</small></h3>${seats.map(row).join("")}
+        ${edit && seats.length < 4 ? `<button class="add" data-a="bot-add">＋ CPUを追加</button>` : ""}
+        ${online && L.specs && L.specs.length ? `<div class="spc">観戦: ${L.specs.map(esc).join("、")}</div>` : ""}
+        ${online && isHost ? `<div class="spc">友だちに部屋番号を教えてね（2〜4人）</div>` : ""}</section>
+      <section class="sui"><div class="card2"><h2>${big ? "大きい島" : "ふつうの島"}</h2>${islandMini(c.size)}
+        <p>${big ? "37マスの大きな島。港が11か所あり、じっくり長い勝負になります。" : "19マスのちょうどいい島。はじめての人にもぴったりです。"}</p>
+        <div class="tags"><span>勝利点 ${c.target}</span><span>はじめの村 ${c.setupN}</span>${c.bmap ? "<span>バランスマップ</span>" : ""}${c.bdice ? "<span>バランスダイス</span>" : ""}</div><small class="np">2〜4人</small></div></section>
+    </div>
+    ${conn ? `<div class="wait">${isHost ? "部屋を準備しています…" : "ホストにつないでいます…"}</div>`
+      : edit ? `<button class="play sus" data-a="su-start" ${seats.length < 2 ? "disabled" : ""}>スタート<svg viewBox="-13 -13 26 26"><use href="#ic-die"/></svg></button>${seats.length < 2 ? `<div class="wait sm">CPU を入れて 2人以上で始められます</div>` : ""}`
+      : `<div class="wait">${spectating ? "観戦: " : ""}ホストがスタートするのを待っています…</div>`}
+  </div>`;
+  $("lobby").className = "scr su-scr"; $("lobby").innerHTML = h;
+}
+// バーを動かしているあいだは数字だけ書きかえ、はなしたら保存（部屋ならみんなに送る）
+document.addEventListener("input", e => {
+  const el = e.target; if (!el.classList || !el.classList.contains("cfgR")) return;
+  const k = el.dataset.k, [lo, hi] = OPT[k], v = +el.value;
+  el.style.setProperty("--p", (v - lo) / (hi - lo) * 100 + "%"); $("sv-" + k).textContent = v;
+  el.parentNode.querySelectorAll(".tk i").forEach((t, j) => t.classList.toggle("on", lo + j === v));
+});
+document.addEventListener("change", e => {
+  const el = e.target; if (!el.classList || !el.classList.contains("cfgR")) return;
+  cfg = cleanCfg({ ...cfg, [el.dataset.k]: +el.value }); store.set("kaitaku-cfg", JSON.stringify(cfg));
+  if (mode === "host") hostLobby(); else renderSetup();
+});
+function setupAct(a) {
+  const online = mode === "host";
+  if (a === "su-back") { leave(); return true; }
+  if (a === "su-start") { if (online) hostStart(); else startLocal(); return true; }
+  if (a.startsWith("chk-")) { const k = a.slice(4); const c = { ...cfg }; if (k === "size") c.size = c.size === "big" ? "std" : "big"; else c[k] = !c[k]; cfg = cleanCfg(c); store.set("kaitaku-cfg", JSON.stringify(cfg)); if (online) hostLobby(); else renderSetup(); return true; }
+  if (a.startsWith("help-")) { const k = a.slice(5); toast(`${CHK[k].lb}：${CHK[k].help}`); clearTimeout(toastT); toastT = setTimeout(() => { $("toast").style.opacity = 0; }, 4500); return true; }
+  if (a === "bot-add") { if (online) hostAddCpu(); else if (soloBots.length < 3) { soloBots.push("norm"); saveBots(); renderSetup(); } return true; }
+  if (a.startsWith("bdel-")) { const i = +a.slice(5); if (online) hostDelCpuAt(i); else { soloBots.splice(i - 1, 1); saveBots(); renderSetup(); } return true; }
+  if (a.startsWith("bdiff-")) {   // よわい → ふつう → つよい → よわい …
+    const i = +a.slice(6), ks = Object.keys(DIFF), nx = d => ks[(ks.indexOf(d) + 1) % ks.length];
+    if (online) { const st = host.seats[i]; if (st && st.bot) { st.diff = nx(st.diff || "norm"); hostLobby(); } }
+    else { soloBots[i - 1] = nx(soloBots[i - 1]); saveBots(); renderSetup(); }
+    return true;
+  }
+  return false;
 }
 function renderLobby() {
-  const L = lobbyInfo, isHost = mode === "host";
-  let h = `<div class="card">`;
-  if (screen === "connecting") h += `<h2 style="text-align:center">${isHost ? "部屋を準備しています…" : "ホストにつないでいます…"}</h2>`;
-  else {
-    h += `<div class="note" style="text-align:center">部屋番号</div><div class="code">${esc(L.code || host.code)}</div>
-      <div class="note" style="text-align:center">友だちにこの番号を教えてね（2〜4人）</div>
-      <h3>参加者</h3><div class="mem">${L.seats.map((s, i) => `<span><i class="dot" style="background:${COLS[i]}"></i>${esc(s.name)}${s.pid === 0 ? "<small>ホスト</small>" : s.bot ? `<small>CPU</small>` : ""}${!s.bot && s.pid === myPid ? "<small>(あなた)</small>" : ""}</span>`).join("")}</div>
-      ${L.specs.length ? `<div class="note">観戦: ${L.specs.map(esc).join("、")}</div>` : ""}`;
-    if (isHost) h += `<div class="row"><button data-a="addcpu" ${L.seats.length >= 4 ? "disabled" : ""}>CPU を追加</button><button data-a="delcpu" ${L.seats.some(s => s.bot) ? "" : "disabled"}>CPU を減らす</button></div>
-      <div class="note">CPUの強さ</div><div class="seg">${Object.entries(DIFF).map(([k, s]) => `<button data-a="hd-${k}" class="${k === host.diff ? "on" : ""}">${s}</button>`).join("")}</div>
-      ${cfgButtons("data-a")}
-      <button class="main" data-a="start" ${L.seats.length < 2 ? "disabled" : ""}>スタート</button>${L.seats.length < 2 ? `<div class="note">CPU を入れて 2人以上で始められます</div>` : ""}`;
-    else h += `<div class="note" style="text-align:center">${esc(cfgTxt(cleanCfg(L.cfg)))}</div><div class="note" style="text-align:center">${spectating ? "観戦: " : ""}ホストがスタートするのを待っています…</div>`;
-  }
-  h += `<button data-a="leave">ぬける</button></div>`;
-  $("lobby").innerHTML = h;
+  renderSetup(); return;   // 2026-11-28: 部屋も ひとり用と同じ設定画面
 }
 // パーティの待ち合わせ画面の中身
 let partySet = null, partyGuestSet = null;
@@ -1228,8 +1549,8 @@ function partyLobbyOpts() {
     partySet.addEventListener("click", e => {
       const b = e.target.closest("[data-b]"); if (!b || b.disabled || mode !== "host" || host.playing) return;
       const k = b.dataset.b;
-      if (k === "+") hostAddCpu(); else if (k === "-") hostDelCpu(); else if (k.startsWith("d-")) { host.diff = k.slice(2); hostLobby(); }
-      else if (/^(c[tsz]|up|dn)-/.test(k)) { setCfg(k); hostLobby(); }
+      if (k === "+") hostAddCpu(); else if (k === "-") hostDelCpu(); else if (k.startsWith("d-")) { host.diff = k.slice(2); host.seats.forEach(x => { if (x.bot) x.diff = host.diff; }); hostLobby(); }
+      else if (/^(c[tszx]|up|dn)-/.test(k)) { setCfg(k); hostLobby(); }
     });
   }
   partySet.querySelector('[data-b="+"]').disabled = L.seats.length >= 4;
@@ -1246,6 +1567,11 @@ document.addEventListener("click", e => {
   if (a.startsWith("d-")) { cpuDiff = a.slice(2); store.set("kaitaku-diff", cpuDiff); renderMenu(); keepName(); return; }
   if (a.startsWith("hd-")) { host.diff = a.slice(3); hostLobby(); return; }
   if (/^(c[tsz]|up|dn)-/.test(a)) { setCfg(a); if (mode === "host" && screen === "lobby") hostLobby(); else { renderMenu(); keepName(); } return; }
+  // ホーム・設定画面のボタン
+  if (setupAct(a)) return;
+  if (a === "go-setup") { fixName(); mode = "none"; screen = "setup"; errMsg = ""; renderUI(); return; }
+  if (a === "tab-solo" || a === "tab-online") { homeTab = a.slice(4); renderMenu(); return; }
+  if (a === "snd") { if (window.YkgSfx) YkgSfx.toggle(); renderMenu(); return; }
   switch (a) {
     case "local": startLocal(); break;
     case "host": fixName(); hostTries = 0; startHost(); break;
@@ -1320,30 +1646,36 @@ function renderBoard() {
   const poly = h => h.c.map(i => P(i).map(n => n.toFixed(1)).join(",")).join(" ");
   let s = "";
   // 海（外わくは少しこい色）と砂浜（島のまわり）
-  s += OCEAN.map(o => `<polygon points="${hexPts(o.x, o.y, 1.04)}" fill="#2a6fa8"/>`).join("");
-  s += OCEAN.map(o => `<polygon points="${hexPts(o.x, o.y, 0.9)}" fill="#3d8fd0" stroke="#5aa6e0" stroke-width="1.5" stroke-opacity=".5"/>`).join("");
-  s += GEO.hex.map(h => `<polygon points="${poly(h)}" fill="#e9d8a6" stroke="#e9d8a6" stroke-width="12" stroke-linejoin="round"/>`).join("");
-  // 港
+  // 2026-11-28: 盤の影 → 海のタイル（波）→ 浅瀬と砂浜 → 港の桟橋 → 土地（厚み・クリーム色のふち・絵）→ 数字の札
+  s += OCEAN.map(o => `<polygon points="${hexPts(o.x + 0.1, o.y + 0.18, 1.08)}" fill="#000" fill-opacity=".35"/>`).join("");
+  s += OCEAN.map(o => `<polygon points="${hexPts(o.x, o.y, 1.06)}" fill="#173f63"/>`).join("");
+  s += OCEAN.map(o => `<polygon points="${hexPts(o.x, o.y, 0.97)}" fill="url(#seag)" stroke="#9fd0f0" stroke-opacity=".35" stroke-width="1.2"/><polygon points="${hexPts(o.x, o.y, 0.97)}" fill="url(#waves)"/>`).join("");
+  s += GEO.hex.map(h => `<polygon points="${poly(h)}" fill="#6cc6d2" stroke="#6cc6d2" stroke-opacity=".75" stroke-width="26" stroke-linejoin="round"/>`).join("");
+  s += GEO.hex.map(h => `<polygon points="${poly(h)}" fill="#e8d29a" stroke="#e8d29a" stroke-width="12" stroke-linejoin="round"/>`).join("");
+  // 港（木の桟橋 + 丸い札）
   for (const hb of G.harbors) {
     const E = GEO.edges[hb.e], m = GEO.mid(hb.e), hc = GEO.hex[E.h[0]];
     const dx = m.x - hc.x, dy = m.y - hc.y, L = Math.hypot(dx, dy), px = (m.x + dx / L * 0.62) * S, py = (m.y + dy / L * 0.62) * S;
-    for (const v of [E.a, E.b]) { const [x, y] = P(v); s += `<line x1="${px}" y1="${py}" x2="${x}" y2="${y}" stroke="#8a6a3f" stroke-width="4" stroke-linecap="round"/>`; }
-    s += `<circle cx="${px}" cy="${py}" r="15" fill="#fff8e6" stroke="#8a6a3f" stroke-width="2"/>`;
-    s += hb.k === "any" ? `<text x="${px}" y="${py + 4.5}" font-size="12" font-weight="800" text-anchor="middle" fill="#3b2a12">3:1</text>`
-      : `<text x="${px}" y="${py - 1}" font-size="12" text-anchor="middle">${RI[hb.k]}</text><text x="${px}" y="${py + 11}" font-size="9" font-weight="800" text-anchor="middle" fill="#3b2a12">2:1</text>`;
+    for (const v of [E.a, E.b]) { const [x, y] = P(v); s += `<line x1="${px + 1.5}" y1="${py + 3}" x2="${x + 1.5}" y2="${y + 3}" stroke="#0005" stroke-width="7"/><line x1="${px}" y1="${py}" x2="${x}" y2="${y}" stroke="#5a3418" stroke-width="7" stroke-linecap="round"/><line x1="${px}" y1="${py}" x2="${x}" y2="${y}" stroke="#b07a42" stroke-width="4" stroke-linecap="round" stroke-dasharray="3 1.2"/>`; }
+    s += `<circle cx="${px + 1.5}" cy="${py + 2.5}" r="16.5" fill="#0006"/><circle cx="${px}" cy="${py}" r="16" fill="url(#tokg)" stroke="#5a3418" stroke-width="2.2"/>`;
+    s += hb.k === "any" ? `<text x="${px}" y="${py + 5}" font-size="13" font-weight="900" font-family="Georgia,serif" text-anchor="middle" fill="#3b2a12">3:1</text><text x="${px}" y="${py - 6}" font-size="7" text-anchor="middle" fill="#6b4a2a">?</text>`
+      : `<use href="#ri-${hb.k}" transform="translate(${px},${py - 3.5}) scale(.55)"/><text x="${px}" y="${py + 12}" font-size="8.5" font-weight="900" font-family="Georgia,serif" text-anchor="middle" fill="#3b2a12">2:1</text>`;
   }
-  // 土地
+  // 土地: まず全部の影、つぎに ふち・面・絵
+  GEO.hex.forEach(h => { s += `<polygon points="${hexPts(h.x + 0.05, h.y + 0.08, 0.985)}" fill="#000" fill-opacity=".38"/>`; });
   GEO.hex.forEach((h, i) => {
-    const t = G.tiles[i], T = TT[t.t], x = h.x * S, y = h.y * S, isHl = hl.t.includes(i), hit = t.n && t.n === sum && G.rollN && i !== G.crow;
-    s += `<polygon points="${poly(h)}" fill="${T.col}" stroke="${isHl ? "#fff" : "#00000055"}" stroke-width="${isHl ? 4 : 1.5}" ${isHl ? `class="hl" data-t="${i}"` : ""}/>`;
-    s += `<text x="${x}" y="${y - 20}" font-size="17" text-anchor="middle" pointer-events="none">${T.ic}</text>`;
+    const t = G.tiles[i], x = h.x * S, y = h.y * S, isHl = hl.t.includes(i);
+    s += `<polygon points="${hexPts(h.x, h.y, 0.975)}" fill="url(#frameg)" stroke="${isHl ? "#fff" : "#7a5c34"}" stroke-width="${isHl ? 4 : 1}" ${isHl ? `class="hl"` : ""}/>`
+      + `<polygon points="${hexPts(h.x, h.y, 0.86)}" fill="url(#f-${t.t})"/>`
+      + `<g transform="translate(${x},${y})" clip-path="url(#hclip)" pointer-events="none"><use href="#t-${t.t}"/></g>`
+      + `<polygon points="${hexPts(h.x, h.y, 0.86)}" fill="none" stroke="url(#bevel)" stroke-width="2.4" pointer-events="none"/>`;
     if (t.n) {
-      const red = t.n === 6 || t.n === 8, pp = pips(t.n);
-      s += `<g pointer-events="none" opacity="${i === G.crow ? 0.45 : 1}"><circle cx="${x}" cy="${y + 6}" r="15" fill="#f8f0dc" stroke="#00000055"/>`
-        + `<text x="${x}" y="${y + 11}" font-size="16" font-weight="800" text-anchor="middle" fill="${red ? "#c81e1e" : "#222"}">${t.n}</text>`
-        + [...Array(pp)].map((_, k) => `<circle cx="${x + (k - (pp - 1) / 2) * 4}" cy="${y + 16}" r="1.4" fill="${red ? "#c81e1e" : "#333"}"/>`).join("") + `</g>`;
+      const red = t.n === 6 || t.n === 8, pp = pips(t.n), ink = red ? "#b3161b" : "#2a1a0e";
+      s += `<g pointer-events="none" opacity="${i === G.crow ? 0.5 : 1}"><circle cx="${x + 1.5}" cy="${y + 2.5}" r="15.5" fill="#000" fill-opacity=".45"/><circle cx="${x}" cy="${y}" r="15" fill="url(#tokg)" stroke="#7a5a32" stroke-width="1.5"/><circle cx="${x}" cy="${y}" r="12.3" fill="none" stroke="#c9ab78" stroke-width=".8"/>`
+        + `<text x="${x}" y="${y + 5}" font-size="${red ? 17 : 15.5}" font-weight="900" font-family="Georgia,'Times New Roman',serif" text-anchor="middle" fill="${ink}">${t.n}</text>`
+        + [...Array(pp)].map((_, k) => `<circle cx="${x + (k - (pp - 1) / 2) * 3.6}" cy="${y + 9.5}" r="1.25" fill="${ink}"/>`).join("") + `</g>`;
     }
-    if (i === G.crow) s += `<g transform="translate(${x + (t.n ? 14 : 0)},${y + (t.n ? -2 : 8)})" pointer-events="none">${CROW_SVG}</g>`;
+    if (i === G.crow) { const rx = x + (t.n ? 18 : 0), ry = y + (t.n ? -6 : 4); s += `<g transform="translate(${rx},${ry}) scale(1.05)" pointer-events="none"><ellipse cx="2" cy="12" rx="11" ry="3.5" fill="#0008"/><use href="#pawn" fill="url(#robg)" stroke="#000" stroke-width="1"/><ellipse cx="-2.5" cy="-11" rx="2" ry="1.4" fill="#fff6"/></g>`; }
   });
   // 2026-11-12: サイコロで当たった土地を目立たせる。となりの土地に線が隠れないよう、全部の土地のあとに描く。
   // サイコロが止まった直後の 2.7 秒は、白く光る・金の輪が広がる演出（描き直しても途中から続くように animation-delay をずらす）
@@ -1352,8 +1684,8 @@ function renderBoard() {
     const t = G.tiles[i]; if (!(t.n && t.n === sum && G.rollN && i !== G.crow)) return;
     const x = h.x * S, y = h.y * S;
     s += `<g pointer-events="none"><polygon points="${poly(h)}" fill="none" stroke="#fff3a0" stroke-width="10" stroke-opacity=".6" stroke-linejoin="round"/><polygon points="${poly(h)}" fill="none" stroke="#ffc400" stroke-width="4.5" stroke-linejoin="round"/>`
-      + `<circle cx="${x}" cy="${y + 6}" r="18" fill="none" stroke="#ffc400" stroke-width="3.5"/>`
-      + (hitAge < 2700 ? `<polygon points="${poly(h)}" class="hitfx" ${dl}/><circle cx="${x}" cy="${y + 6}" r="17" class="hitring" ${dl}/><circle cx="${x}" cy="${y + 6}" r="17" class="hitring" style="animation-delay:${450 - hitAge}ms"/>` : "") + `</g>`;
+      + `<circle cx="${x}" cy="${y}" r="18" fill="none" stroke="#ffc400" stroke-width="3.5"/>`
+      + (hitAge < 2700 ? `<polygon points="${poly(h)}" class="hitfx" ${dl}/><circle cx="${x}" cy="${y}" r="17" class="hitring" ${dl}/><circle cx="${x}" cy="${y}" r="17" class="hitring" style="animation-delay:${450 - hitAge}ms"/>` : "") + `</g>`;
   });
   // タップできる土地は上にもう一度（当たり判定）
   for (const i of hl.t) s += `<polygon points="${poly(GEO.hex[i])}" fill="#ffffff22" data-t="${i}"/>`;
@@ -1361,7 +1693,11 @@ function renderBoard() {
   G.er.forEach((p, e) => {
     if (p < 0) return; const E = GEO.edges[e], [x1, y1] = P(E.a), [x2, y2] = P(E.b);
     const sx = x1 + (x2 - x1) * 0.14, sy = y1 + (y2 - y1) * 0.14, ex = x2 - (x2 - x1) * 0.14, ey = y2 - (y2 - y1) * 0.14;
-    s += `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="#111" stroke-width="10" stroke-linecap="round"/><line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${COLS[p]}" stroke-width="6.5" stroke-linecap="round"/>`;
+    // 木の棒: 影 → こい色のふち → その人の色 → 上の光
+    const c = COLS[p];
+    s += `<line x1="${sx + 1.5}" y1="${sy + 3}" x2="${ex + 1.5}" y2="${ey + 3}" stroke="#000" stroke-opacity=".45" stroke-width="9" stroke-linecap="round"/>`
+      + `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${shade(c, -.55)}" stroke-width="10" stroke-linecap="round"/><line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${c}" stroke-width="7" stroke-linecap="round"/>`
+      + `<line x1="${sx}" y1="${sy - 1.6}" x2="${ex}" y2="${ey - 1.6}" stroke="${shade(c, .55)}" stroke-width="2" stroke-linecap="round" stroke-opacity=".9"/>`;
   });
   // 置ける道
   for (const e of hl.e) {
@@ -1375,7 +1711,7 @@ function renderBoard() {
   const big = ui.probMode && G.phase !== "over", ks = big ? 1.55 : 1;
   G.vb.forEach((b, v) => {
     if (!b) return; const [x, y] = P(v);
-    s += `<path d="${b.lv === 2 ? TOWN_PATH : VIL_PATH}" transform="translate(${x},${y}) scale(${ks})" fill="${COLS[b.p]}" stroke="#111" stroke-width="${big ? 1.6 : 2.2}" stroke-linejoin="round"/>`;
+    s += `<g transform="translate(${x},${y}) scale(${big ? 1.55 : 1.3})" stroke-linejoin="round">${b.lv === 2 ? townSvg(COLS[b.p]) : vilSvg(COLS[b.p])}</g>`;
     if (big) {
       const w = GEO.verts[v].h.reduce((a, ti) => a + (ti === G.crow ? 0 : pips(G.tiles[ti].n)), 0);
       s += `<text x="${x + (b.lv === 2 ? 2 : 0)}" y="${y + 7.5}" font-size="11" font-weight="900" text-anchor="middle" fill="#fff" stroke="#000" stroke-width="2.8" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${Math.round(w / 36 * 100)}</text>`;
@@ -1502,7 +1838,7 @@ function flyRes(list) {
   const fx = $("fx"), me = mySeat(), per = {}; let coined = false;
   list.forEach((g, k) => {
     const c = document.createElement("div"); c.className = "fc"; c.style.setProperty("--rc", RCOL[g.r]);
-    c.innerHTML = `${RI[g.r]}<b>+${g.n}</b>`;
+    c.innerHTML = `${riSvg(g.r, "", "-13 -13 26 26").replace("<svg ", '<svg width="28" height="28" ')}<b>+${g.n}</b>`;
     const j = (per[g.ti] = (per[g.ti] || 0) + 1) - 1, p0 = tpos(g.ti);
     c.style.left = (p0.x + j * 16 - (j ? 8 : 0)) + "px"; c.style.top = (p0.y + j * 3) + "px";
     c.style.transform = "scale(.3)"; c.style.opacity = "0"; fx.appendChild(c);
@@ -1583,14 +1919,14 @@ function bannerText() {
   if (ui.mode) return { my: true, h: `${BN[ui.mode]}をつくる場所をタップ` };
   return { my: false, h: "" };
 }
-const cardHtml = r => `<span class="ocard" style="--rc:${RCOL[r]}">${RI[r]}</span>`;
+const cardHtml = r => `<span class="ocard" style="--rc:${RCOL[r]}">${riSvg(r, "", "-13 -13 26 26").replace("<svg ", '<svg width="26" height="26" ')}</span>`;
 function render() {
   if (!G || screen !== "game") return;
   const s = mySeat(), me = s >= 0 ? G.ps[s] : null, myTurn = s >= 0 && G.cur === s && G.phase !== "over";
   if (!myTurn || G.phase !== "main") ui.mode = null;
   if (myTurn && G.phase === "main" && G.free > 0) ui.mode = "road";
   // 人
-  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length + p.vpC; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="vpb">${pubVp(i, s)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
+  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length + p.vpC; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="av"><svg viewBox="-13 -16 26 30"><use href="#pawn" fill="${shade(COLS[i], -.55)}" stroke="${shade(COLS[i], .5)}" stroke-width="1.2"/></svg></div><div class="vpb">${pubVp(i, s)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
     <div class="st"><span>手札${Math.max(0, tot(p.hand) - pendOf(i))}</span>${nc ? `<span>カード${nc}</span>` : ""}${p.kn ? `<span class="${G.armyHolder === i ? "lr" : ""}">騎士${p.kn}</span>` : ""}</div><div class="st"><span>村${p.vils}</span><span>町${p.towns}</span><span class="${G.roadHolder === i ? "lr" : ""}">道${p.lr}</span></div></div></div>`; }).join("");
   $("game").classList.toggle("p4", G.ps.length >= 4);
   const bt = bannerText();
@@ -1603,12 +1939,14 @@ function render() {
   { const ls = G.lastSteal; if (ls && ui.stealSeen !== ls.n) { const show = ui.stealSeen != null && ls.n > ui.stealSeen; ui.stealSeen = ls.n; if (show && !FAST) showSteal(ls, s); } }
   // 手もと（下のトレイ）
   if (me) {
-    $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc" id="hc-${r}" style="--rc:${RCOL[r]}"><div class="ic">${RI[r]}</div><b>${Math.max(0, me.hand[r] - pendOf(s, r))}</b>${RN[r]}${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
-      + `<div class="rc cards" data-g="cards"><div class="ic">🃏</div><b>${me.cards.length + me.newC.length + me.vpC}</b>カード</div>`;
+    $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc" id="hc-${r}" style="--rc:${RCOL[r]};--rf:radial-gradient(circle at 40% 30%,${FACE[RT[r]][0]},${FACE[RT[r]][1]})"><div class="art">${riSvg(r, "", "-14 -12 28 24")}</div><b>${Math.max(0, me.hand[r] - pendOf(s, r))}</b><span class="rn">${RN[r]}</span>${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
+      + `<div class="rc cards" data-g="cards"><div class="art"><svg viewBox="-14 -12 28 24"><rect x="-9" y="-10" width="13" height="18" rx="2" fill="#efe3c4" stroke="#2c1e47" transform="rotate(-12)"/><rect x="-4" y="-9" width="13" height="18" rx="2" fill="#fff6dc" stroke="#2c1e47" transform="rotate(8)"/><path d="M3-3l1.2 2.6 2.8.3-2.1 1.9.6 2.8L3 3.2.5 4.6l.6-2.8L-1 0l2.8-.3z" fill="#d9a22a" transform="rotate(8)"/></svg></div><b>${me.cards.length + me.newC.length + me.vpC}</b><span class="rn">カード</span></div>`;
   } else $("hand").innerHTML = `<div class="rc" style="padding:8px;font-size:13px">観戦中: みんなの手は見えません</div>`;
   const nc = me ? me.cards.length + me.newC.length + me.vpC : 0;
   $("cardBd").textContent = nc; $("cardBd").classList.toggle("hidden", !nc);
-  $("side").querySelector('[data-g="pmode"]').classList.toggle("on", ui.probMode);   // 置き場所の確率表示中は ボタンが光る
+  if (G.pm === false) ui.probMode = false;   // 設定で「確率表示」を切っているときは使えない
+  $("side").querySelector('[data-g="pmode"]').classList.toggle("on", ui.probMode);
+  $("side").querySelector('[data-g="pmode"]').classList.toggle("hidden", G.pm === false);   // 置き場所の確率表示中は ボタンが光る
   // 右下のボタン: [つくる 4つ] / [おわり・ふる] [↶ やり直し] [⇄ 交換]
   const sq = (g, ic, lbl, en, on) => `<button class="sq ${on ? "on" : ""}" data-g="${g}" ${en ? "" : "disabled"}>${ic}<small>${lbl}</small></button>`;
   let r1 = "", r2 = "";
@@ -1779,7 +2117,7 @@ function renderModal() {
   else if (k === "prob") {
     // 2 こ のサイコロの合計が出る確率と、その数字の土地（✖ は盗賊がいて出ない）。あなたの村・町が取れるまい数も
     const mine = n => { let c = 0; if (s < 0) return 0; G.tiles.forEach((t, ti) => { if (t.n !== n || ti === G.crow) return; GEO.hex[ti].c.forEach(v => { const b = G.vb[v]; if (b && b.p === s) c += b.lv; }); }); return c; };
-    h = `<h2>🎲 サイコロの確率</h2><button data-m="pmode" class="${ui.probMode ? "on" : ""}">📍 置き場所の確率表示：${ui.probMode ? "ON" : "OFF"}</button>
+    h = `<h2>🎲 サイコロの確率</h2>${G && G.pm === false ? "" : `<button data-m="pmode" class="${ui.probMode ? "on" : ""}">📍 置き場所の確率表示：${ui.probMode ? "ON" : "OFF"}</button>`}
       <div class="note" style="text-align:center">ON にすると、村を置ける角に、まわりの土地が出る確率の合計（%）を出します。高いほど赤く大きい丸です。</div>
       <div class="note" style="text-align:center">2こ の合計。6 と 8 がいちばん出やすい（7 は盗賊）</div>`
       + [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => {
@@ -1870,7 +2208,7 @@ $("modal").addEventListener("click", e => {
   if (m === "dodisc") { const d = { ...ui.dsel }; ui.modal = null; act({ k: "discard", d }); renderModal(); return; }
   if (m === "domono") { ui.modal = null; act({ k: "play", c: "mono", r: b.dataset.r }); renderModal(); return; }
   if (m === "doharvest") { const r = ui.picks.slice(); ui.modal = null; act({ k: "play", c: "harvest", r }); renderModal(); return; }
-  if (m === "again") { ui.modal = null; const seats = G.ps.map(p => ({ pid: p.pid, name: p.name, bot: p.bot, diff: p.diff })); startGame(shuffle(seats), { target: G.target, setupN: G.setupN, size: G.size }); return; }
+  if (m === "again") { ui.modal = null; const seats = G.ps.map(p => ({ pid: p.pid, name: p.name, bot: p.bot, diff: p.diff })); startGame(shuffle(seats), { target: G.target, setupN: G.setupN, size: G.size, pm: G.pm, bmap: G.bmap, bdice: G.bdice }); return; }
   if (m === "tomenu") { ui.modal = null; leave(); return; }
   if (m === "lobby") { hostBackToLobby(); return; }
 });
