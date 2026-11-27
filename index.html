@@ -87,6 +87,14 @@
   .sheetbox { max-width:480px; margin:0 auto; }
   .sheetbox .party { margin:0 0 16px; }
   .sheetclose { display:block; margin:0 auto; padding:10px 34px; font:inherit; font-weight:900; font-size:16px; color:#fff; border:3px solid #fff; border-radius:99px; background:linear-gradient(#9aa4dd,#7a85c9); box-shadow:0 4px 0 #5a65a8; cursor:pointer; }
+  .avlabel { margin:12px 0 6px; font-size:13px; color:var(--sub); font-weight:900; }
+  .avpick { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+  .party .avb { padding:3px; border-radius:16px; aspect-ratio:1; border:3px solid #fff; background:#fff; box-shadow:0 3px 0 var(--edge); text-shadow:none; display:grid; place-items:center; }
+  .party .avb.sel { border-color:var(--orange); background:#fff4de; box-shadow:0 3px 0 #cc7410; }
+  .party .avb img { width:100%; height:100%; object-fit:contain; display:block; }
+  img.av { width:26px; height:26px; object-fit:contain; vertical-align:middle; margin-right:5px; }
+  .party .members span { display:inline-flex; align-items:center; }
+  .statsbox td img.av { width:22px; height:22px; }
   .foot { margin-top:22px; font-size:12px; color:#fff; line-height:1.6; text-align:center; text-shadow:0 1px 0 rgba(60,70,150,.5); }
   a.game.locked { opacity:.6; filter:grayscale(.3); }
   .toast { z-index:99; position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 24px); transform:translateX(-50%); background:#fff; color:var(--ink); border:3px solid var(--edge); padding:10px 18px; border-radius:99px; font-size:14px; box-shadow:0 4px 0 var(--edge); }
@@ -210,7 +218,25 @@ const guests = new Map();   // ホスト: 相手の PeerJS の ID → { conn, na
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const cleanName = v => String(v || "").trim().slice(0, 12) || "ゲスト";
 const myName = () => cleanName(document.getElementById("pname")?.value ?? store.get("ykg-name"));
-const saveParty = () => partyStore.set(party);
+const AV_N = 19;   // avatars/a00.png ～ a18.png（ぜんぶ自分で描いたキャラ）
+const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : 0; };
+function myAv() {
+  let v = store.get("ykg-av");
+  if (v == null || v === "") { v = String(Math.floor(Math.random() * AV_N)); store.set("ykg-av", v); }
+  return clampAv(v);
+}
+const avUrl = i => "avatars/a" + String(clampAv(i)).padStart(2, "0") + ".png";
+const avImg = (i, cls) => `<img class="${cls || "av"}" src="${avUrl(i)}" alt="">`;
+const avOf = name => { const m = members.find(x => x.name === name); return m ? m.av : null; };
+function setAv(i) {
+  i = clampAv(i); store.set("ykg-av", String(i));
+  if (party) {
+    party.av = i; saveParty();
+    if (party.role === "host") sendMembers(); else { try { hostConn?.send({ t: "av", av: i }); } catch (e) {} render(); }
+  } else render();
+}
+const avPickHtml = () => `<div class="avlabel">キャラをえらぶ</div><div class="avpick">${Array.from({ length: AV_N }, (_, i) => `<button class="avb${i === myAv() ? " sel" : ""}" data-av="${i}" aria-label="キャラ${i + 1}">${avImg(i)}</button>`).join("")}</div>`;
+const saveParty = () => { if (party) party.av = myAv(); partyStore.set(party); };
 
 // 成績の表（勝ち数の多い順。同じなら負けの少ない順。どちらも同じなら同じ順位）
 function rankRows() {
@@ -225,7 +251,7 @@ function statsHtml() {
   const rows = rankRows();
   return `<div class="statsbox"><div class="statshead"><b>成績（このパーティ）</b><button data-p="stats">とじる</button></div>
     ${rows.length ? `<table><tr><th>順位</th><th>名前</th><th>勝ち</th><th>負け</th></tr>
-      ${rows.map(r => `<tr class="${r.name === party.name ? "me" : ""}"><td>${r.rank}</td><td>${esc(r.name)}${r.here ? "" : "（抜けた）"}</td><td>${r.w}</td><td>${r.l}</td></tr>`).join("")}</table>`
+      ${rows.map(r => `<tr class="${r.name === party.name ? "me" : ""}"><td>${r.rank}</td><td>${avOf(r.name) != null ? avImg(avOf(r.name)) : ""}${esc(r.name)}${r.here ? "" : "（抜けた）"}</td><td>${r.w}</td><td>${r.l}</td></tr>`).join("")}</table>`
       : `<div class="note">まだ勝負がついていません</div>`}
     <div class="note">パーティでオンライン対戦したゲームの勝ち負けを数えます（観戦・ひとり用・CPU戦・この端末で交代は数えません）。順位は勝ち数の多い順です。</div></div>`;
 }
@@ -254,6 +280,7 @@ function render() {
   if (!party) {
     el.innerHTML = `<h2>みんなで遊ぶ</h2>
       <input id="pname" maxlength="12" placeholder="なまえ" value="${esc(store.get("ykg-name") || "")}">
+      ${avPickHtml()}
       <div class="row"><button class="main" data-p="host">ホスト（部屋を作る）</button></div>
       <div class="row"><input id="pcode" inputmode="numeric" maxlength="1" placeholder="番号" value="${esc(store.get("ykg-last") || "")}"><button class="blue" data-p="join">入室</button></div>
       <div class="note">入室するときは、最初に 1 回だけ、ホストの番号（1けた）を入れます。あとはホストがゲームを選ぶと、みんな一緒にそのゲームへ移ります。ひとりで遊ぶときは、下のゲームをそのまま選んでください。</div>
@@ -266,7 +293,8 @@ function render() {
     el.innerHTML = `<h2>${host ? "あなたがホスト" : "パーティに参加中"}</h2>
       <div style="display:flex;align-items:flex-end;gap:12px"><div class="code">${esc(party.code)}</div>
         <div class="note" style="margin:0">${host ? "この番号をゲストに伝えてください" : status === "joined" ? "ホストがゲームを選ぶのを待っています" : "ホストを探しています…"}</div></div>
-      <div class="members">${members.map(m => `<span class="${m.name === party.name ? "me" : ""}">${esc(m.name)}${m.host ? "（ホスト）" : m.spec ? "（観戦）" : ""}</span>`).join("")}</div>
+      <div class="members">${members.map(m => `<span class="${m.name === party.name ? "me" : ""}">${m.av != null ? avImg(m.av) : ""}${esc(m.name)}${m.host ? "（ホスト）" : m.spec ? "（観戦）" : ""}</span>`).join("")}</div>
+      ${avPickHtml()}
       <div class="row"><input id="pname" maxlength="12" value="${esc(typing ?? party.name)}"><button data-p="rename" style="flex:0 0 auto">名前を変える</button></div>
       ${host ? "" : `<div class="row"><button data-p="spec" class="${party.spec ? "main" : ""}">${party.spec ? "観戦する（オン）" : "観戦する（オフ）"}</button></div>`}
       <div class="note">${host ? "下のゲームを選ぶと、みんなも一緒に移ります。ホストは遊ぶ人になります（観戦はできません）。"
@@ -339,20 +367,21 @@ function hostParty(code, again) {
       const g = guests.get(conn.peer);
       if (m.t === "hi") {
         const name = uniqueName(cleanName(m.name), conn.peer);
-        guests.set(conn.peer, { conn, name, spec: !!m.spec });
+        guests.set(conn.peer, { conn, name, spec: !!m.spec, av: clampAv(m.av) });
         conn.send({ t: "you", name }); sendMembers();
       } else if (m.t === "name" && g) {
         const name = uniqueName(cleanName(m.name), conn.peer);
         renameStats(g.name, name); g.name = name;
         conn.send({ t: "you", name }); sendMembers();
-      } else if (m.t === "spec" && g) { g.spec = !!m.spec; sendMembers(); }
+      } else if (m.t === "av" && g) { g.av = clampAv(m.av); sendMembers(); }
+      else if (m.t === "spec" && g) { g.spec = !!m.spec; sendMembers(); }
       else if (m.t === "where") { try { conn.send({ t: "at", game: goingTo, list: true }); } catch (x) {} }   // ゲームの中のゲスト: ホストは一覧にいる（移る途中ならそのゲーム）
     });
     conn.on("close", () => { if (guests.get(conn.peer)?.conn === conn) { guests.delete(conn.peer); sendMembers(); } });
   });
 }
 function sendMembers() {
-  const list = [{ name: party.name, host: true }, ...[...guests.values()].map(g => ({ name: g.name, spec: g.spec }))];
+  const list = [{ name: party.name, host: true, av: myAv() }, ...[...guests.values()].map(g => ({ name: g.name, spec: g.spec, av: g.av }))];
   for (const g of guests.values()) { try { g.conn.send({ t: "members", list, stats }); } catch (e) {} }
   members = list;
   render();
@@ -386,7 +415,7 @@ function connectHost() {
     if (++lookTries % 3 === 0) { try { peer.destroy(); } catch (e) {} joinParty(party.code); }   // ときどき peer から作り直す
     else connectHost();
   }, 2500);
-  c.on("open", () => { c.opened = true; lookTries = 0; status = "joined"; errMsg = ""; c.send({ t: "hi", name: party.name, spec: !!party.spec }); render(); });
+  c.on("open", () => { c.opened = true; lookTries = 0; status = "joined"; errMsg = ""; c.send({ t: "hi", name: party.name, spec: !!party.spec, av: myAv() }); render(); });
   c.on("data", m => {
     if (!m) return;
     if (m.t === "you") { party.name = m.name; saveParty(); render(); }                 // ホストが決めた名前（重なったときは番号つき）
@@ -403,10 +432,11 @@ function leaveParty() {
 }
 
 document.getElementById("party").addEventListener("click", e => {
+  const avb = e.target.closest("[data-av]"); if (avb) { setAv(avb.dataset.av); return; }
   const a = e.target.closest("[data-p]")?.dataset.p; if (!a) return;
   if (a === "host") {
     store.set("ykg-name", myName()); errMsg = ""; tries = 0; party = null; stats = {}; sjson.set("ykg-stats", null); sjson.set("ykg-results", null);
-    const n = myName(); hostParty(null, false); party = { role: "host", code: "…", name: n }; members = [{ name: n, host: true }]; render();
+    const n = myName(); hostParty(null, false); party = { role: "host", code: "…", name: n }; members = [{ name: n, host: true, av: myAv() }]; render();
   }
   else if (a === "join") {
     if (!(document.getElementById("pname").value || "").trim()) { errMsg = "名前を入力してください"; render(); toast("名前を入力してください"); return; }

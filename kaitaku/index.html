@@ -300,6 +300,10 @@ html,body{background-color:#4a2a14}
 .pl{background:var(--plate);border:2px solid var(--gold);border-radius:9px;padding:2px;gap:4px;box-shadow:0 4px 10px #000b,inset 0 1px 0 #ffffff1f;align-items:stretch}
 .pl.c1,.pl.c2{flex-direction:row-reverse}
 .pl .av{position:relative;flex:none;width:40px;border-radius:6px;background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--pc) 55%,#fff),var(--pc) 55%,color-mix(in srgb,var(--pc) 55%,#000));border:1px solid #0008;overflow:hidden}
+.pl .av img.pimg{position:absolute;left:0;bottom:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 1px 1px #0008)}
+.pl .av:has(img.pimg){width:50px}
+@media (orientation:portrait){ .pl .av:has(img.pimg){width:40px} }
+.pr .hx i img.pimg{width:100%;height:100%;object-fit:contain;display:block;margin-top:4px}
 .pl .av svg{position:absolute;left:50%;bottom:-3px;width:34px;height:34px;translate:-50% 0;filter:drop-shadow(0 1px 1px #0008)}
 .vpb{position:absolute;width:26px;height:24px;border:0;border-radius:0;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:linear-gradient(#ffe9a8,#c9932f);color:#3a1d05;font:900 14px/1 Georgia,serif;z-index:2;box-shadow:none}
 .pl{position:absolute}
@@ -704,7 +708,7 @@ function newGame(seats, c) {
   const k3 = big ? 3 : 2, deck = shuffle([...Array(big ? 20 : 14).fill("knight"), ...Array(5).fill("vp"), ...Array(k3).fill("bridge"), ...Array(k3).fill("harvest"), ...Array(k3).fill("mono")]);
   return {
     tiles, crow: tiles.findIndex(t => t.t === "volcano"), harbors, vb: Array(GEO.verts.length).fill(null), er: Array(GEO.edges.length).fill(-1),
-    ps: seats.map((s, i) => ({ name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: emptyHand(), cards: [], newC: [], vpC: 0, used: 0, kn: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
+    ps: seats.map((s, i) => ({ av: clampAv(s.av), name: s.name, pid: s.pid == null ? null : s.pid, bot: !!s.bot, diff: s.diff || "norm", col: i, hand: emptyHand(), cards: [], newC: [], vpC: 0, used: 0, kn: 0, roads: 0, vils: 0, towns: 0, lr: 0 })),
     cur: order[0], phase: "setup", su: { i: 0, order, step: "v", lastV: -1 }, dice: [0, 0], rollN: 0, log: [], winner: -1, free: 0, cardUsed: false, back: "main", victims: [], deck, roadHolder: -1, turnN: 1, trades: 0, ver: 0, offer: null, offN: 0, offerN: 0, undoN: 0,
     size: c.size, target: c.target, setupN: c.setupN, pm: c.pm, bmap: c.bmap, bdice: c.bdice, armyHolder: -1,
   };
@@ -1278,6 +1282,11 @@ const cfgButtons = attr => `${stepper(attr, "target", "勝利点（ふつうは 
   <div class="seg">${["pm", "bmap", "bdice"].map(k => `<button ${attr}="cx-${k}" class="${cfg[k] ? "on" : ""}">${cfg[k] ? "✓ " : ""}${CHK[k].lb}</button>`).join("")}</div>`;
 try { const n = +store.get("kaitaku-cpus"); if (n >= 1 && n <= 3) cpuN = n; const d = store.get("kaitaku-diff"); if (DIFF[d]) cpuDiff = d; } catch (e) {}
 let meName = PARTY ? String(PARTY.name || "ゲスト").slice(0, 12) : "";
+// 2026-11-28: ホームでえらんだキャラ（../avatars/aNN.png、19 体）。えらんでいなければ -1（コマのまま）
+const AV_N = 19;
+const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : -1; };
+function myAv() { return clampAv(PARTY && PARTY.av != null ? PARTY.av : store.get("ykg-av")); }
+const avImg = (a, cls) => clampAv(a) >= 0 ? `<img class="${cls || "pimg"}" src="../avatars/a${String(clampAv(a)).padStart(2, "0")}.png" alt="">` : "";
 function myName() { if (meName) return meName; return (($("name") && $("name").value) || store.get("kaitaku-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
 function fixName() { meName = ""; meName = myName(); store.set("kaitaku-name", meName); }
 const mySeat = () => G ? G.ps.findIndex(p => !p.bot && p.pid === myPid) : -1;
@@ -1320,7 +1329,7 @@ function act(a) {
 function startLocal() {
   fixName(); clearTimeout(cpuTimer);
   mode = "local"; myPid = 0; spectating = false;
-  const seats = [{ pid: 0, name: myName() }];
+  const seats = [{ pid: 0, name: myName(), av: myAv() }];
   soloBots.forEach((d, i) => seats.push({ name: "CPU-" + "ABC"[i], bot: true, diff: d }));   // 2026-11-28: 設定画面で CPU ごとに強さをえらぶ
   startGame(shuffle(seats));   // 順番はランダム
 }
@@ -1336,12 +1345,12 @@ function sendAll(m) { for (const c of [...host.conns.values(), ...host.specs.val
 function netFail() { errMsg = "オフラインのため通信できません。CPUと対戦で遊べます"; cleanupNet(); mode = "none"; screen = "menu"; renderUI(); }
 function cleanupNet() { try { peer && peer.destroy(); } catch (e) {} peer = null; hostConn = null; host.conns.clear(); host.specs.clear(); host.playing = false; }
 function peerOk() { if (typeof Peer !== "undefined" && !isOffline()) return true; netFail(); return false; }
-function lobbyMsg() { return { t: "lobby", code: host.code, seats: host.seats.map(s => ({ name: s.name, bot: !!s.bot, pid: s.pid, diff: s.diff || "norm" })), specs: [...host.specs.values()].map(c => c.pname), diff: host.diff, cfg }; }
+function lobbyMsg() { return { t: "lobby", code: host.code, seats: host.seats.map(s => ({ av: s.av, name: s.name, bot: !!s.bot, pid: s.pid, diff: s.diff || "norm" })), specs: [...host.specs.values()].map(c => c.pname), diff: host.diff, cfg }; }
 function hostLobby() { lobbyInfo = lobbyMsg(); sendAll(lobbyInfo); renderUI(); }
 function startHost() {
   if (!peerOk()) return;
   mode = "host"; screen = "connecting"; errMsg = ""; myPid = 0; spectating = false; G = null;
-  host.seats = [{ pid: 0, name: myName() }]; host.conns.clear(); host.specs.clear(); host.nextId = 1; host.playing = false;
+  host.seats = [{ pid: 0, name: myName(), av: myAv() }]; host.conns.clear(); host.specs.clear(); host.nextId = 1; host.playing = false;
   renderUI();
   const code = PARTY ? PARTY.code : randCode();
   try { peer = new Peer(netId(code)); } catch (e) { netFail(); return; }
@@ -1359,7 +1368,7 @@ function startHost() {
 function hostMsg(conn, m) {
   if (!m) return;
   if (m.t === "hello") {
-    const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12); conn.wantSpec = !!m.spec;
+    const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12); conn.wantSpec = !!m.spec; conn.pav = clampAv(m.av);
     // 観戦: 観戦をえらんだ人・始まったあとに来た人・4人いっぱいのとき
     if (m.spec || host.playing || host.seats.length >= 4) {
       conn.spec = true; host.specs.set(id, conn); conn.send({ t: "welcome", you: id, spec: 1 });
@@ -1367,7 +1376,7 @@ function hostMsg(conn, m) {
       if (host.playing) { lobbyInfo = lobbyMsg(); sendAll(lobbyInfo); render(); }
       return;
     }
-    host.conns.set(id, conn); host.seats.push({ pid: id, name: conn.pname }); conn.send({ t: "welcome", you: id }); hostLobby(); return;
+    host.conns.set(id, conn); host.seats.push({ pid: id, name: conn.pname, av: conn.pav }); conn.send({ t: "welcome", you: id }); hostLobby(); return;
   }
   if (m.t === "act" && !conn.spec && G && host.playing) {
     const s = G.ps.findIndex(p => !p.bot && p.pid === conn.pid);
@@ -1397,7 +1406,7 @@ function hostStart() {
   if (host.playing || host.seats.length < 2) return;
   host.playing = true;
   try { ykgLobby.close(); } catch (e) {}   // 2026-11-10: closeAll だと、部屋にもどったときゲストの待ち合わせ画面が出なかった
-  const seats = shuffle(host.seats.map(s => ({ pid: s.pid, name: s.name, bot: !!s.bot, diff: s.diff || host.diff })));
+  const seats = shuffle(host.seats.map(s => ({ av: s.av, pid: s.pid, name: s.name, bot: !!s.bot, diff: s.diff || host.diff })));
   startGame(seats);
 }
 function hostBackToLobby() {
@@ -1405,7 +1414,7 @@ function hostBackToLobby() {
   // 試合中にぬけた人の席（CPU になったもの）は、部屋からはずす
   host.seats = host.seats.filter(s => s.bot || s.pid === 0 || host.conns.has(s.pid));
   // 観戦していた人も、席があいていれば遊ぶ人にもどす
-  for (const [id, c] of host.specs) { if (host.seats.length >= 4) break; if (c.wantSpec) continue; host.specs.delete(id); c.spec = false; host.conns.set(id, c); host.seats.push({ pid: id, name: c.pname }); try { c.send({ t: "welcome", you: id }); } catch (e) {} }
+  for (const [id, c] of host.specs) { if (host.seats.length >= 4) break; if (c.wantSpec) continue; host.specs.delete(id); c.spec = false; host.conns.set(id, c); host.seats.push({ pid: id, name: c.pname, av: c.pav }); try { c.send({ t: "welcome", you: id }); } catch (e) {} }
   hostLobby();
 }
 function joinRoom(code) {
@@ -1418,7 +1427,7 @@ function joinRoom(code) {
     const hc = hostConn = peer.connect(netId(code), { reliable: true });
     // パーティ: 相手が見つからないまま止まることがあるので、2.5 秒でつながらなければ作り直す
     if (PARTY) setTimeout(() => { if (hostConn === hc && !hc.open && screen === "connecting" && ++partyTries < 60) { cleanupNet(); joinRoom(code); } }, 2500);
-    hc.on("open", () => { hc.opened = true; hc.send({ t: "hello", name: myName(), spec: !!(PARTY && PARTY.spec) }); });
+    hc.on("open", () => { hc.opened = true; hc.send({ t: "hello", av: myAv(), name: myName(), spec: !!(PARTY && PARTY.spec) }); });
     hc.on("data", onMsg);
     hc.on("close", () => {
       if (PARTY) { if (hc.opened) toGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ
@@ -1606,13 +1615,13 @@ function renderSetup() {
   const c = online && !isHost ? cleanCfg(L.cfg) : cfg, edit = !online || isHost;
   // 遊ぶ人の一覧
   let seats;
-  if (!online) seats = [{ name: myName(), me: true }].concat(soloBots.map((d, i) => ({ name: "CPU-" + "ABC"[i], bot: true, diff: d, i: i + 1 })));
-  else seats = (L.seats || []).map((x, i) => ({ name: x.name, bot: x.bot, diff: x.diff || L.diff || "norm", i, me: !x.bot && x.pid === myPid, host: x.pid === 0 }));
+  if (!online) seats = [{ av: myAv(), name: myName(), me: true }].concat(soloBots.map((d, i) => ({ name: "CPU-" + "ABC"[i], bot: true, diff: d, i: i + 1 })));
+  else seats = (L.seats || []).map((x, i) => ({ av: x.av, name: x.name, bot: x.bot, diff: x.diff || L.diff || "norm", i, me: !x.bot && x.pid === myPid, host: x.pid === 0 }));
   const sl = (k, lb, unit) => { const [lo, hi] = OPT[k], v = c[k], pc = (v - lo) / (hi - lo) * 100;
     return `<div class="sl"><div class="slt">${lb}：<b id="sv-${k}">${v}</b>${unit}</div><div class="slw"><input type="range" class="cfgR" data-k="${k}" min="${lo}" max="${hi}" step="1" value="${v}" style="--p:${pc}%" ${edit ? "" : "disabled"} aria-label="${lb}"><div class="tk">${[...Array(hi - lo + 1)].map((_, j) => `<i class="${lo + j === v ? "on" : ""}">${lo + j}</i>`).join("")}</div></div></div>`; };
   const ck = k => `<div class="ck"><button class="box ${chkOn(c, k) ? "on" : ""}" data-a="chk-${k}" ${edit ? "" : "disabled"} aria-label="${CHK[k].lb}" aria-pressed="${chkOn(c, k)}"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span>${CHK[k].lb}</span><button class="q" data-a="help-${k}" aria-label="${CHK[k].lb}とは">?</button></div>`;
   const diffBtn = x => edit ? `<button class="df" data-a="bdiff-${x.i}">${DIFF[x.diff]}<small>▾</small></button>` : `<span class="df ro">${DIFF[x.diff]}</span>`;
-  const row = (x, k) => `<div class="pr" style="--pc:${COLS[k]}"><div class="hx"><i><svg viewBox="-13 -16 26 30"><use href="#pawn" fill="${shade(COLS[k], -.55)}" stroke="${shade(COLS[k], .5)}" stroke-width="1.2"/></svg></i></div>
+  const row = (x, k) => `<div class="pr" style="--pc:${COLS[k]}"><div class="hx"><i>${clampAv(x.av) >= 0 ? avImg(x.av) : `<svg viewBox="-13 -16 26 30"><use href="#pawn" fill="${shade(COLS[k], -.55)}" stroke="${shade(COLS[k], .5)}" stroke-width="1.2"/></svg>`}</i></div>
     <div class="pn">${x.bot ? `<span class="nm2">${esc(x.name)}</span>${diffBtn(x)}` : `<span class="nm1">${esc(x.name)}</span><small>${x.me ? "あなた" : ""}${x.host && online ? (x.me ? "・" : "") + "ホスト" : ""}</small>`}</div>
     ${x.bot && edit ? `<button class="x" data-a="bdel-${x.i}" aria-label="${esc(x.name)}をはずす">✕</button>` : `<span class="x0"></span>`}</div>`;
   const big = c.size === "big";
@@ -2033,7 +2042,7 @@ function render() {
   if (!myTurn || G.phase !== "main") ui.mode = null;
   if (myTurn && G.phase === "main" && G.free > 0) ui.mode = "road";
   // 人
-  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length + p.vpC; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="av"><svg viewBox="-13 -16 26 30"><use href="#pawn" fill="${shade(COLS[i], -.55)}" stroke="${shade(COLS[i], .5)}" stroke-width="1.2"/></svg></div><div class="vpb">${pubVp(i, s)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
+  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length + p.vpC; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="av">${clampAv(p.av) >= 0 ? avImg(p.av) : `<svg viewBox="-13 -16 26 30"><use href="#pawn" fill="${shade(COLS[i], -.55)}" stroke="${shade(COLS[i], .5)}" stroke-width="1.2"/></svg>`}</div><div class="vpb">${pubVp(i, s)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
     <div class="st"><span>手札${Math.max(0, tot(p.hand) - pendOf(i))}</span>${nc ? `<span>カード${nc}</span>` : ""}${p.kn ? `<span class="${G.armyHolder === i ? "lr" : ""}">騎士${p.kn}</span>` : ""}</div><div class="st"><span>村${p.vils}</span><span>町${p.towns}</span><span class="${G.roadHolder === i ? "lr" : ""}">道${p.lr}</span></div></div></div>`; }).join("");
   $("game").classList.toggle("p4", G.ps.length >= 4);
   const bt = bannerText();
@@ -2315,7 +2324,7 @@ $("modal").addEventListener("click", e => {
   if (m === "dodisc") { const d = { ...ui.dsel }; ui.modal = null; act({ k: "discard", d }); renderModal(); return; }
   if (m === "domono") { ui.modal = null; act({ k: "play", c: "mono", r: b.dataset.r }); renderModal(); return; }
   if (m === "doharvest") { const r = ui.picks.slice(); ui.modal = null; act({ k: "play", c: "harvest", r }); renderModal(); return; }
-  if (m === "again") { ui.modal = null; const seats = G.ps.map(p => ({ pid: p.pid, name: p.name, bot: p.bot, diff: p.diff })); startGame(shuffle(seats), { target: G.target, setupN: G.setupN, size: G.size, pm: G.pm, bmap: G.bmap, bdice: G.bdice }); return; }
+  if (m === "again") { ui.modal = null; const seats = G.ps.map(p => ({ av: p.av, pid: p.pid, name: p.name, bot: p.bot, diff: p.diff })); startGame(shuffle(seats), { target: G.target, setupN: G.setupN, size: G.size, pm: G.pm, bmap: G.bmap, bdice: G.bdice }); return; }
   if (m === "tomenu") { ui.modal = null; leave(); return; }
   if (m === "lobby") { hostBackToLobby(); return; }
 });
