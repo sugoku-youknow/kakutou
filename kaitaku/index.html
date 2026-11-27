@@ -300,9 +300,9 @@ html,body{background-color:#4a2a14}
 .pl{background:var(--plate);border:2px solid var(--gold);border-radius:9px;padding:2px;gap:4px;box-shadow:0 4px 10px #000b,inset 0 1px 0 #ffffff1f;align-items:stretch}
 .pl.c1,.pl.c2{flex-direction:row-reverse}
 .pl .av{position:relative;flex:none;width:40px;border-radius:6px;background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--pc) 55%,#fff),var(--pc) 55%,color-mix(in srgb,var(--pc) 55%,#000));border:1px solid #0008;overflow:hidden}
-.pl .av img.pimg{position:absolute;left:0;bottom:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 1px 1px #0008)}
 .pl .av:has(img.pimg){width:50px}
 @media (orientation:portrait){ .pl .av:has(img.pimg){width:40px} }
+.pl .av img.pimg{position:absolute;left:0;bottom:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 1px 1px #0008)}
 .pr .hx i img.pimg{width:100%;height:100%;object-fit:contain;display:block;margin-top:4px}
 .pl .av svg{position:absolute;left:50%;bottom:-3px;width:34px;height:34px;translate:-50% 0;filter:drop-shadow(0 1px 1px #0008)}
 .vpb{position:absolute;width:26px;height:24px;border:0;border-radius:0;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:linear-gradient(#ffe9a8,#c9932f);color:#3a1d05;font:900 14px/1 Georgia,serif;z-index:2;box-shadow:none}
@@ -343,8 +343,9 @@ html,body{background-color:#4a2a14}
 #acts .go.main,#acts .main.go{background:linear-gradient(#ffe27a 0,#f5c23c 45%,#d99a1c 100%);color:#2a1505;border:3px solid #fff1b8;border-bottom:3px solid #a66d0c;box-shadow:0 0 0 2px #3a2408,0 5px 10px #000b,inset 0 2px 0 #fff8;font-weight:900;letter-spacing:1px}
 #acts button:disabled{opacity:.45;filter:saturate(.4)}
 /* サイコロ: 赤い角のまるいサイコロに白い目 */
-.die{background:radial-gradient(circle at 30% 25%,#f0675a,#c8281f 55%,#8e140f);border-radius:22%;box-shadow:inset -2px -3px 3px #0005,inset 2px 2px 2px #fff5,0 4px 7px #000a}
-.die i.on{background:radial-gradient(circle at 40% 35%,#fff,#e8dcd2);box-shadow:inset 0 1px 1px #0005}
+/* 2026-11-28: サイコロは ふった人の色（--dc）。黄色のように明るい色は目を黒っぽく（--dp） */
+.die{background:radial-gradient(circle at 30% 25%,color-mix(in srgb,var(--dc,#c8281f) 55%,#fff),var(--dc,#c8281f) 55%,color-mix(in srgb,var(--dc,#c8281f) 60%,#000));border-radius:22%;box-shadow:inset -2px -3px 3px #0005,inset 2px 2px 2px #fff5,0 4px 7px #000a}
+.die i.on{background:radial-gradient(circle at 40% 35%,color-mix(in srgb,var(--dp,#fff) 80%,#fff),var(--dp,#fff));box-shadow:inset 0 1px 1px #0005}
 #bigDice .die{width:72px;height:72px;padding:10px}
 #bigDice .die:first-child{rotate:-12deg}#bigDice .die:last-child{rotate:9deg;translate:0 10px}
 #dice .sum{font-family:Georgia,serif;color:#fff3c4}
@@ -784,7 +785,7 @@ function produce(sum) {
 }
 function doRoll(s) {
   const [d1, d2] = G.bdice ? drawDice() : [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)], sum = d1 + d2;
-  G.dice = [d1, d2]; G.rollN++; UNDO = []; G.undoN = 0;
+  G.dice = [d1, d2]; G.rollN++; G.roller = s; UNDO = []; G.undoN = 0;   // roller: サイコロをその人の色で出す
   addLog(`🎲 ${G.ps[s].name}: ${sum}`);
   if (sum === 7) {
     // 盗賊が来る: 10まい以上（大きい島は 12まい以上）持っている人は半分すてる。2026-11-18: すてるカードは自分でえらぶ（CPU はすぐえらぶ）
@@ -1898,6 +1899,8 @@ function rollGains() {
 }
 function updDice() {
   const el = $("dice"), big = $("bigDice");
+  { const c = COLS[G.roller != null ? G.roller : G.cur] || COLS[0], light = c === "#facc15";
+    for (const e of [el, big]) { e.style.setProperty("--dc", c); e.style.setProperty("--dp", light ? "#3a2a05" : "#fff"); } }
   if (!G.rollN) { el.innerHTML = ""; big.innerHTML = ""; shownRoll = 0; return; }
   if (G.rollN === shownRoll) return;
   const first = shownRoll < 0; shownRoll = G.rollN;
