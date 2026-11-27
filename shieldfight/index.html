@@ -5513,7 +5513,7 @@ function ymHomeSvg() {
     s = ymBg(W, H) + backTab
       + ymTile("brawl", ymShape(big, "#fff", 18) + `<clipPath id="ymCb"><path d="${big}"/></clipPath><g clip-path="url(#ymCb)"><path d="M0 0 H700 V140 L0 350Z" fill="${YM.red}"/><path d="M0 350 L700 140 V170 L0 380Z" fill="${YM.red2}"/></g>`
         + ymEmblem(330, 200, 0.92) + ymTxt(250, 392, 104, "大乱闘") + ymTxt(250, 440, 26, "CPUと戦う", { fill: YM.ink, out: false, cls: "ym-ui" }))
-      + ymTile("train", `<circle cx="800" cy="138" r="104" fill="${YM.ink}"/><circle class="ym-face" cx="800" cy="138" r="94" fill="${YM.orange}"/><path d="M706 160 A94 94 0 0 0 894 160Z" fill="#ffd2a3"/>` + YMI.target(800, 112, 1.05) + ymTxt(800, 196, 28, "トレーニング"))
+      + ymTile("train", `<circle cx="800" cy="138" r="104" fill="${YM.ink}"/><circle class="ym-face" cx="800" cy="138" r="94" fill="${YM.orange}"/><path d="M708.6 160 A94 94 0 0 0 891.4 160Z" fill="#ffd2a3"/>` + YMI.target(800, 112, 1.05) + ymTxt(800, 190, 21, "トレーニング"))
       + ymTile("host", ymShape("M622 262 H962 Q992 262 984 290 L974 320 Q966 344 936 344 H562 Z", YM.green, 16) + `<path d="M622 262 H962 Q992 262 984 290 L980 302 H600Z" fill="#c7ef8f"/>` + YMI.house(652, 303, 0.85) + ymTxt(820, 322, 48, "部屋を作る"), off)
       + ymTile("join", ymShape("M592 362 H962 Q992 362 984 390 L974 420 Q966 444 936 444 H532 Z", YM.blue, 16) + `<path d="M592 362 H962 Q992 362 984 390 L980 402 H570Z" fill="#a9dcff"/>` + YMI.door(622, 403, 0.8) + ymTxt(800, 422, 48, "部屋に入る"), off)
       + (touch ? ymTile("pad", ymShape("M556 462 H730 Q746 462 746 478 V520 Q746 536 730 536 H556 Q540 536 540 520 V478 Q540 462 556 462Z", YM.violet, 12) + YMI.pad(581, 499, 0.55) + ymTxt(680, 509, 26, "ボタン配置")) : "")
