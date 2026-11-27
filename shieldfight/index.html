@@ -315,6 +315,9 @@
   .ym-num{left:400px;width:120px;background:#3a414e;color:#fff;font-size:22px;cursor:default}
   .port .ym-mode{width:220px;font-size:28px}.port .ym-rounds{left:286px;width:230px;font-size:20px}
   .port .ym-title{width:300px}.port .ym-num{left:370px;width:110px}
+  .ym-pad{left:578px;width:140px;background:#b45cf0;font-size:18px;color:#fff;text-shadow:2px 2px 0 #15171c}
+  .port .ym-pad{left:506px;width:100px;font-size:14px}
+  .ym-pad ~ .ym-code{left:710px}
   /* キャラの一覧 */
   .ym-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(8,1fr);grid-auto-rows:1fr;gap:4px;padding:8px 22px 6px}
   .port .ym-grid{grid-template-columns:repeat(4,1fr);padding:8px 14px 6px}
@@ -5855,6 +5858,7 @@ function showOnlineSelect() {
       <div class="ym-seg ym-back" data-a="back">←</div>
       <div class="ym-seg ym-mode" data-a="mode"></div>
       <div class="ym-seg ym-rounds"><span data-a="r-">◀</span><b id="ymR"></b>本先取<span data-a="r+">▶</span></div>
+      ${coarseMq.matches || landForce === "1" ? `<div class="ym-seg ym-pad" data-a="pad">ボタン配置</div>` : ""}
       <div class="ym-seg ym-code" data-a="code">部屋<b>${esc(roomCode)}</b><small id="ymCopy">${role === "host" && !PARTY ? "タップでURLをコピー" : ""}</small></div></div>
     <div class="ym-grid">${ymCellsHtml()}<div class="ym-cell rand" data-ch="-1"><b>?</b><span>おまかせ</span></div></div>
     <div class="ym-band" id="ymBand"></div>
@@ -5936,6 +5940,7 @@ function ymOnClick(e) {
   st.querySelectorAll(".ym-pop").forEach(p => p.remove());
   const a = e.target.closest("[data-a]"), A = a && a.dataset.a;
   if (A === "back") { if (confirm(host ? "部屋を閉じてタイトルへ戻りますか？" : "部屋をぬけますか？")) goTitle(); return; }
+  if (A === "pad") { openLayoutEditor(); return; }
   if (A === "code") { if (host && !PARTY) { try { navigator.clipboard.writeText(shareUrl()); const c = st.querySelector("#ymCopy"); if (c) c.textContent = "コピーしました"; } catch (x) {} } return; }
   if (host && A === "mode") {                             // ホスト: 大乱闘 ⇄ チーム戦（チームは席ごとに赤・青を交互に）
     game.tmd = game.tmd ? 0 : 1;
@@ -6309,17 +6314,6 @@ if (PARTY && !isOffline()) { if (PARTY.role === "host") startHost(); else startC
 // ネットにつながった・切れた: タイトル画面なら作り直す（オフラインのときは、部屋・参加のボタンを隠す）
 addEventListener("online", () => { if (uiKey === "title") { uiKey = ""; renderUI(); } });
 addEventListener("offline", () => { if (uiKey === "title") { uiKey = ""; renderUI(); } });
-// パーティの待ち合わせ画面（全部のゲームで同じ構図。party-beacon.js）。ホストがスタートを押すと、みんなキャラ選びへ進む（2026-11-07）
-if (PARTY && window.ykgLobby && !isOffline()) {
-  const rules = "盾が外れた隙を突いて、相手をステージから落とす対戦ゲーム。\nスタートのあと、それぞれキャラを選びます。";
-  // 自分の設定（2026-11-13）: パーティではタイトル画面を飛ばすので、操作ボタンの配置と音はここで変える
-  const mine = [
-    ...(coarseMq.matches || landForce === "1" ? [{ label: "操作ボタンの配置", onClick: () => { ykgLobby.hide(); openLayoutEditor(); } }] : []),
-    { label: () => Sfx.muted ? "🔇 音：オフ" : "🔊 音：オン", onClick: () => { Sfx.init(); Sfx.setMuted(!Sfx.muted); paintMute(); Sfx.beep(false); } },
-  ];
-  if (PARTY.role === "host") ykgLobby.open({ title: "シールドファイト", rules, mine, button: { label: "スタート", onClick: () => ykgLobby.closeAll() } });
-  else ykgLobby.open({ title: "シールドファイト", rules, mine, wait: PARTY.spec ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" });
-}
 // アップデートのお知らせ（2026-11-21 から）: この版をまだ見ていない人にだけ、開いたときに 1 回出す（localStorage の shieldfight-upnote に見た版を覚える）。
 // 次にお知らせを出すときは UPNOTE_VER を変えて、UPNOTE の中身を書きかえる
 const UPNOTE_VER = "2026-11-22";   // 6 キャラの調整（ボマー・侍・騎士・アーチャー・テレポーター・バーサーカー）
