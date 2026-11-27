@@ -780,6 +780,7 @@ const HM_SELF = 20, HM_HEAL = 8, HM_BIND = 60, HM_DMG4 = 10, HM_FRAC5 = 2, HM_SH
 // 2026-11-27 第2弾: 自動カウンターはなくした。減る速さは 3 分の 1（満タンから 7 秒 → 21 秒）
 const KL_MAX = 100, KL_CHG = KL_MAX / 240, KL_DRAIN = KL_MAX / 1260, KL_MV = 1.2, KL_JUMP = 1.2, KL_POW = 1.2, KL_ON_MIN = 5, KL_TOG = 15;
 const KL_SHOCK = 6, KL_SHOCK_F = 20, KL_TR_LIFE = 20, KL_TOUCH_CD = 60, KL_TOUCH_PAD = 4;   // KL_TOUCH_*: 体が触れたときの感電（同じ敵へは 1 秒に 1 回。体のふちから 4px まで）
+const KL_NK_HOP = 7, KL_BUMP = 3, KL_BUMP_UP = 3;   // KL_NK_HOP: ナルカミの反動で上へ（約 40px）/ KL_BUMP: カンムル中に当たったときの、とても小さな吹っ飛ばし（横 3・上 3）
 const KL_NK_COST = 30, KL_NK_W = 70, KL_NK_FRAC = 1.1, KL_NK_ANG = 80, KL_NK_CD = 45;
 const isKillua = p => !p.isClone && chOf(p).id === "killua";
 // 村人（2026-11-27）: 苗木・大木は game.tr（{ own, x: 根もとの中心, y: 足場の面, st: 0 苗木 / 1 大木 / 2 倒れている, t: 経過, fd: 倒れる向き, ft: 倒れ始めてから }）
@@ -897,7 +898,7 @@ const CHARS = [
   { id: "killua", name: "キルア", A: 2, D: 2, S: 4, tag: "カミナリをためて、カンムルで速く強くなる",
     skill: { name: "カンムル", cd: 0.25, cdText: "なし（カミナリを使う）",
       text: "地上で押すとカンムルのオン/オフ。カンムル中はカミナリが減り続けるが（満タンから21秒）、移動の速さ・ジャンプ・攻撃の威力が1.2倍になり、体が触れた敵を感電させる（6%、地上なら少し動けない。盾は効かない。同じ相手へは1秒に1回）。カンムル中にステップすると、通った道にも雷が残る。空中で押すとナルカミ: カミナリ30を使って、自分の真下にカミナリを落とす（盾は効かない）" },
-    auto: "充電: 地上で止まっている間、カミナリがたまる（4秒で満タン）" },
+    auto: "充電: 地上にいる間はいつもカミナリがたまる（4秒で満タン。カンムル中はたまらない）。試合の始まりは満タン" },
   // 33〜35 体目（必ず末尾に足す）。2026-11-27 ユーザー設計
   { id: "villager", name: "村人", A: 2, D: 3, S: 3, tag: "木を植えて育て、切り倒して相手を下敷きにする",
     skill: { name: "植林", cd: 0.5, cdText: "植える0.5秒 / 水やり1.5秒 / 斧2.5秒",
@@ -1221,7 +1222,7 @@ function spawn(p, slot, n, battle) {
   p.nsh = 0; p.bsl = 0; p.msw = MSW_MAX; p.msA = 0; p.mswT = 0; p.sl = 0; p.ws = 0; p.bnd = 0; p.esc = 0; p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0; p.hmT = 0; p.vbT = 0; p.vbTgt = null; p.wgT = 0;
   p.sp = 0; p.spV = 0; p.spK = 0; p.dtD = 0; p.dtT = 0; p.pdir = 0; p.dsC = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
   p.um = 0; p.umR = 0; p.umHp = UMB_HP; p.umh = []; p.aiUm = 0;   // キャンピングシェルター
-  p.kz = 0; p.kr = 0; p.kt = null; p.ktc = [];
+  p.kz = battle && isKillua(p) ? KL_MAX : 0; p.kr = 0; p.kt = null; p.ktc = [];   // 2026-11-28: 試合（ラウンド）の始まりは満タン。ロビーでは 0（キャラが分からないように）
   p.dwN = 0; p.aiCan = 0;                                          // 小人使い: 次に引き抜く色 / ガンマン（CPU）                                 // キルア: カミナリ・カンムル中か・ステップで残した雷
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.wpc = 0; p.spc = 0;
@@ -2391,7 +2392,7 @@ function physics(p, inp, neutral) {
   if (chd.id === "killua" && !p.isClone && !neutral) {   // キルア: カンムル中は減り続ける（なくなると切れる）。オフで地上に止まっている間はたまる
     klTrail(p);
     if (p.kr) { if ((p.kz -= KL_DRAIN) <= 0) { p.kz = 0; p.kr = 0; emit("klt", ecx(p), ecy(p), -1); } }
-    else if (p.ground && !dir && p.a === 0 && p.s === 0 && p.fz === 0 && p.ach === 0 && Math.abs(p.vx) < 1.5 && p.kz < KL_MAX) {
+    else if (p.ground && p.kz < KL_MAX) {                    // 2026-11-28: 地上にいる間は、歩いていても攻撃していても常にたまる（カンムル中は減るほうなのでたまらない）
       p.kz = Math.min(KL_MAX, p.kz + KL_CHG);
       if (p.kz >= KL_MAX) emit("klf", ecx(p), ecy(p));
     }
@@ -2680,6 +2681,8 @@ function klShock(p, t) {
     t.a = 0; t.ak = 0; t.cd = 0; t.ks = 0; t.cn = 0; t.mc = 0; t.vx = 0;
     t.fz = Math.max(t.fz, bindLen(t, KL_SHOCK_F)); t.bnd = 1;
   }
+  const bd = Math.sign(ecx(t) - ecx(p)) || p.f;                      // とても小さな吹っ飛ばし（キルアから離れる向きへ少し。地上の相手は上へは浮かない）
+  t.vx = bd * KL_BUMP; if (!t.ground) t.vy = Math.min(t.vy, -KL_BUMP_UP);
   emit("kls", ecx(t), ecy(t));
 }
 // キルアのカンムル中: ①ステップすると通った道に雷を残す（p.kt。ステップ中は伸び、終わってから KL_TR_LIFE フレームで消える。同じ雷では 1 人 1 回）
@@ -2718,7 +2721,7 @@ function narukami(p) {
     knock(p, t, KL_NK_FRAC, dir, KL_NK_FRAC, undefined, KL_NK_ANG); impact("h", p, t, KL_NK_FRAC, dir);
   }
   hitObjs(p.own, x0, top, x1, bot, []);
-  p.vy = Math.min(p.vy, -2);                                         // 落とす瞬間、少しだけ浮く
+  p.vy = -KL_NK_HOP;                                                 // 撃った反動で少し浮く（2026-11-28 に、わずかだったのをはっきり浮くように）
   emit("nk", cx0, top, bot);
 }
 // ======== 村人・小人使い・ガンマン（2026-11-27） ========
