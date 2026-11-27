@@ -772,6 +772,12 @@ const UMB_DMG_MAX = 30, UMB_DMG_HIT = 10, UMB_DMG_BLAST = 15, UMB_BREAK_LOCK = 4
 const US_V = 9, US_R = 22, US_RANGE = 700, US_BLAST = 90, US_KNOCK = 1.1, US_LIFT = 7;
 const SR_F = 40, SR_V = 9, SR_REACH = 30, SR_HIT = 0.6, SR_BLAST = 100, SR_KNOCK = 1.0, SR_LIFT = 6.5;
 const HM_SELF = 20, HM_HEAL = 8, HM_BIND = 60, HM_DMG4 = 10, HM_FRAC5 = 2, HM_SHOW = 60;   // HM_SHOW: 出目の吹き出しを頭の上に出しておく長さ（1 秒）
+// キルア（2026-11-27）: カミナリ p.kz（0〜KL_MAX）。地上で止まっている間たまる。カンムル p.kr 中は減り続け、スピード +KL_S・ジャンプ KL_JUMP 倍、
+// 攻撃を受けると自動カウンター（KL_CN_COST。続けて返すのは KL_CN_GAP フレームあけてから）。空中のスキルはナルカミ（KL_NK_COST、真下へ幅 KL_NK_W の落雷）
+const KL_MAX = 100, KL_CHG = KL_MAX / 240, KL_DRAIN = KL_MAX / 420, KL_S = 2, KL_JUMP = 1.3, KL_CN_COST = 20, KL_CN_GAP = 30, KL_ON_MIN = 5, KL_TOG = 15;
+const KL_NK_COST = 30, KL_NK_W = 70, KL_NK_FRAC = 1.1, KL_NK_ANG = 80, KL_NK_CD = 45;
+const isKillua = p => !p.isClone && chOf(p).id === "killua";
+const klJump = p => p.kr && isKillua(p) ? KL_JUMP : 1;
 const withdrawn = p => !p.isClone && (p.cw | 0) > CIG_WD;
 const cigLeft = p => Math.max(0, 1 - (p.cw | 0) / CIG_WD);   // 口のタバコの残り（1 = 火をつけたばかり、0 = 吸い切った）
 // 撃墜ライン（ワールド座標）。この外へ出ると脱落する。崖の外から戻れるキャラ（テレポーター・二段ジャンプ）のために、
@@ -869,6 +875,11 @@ const CHARS = [
   { id: "camp", name: "キャンピングシェルター", A: 2, D: 3, S: 2, tag: "大きな傘で守りながら押し込み、傘を飛ばす",
     skill: { name: "ウルトラショット", cd: 10, text: "大きなインクの塊を撃つ。敵に当たるか遠くまで飛ぶと爆発する（盾は効かない）" },
     auto: "攻撃ボタンで前に大きな傘を開く（押している間ずっと。開いている間は向きを変えられない）。傘は前からの攻撃を防ぎ、触れた敵の盾を削る。1.25秒開くと傘が前へ飛んでいき、5秒たち、飛ばした傘がなくなると新しい傘を開ける" },
+  // 32 体目（必ず末尾に足す）。2026-11-27 ユーザー設計
+  { id: "killua", name: "キルア", A: 2, D: 2, S: 4, tag: "カミナリをためて、カンムルで速く・自動で返す",
+    skill: { name: "カンムル", cd: 0.25, cdText: "なし（カミナリを使う）",
+      text: "地上で押すとカンムルのオン/オフ。カンムル中はカミナリが減り続けるが、スピード+2・ジャンプ1.3倍になり、攻撃を受けると自動でカウンターする（1回でカミナリ20）。空中で押すとナルカミ: カミナリ30を使って、自分の真下にカミナリを落とす（盾は効かない）" },
+    auto: "充電: 地上で止まっている間、カミナリがたまる（4秒で満タン）" },
 ];
 const chOf = p => CHARS[p.ch] || CHARS[0];
 // もとの性能（リバーシは今の形態の値。分身は分身の性能）
@@ -876,7 +887,7 @@ const baseStat = (p, k) => { if (p.isClone) return CLONE_STATS[k]; const c = chO
 // 狂化中・巨大化中は性能が変わる（0〜6 に収める）。狂化は攻撃・スピードが上がり、防御が下がる。巨大化は全部が上がる
 // ラストスパート中は、なおの攻撃・防御・スピードが +2（分身には付かない）
 const statOf = (p, k) => Math.max(MIN_STAT, Math.min(MAX_STAT, baseStat(p, k) + (p.bz > 0 ? BZ_BONUS[k] : 0) + (p.gt > 0 ? GIANT_BONUS : 0) + (!p.isClone && chOf(p).id === "nao" && late() ? LATE_NAO_BONUS : 0)
-  + (p.ub > 0 ? UP_BONUS : 0) - (k === "S" && p.nc > 0 ? CIG_SLOW_BY : 0) - (withdrawn(p) ? CIG_WD_BY : 0) + (!p.isClone && k !== "D" && chOf(p).id === "hadou" ? (p.dm || 0) / HADOU_PER : 0) + (p.ybs ? p.ybs[k === "A" ? 0 : k === "D" ? 1 : 2] : 0)));   // ybs: ヤク猫の注射器で上がっている数（攻撃・防御・スピード）   // ub: 注射器・タバコの強化 / nc: 敵のタバコを拾ってスピードが下がっている
+  + (p.ub > 0 ? UP_BONUS : 0) + (k === "S" && p.kr && isKillua(p) ? KL_S : 0) - (k === "S" && p.nc > 0 ? CIG_SLOW_BY : 0) - (withdrawn(p) ? CIG_WD_BY : 0) + (!p.isClone && k !== "D" && chOf(p).id === "hadou" ? (p.dm || 0) / HADOU_PER : 0) + (p.ybs ? p.ybs[k === "A" ? 0 : k === "D" ? 1 : 2] : 0)));   // ybs: ヤク猫の注射器で上がっている数（攻撃・防御・スピード）   // ub: 注射器・タバコの強化 / nc: 敵のタバコを拾ってスピードが下がっている
 const effA = p => statOf(p, "A");
 const effD = p => statOf(p, "D");
 const effS = p => statOf(p, "S");
@@ -1182,6 +1193,7 @@ function spawn(p, slot, n, battle) {
   p.nsh = 0; p.bsl = 0; p.msw = MSW_MAX; p.msA = 0; p.mswT = 0; p.sl = 0; p.ws = 0; p.bnd = 0; p.esc = 0; p.ub = 0; p.nc = 0; p.dr = 0; p.st = 0; p.dm = 0; p.yb = []; p.ybs = [0, 0, 0]; p.ybt = 0; p.cw = 0; p.cs = 0; p.hw = 0; p.hwr = 0; p.hwh = []; p.hmN = 0; p.hmT = 0; p.vbT = 0; p.vbTgt = null; p.wgT = 0;
   p.sp = 0; p.spV = 0; p.spK = 0; p.dtD = 0; p.dtT = 0; p.pdir = 0; p.dsC = 0; p.spN = 0; p.spW = 0; p.spC = 0; p.spU = 0; p.srT = 0; p.srHit = []; p.srCar = []; p.aiStp = 0;   // スパッタリー
   p.um = 0; p.umR = 0; p.umHp = UMB_HP; p.umh = []; p.aiUm = 0;   // キャンピングシェルター
+  p.kz = 0; p.kr = 0; p.kg = 0;                                    // キルア: カミナリ・カンムル中か・次のカウンターまで
   if (battle && chOf(p).id === "giant") p.kc = GIANT_LOCK;       // 巨人は、ラウンド開始から 10 秒はスキルを使えない
   p.wpc = 0; p.spc = 0;
   p.aiT = 0; p.aiIn = 0; p.aiDrop = false; p.aiWant = 0; p.aiSideT = 0; p.aiTgt = null; p.aiCh = 0; p.aiWait = 0; p.aiGoal = null; p.aiOnce = 0; p.aiIdle = 0;   // 頭脳の記憶を消す
@@ -1851,6 +1863,7 @@ function sharkBlast(p, px) {
 function hammerHit(p, t) {
   const n = p.hmN | 0, dir = p.f;
   if (n <= 1) return;
+  if (klCounter(t, p)) return;
   if (t.cn > 0 && p.al) { counterHit(t, p); return; }
   if (n <= 3) { strike(p, t, { dir, frac: 1, recoil: true }); return; }
   if (shieldUp(t)) { breakShield(t); impact("k", p, t, 0, dir); }
@@ -2339,6 +2352,14 @@ function physics(p, inp, neutral) {
     if ((p.ground && dir) || jrise || p.bu > 0 || apress || p.s > 0 || p.fz > 0 || p.a > 0 || p.hd > 0 || p.yk > 0 || p.mb > 0) { const o = hwPos(p); emit("hwx", o.x, o.y, 0.2); p.hwr = 0; p.hwh = []; }   // 止まる: 玉は見えなくなるが、ため量は残る（2026-10-18 から。押すと再開）
     else if (p.hw < HW_MAX && (p.hw += late() ? 2 : 1) >= HW_MAX) { p.hw = HW_MAX; const o = hwPos(p); emit("hwu", o.x, o.y, o.r); }
   }
+  if (chd.id === "killua" && !p.isClone && !neutral) {   // キルア: カンムル中は減り続ける（なくなると切れる）。オフで地上に止まっている間はたまる
+    if (p.kg > 0) p.kg--;
+    if (p.kr) { if ((p.kz -= KL_DRAIN) <= 0) { p.kz = 0; p.kr = 0; emit("klt", ecx(p), ecy(p), -1); } }
+    else if (p.ground && !dir && p.a === 0 && p.s === 0 && p.fz === 0 && p.ach === 0 && Math.abs(p.vx) < 1.5 && p.kz < KL_MAX) {
+      p.kz = Math.min(KL_MAX, p.kz + KL_CHG);
+      if (p.kz >= KL_MAX) emit("klf", ecx(p), ecy(p));
+    }
+  }
   const tpAim = chd.id === "teleporter" && !p.isClone && p.ks > 0;   // テレポーター: ためている間は、方向キー（スキルボタンのスライド）で向きを決める。動かず跳ばない
   if (tpAim && kin) {                              // スライドしていれば、その向きと長さ。していなければ（キーボード）方向キーと、ためた長さ
     const ai = (inp >> AIM_SHIFT) & 63;
@@ -2409,7 +2430,7 @@ function physics(p, inp, neutral) {
     const acc = turnOk ? 0.4 : 0.12;
     p.vx += (dir * sp - p.vx) * acc;
     if (p.jh > 0) {                                // 小ジャンプ: 押したフレームを 1 として、SHORT_HOP_F フレーム目までに離したら、上がる勢いを弱める
-      if (!u) { const rem = jumpHeight(S) * wm.jp * SHORT_HOP_H - (p.jy0 - p.y), v = rem > 0 ? -jumpVel(rem) : 0; if (p.vy < v) p.vy = v; p.jh = 0; }   // 跳び始めから数えて、ふつうの SHORT_HOP_H 倍の高さで止まる
+      if (!u) { const rem = jumpHeight(S) * wm.jp * klJump(p) * SHORT_HOP_H -(p.jy0 - p.y), v = rem > 0 ? -jumpVel(rem) : 0; if (p.vy < v) p.vy = v; p.jh = 0; }   // 跳び始めから数えて、ふつうの SHORT_HOP_H 倍の高さで止まる
       else if (++p.jh > SHORT_HOP_F) p.jh = 0;
     }
     // スパッタリー: 地上で左右＋ジャンプボタン（CPU は頭脳の指示）でステップ。使えないとき（2 回目のあとの待ち）はふつうのジャンプになる
@@ -2422,12 +2443,12 @@ function physics(p, inp, neutral) {
       if (++p.spN >= 2) { p.spC = STEP_F + STEP_CD; p.spW = 0; } else p.spW = STEP_F + STEP_CHAIN;
       emit("stp", ecx(p), p.y + phOf(p), stepDir, p.own);
     } else if (upress && p.ground && p.cn === 0 && !lock && !p.spU && !tpAim) {
-      p.vy = -jumpVel(jumpHeight(S) * wm.jp); p.ground = false; p.bu = 0; p.jg = JUMP_TURN; p.jh = (p.cpu || p.isClone || neutral) ? 0 : 1; p.jy0 = p.y;   // jh: 小ジャンプを見るため、押し続けているフレームを数える
+      p.vy = -jumpVel(jumpHeight(S) * wm.jp * klJump(p)); p.ground = false; p.bu = 0; p.jg = JUMP_TURN; p.jh = (p.cpu || p.isClone || neutral) ? 0 : 1; p.jy0 = p.y;   // jh: 小ジャンプを見るため、押し続けているフレームを数える
       if (!p.isClone) emit("j", ecx(p), p.y + PLH);
     } else if ((jrise || p.bu > 0) && !p.ground && !p.dj && p.cn === 0 && !lock && !tpAim) {     // 二段ジャンプ: 空中で 1 回だけ（押した瞬間に左右を押していれば、その方向を向く）。先行入力でも出る
       const airH = chd.id === "vamp" && !p.isClone && !neutral ? VAMP_AIR_H : jumpHeight(S) * AIR_JUMP;   // 吸血鬼の羽: スピード 6 の地上ジャンプと同じ高さ
       p.jh = 0;
-      p.vy = Math.min(p.vy, -jumpVel(airH * wm.jp)); p.dj = 1; p.bu = 0;   // 上昇中に押しても、いまの勢いより弱くはならない
+      p.vy = Math.min(p.vy, -jumpVel(airH * wm.jp * klJump(p))); p.dj = 1; p.bu = 0;   // 上昇中に押しても、いまの勢いより弱くはならない
       if (chd.id === "vamp" && !p.isClone) p.wgT = VAMP_WING;   // 吸血鬼: 羽を広げて跳ぶ
       if (dir && p.a === 0 && p.ks === 0) p.f = dir;
       if (!p.isClone) emit("dj", ecx(p), p.y + phOf(p));
@@ -2510,6 +2531,14 @@ function skillInput(p, chd, kin, kpress, dir, zone) {
     if (!p.hwr) { if (p.a > 0) return false; p.hwr = 1; p.hwh = []; emit("sc", ecx(p), ecy(p), p.ch); return true; }
     if (p.a > 0 || p.hw < HW_MIN) return false;
     aim(); fireHadou(p); return true;
+  }
+  if (chd.id === "killua") {                     // キルア: 地上ではカンムルのオン/オフ、空中ではナルカミ
+    if (!kpress || p.kc > 0 || p.a > 0) return false;
+    if (!p.ground) { if (p.kz < KL_NK_COST) return false; aim(); narukami(p); return true; }
+    if (!p.kr && p.kz < KL_ON_MIN) return false;
+    p.kr = p.kr ? 0 : 1; p.kc = p.km = KL_TOG;
+    emit("klt", ecx(p), ecy(p), p.kr ? 1 : -1);
+    return true;
   }
   if (sk.hold) {
     if (chd.id === "bomber" && p.ks > 0) p.bcl = dir === 0 ? 0 : dir === p.f ? 1 : -1;   // ボマー: いま離したら、どう投げるか（向いている方 1 / なし 0 / 反対 -1）。向きは変えない
@@ -2598,9 +2627,36 @@ function counterHit(kn, att) {
   if (flyOut(att)) game.hs = Math.max(game.hs, 12);
 }
 
+// キルアのカンムル: 攻撃を受けたら、カミナリを使って自動で返す（騎士のカウンターと同じ強さ）。返したら true
+function klCounter(t, att) {
+  if (!att || !att.al || att === t || !t.kr || !isKillua(t) || t.kg > 0 || t.kz < KL_CN_COST) return false;
+  t.kz -= KL_CN_COST; t.kg = KL_CN_GAP;
+  const d = Math.sign(ecx(att) - ecx(t)); if (d) t.f = d;          // 攻撃してきた方を向いて返す
+  counterHit(t, att);
+  emit("klc", ecx(t), ecy(t), t.f);
+  return true;
+}
+// キルアのナルカミ（空中で使う）: 自分の真下へカミナリを落とす。真下の足場の面（なければ撃墜ライン）まで、幅 KL_NK_W に当たる。盾は効かない
+function narukami(p) {
+  p.kz = Math.max(0, p.kz - KL_NK_COST); p.kc = p.km = KL_NK_CD;
+  const cx0 = ecx(p), top = p.y + phOf(p) * 0.5;
+  let bot = KO_B;
+  for (const pl of platforms()) if (cx0 > pl.x && cx0 < pl.x + pl.w && pl.y >= p.y + phOf(p) - 1 && pl.y < bot) bot = pl.y;
+  const x0 = cx0 - KL_NK_W / 2, x1 = cx0 + KL_NK_W / 2;
+  for (const t of ents()) {
+    if (t === p || ally(t.own, p.own) || !t.al || untouchable(t)) continue;
+    if (hbR(t) < x0 || hbL(t) > x1 || t.y + phOf(t) < top || t.y > bot) continue;
+    const dir = Math.sign(ecx(t) - cx0) || p.f;
+    knock(p, t, KL_NK_FRAC, dir, KL_NK_FRAC, undefined, KL_NK_ANG); impact("h", p, t, KL_NK_FRAC, dir);
+  }
+  hitObjs(p.own, x0, top, x1, bot, []);
+  p.vy = Math.min(p.vy, -2);                                         // 落とす瞬間、少しだけ浮く
+  emit("nk", cx0, top, bot);
+}
 // 近接攻撃と矢の命中処理。o: { dir 飛んでくる向き, frac 盾なしの強さ, recoil 反動, breaker 盾を一撃で壊す（吹っ飛ばさない）}
 function strike(att, t, o) {
   if (untouchable(t)) return;
+  if (klCounter(t, att)) return;
   if (t.cn > 0 && att.al) { counterHit(t, att); return; }
   if (umbrellaBlock(att, t, o)) return;                      // キャンピングシェルターの傘（前からの攻撃）
   const open = !shieldUp(t) || t.f !== -o.dir;               // 盾がない・外れている・背後から → 盾は効かない
@@ -3180,7 +3236,11 @@ function aiSkill(c, t, X, B) {                         // スキルを使うな�
       const aimed = face && fy + o.r >= t.y && fy - o.r <= t.y + phOf(t) && gap <= HW_RANGE - 40;
       return ready && aimed && c.hw >= HW_MIN ? KEY.k : 0;
     }
-    case "yaku": return g && sameLevel && t.ground && gap > 40 && gap < 220 ? KEY.k : 0;                                        // 敵が来る道の足もとに注射器を落とす
+    case "killua":                                                                                                      // 空中: 真下に敵がいたらナルカミ / 地上: 近づいたらカンムル、離れた・カミナリが少ないときは切る
+      if (!g) return c.kz >= KL_NK_COST && t.y + phOf(t) > c.y + phOf(c) - 10 && Math.abs(ecx(t) - ecx(c)) < KL_NK_W / 2 + 10 ? KEY.k : 0;
+      if (!c.kr) return c.kz >= 60 && gap < 320 ? KEY.k : 0;
+      return gap > 480 || c.kz < KL_CN_COST ? KEY.k : 0;
+    case "yaku": return g && sameLevel && t.ground && gap > 40 && gap < 220 ? KEY.k : 0;                                       // 敵が来る道の足もとに注射器を落とす
     case "yani": { const hy = c.y + 22 * szOf(c); return face && hy + 20 >= t.y && hy - 20 <= t.y + phOf(t) && gap <= BREATH_W - 30 && t.s === 0 ? KEY.k : 0; }   // 息の雲が届く距離の敵へ                                                         // 地上の敵が近いとき、手下を呼ぶ
     case "lancer": return g && face && sameLevel && shieldUp(t) && tFaces && gap >= 80 && gap <= 200 ? KEY.k : 0;              // 盾で待つ敵へ、突進して盾を割る
     case "xbow": {                                                                                                          // 同じ高さの敵が射線に入るところへ、クロスボウを置く（置ける数（ふだん 1 台、ラストスパート中は 2 台）に達している間は置かない）
@@ -3419,7 +3479,9 @@ function aiThink(c, owner, pls, B) {
   if (B.dodge && c.ground && Math.random() < B.dodge) inp = aiDodge(c, inp, ccx, feet);
   // 行き詰まり防止: 同じ高さで 2 秒（120 フレーム）も何も押していなければ、とにかく敵へ向かう（待ち・不感帯などで動けなくなる場合の保険）
   if (id === "wizard" && c.mgr && c.ground && gap > 70 && !(inp & KEY.k)) inp &= ~(KEY.l | KEY.r | KEY.a | KEY.u);   // 魔法使い: ためている間は動かない（動くと止まる）。敵が近づいたら動く
-  if ((inp & (KEY.l | KEY.r | KEY.a | KEY.u | KEY.k)) || (id === "wizard" && c.mgr)) c.aiIdle = 0; else c.aiIdle += B.think;
+  const klChg = id === "killua" && B.skill > 0 && !c.kr && c.ground && c.kz < KL_MAX * 0.8 && gap > 260 && !(inp & KEY.k);   // キルア: 敵が遠いうちは止まって充電する
+  if (klChg) inp &= ~(KEY.l | KEY.r | KEY.a | KEY.u);
+  if ((inp & (KEY.l | KEY.r | KEY.a | KEY.u | KEY.k)) || (id === "wizard" && c.mgr) || klChg) c.aiIdle = 0; else c.aiIdle += B.think;
   if (c.aiIdle >= 120 && c.ground) { c.aiIdle = 0; c.aiOnce = 0; c.aiSideT = 0; c.aiGoal = tcx; inp = sgn > 0 ? KEY.r : KEY.l; }
   return inp;
 }
@@ -3677,6 +3739,9 @@ function serEnt(p) {                                         // 見た目に必�
   if (p.a > 0 && p.ak === KNB_AK) o.acc = Math.round(p.achC * 10);   // 騎士のため突きのため量                                  // 敵のタバコでスピード −1 の残り
   if (p.dr > 0) o.dr = p.dr;                                  // 注射器で画面が揺れる残り（揺れるのは本人の画面だけ）
   if (p.st > 0) o.st = p.st;                                  // 臭い息で動けない残り（見た目用）
+  if (p.kz > 0) o.kz = Math.round(p.kz);                      // キルア: カミナリ（戦闘中しかたまらない）
+  if (p.kr) o.kr = 1;                                         // キルア: カンムル中
+  if (!p.ground && game.ph !== "lobby" && isKillua(p)) o.ka = 1;   // キルア: 空中にいる（スキルボタンの表示がナルカミに変わる）
   // 2026-11-18: いつもの値（0・盾が満タン・生きていない）は送らない。参加者は、ないものをいつもの値として読む（readEnt）。
   // 4 人で 1 回 1.3KB → 1 パケット（約 1.2KB）に収まる大きさへ。分かれて届くと、どちらかが落ちただけでその回が丸ごとなくなる
   for (const k of ZERO_KEYS) if (!o[k]) delete o[k];
@@ -4053,6 +4118,7 @@ function readEnt(p, n) {                                     // スナップシ�
   }
   p.gk = n.gk | 0; p.gq = n.gq | 0; p.bt = n.bt | 0;
   p.ub = n.ub | 0; p.nc = n.nc | 0; p.dr = n.dr | 0; p.st = n.st | 0; p.dm = n.dm | 0; p.ybs = n.yb || [0, 0, 0]; p.ybt = n.ybt | 0; p.cw = n.cw | 0; p.cs = n.cs | 0; p.hw = n.hw | 0; p.hwr = n.hwr | 0; p.hmN = n.hn | 0; p.hmT = n.hn ? 1 : 0; p.wgT = n.wg | 0; p.msT = n.ms | 0; { const ta = Array.isArray(n.ta) ? n.ta : [0, 0]; p.tpAx = +ta[0] || 0; p.tpAy = +ta[1] || 0; } p.tpM = n.tm | 0; p.bcl = n.bc | 0; p.nsw = n.nw | 0; p.ach = n.ac | 0; p.achL = n.acl | 0; p.achC = (n.acc | 0) / 10; p.msw = n.mw | 0; p.msA = n.ma | 0; p.ws = n.ws | 0; p.vbT = n.vb | 0; p.sp = n.sp | 0; p.srT = n.sr | 0; p.um = n.um | 0; p.umR = n.umR | 0; p.umHp = n.umHp === undefined ? UMB_HP : n.umHp | 0;
+  p.kz = n.kz | 0; p.kr = n.kr | 0; p.ka = n.ka | 0;
   p.mg = n.mg | 0; p.mgr = n.mr | 0; p.mc = n.mc | 0; p.ml = n.ml | 0; p.bd = n.bd === undefined ? BOOK_MAX : n.bd | 0; p.bdT = n.bdT | 0; p.mb = n.mb | 0;
   if (n.ch !== undefined) p.ch = n.ch;
 }
@@ -4768,6 +4834,22 @@ const C = {
     draw(c, m) { body(c, m); c.fillStyle = shade(m, -.35); c.beginPath(); c.moveTo(-2, 12); c.quadraticCurveTo(20, -10, 42, 12); c.lineTo(42, 14); c.lineTo(-2, 14); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); eyes(c, "round", 18); mouth(c, "smile", 33); [["#2fdc6a", 8, 40], ["#ff4fd8", 26, 48], ["#2fc5ff", 14, 52]].forEach(([col, x, y]) => { c.fillStyle = col; c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.arc(x + 4, y - 2, 2, 0, 7); c.fill(); }); box(c, "#3b3b3b", 36, 34, 14, 7, 2); } },
   camp: { std: "#6f8f4a", back(c) { box(c, "#c98a3a", -10, 14, 14, 26, 4); line(c, "#3b3b3b", 2, [[-3, 14], [-3, 8]]); },
     draw(c, m) { body(c, m); c.fillStyle = "#e6d3a3"; c.beginPath(); c.moveTo(-4, 10); c.lineTo(44, 10); c.lineTo(36, -2); c.lineTo(4, -2); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); eyes(c, "dot", 16); mouth(c, "smile", 30); c.fillStyle = "#ffd24a"; rr(c, 20, 38, 10, 12, 2); c.fill(); c.lineWidth = 1.5; c.strokeStyle = INK; c.stroke(); c.fillStyle = "rgba(255,240,150,.7)"; c.beginPath(); c.arc(25, 44, 8, 0, 7); c.fill(); } },
+  // キルア: ぼさぼさの白い髪、紺のタートルネック（長袖）の上に半袖のシャツ（体の色）、灰色の半ズボン、紫の靴
+  killua: { std: "#e4e0f2", back(c) { c.fillStyle = "#2b3a7a"; rr(c, 2, 28, 8, 17, 3); c.fill(); c.lineWidth = 1.8; c.strokeStyle = INK; c.stroke(); },
+    draw(c, m) {
+      body(c, m);
+      c.fillStyle = "#7c88a6"; rr(c, 1, 43, 38, 12, 2); c.fill(); c.lineWidth = 1.8; c.strokeStyle = INK; c.stroke(); line(c, INK, 1.2, [[20, 46], [20, 55]]);   // 半ズボン
+      box(c, "#7b4b8f", 1, 53, 17, 7, 3); box(c, "#7b4b8f", 22, 53, 17, 7, 3); c.fillStyle = "#f1e8f4"; c.fillRect(3, 52, 13, 3); c.fillRect(24, 52, 13, 3);   // 靴（白いふち）
+      box(c, "#2b3a7a", 29, 30, 9, 17, 3); box(c, m, 27, 24, 12, 9, 3); c.fillStyle = "#f6dcc0"; c.fillRect(30, 46, 7, 4);   // 前の腕: 紺の長袖、半袖、手はポケットのあたり
+      box(c, "#2b3a7a", 11, 21, 24, 6, 2);                                                                                // タートルネック
+      c.fillStyle = "#f6dcc0"; rr(c, 12, 7, 26, 16, 5); c.fill(); c.lineWidth = 1.5; c.strokeStyle = INK; c.stroke();     // 顔
+      c.fillStyle = "#f4f5f9"; c.beginPath();                                                                             // 白いぼさぼさの髪（前髪が額にかかる）
+      [[1, 24], [-4, 13], [-7, 5], [0, 4], [-1, -8], [8, -2], [10, -14], [17, -4], [23, -16], [27, -4], [35, -11], [35, -1], [44, -3], [40, 7], [36, 13], [33, 8], [29, 13], [25, 8], [21, 12], [17, 8], [13, 17], [10, 24]].forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+      c.closePath(); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
+      line(c, "#c9ccd8", 1.3, [[6, 2], [12, -6]]); line(c, "#c9ccd8", 1.3, [[20, 0], [24, -9]]); line(c, "#c9ccd8", 1.3, [[3, 12], [8, 6]]);
+      c.fillStyle = "#3a4fa8"; rr(c, 22, 14, 5, 6, 2); c.fill(); rr(c, 31, 14, 5, 6, 2); c.fill(); c.fillStyle = "#fff"; c.fillRect(23, 15, 1.6, 1.6); c.fillRect(32, 15, 1.6, 1.6);   // 青い目
+      line(c, INK, 1.4, [[28, 21], [32, 21]]);
+    } },
 };
   return {
     std: id => (C[id] || C.normal).std,
@@ -5613,6 +5695,13 @@ function updateSkillUI() {
         else { state = "ready"; label = "ため始め"; sec = "📖" + me.bd; wizHint = "押すとため始める（地上で動くと止まる。空中では横に動いてもたまる）"; }
 
       }
+      else if (id === "killua") {                                // キルア: 地上はカンムルのオン/オフ、空中はナルカミ。数字はカミナリの量（⚡）
+        const kz = me.kz | 0, air = role === "client" ? !!me.ka : !me.ground;
+        label = air ? "ナルカミ" : me.kr ? "カンムル解除" : "カンムル"; sec = "⚡" + kz;
+        if (me.kc > 0) { state = "cool"; ratio = Math.min(1, me.kc / (me.km || KL_TOG)); }
+        else if (air ? kz < KL_NK_COST : (!me.kr && kz < KL_ON_MIN)) { state = "cool"; ratio = 1 - kz / (air ? KL_NK_COST : KL_ON_MIN); }
+        else state = me.kr ? "charge" : "ready";
+      }
       else if (zone) { state = "ready"; label = "入れ替え"; sec = String(Math.ceil(zone.t / 60)); }   // スワッパーの ゾーンがある間（数字は円が消えるまでの秒数）
       else if (me.ks > 0) { state = "charge"; label = "ため中"; }
       else if (id === "archer" && me.am <= 0) { state = "cool"; label = "矢なし"; ratio = 1 - me.amT / ARROW_REGEN; sec = "0"; }   // 矢がないとき: 次の 1 本までを円で出す
@@ -5928,7 +6017,9 @@ function updateFx(dt) {
   }
   for (let i = rings.length - 1; i >= 0; i--) { rings[i].t += dt; if (rings[i].t >= rings[i].max) rings.splice(i, 1); }
   for (let i = inks.length - 1; i >= 0; i--) { inks[i].t += dt; if (inks[i].t >= 240) inks.splice(i, 1); }
+  for (let i = nkBolts.length - 1; i >= 0; i--) { nkBolts[i].t += dt; if (nkBolts[i].t >= 18) nkBolts.splice(i, 1); }
 }
+const nkBolts = [];                                  // キルアのナルカミの落雷（見た目だけ。0.3 秒）
 function drawFx() {
   for (const q of parts) {
     cx.globalAlpha = Math.min(1, q.life / (q.max * 0.5));
@@ -5941,6 +6032,11 @@ function drawFx() {
     cx.globalAlpha = 1 - r.t / r.max; cx.strokeStyle = r.c; cx.lineWidth = 3;
     const rad = (r.r0 || 8) + r.t * (r.sp || 5.5);
     cx.beginPath(); cx.ellipse(r.x, r.y, rad, rad * (r.sy || 1), 0, 0, Math.PI * 2); cx.stroke();      // sy: 縦のつぶし具合（1 より小さいと平たい輪）
+  }
+  for (const b of nkBolts) {                         // ナルカミ: 太い光の柱と、ぎざぎざの稲妻
+    const k = 1 - b.t / 18;
+    cx.globalAlpha = 0.35 * k; cx.fillStyle = "#bae6fd"; cx.fillRect(b.x - KL_NK_W / 2, b.y0, KL_NK_W, b.y1 - b.y0);
+    cx.globalAlpha = k; cx.save(); cx.lineWidth = 2; for (let j = 0; j < 2; j++) bolt(cx, b.x + (Math.random() - 0.5) * 20, b.y0, b.x + (Math.random() - 0.5) * 30, b.y1); cx.restore();
   }
   cx.globalAlpha = 1;
 }
@@ -6125,6 +6221,20 @@ function fxEvent(e) {
     Sfx.shieldBreak(); shake(12); flashA = Math.max(flashA, 0.4);
     rings.push({ x, y, t: 0, max: 18, c: "#ffffff", r0: 10, sp: 7 }); rings.push({ x, y, t: 0, max: 22, c: "#facc15", r0: 6, sp: 5 });
     burst(x, y, 26, { dir: d > 0 ? 0 : Math.PI, spread: 2.2, v0: 4, v1: 12, l0: 14, l1: 28, s0: 3, s1: 7, g: 0.05, colors: ["#facc15", "#ffffff", "#f97316"] });
+  } else if (k === "klt") {                        // キルア: カンムルのオン（d = 1）/ オフ（d = -1）
+    if (d > 0) { Sfx.magicCast(3); rings.push({ x, y, t: 0, max: 14, c: "#67e8f9", r0: 10, sp: 5 }); burst(x, y, 14, { v0: 2, v1: 6, l0: 10, l1: 20, s0: 2, s1: 4, colors: ["#e0f2fe", "#67e8f9", "#ffffff"] }); }
+    else { Sfx.bindOff(); burst(x, y, 6, { v0: 0.5, v1: 2, l0: 8, l1: 14, s0: 2, s1: 3, g: 0.05, colors: ["#94a3b8", "#e0f2fe"] }); }
+  } else if (k === "klf") {                        // キルア: カミナリが満タンになった
+    Sfx.bookNew(); rings.push({ x, y, t: 0, max: 12, c: "#fde047", r0: 12, sp: 4 });
+  } else if (k === "klc") {                        // キルア: カンムルの自動カウンター
+    Sfx.magic(2); shake(6); flashA = Math.max(flashA, 0.15);
+    rings.push({ x, y, t: 0, max: 14, c: "#67e8f9", r0: 8, sp: 6 });
+    burst(x, y, 16, { dir: d > 0 ? 0 : Math.PI, spread: 1.6, v0: 3, v1: 9, l0: 10, l1: 20, s0: 2, s1: 4, colors: ["#e0f2fe", "#67e8f9", "#ffffff"] });
+  } else if (k === "nk") {                         // キルア: ナルカミ（x: 落ちる位置 / y: 上の端 / d: 下の端）
+    Sfx.magic(4); shake(8); flashA = Math.max(flashA, 0.25);
+    nkBolts.push({ x, y0: y, y1: e[3], t: 0 });
+    rings.push({ x, y: e[3], t: 0, max: 16, c: "#bae6fd", r0: 10, sp: 6, sy: 0.35 });
+    burst(x, e[3], 18, { dir: -Math.PI / 2, spread: 2.4, v0: 2, v1: 8, l0: 10, l1: 22, s0: 2, s1: 5, g: 0.15, colors: ["#e0f2fe", "#67e8f9", "#fde047", "#ffffff"] });
   } else if (k === "vbd") {                        // 噛みついている間に % が移った
     burst(x, y, 3, { v0: 0.5, v1: 2, l0: 10, l1: 18, s0: 2, s1: 3, g: 0.1, colors: ["#dc2626", "#7f1d1d"] });
   } else if (k === "vbx") {                        // 吸血の空振り
@@ -6376,6 +6486,21 @@ function drawPlayer(p, i, me, now) {
     const mx = p.f > 0 ? p.x + PLW + 2 : p.x - 2, my = p.y + 22;
     cx.fillStyle = "#f8fafc"; cx.beginPath(); cx.moveTo(mx, my - 4); cx.lineTo(mx + p.f * 7, my); cx.lineTo(mx, my + 4); cx.fill();
     cx.fillStyle = "rgba(220,38,38,0.85)"; for (let j = 0; j < 3; j++) { const ph = ((now / 260) + j / 3) % 1; cx.beginPath(); cx.arc(mx + p.f * (16 - 16 * ph), my + Math.sin(ph * 6 + j) * 3, 2.2, 0, 6.2832); cx.fill(); }
+  }
+  if (chd.id === "killua" && !clone && p.al) {                             // キルア: カンムル中は青白い光と稲妻をまとう。足もとにカミナリの量（全員に見える）
+    const mx = p.x + PLW / 2, my = p.y + PLH / 2;
+    if (p.kr) {
+      cx.save(); cx.globalAlpha = alpha * (0.22 + 0.08 * Math.sin(now / 60)); cx.fillStyle = "#93c5fd";
+      cx.beginPath(); cx.ellipse(mx, my, PLW * 0.95, PLH * 0.7, 0, 0, 6.2832); cx.fill();
+      cx.globalAlpha = alpha;
+      for (let k = 0; k < 3; k++) { const a = Math.random() * 6.2832, r0 = 14 + Math.random() * 10; bolt(cx, mx + Math.cos(a) * r0, my + Math.sin(a) * r0 * 1.3, mx + Math.cos(a) * (r0 + 22), my + Math.sin(a) * (r0 + 22) * 1.3); }
+      cx.restore();
+    }
+    const k = Math.max(0, Math.min(1, (p.kz || 0) / KL_MAX)), bw = PLW + 8, by = p.y + PLH + 4;
+    cx.save(); cx.globalAlpha = alpha; cx.fillStyle = "rgba(15,23,42,0.55)"; cx.fillRect(p.x - 4, by, bw, 5);
+    cx.fillStyle = p.kr ? "#67e8f9" : k >= 1 ? "#fde047" : "#facc15"; cx.fillRect(p.x - 4, by, bw * k, 5);
+    cx.fillStyle = "rgba(255,255,255,0.7)"; for (const c0 of [KL_CN_COST, KL_NK_COST]) cx.fillRect(p.x - 4 + bw * c0 / KL_MAX - 0.5, by, 1, 5);   // 目盛り: カウンター 1 回 / ナルカミ 1 回
+    cx.restore();
   }
   if (chd.id === "hadou" && !clone && p.al && p.hw > 0 && p.hwr) {         // 波動士: 頭の上でためている波動の玉（脈打つ）。両手から玉へ細い光の筋
     const o = hwPos(p), full = p.hw >= HW_MAX, pulse = 1 + (full ? 0.08 : 0.12) * Math.sin(now / (full ? 45 : 60));
