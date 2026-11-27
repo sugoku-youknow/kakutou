@@ -1067,7 +1067,7 @@ function sanitizeProfile(d) {
   let c = Math.round(Number(d.c));
   if (d.c == null || !Number.isFinite(c) || c < 0 || c >= CHARS.length) c = 0;
   const pc = Math.round(Number(d.pc));
-  return Object.assign({ n, c, tg: sanitizeTeam(d.tg) }, d.pc != null && pc >= 0 && pc <= 3 ? { pc } : null);   // pc: 選んだ色（2026-11-27）   // tg: チーム（古い版の参加者は送らない → チームなし。メッセージの種類 t と重ならない名前にする）
+  return Object.assign({ n, c, tg: sanitizeTeam(d.tg) }, d.pc != null && pc >= 0 && pc <= 4 ? { pc } : null);   // pc: 選んだ色（2026-11-27）   // tg: チーム（古い版の参加者は送らない → チームなし。メッセージの種類 t と重ならない名前にする）
 }
 function loadProfile() {
   try { const j = JSON.parse(localStorage.getItem("shieldfight-profile2") || "null"); if (j) return sanitizeProfile(j); } catch (e) {}
@@ -1107,7 +1107,7 @@ const sidesOf = list => new Set(list.map(sideOf)).size;
 // スロット i の人の色。チーム戦ならチームの色の濃淡（同じチームの中で、スロットの小さい順に 1 番目・2 番目…）、そうでなければ席の色
 function colOf(i) {
   const t = tgOf(i), pp = game.p[i];
-  if (!t) return COLORS[pp && pp.pc != null ? pp.pc : i] || "#ffffff";   // 個人戦: 選んだ色（p.pc。2026-11-27）、なければ席の色
+  if (!t) return pp ? bodyCol(pp.ch, pp.pc | 0) : COLORS[i] || "#ffffff";   // 個人戦: 選んだ色（p.pc: 0 = キャラのいつもの色 / 1〜4 = 赤・黄・青・緑。2026-11-27）
   let k = 0; for (let j = 0; j < i; j++) if (game.p[j] && game.p[j].c && tgOf(j) === t) k++;
   return TEAM_SHADES[t][k % 4];
 }
@@ -3775,17 +3775,17 @@ let solo = false;
 let training = false, trainKO = 0;
 // 2026-11-27: 席ごとの CPU（空いた席があってもよい）。slots[k] は席 k+1 の CPU（null = なし）: { lv: 強さ, ch: キャラ（-1 = おまかせ）, pc: 色（個人戦）, tg: チーム（チーム戦）}
 // team: チーム戦か / myPc・myTg・myCh: 自分（1P）の色・チーム・キャラ（-1 = おまかせ）
-const soloCfg = { slots: [{ lv: 1, ch: -1, pc: 1, tg: 2 }, null, null], team: false, myPc: 0, myTg: 1, myCh: 0 };
+const soloCfg = { slots: [{ lv: 1, ch: -1, pc: 0, tg: 2 }, null, null], team: false, myPc: 0, myTg: 1, myCh: 0 };   // pc: 0 = キャラのいつもの色 / 1〜4 = 赤・黄・青・緑
 const ymInt = (v, lo, hi, def) => { const n = Math.round(Number(v)); return v != null && Number.isFinite(n) && n >= lo && n <= hi ? n : def; };
 function sanitizeSolo(d) {
   d = d || {};
   let slots;
-  if (Array.isArray(d.slots)) slots = [0, 1, 2].map(k => { const v = d.slots[k]; return v && typeof v === "object" ? { lv: ymInt(v.lv, 0, AI_LEVELS.length - 1, 1), ch: ymInt(v.ch, -1, CHARS.length - 1, -1), pc: ymInt(v.pc, 0, 3, k + 1), tg: ymInt(v.tg, 1, 4, k % 2 ? 1 : 2) } : null; });
+  if (Array.isArray(d.slots)) slots = [0, 1, 2].map(k => { const v = d.slots[k]; return v && typeof v === "object" ? { lv: ymInt(v.lv, 0, AI_LEVELS.length - 1, 1), ch: ymInt(v.ch, -1, CHARS.length - 1, -1), pc: ymInt(v.pc, 0, 4, 0), tg: ymInt(v.tg, 1, 4, k % 2 ? 1 : 2) } : null; });
   else {                                                  // 古い形（n: CPU の数, lv, chars, teams）から作り直す
     const n = ymInt(d.n, 1, MAX_PLAYERS - 1, 1), lv = ymInt(d.lv, 0, AI_LEVELS.length - 1, 1);
-    slots = [0, 1, 2].map(k => k < n ? { lv, ch: ymInt(d.chars && d.chars[k], -1, CHARS.length - 1, -1), pc: k + 1, tg: ymInt(d.teams && d.teams[k], 1, 4, k % 2 ? 1 : 2) } : null);
+    slots = [0, 1, 2].map(k => k < n ? { lv, ch: ymInt(d.chars && d.chars[k], -1, CHARS.length - 1, -1), pc: 0, tg: ymInt(d.teams && d.teams[k], 1, 4, k % 2 ? 1 : 2) } : null);
   }
-  return { slots, team: !!d.team, myPc: ymInt(d.myPc, 0, 3, 0), myTg: ymInt(d.myTg, 1, 4, 1), myCh: ymInt(d.myCh, -1, CHARS.length - 1, draft ? draft.c : 0) };
+  return { slots, team: !!d.team, myPc: ymInt(d.myPc, 0, 4, 0), myTg: ymInt(d.myTg, 1, 4, 1), myCh: ymInt(d.myCh, -1, CHARS.length - 1, draft ? draft.c : 0) };
 }
 function loadSolo() { try { const j = JSON.parse(localStorage.getItem("shieldfight-cpu") || "null"); if (j) Object.assign(soloCfg, sanitizeSolo(j)); } catch (e) {} }
 function saveSolo() { try { localStorage.setItem("shieldfight-cpu", JSON.stringify(soloCfg)); } catch (e) {} }
@@ -4640,12 +4640,150 @@ function drawSword(c, p, ak, col) {
   }
   c.restore();
 }
+// ---------- キャラの見た目（2026-11-27 に一新）----------
+// 体は 40×60（当たり判定と同じ）。キャラごとに体の形・顔・持ち物・いつもの色（std）がある。色選びで体の色だけ変わり、持ち物の色はそのまま。
+// 右向きで描き、左向きは左右を反転する。o: 試合中の状態（槍兵の槍・リバーシの形態・ゴブGのゴブリン・魔法書の耐久・ヤニ猫のタバコ）
+const CDRAW = (() => {
+  const INK = "#15171c";
+const shade = (hex, k) => { const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255; const t = k < 0 ? 0 : 255, a = Math.abs(k); r = Math.round(r + (t - r) * a); g = Math.round(g + (t - g) * a); b = Math.round(b + (t - b) * a); return `rgb(${r},${g},${b})`; };
+function rr(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+const fillP = (c, col, path) => { c.fillStyle = col; c.beginPath(); path(); c.fill(); };
+const dark = col => { const m = /^#([0-9a-f]{6})$/i.exec(col || ""); if (!m) return false; const n = parseInt(m[1], 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.3; };
+function body(c, main, shape) {           // 体（黒いふち + 体の色 + 右下の影）
+  c.lineJoin = "round";
+  const p = () => {
+    if (shape === "round") { rr(c, 0, 6, 40, 54, 18); }
+    else if (shape === "blob") { c.beginPath(); c.moveTo(0, 22); c.quadraticCurveTo(0, 0, 20, 0); c.quadraticCurveTo(40, 0, 40, 22); c.lineTo(40, 60); for (let i = 0; i < 4; i++) c.quadraticCurveTo(35 - i * 10, 52, 30 - i * 10, 60); c.closePath(); }
+    else if (shape === "wide") { rr(c, -3, 4, 46, 56, 8); }
+    else if (shape === "tall") { rr(c, 4, 0, 32, 60, 8); }
+    else if (shape === "bell") { c.beginPath(); c.moveTo(6, 8); c.quadraticCurveTo(20, -4, 34, 8); c.lineTo(42, 60); c.lineTo(-2, 60); c.closePath(); }
+    else rr(c, 0, 0, 40, 60, 7);
+  };
+  p(); c.fillStyle = main; c.fill(); c.lineWidth = 2.5; c.strokeStyle = dark(main) ? "#aeb8c8" : INK; c.stroke();   // 暗い体（黒いコートなど）は、暗いステージでも形が分かるよう、ふちを明るく
+  c.save(); p(); c.clip(); c.fillStyle = "rgba(0,0,0,.14)"; c.fillRect(26, 0, 20, 64); c.fillStyle = "rgba(255,255,255,.18)"; c.fillRect(-4, 0, 8, 64); c.restore();
+}
+function eyes(c, kind, y = 16, x0 = 22) {   // 顔は右向き（向きは呼ぶ側で反転）
+  c.fillStyle = INK; c.strokeStyle = INK; c.lineWidth = 2;
+  if (kind === "dot") { c.fillRect(x0, y, 5, 6); c.fillRect(x0 + 10, y, 5, 6); }
+  else if (kind === "round") { [x0 + 2, x0 + 12].forEach(x => { c.fillStyle = "#fff"; c.beginPath(); c.arc(x, y + 3, 5, 0, 7); c.fill(); c.stroke(); c.fillStyle = INK; c.beginPath(); c.arc(x + 1.5, y + 3, 2.4, 0, 7); c.fill(); }); }
+  else if (kind === "angry") { c.fillRect(x0, y + 2, 5, 4); c.fillRect(x0 + 10, y + 2, 5, 4); c.beginPath(); c.moveTo(x0 - 1, y - 2); c.lineTo(x0 + 6, y + 1); c.moveTo(x0 + 16, y - 2); c.lineTo(x0 + 9, y + 1); c.stroke(); }
+  else if (kind === "sleepy") { c.beginPath(); c.moveTo(x0, y + 3); c.quadraticCurveTo(x0 + 3, y + 6, x0 + 6, y + 3); c.moveTo(x0 + 10, y + 3); c.quadraticCurveTo(x0 + 13, y + 6, x0 + 16, y + 3); c.stroke(); }
+  else if (kind === "swirl") { [x0 + 2, x0 + 12].forEach(x => { c.beginPath(); for (let a = 0; a < 12; a += .3) c.lineTo(x + Math.cos(a) * a * .4, y + 3 + Math.sin(a) * a * .4); c.lineWidth = 1.3; c.stroke(); }); }
+  else if (kind === "visor") { c.fillStyle = "#22e3f5"; rr(c, x0 - 4, y, 22, 7, 3); c.fill(); c.stroke(); c.fillStyle = "#fff"; c.fillRect(x0 + 10, y + 1.5, 5, 2); }
+  else if (kind === "cat") { c.beginPath(); c.moveTo(x0, y + 4); c.lineTo(x0 + 3, y + 1); c.lineTo(x0 + 6, y + 4); c.moveTo(x0 + 10, y + 4); c.lineTo(x0 + 13, y + 1); c.lineTo(x0 + 16, y + 4); c.stroke(); }
+  else if (kind === "spider") { c.fillStyle = "#ff3b3b"; [[0, 0], [7, -1], [14, 0], [3, 5], [11, 5], [-3, 5], [17, 5], [7, 8]].forEach(([dx, dy]) => { c.beginPath(); c.arc(x0 + dx, y + dy + 2, 1.9, 0, 7); c.fill(); }); }
+}
+const mouth = (c, kind, y = 30, x0 = 24) => {
+  c.strokeStyle = INK; c.fillStyle = INK; c.lineWidth = 2;
+  if (kind === "smile") { c.beginPath(); c.arc(x0 + 5, y - 3, 5, 0.3, 2.8); c.stroke(); }
+  else if (kind === "grit") { c.fillStyle = "#fff"; c.fillRect(x0, y - 3, 12, 5); c.strokeRect(x0, y - 3, 12, 5); c.beginPath(); c.moveTo(x0 + 4, y - 3); c.lineTo(x0 + 4, y + 2); c.moveTo(x0 + 8, y - 3); c.lineTo(x0 + 8, y + 2); c.stroke(); }
+  else if (kind === "fang") { c.beginPath(); c.moveTo(x0, y - 3); c.lineTo(x0 + 12, y - 3); c.stroke(); c.fillStyle = "#fff"; [x0 + 2, x0 + 8].forEach(x => { c.beginPath(); c.moveTo(x, y - 3); c.lineTo(x + 2, y + 3); c.lineTo(x + 4, y - 3); c.fill(); c.stroke(); }); }
+  else if (kind === "o") { c.beginPath(); c.arc(x0 + 6, y - 2, 2.5, 0, 7); c.fill(); }
+  else if (kind === "line") { c.beginPath(); c.moveTo(x0 + 2, y - 2); c.lineTo(x0 + 10, y - 2); c.stroke(); }
+  else if (kind === "whisk") { c.lineWidth = 1.2; c.beginPath(); [[-2, 0], [-2, 3], [14, 0], [14, 3]].forEach(([dx, dy]) => { c.moveTo(x0 + 6, y - 4); c.lineTo(x0 + dx + (dx > 0 ? 6 : -6), y - 5 + dy); }); c.stroke(); c.beginPath(); c.arc(x0 + 6, y - 4, 1.5, 0, 7); c.fill(); }
+};
+const line = (c, col, w, pts) => { c.strokeStyle = col; c.lineWidth = w; c.lineCap = "round"; c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.stroke(); };
+const box = (c, col, x, y, w, h, r = 2) => { c.fillStyle = col; rr(c, x, y, w, h, r); c.fill(); c.lineWidth = 1.8; c.strokeStyle = INK; c.stroke(); };
+const circ = (c, col, x, y, r) => { c.fillStyle = col; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.lineWidth = 1.8; c.strokeStyle = INK; c.stroke(); };
+
+const C = {
+  normal: { std: "#8d98ab", draw(c, m) { body(c, m); eyes(c, "dot"); mouth(c, "line"); } },
+  bomber: { std: "#f08c2e", back(c) { line(c, "#a16207", 2.5, [[16, 2], [12, -8], [16, -14]]); circ(c, "#ffdd57", 16, -15, 3); },
+    draw(c, m) { body(c, m, "round"); box(c, "#3b3b3b", 2, 12, 36, 10, 5); circ(c, "#7fdcff", 24, 17, 4); circ(c, "#7fdcff", 33, 17, 4); mouth(c, "grit", 34); circ(c, "#2a2a2a", 10, 46, 7); line(c, "#a16207", 1.5, [[12, 40], [15, 36]]); } },
+  samurai: { std: "#3d4f9f", back(c) { box(c, INK, 8, -7, 10, 9, 4); },
+    draw(c, m) { body(c, m); c.fillStyle = "#f8fafc"; c.fillRect(0, 6, 40, 5); c.fillStyle = "#dc2626"; c.fillRect(2, 6, 6, 5); eyes(c, "angry", 18); mouth(c, "line", 32); c.fillStyle = "#eef0f4"; c.beginPath(); c.moveTo(10, 60); c.lineTo(20, 40); c.lineTo(30, 60); c.fill(); line(c, INK, 1.5, [[10, 60], [20, 40], [30, 60]]); line(c, "#5a3a20", 4, [[4, 50], [-4, 30]]); line(c, "#d8dde6", 2.5, [[-4, 30], [-9, 18]]); } },
+  archer: { std: "#3f8f4a", back(c) { box(c, "#8b5a2b", -6, 12, 9, 26, 3); [-4, -1].forEach(x => line(c, "#e5e7eb", 1.5, [[x, 12], [x, 4]])); },
+    draw(c, m) { body(c, m); c.fillStyle = shade(m, -.3); c.beginPath(); c.moveTo(-2, 14); c.quadraticCurveTo(20, -14, 42, 14); c.lineTo(42, 10); c.quadraticCurveTo(20, -20, 4, 0); c.closePath(); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); eyes(c, "dot", 18); mouth(c, "smile", 32); line(c, "#a16207", 2.5, [[44, 14], [52, 30], [44, 46]]); line(c, "#e5e7eb", 1, [[44, 14], [44, 46]]); } },
+  teleporter: { std: "#26b5c9", draw(c, m) { body(c, m, "tall"); eyes(c, "visor", 14); c.fillStyle = "rgba(255,255,255,.55)"; [[2, 40], [38, 26], [44, 48], [-4, 20]].forEach(([x, y]) => { c.beginPath(); c.moveTo(x, y - 4); c.lineTo(x + 1.5, y); c.lineTo(x, y + 4); c.lineTo(x - 1.5, y); c.fill(); }); c.fillStyle = "rgba(255,255,255,.35)"; c.fillRect(4, 50, 32, 3); c.fillRect(4, 55, 32, 2); } },
+  berserker: { std: "#c0392b", back(c) { [[4, 2], [12, -3], [20, -5], [28, -3], [36, 2]].forEach(([x, y]) => { c.fillStyle = "#5a1a12"; c.beginPath(); c.moveTo(x - 5, 6); c.lineTo(x, y - 6); c.lineTo(x + 5, 6); c.fill(); }); },
+    draw(c, m) { body(c, m, "wide"); box(c, "#7a7f8a", -2, 2, 44, 8, 3); [[-2, 2, -10, -10], [42, 2, 50, -10]].forEach(([x, y, x2, y2]) => { c.fillStyle = "#f3ead7"; c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo((x + x2) / 2, y - 2, x2, y2); c.lineTo(x + (x2 > x ? -4 : 4) * -1, y + 6); c.fill(); c.lineWidth = 1.5; c.strokeStyle = INK; c.stroke(); }); eyes(c, "angry", 18); mouth(c, "grit", 33); line(c, "#5a1a12", 2, [[8, 22], [14, 36]]); } },
+  knight: { std: "#9aa6b8", back(c) { c.fillStyle = "#e53935"; c.beginPath(); c.moveTo(16, 2); c.quadraticCurveTo(10, -16, -6, -6); c.quadraticCurveTo(6, -8, 12, 4); c.fill(); },
+    draw(c, m) { body(c, m); box(c, shade(m, -.25), 2, 2, 36, 26, 10); box(c, INK, 18, 12, 20, 4, 1); [22, 27, 32].forEach(x => line(c, INK, 1.5, [[x, 18], [x, 25]])); c.fillStyle = shade(m, .35); c.fillRect(4, 34, 32, 4); c.fillRect(4, 44, 32, 4); line(c, INK, 1.2, [[4, 34], [36, 34]]); } },
+  ghost: { std: "#d9d4f5", draw(c, m) { c.globalAlpha = .9; body(c, m, "blob"); c.globalAlpha = 1; eyes(c, "round", 16); mouth(c, "o", 34); c.fillStyle = "rgba(255,120,180,.45)"; c.beginPath(); c.arc(18, 28, 3, 0, 7); c.arc(38, 28, 3, 0, 7); c.fill(); } },
+  giant: { std: "#8a6a4a", draw(c, m) { body(c, m, "wide"); line(c, INK, 3, [[20, 14], [38, 14]]); eyes(c, "dot", 18); mouth(c, "grit", 33); box(c, "#6b4a2b", -3, 44, 46, 8, 2); c.fillStyle = "#ffd24a"; c.fillRect(16, 45, 8, 6); line(c, "#7a5230", 6, [[-4, 50], [-12, 20]]); circ(c, "#7a5230", -12, 18, 6); } },
+  copern: { std: "#9b59b6", back(c, m) { c.globalAlpha = .4; c.fillStyle = m; rr(c, -10, 4, 40, 56, 7); c.fill(); c.globalAlpha = 1; },
+    draw(c, m) { body(c, m); c.strokeStyle = "#ff7ad9"; c.lineWidth = 2; c.strokeRect(20, 14, 8, 7); c.strokeRect(31, 14, 8, 7); line(c, "#ff7ad9", 2, [[28, 17], [31, 17]]); c.fillStyle = INK; c.fillRect(23, 16, 3, 3); c.fillRect(34, 16, 3, 3); mouth(c, "smile", 31); c.fillStyle = "rgba(255,255,255,.7)"; c.fillRect(6, 44, 7, 7); c.fillRect(15, 44, 7, 7); } },
+  okure: { std: "#f4a7c0", back(c) { c.fillStyle = "#ffe8f0"; c.beginPath(); c.moveTo(2, 6); c.quadraticCurveTo(10, -12, 30, -2); c.lineTo(38, 6); c.fill(); circ(c, "#fff", 36, -2, 3); },
+    draw(c, m) { body(c, m, "round"); eyes(c, "sleepy", 20); mouth(c, "o", 34); [[8, 10, "#ff5c9e"], [14, 4, "#ffd24a"]].forEach(([x, y, col]) => { for (let a = 0; a < 5; a++) { c.fillStyle = col; c.beginPath(); c.arc(x + Math.cos(a * 1.26) * 4, y + Math.sin(a * 1.26) * 4, 3, 0, 7); c.fill(); } circ(c, "#fff6a8", x, y, 2.2); }); } },
+  nao: { std: "#7fd1ae", draw(c, m) { body(c, m, "round"); eyes(c, "round", 18); mouth(c, "smile", 34); c.fillStyle = "#ff4d6d"; c.beginPath(); c.moveTo(14, 44); c.bezierCurveTo(4, 36, 10, 30, 14, 36); c.bezierCurveTo(18, 30, 24, 36, 14, 44); c.fill(); line(c, "#3f9e4f", 2, [[20, 6], [20, -4]]); c.fillStyle = "#5cc96b"; c.beginPath(); c.ellipse(15, -5, 5, 3, -.5, 0, 7); c.ellipse(25, -6, 5, 3, .5, 0, 7); c.fill(); } },
+  clock: { std: "#c9a24a", back(c) { box(c, INK, 6, -14, 26, 16, 2); c.fillStyle = "#c9a24a"; c.fillRect(6, -4, 26, 3); box(c, INK, 0, 0, 38, 4, 1); },
+    draw(c, m) { body(c, m); eyes(c, "dot", 14); c.strokeStyle = "#ffd24a"; c.lineWidth = 2; c.beginPath(); c.arc(34, 17, 6, 0, 7); c.stroke(); line(c, "#ffd24a", 1, [[38, 22], [40, 34]]); circ(c, "#fff8e0", 18, 40, 11); line(c, INK, 2, [[18, 40], [18, 32]]); line(c, INK, 2, [[18, 40], [24, 42]]); } },
+  swapper: { std: "#2b2d3a", back(c) { line(c, "#4a4f5c", 4, [[-6, 58], [34, -18]]); line(c, "#e9e4da", 4, [[34, -18], [40, -28]]); c.fillStyle = "#c9a24a"; c.fillRect(31, -17, 6, 3); c.strokeStyle = "rgba(90,180,255,.55)"; c.lineWidth = 2; c.beginPath(); c.arc(50, 30, 12, 0, 7); c.stroke(); },
+    draw(c, m) { body(c, m, "bell"); line(c, "#c8ccd4", 1.5, [[22, 24], [24, 60]]); c.fillStyle = shade(m, .25); c.beginPath(); c.moveTo(6, 20); c.quadraticCurveTo(20, 30, 36, 20); c.lineTo(34, 26); c.quadraticCurveTo(20, 34, 8, 26); c.fill(); c.fillStyle = "#f4ede0"; c.beginPath(); c.moveTo(-1, 6); c.quadraticCurveTo(0, -16, 20, -16); c.quadraticCurveTo(40, -16, 41, 6); c.closePath(); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); c.fillStyle = "#e2d8c4"; c.beginPath(); for (let i = 0; i <= 10; i++) c.arc(-1 + i * 4.2, 6, 2.6, 0, 7); c.fill(); c.strokeStyle = "rgba(0,0,0,.15)"; c.lineWidth = 1; [[8, -8], [20, -12], [31, -7], [14, -2], [27, 0]].forEach(([x, y]) => { c.beginPath(); c.arc(x, y, 1.6, 0, 7); c.stroke(); }); c.fillStyle = INK; c.fillRect(23, 13, 5, 3); c.fillRect(32, 13, 5, 3); c.strokeStyle = "rgba(60,40,80,.6)"; c.lineWidth = 1.2; c.beginPath(); c.moveTo(23, 18); c.lineTo(28, 18); c.moveTo(32, 18); c.lineTo(37, 18); c.stroke(); line(c, INK, 1.6, [[27, 22], [33, 21]]); } },
+  wrestler: { std: "#e5533d", draw(c, m) { body(c, m, "wide"); c.fillStyle = "#ffd24a"; rr(c, 2, 2, 36, 26, 10); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); c.fillStyle = m; [[18, 10], [32, 10]].forEach(([x, y]) => { c.beginPath(); c.moveTo(x - 6, y + 9); c.lineTo(x, y); c.lineTo(x + 6, y + 9); c.fill(); }); eyes(c, "dot", 14); mouth(c, "grit", 26); box(c, INK, -3, 42, 46, 8, 2); circ(c, "#ffd24a", 20, 46, 6); } },
+  tengu: { std: "#d6402f", back(c) { c.fillStyle = "#3b3b3b"; c.beginPath(); c.moveTo(-6, 4); c.lineTo(-2, -8); c.lineTo(4, 2); c.fill(); },
+    draw(c, m) { body(c, m); box(c, INK, 12, -4, 14, 9, 3); eyes(c, "angry", 16); c.fillStyle = shade(m, -.15); c.beginPath(); c.moveTo(38, 22); c.lineTo(56, 28); c.lineTo(38, 30); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); c.fillStyle = "#e8e8e8"; [4, 9, 14].forEach(x => { c.beginPath(); c.moveTo(x, 40); c.lineTo(x + 3, 58); c.lineTo(x + 6, 40); c.fill(); }); c.fillStyle = "#2e7d32"; c.beginPath(); c.ellipse(-6, 30, 8, 12, -.3, 0, 7); c.fill(); line(c, "#6b4a2b", 2, [[-2, 40], [2, 48]]); } },
+  boomer: { std: "#3fa9f5", back(c) { c.fillStyle = "#c98a3a"; c.beginPath(); c.moveTo(-6, 6); c.quadraticCurveTo(6, 16, -6, 30); c.lineTo(-2, 30); c.quadraticCurveTo(10, 16, -2, 6); c.fill(); },
+    draw(c, m) { body(c, m); c.fillStyle = "#ff8a1f"; c.fillRect(0, 6, 40, 6); c.beginPath(); c.moveTo(0, 8); c.lineTo(-10, 4); c.lineTo(-8, 14); c.fill(); eyes(c, "dot", 18); mouth(c, "smile", 32); } },
+  lancer: { std: "#b07a3a", back(c) { c.fillStyle = "#c0392b"; c.beginPath(); c.moveTo(4, 0); c.quadraticCurveTo(20, -18, 36, 0); c.fill(); },
+    draw(c, m, o) { body(c, m); box(c, "#c9a24a", 0, 0, 40, 14, 6); box(c, INK, 20, 8, 18, 6, 1); eyes(c, "angry", 18); mouth(c, "line", 32);
+      if (!o.atk) { line(c, "#6b4a2b", 3, [[44, 56], [44, -16]]); c.fillStyle = "#d8dde6"; c.beginPath(); c.moveTo(40, -16); c.lineTo(44, -28); c.lineTo(48, -16); c.fill(); c.strokeStyle = INK; c.lineWidth = 1.5; c.stroke(); } } },
+  reversi: { std: "#2b2b2b", back(c, m, o) { const d = !!o.fm; circ(c, d ? INK : "#fff", 20, -4, 7); c.fillStyle = d ? "#fff" : INK; c.beginPath(); c.arc(20, -4, 7, Math.PI / 2, Math.PI * 1.5); c.fill();
+      if (!d) { c.fillStyle = "#dc2626"; c.beginPath(); c.moveTo(4, 2); c.lineTo(2, -10); c.lineTo(12, 2); c.fill(); c.beginPath(); c.moveTo(36, 2); c.lineTo(38, -10); c.lineTo(28, 2); c.fill(); } },
+    draw(c, m, o) { const d = !!o.fm, A = d ? "#f4f4f4" : m, B = d ? m : "#f4f4f4"; body(c, A); c.save(); rr(c, 0, 0, 40, 60, 7); c.clip(); c.fillStyle = B; c.fillRect(20, 0, 20, 60); c.restore(); rr(c, 0, 0, 40, 60, 7); c.lineWidth = 2.5; c.strokeStyle = INK; c.stroke();
+      c.fillStyle = d ? INK : "#fff"; c.fillRect(10, 16, 5, 6); c.fillStyle = d ? "#fff" : INK; c.fillRect(28, 16, 5, 6); mouth(c, d ? "line" : "fang", 32, 16);
+      if (d) { box(c, "#9ca3af", -4, 20, 9, 18, 2); box(c, "#9ca3af", 35, 20, 9, 18, 2); } } },
+  spider: { std: "#3a2f5c", back(c) { line(c, "rgba(255,255,255,.85)", 1.2, [[49, 2], [58, -34]]); c.strokeStyle = "rgba(255,255,255,.35)"; c.lineWidth = 1; c.beginPath(); c.arc(58, -34, 4, 0, 7); c.stroke(); },
+    draw(c, m) { body(c, m); c.save(); rr(c, 0, 0, 40, 60, 7); c.clip(); c.strokeStyle = "rgba(255,255,255,.16)"; c.lineWidth = 1; for (let a = 0; a < 5; a++) { c.beginPath(); c.moveTo(20, 30); c.lineTo(20 + Math.cos(a * 1.26 + .3) * 34, 30 + Math.sin(a * 1.26 + .3) * 34); c.stroke(); } [10, 20].forEach(r => { c.beginPath(); c.arc(20, 30, r, 0, 7); c.stroke(); }); c.restore(); c.fillStyle = shade(m, -.35); rr(c, 2, 2, 36, 24, 9); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); c.fillStyle = "#1a1626"; rr(c, 14, 9, 25, 9, 4); c.fill(); [[22, 13.5, 3.2], [33, 13.5, 3.2], [27.5, 11, 1.6], [17, 12, 1.4]].forEach(([x, y, r]) => { c.fillStyle = "#ff3b3b"; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.fillStyle = "rgba(255,255,255,.7)"; c.beginPath(); c.arc(x - r * .35, y - r * .35, r * .3, 0, 7); c.fill(); }); c.fillStyle = "#ff3b3b"; c.beginPath(); c.moveTo(20, 33); c.lineTo(23, 37); c.lineTo(20, 41); c.lineTo(17, 37); c.fill(); c.fillStyle = shade(m, -.35); c.fillRect(0, 48, 40, 3); line(c, INK, 8, [[34, 30], [48, 6]]); line(c, m, 5, [[34, 30], [48, 6]]); circ(c, shade(m, -.35), 49, 4, 4); box(c, "#c8ccd4", 44, 8, 7, 4, 1); line(c, INK, 7, [[6, 30], [2, 44]]); line(c, m, 4, [[6, 30], [2, 44]]); c.fillStyle = INK; c.fillRect(22, 21, 10, 1.8); } },
+  xbow: { std: "#8d8f4a", back(c) { c.fillStyle = "#6b4a2b"; c.beginPath(); c.ellipse(20, 2, 26, 5, 0, 0, 7); c.fill(); box(c, "#6b4a2b", 6, -10, 28, 12, 4); },
+    draw(c, m) { body(c, m); c.fillStyle = "#c0392b"; c.fillRect(6, 0, 28, 3); box(c, "#ff9f1a", 20, 14, 18, 7, 3); eyes(c, "dot", 15, 23); mouth(c, "smile", 32); line(c, "#6b4a2b", 3, [[30, 40], [52, 40]]); line(c, INK, 2, [[46, 30], [50, 40], [46, 50]]); } },
+  gobg: { std: "#7a9a4a", back(c, m, o) { box(c, "#9a6b3a", -16, 2, 18, 40, 4); [10, 18, 26, 34].forEach(y => line(c, "#6b4a2b", 1, [[-16, y], [2, y]]));
+      [[-10, o.gk || 0], [12, o.gq || 0]].forEach(([gy, gk]) => { const thr = gk > GOB_THROW_CD - 10, gx = -14;
+        c.fillStyle = "#a8d05a"; rr(c, gx, gy, 14, 14, 6); c.fill(); c.lineWidth = 1.5; c.strokeStyle = INK; c.stroke();
+        c.beginPath(); c.moveTo(gx, gy + 6); c.lineTo(gx - 7, gy + 2); c.lineTo(gx, gy + 10); c.fill(); c.beginPath(); c.moveTo(gx + 14, gy + 6); c.lineTo(gx + 20, gy + 1); c.lineTo(gx + 14, gy + 10); c.fill();
+        c.fillStyle = INK; c.fillRect(gx + 5, gy + 5, 2, 3); c.fillRect(gx + 10, gy + 5, 2, 3); c.fillStyle = "#c0392b"; c.fillRect(gx, gy, 14, 3);
+        if (thr) { line(c, "#6b4a2b", 2, [[gx + 10, gy + 10], [gx + 42, gy + 10]]); c.fillStyle = "#d8dde6"; c.beginPath(); c.moveTo(gx + 48, gy + 10); c.lineTo(gx + 42, gy + 7); c.lineTo(gx + 42, gy + 13); c.fill(); }
+        else { line(c, "#6b4a2b", 2, [[gx + 16, gy + 14], [gx + 22, gy - 4]]); c.fillStyle = "#d8dde6"; c.beginPath(); c.moveTo(gx + 20, gy - 4); c.lineTo(gx + 23, gy - 10); c.lineTo(gx + 25, gy - 3); c.fill(); } }); },
+    draw(c, m) { body(c, m, "wide"); line(c, "#8a6a3a", 3, [[2, 8], [10, 44]]); c.fillStyle = shade(m, -.2); c.beginPath(); c.ellipse(30, 30, 7, 5, 0, 0, 7); c.fill(); eyes(c, "dot", 16, 24); line(c, INK, 2.5, [[22, 13], [30, 15]]); mouth(c, "line", 34, 24); c.fillStyle = "#f3ead7"; [[26, 30], [34, 30]].forEach(([x, y]) => { c.beginPath(); c.moveTo(x, y); c.lineTo(x + 1.5, y - 6); c.lineTo(x + 3, y); c.fill(); }); box(c, "#6b4a2b", -3, 44, 46, 6, 2); } },
+  wizard: { std: "#2c2f6b", back(c, m) { c.fillStyle = shade(m, -.3); c.beginPath(); c.moveTo(0, 14); c.quadraticCurveTo(-6, 40, -2, 60); c.lineTo(6, 60); c.fill(); },
+    draw(c, m, o) { body(c, m, "bell"); c.fillStyle = shade(m, -.35); c.beginPath(); c.moveTo(2, 22); c.quadraticCurveTo(0, -4, 22, -4); c.quadraticCurveTo(42, -2, 40, 22); c.lineTo(36, 22); c.quadraticCurveTo(36, 6, 22, 6); c.quadraticCurveTo(8, 6, 8, 22); c.closePath(); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); c.fillStyle = "#f6dcc0"; rr(c, 9, 8, 26, 16, 6); c.fill(); eyes(c, "dot", 12, 19); line(c, "#e2b93b", 2, [[4, 56], [38, 56]]); line(c, "#e2b93b", 2, [[20, 24], [20, 54]]); c.fillStyle = "#e2b93b"; c.beginPath(); c.arc(20, 30, 2.5, 0, 7); c.fill();
+      const bd = o.bd === undefined ? BOOK_MAX : o.bd;
+      if (bd > 0) { box(c, bd <= 3 ? "#b91c1c" : "#7a4f2a", 30, 32, 16, 12, 2); c.fillStyle = "#f3ead7"; c.fillRect(32, 34, 5, 8); c.fillRect(39, 34, 5, 8); c.fillStyle = "#ffd24a"; c.fillRect(37.5, 36, 3, 3); } } },
+  yaku: { std: "#ff9fb5", back(c) { line(c, "#f0d38a", 3, [[2, 50], [-8, 44], [-10, 34]]); },
+    draw(c, m) { const hair = "#f0d38a"; body(c, m); c.fillStyle = "#6e7480"; c.fillRect(2, 46, 36, 14); line(c, INK, 1.2, [[20, 48], [20, 60]]); c.fillStyle = hair; [[4, 0], [28, 0]].forEach(([x]) => { c.beginPath(); c.moveTo(x, 4); c.lineTo(x + 3, -9); c.lineTo(x + 10, 4); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); }); box(c, hair, 1, 1, 38, 22, 6); c.fillStyle = "#f6dcc0"; rr(c, 14, 9, 24, 14, 4); c.fill(); eyes(c, "swirl", 12, 20); mouth(c, "line", 22, 22); c.fillStyle = "#d6f5ff"; rr(c, -8, 32, 18, 6, 2); c.fill(); c.lineWidth = 1.5; c.strokeStyle = INK; c.stroke(); c.fillStyle = "#3fd36b"; c.fillRect(-6, 33, 10, 4); line(c, "#9aa6b8", 1.5, [[-8, 35], [-14, 35]]); } },
+  yani: { std: "#b9c4d6", back(c) { line(c, "#4a4f5c", 3, [[2, 50], [-8, 46], [-10, 36]]); },
+    draw(c, m, o) { const hair = "#c9ccd2", now = performance.now(); body(c, m); c.fillStyle = "#3e4a66"; c.fillRect(2, 46, 36, 14); line(c, INK, 1.2, [[20, 48], [20, 60]]); c.fillStyle = hair; [[4, 0], [28, 0]].forEach(([x]) => { c.beginPath(); c.moveTo(x, 4); c.lineTo(x + 3, -9); c.lineTo(x + 10, 4); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); }); box(c, hair, 1, 1, 38, 22, 6); c.fillStyle = hair; [[10, 22], [16, 24], [36, 22]].forEach(([x, y]) => { c.beginPath(); c.moveTo(x - 3, 20); c.lineTo(x, y + 3); c.lineTo(x + 3, 20); c.fill(); }); c.fillStyle = "#f6dcc0"; rr(c, 14, 9, 24, 13, 4); c.fill();
+      const wd = !!o.wd, left = o.left === undefined ? 1 : o.left;
+      if (wd) { eyes(c, "angry", 13, 20); line(c, INK, 1.6, [[24, 21], [28, 19], [32, 21]]);
+        c.save(); c.translate(8, 6); c.strokeStyle = "#dc2626"; c.lineWidth = 1.8; c.beginPath(); for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { c.moveTo(a * 2, b * 6); c.quadraticCurveTo(a * 2, b * 2, a * 6, b * 2); } c.stroke(); c.restore();
+        c.fillStyle = "rgba(226,232,240,0.6)"; for (let k = 0; k < 2; k++) { const ph = (now / 600 + k * 0.5) % 1; c.beginPath(); c.arc(10 + k * 20 + Math.sin(ph * 7) * 3, -14 - ph * 18, 3 + ph * 4, 0, 7); c.fill(); } }
+      else { eyes(c, "sleepy", 13, 20); const len = 2 + 12 * left, tip = 38 + len; line(c, "#d97706", 3, [[34, 20], [38, 20]]); line(c, "#f4f4f4", 3, [[38, 20], [tip, 20]]); line(c, Math.floor(now / 180) % 2 ? "#ef4444" : "#fb923c", 3, [[tip, 20], [tip + 2, 20]]);
+        const t = now / 400; c.strokeStyle = "rgba(203,213,225,0.65)"; c.lineWidth = 1.5; c.beginPath(); c.moveTo(tip + 3, 18); c.quadraticCurveTo(tip + 8 + 5 * Math.sin(t), 10, tip + 5 + 2 * Math.sin(t + 1), 0); c.stroke(); }
+      const n = o.cs | 0; box(c, "#b91c1c", 5, 30, 12, 12, 1); for (let k = 0; k < Math.min(n, 3); k++) { c.fillStyle = "#f4f4f4"; c.fillRect(6.5 + k * 3.5, 26, 2.5, 5); c.fillStyle = "#d97706"; c.fillRect(6.5 + k * 3.5, 26, 2.5, 1.5); } } },
+  vamp: { std: "#6b1f3a", back(c) { c.fillStyle = "#1c1c24"; c.beginPath(); c.moveTo(-2, 8); c.lineTo(-16, 18); c.lineTo(-10, 22); c.lineTo(-14, 30); c.lineTo(-2, 26); c.fill(); c.beginPath(); c.moveTo(-2, 2); c.lineTo(20, -10); c.lineTo(42, 2); c.lineTo(42, 14); c.lineTo(-2, 14); c.fill(); },
+    draw(c, m) { body(c, m); c.fillStyle = "#1c1c24"; c.beginPath(); c.moveTo(0, 0); c.lineTo(40, 0); c.lineTo(40, 8); c.lineTo(26, 8); c.lineTo(20, 14); c.lineTo(14, 8); c.lineTo(0, 8); c.fill(); eyes(c, "angry", 18); c.fillStyle = "#ff3b3b"; c.fillRect(23, 20, 3, 2); c.fillRect(33, 20, 3, 2); mouth(c, "fang", 33); c.fillStyle = "#b71c1c"; c.beginPath(); c.moveTo(0, 42); c.lineTo(20, 52); c.lineTo(40, 42); c.lineTo(40, 60); c.lineTo(0, 60); c.fill(); } },
+  hadou: { std: "#7cc6ff", back(c) { c.fillStyle = "rgba(120,200,255,.5)"; c.beginPath(); c.arc(50, 34, 10, 0, 7); c.fill(); c.fillStyle = "#e8f8ff"; c.beginPath(); c.arc(50, 34, 5, 0, 7); c.fill(); },
+    draw(c, m) { body(c, m); c.fillStyle = "#f4f4f4"; c.beginPath(); c.moveTo(10, 24); c.lineTo(20, 40); c.lineTo(30, 24); c.lineTo(40, 24); c.lineTo(40, 60); c.lineTo(0, 60); c.lineTo(0, 24); c.fill(); line(c, INK, 1.5, [[10, 24], [20, 40], [30, 24]]); c.fillStyle = "#ffd24a"; c.fillRect(0, 6, 40, 5); c.fillStyle = INK; c.fillRect(0, 44, 40, 5); eyes(c, "angry", 14); } },
+  gambler: { std: "#2e9e6b", back(c) { line(c, "#6b4a2b", 3, [[-4, 50], [-4, 20]]); box(c, "#9aa6b8", -14, 10, 20, 12, 3); },
+    draw(c, m) { body(c, m); c.fillStyle = "rgba(60,220,120,.75)"; c.beginPath(); c.moveTo(-2, 10); c.lineTo(46, 10); c.lineTo(40, 2); c.lineTo(0, 2); c.fill(); c.lineWidth = 1.5; c.strokeStyle = INK; c.stroke(); eyes(c, "dot", 16); mouth(c, "smile", 30); box(c, "#fff", 8, 38, 12, 12, 2); c.fillStyle = INK; [[11, 41], [17, 47], [14, 44]].forEach(([x, y]) => { c.beginPath(); c.arc(x, y, 1.3, 0, 7); c.fill(); }); box(c, "#fff", 24, 36, 10, 14, 1); c.fillStyle = "#e53935"; c.font = "900 9px sans-serif"; c.fillText("♥", 25, 46); } },
+  cf: { std: "#e8611f", draw(c, m) { body(c, m); c.fillStyle = INK; c.fillRect(0, 34, 40, 3); c.fillStyle = "#f4f4f4"; c.fillRect(30, 26, 6, 34); box(c, "#f4f4f4", -1, -2, 42, 26, 12); c.fillStyle = "#1d2433"; rr(c, 16, 8, 24, 9, 4); c.fill(); c.fillStyle = "rgba(120,200,255,.7)"; c.fillRect(30, 9.5, 7, 2); line(c, m, 3, [[4, 2], [12, 18]]); box(c, "#2b2d3a", 0, 50, 40, 10, 2); c.fillStyle = "#ffd24a"; c.fillRect(2, 52, 8, 2); } },
+  splat: { std: "#ff8a1f", back(c) { c.fillStyle = "#5b6b80"; c.beginPath(); c.moveTo(4, 60); c.lineTo(16, 44); c.lineTo(20, 60); c.fill(); },
+    draw(c, m) { body(c, m); c.fillStyle = shade(m, -.35); c.beginPath(); c.moveTo(-2, 12); c.quadraticCurveTo(20, -10, 42, 12); c.lineTo(42, 14); c.lineTo(-2, 14); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); eyes(c, "round", 18); mouth(c, "smile", 33); [["#2fdc6a", 8, 40], ["#ff4fd8", 26, 48], ["#2fc5ff", 14, 52]].forEach(([col, x, y]) => { c.fillStyle = col; c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.arc(x + 4, y - 2, 2, 0, 7); c.fill(); }); box(c, "#3b3b3b", 36, 34, 14, 7, 2); } },
+  camp: { std: "#6f8f4a", back(c) { box(c, "#c98a3a", -10, 14, 14, 26, 4); line(c, "#3b3b3b", 2, [[-3, 14], [-3, 8]]); },
+    draw(c, m) { body(c, m); c.fillStyle = "#e6d3a3"; c.beginPath(); c.moveTo(-4, 10); c.lineTo(44, 10); c.lineTo(36, -2); c.lineTo(4, -2); c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke(); eyes(c, "dot", 16); mouth(c, "smile", 30); c.fillStyle = "#ffd24a"; rr(c, 20, 38, 10, 12, 2); c.fill(); c.lineWidth = 1.5; c.strokeStyle = INK; c.stroke(); c.fillStyle = "rgba(255,240,150,.7)"; c.beginPath(); c.arc(25, 44, 8, 0, 7); c.fill(); } },
+};
+  return {
+    std: id => (C[id] || C.normal).std,
+    draw(c, id, main, o) { const d = C[id] || C.normal; c.lineCap = "butt"; if (d.back) d.back(c, main, o); d.draw(c, main, o); c.lineCap = "butt"; c.lineJoin = "miter"; },
+  };
+})();
+// 色: 0 = いつもの色（キャラごと）/ 1 赤 / 2 黄 / 3 青 / 4 緑。チーム戦はチームの色
+const PAL_COLS = ["", "#e8463c", "#f2c12e", "#2f7df5", "#2fb44a"], PAL_NAMES = ["いつもの色", "赤", "黄", "青", "緑"];
+const charStd = idx => CDRAW.std((CHARS[idx] || CHARS[0]).id);
+const bodyCol = (idx, pc) => pc > 0 && PAL_COLS[pc] ? PAL_COLS[pc] : charStd(idx);
+// 文字に使う色: 暗い色（黒いコートなど）は、暗い背景でも読めるよう明るくする
+function textCol(hex) {
+  const n = parseInt(String(hex).slice(1), 16); if (!Number.isFinite(n)) return hex;
+  const r = n >> 16, g = (n >> 8) & 255, b = n & 255, l = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  if (l > 0.45) return hex;
+  const k = 0.55; return `rgb(${Math.round(r + (255 - r) * k)},${Math.round(g + (255 - g) * k)},${Math.round(b + (255 - b) * k)})`;
+}
 function drawChar(c, idx, x, y, f, col, flash, o) {
-  c.fillStyle = flash ? "#ffffff" : col;
-  c.fillRect(x, y, PLW, PLH);
-  c.fillStyle = "#111827";
-  c.fillRect(x + (f > 0 ? 24 : 8), y + 12, 8, 8);            // 目（向き）
-  deco(c, (CHARS[idx] || CHARS[0]).id, x, y, f, o);
+  c.save(); c.translate(x, y); if (f < 0) { c.translate(PLW, 0); c.scale(-1, 1); }
+  CDRAW.draw(c, (CHARS[idx] || CHARS[0]).id, flash ? "#ffffff" : col, o || {});
+  c.restore();
+  const id = (CHARS[idx] || CHARS[0]).id;
+  if (id === "yani" && o && (o.cs | 0) >= 4) { c.fillStyle = "#fde047"; c.font = "bold 10px sans-serif"; c.textAlign = "center"; c.fillText("×" + (o.cs | 0), x + 20, y + 62); }   // タバコが 4 本以上: 数（文字は反転しない）
 }
 
 // ---------- UI（DOM）----------
@@ -4672,7 +4810,7 @@ function landStatsHtml() {
     const p = game.p[i], c = chOf(p), wins = Array.from({ length: game.wr }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
     const vals = [effA(p), effD(p), effS(p)], bases = [baseStat(p, "A"), baseStat(p, "D"), baseStat(p, "S")];   // もとの値（リバーシは今の形態）
     const bars = LAND_STATS ? `<div class="hs">${STATS.map((st, k) => barHtml(vals[k], st.color, bases[k])).join("")}</div>` : "";
-    return `<div class="hc${i === myId ? " me" : ""}" style="--c:${colOf(i)}"><div><b>${esc(nameOf(i))}</b>` +
+    return `<div class="hc${i === myId ? " me" : ""}" style="--c:${textCol(colOf(i))}"><div><b>${esc(nameOf(i))}</b>` +
       `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn">${wins}</span></div></div>${bars}</div>`;
   };
   const half = Math.ceil(ids.length / 2);
@@ -4687,8 +4825,8 @@ function statsHtml() {
     if (!p || !p.c || !p.lk) continue;
     const c = chOf(p), wins = Array.from({ length: game.wr }, (_, k) => `<i class="${k < p.w ? "on" : ""}"></i>`).join("");
     const vals = [effA(p), effD(p), effS(p)], bases = [baseStat(p, "A"), baseStat(p, "D"), baseStat(p, "S")];   // もとの値（リバーシは今の形態）
-    html +=`<div class="pc${i === myId ? " me" : ""}"><b style="color:${colOf(i)}">${esc(nameOf(i))}</b>${teamLabel(p)}` +
-      `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn" style="color:${colOf(i)}">${wins}</span></div>` +
+    html +=`<div class="pc${i === myId ? " me" : ""}"><b style="color:${textCol(colOf(i))}">${esc(nameOf(i))}</b>${teamLabel(p)}` +
+      `<div class="sub"><span>${esc(c.name)}${p.lv > 0 ? " ♥" + p.lv : ""}</span><span class="wn" style="color:${textCol(colOf(i))}">${wins}</span></div>` +
       STATS.map((st, k) => `<div class="pr"><span class="lb" style="color:${st.color}">${st.label}</span>${barHtml(vals[k], st.color, bases[k])}</div>`).join("") + `</div>`;
   }
   return `<div class="pcs">${html}</div>`;
@@ -4727,7 +4865,7 @@ function drawPreview(canvas, idx) {
   else if ((CHARS[idx] || CHARS[0]).id === "wizard") c.setTransform(1.15, 0, 0, 1.15, 12, 22);   // 魔法使いは、帽子の先が欠けないよう少し小さく、下げて描く
   else c.setTransform(1.4, 0, 0, 1.4, 8, 14);
   c.clearRect(-8, -14, 80, 110);
-  drawChar(c, idx, 0, 0, 1, COLORS[myId] || COLORS[0], false);
+  drawChar(c, idx, 0, 0, 1, charStd(idx), false);
 }
 function paintSelect() {
   const root = ui.querySelector(".setup"); if (!root) return;
@@ -4879,7 +5017,6 @@ let soloStage = false;                            // CPU 戦: キャラ選択の
 let ymJoin = false;                               // ホーム: 「部屋に入る」の番号入力を開いている
 const ymPort = () => window.innerHeight > window.innerWidth * 1.1;
 const YM = { ink: "#15171c", red: "#e8463c", red2: "#c9372e", orange: "#ff8f1f", green: "#8fd630", blue: "#2fa6f5", violet: "#b45cf0", teal: "#22c7b8", yellow: "#ffcc2e" };
-const YM_PAL = ["#e8463c", "#2f7df5", "#2fb44a", "#e0a800"];   // 個人戦の色（COLORS と同じ並び: 赤・青・緑・黄）
 // 設計の大きさの画面を、いまの画面いっぱいに合わせる
 function ymFit() {
   const st = document.getElementById("ymSt"); if (!st) return;
@@ -5010,7 +5147,7 @@ function showHome() {
 }
 
 // ---------- キャラの絵（一覧・パネル）----------
-function ymCellArt(cv, i) { const c = cv.getContext("2d"); c.setTransform(3, 0, 0, 3, 47, 14); drawChar(c, i, 0, 0, 1, "#5d6a80", false); }
+function ymCellArt(cv, i) { const c = cv.getContext("2d"); c.setTransform(3, 0, 0, 3, 47, 14); drawChar(c, i, 0, 0, 1, charStd(i), false); }
 function ymPanelArt(cv, i, col) {
   const c = cv.getContext("2d");
   if (i < 0) { c.fillStyle = col; c.font = "900 170px sans-serif"; c.fillText("?", 40, 220); return; }
@@ -5044,8 +5181,8 @@ const ymTeamMode = () => soloCfg.team;
 // スロット i の色（パネル・コインの色）
 function ymSlotCol(i) {
   if (ymTeamMode()) { const t = i === 0 ? soloCfg.myTg : (soloCfg.slots[i - 1] || {}).tg; return TEAM_SHADES[t || 1][0]; }
-  const pc = i === 0 ? soloCfg.myPc : (soloCfg.slots[i - 1] || {}).pc;
-  return YM_PAL[pc | 0];
+  const pc = (i === 0 ? soloCfg.myPc : (soloCfg.slots[i - 1] || {}).pc) | 0, ch = ymSlotCh(i);
+  return ch == null || ch < 0 ? (pc > 0 ? PAL_COLS[pc] : "#9aa2ae") : bodyCol(ch, pc);   // おまかせは、色を選んでいなければ灰色
 }
 const ymSlotCh = i => i === 0 ? soloCfg.myCh : (soloCfg.slots[i - 1] ? soloCfg.slots[i - 1].ch : null);
 function ymSelPaint() {
@@ -5073,7 +5210,7 @@ function ymSelPaint() {
     const ch = ymSlotCh(i);
     if (ch === null) { h += `<div class="ym-pn empty" data-slot="${i}"><div class="slot">${i + 1}P</div><div class="add"><b>＋</b>タップで${training ? "相手" : " CPU "}を追加</div><div class="plate">なし</div></div>`; continue; }
     const col = ymSlotCol(i), nm = ch < 0 ? "おまかせ" : CHARS[ch].name, s = i ? soloCfg.slots[i - 1] : null;
-    const tag = team ? `${TEAM_NAMES[i === 0 ? soloCfg.myTg : s.tg]}チーム ⇄` : "色 ⇄";
+    const tag = team ? `${TEAM_NAMES[i === 0 ? soloCfg.myTg : s.tg]}チーム ⇄` : `${PAL_NAMES[(i === 0 ? soloCfg.myPc : s.pc) | 0]} ⇄`;
     h += `<div class="ym-pn" data-slot="${i}" style="--c:${col}"><canvas class="art" width="220" height="290"></canvas><div class="hint">${tag}</div>`
       + `<div class="slot">${i ? "CPU" : "1P"}</div><div class="cn" style="font-size:${nm.length > 4 ? 17 : 23}px">${esc(nm)}</div>`
       + (i ? `<div class="plate" data-a="rm">${training ? "相手" : "CPU " + esc(AI_LEVELS[s.lv].name)}<i>タップで外す</i></div>`
@@ -5100,7 +5237,7 @@ function ymSelClick(e) {
   if (pop) {                                                        // CPU の強さを選ぶ小窓
     const b = e.target.closest("[data-lv]"); if (!b) return;
     const k = +pop.dataset.slot, used = [soloCfg.myPc].concat(soloCfg.slots.filter(Boolean).map(s => s.pc));
-    soloCfg.slots[k - 1] = { lv: +b.dataset.lv, ch: -1, pc: [0, 1, 2, 3].find(c => !used.includes(c)) || 0, tg: k % 2 ? 2 : 1 };
+    soloCfg.slots[k - 1] = { lv: +b.dataset.lv, ch: -1, pc: 0, tg: k % 2 ? 2 : 1 };
     pop.remove(); ymSoloChanged(); return;
   }
   st.querySelectorAll(".ym-pop").forEach(p => p.remove());
@@ -5114,7 +5251,7 @@ function ymSelClick(e) {
   const pnl = e.target.closest(".ym-pn"); if (!pnl) return;
   const i = +pnl.dataset.slot;
   if (pnl.classList.contains("empty")) {
-    if (training) { soloCfg.slots[i - 1] = { lv: 0, ch: -1, pc: i, tg: i % 2 ? 2 : 1 }; ymSoloChanged(); return; }
+    if (training) { soloCfg.slots[i - 1] = { lv: 0, ch: -1, pc: 0, tg: i % 2 ? 2 : 1 }; ymSoloChanged(); return; }
     const x = (ymPort() ? (i % 2) * 300 : i * 246) + 10, y = ymPort() ? 560 : 286;
     st.insertAdjacentHTML("beforeend", `<div class="ym-pop" data-slot="${i}" style="left:${Math.min(x, ymPort() ? 360 : 760)}px;top:${y}px"><h3>CPU を追加：強さは？</h3>`
       + AI_LEVELS.map((l, v) => `<div class="b" data-lv="${v}" style="background:${["#6fbf4a", "#f0a020", "#e8463c"][v] || "#888"}">${esc(l.name)}<small>${esc(l.desc)}</small></div>`).join("") + `</div>`);
@@ -5127,9 +5264,10 @@ function ymSelClick(e) {
     const cur = i === 0 ? soloCfg.myTg : soloCfg.slots[i - 1].tg, nx = cur % 4 + 1;
     if (i === 0) soloCfg.myTg = nx; else soloCfg.slots[i - 1].tg = nx;
   } else {
-    const cur = i === 0 ? soloCfg.myPc : soloCfg.slots[i - 1].pc;
-    const others = [0, 1, 2, 3].filter(j => j !== i).map(j => j === 0 ? soloCfg.myPc : soloCfg.slots[j - 1] && soloCfg.slots[j - 1].pc).filter(v => v != null);
-    let nx = cur; for (let n = 1; n <= 4; n++) { const c = (cur + n) % 4; if (!others.includes(c)) { nx = c; break; } }
+    // いつもの色 → 赤 → 黄 → 青 → 緑 の順。同じキャラを同じ色で選んでいる人がいれば、その色は飛ばす
+    const cur = (i === 0 ? soloCfg.myPc : soloCfg.slots[i - 1].pc) | 0, ch = ymSlotCh(i);
+    const others = [0, 1, 2, 3].filter(j => j !== i && ymSlotCh(j) != null && ymSlotCh(j) >= 0 && ymSlotCh(j) === ch).map(j => (j === 0 ? soloCfg.myPc : soloCfg.slots[j - 1].pc) | 0);
+    let nx = cur; for (let n = 1; n <= 5; n++) { const c = (cur + n) % 5; if (!others.includes(c)) { nx = c; break; } }
     if (i === 0) soloCfg.myPc = nx; else soloCfg.slots[i - 1].pc = nx;
   }
   ymSoloChanged();
@@ -5325,9 +5463,9 @@ function ymOnPaint() {
   for (let i = 0; i < MAX_PLAYERS; i++) {
     const p = game.p[i];
     if (!p || !p.c) { h += `<div class="ym-pn empty" data-slot="${i}"><div class="slot">${i + 1}P</div><div class="add">${host ? "<b>＋</b>タップで CPU を追加" : "<b>…</b>募集中"}</div><div class="plate">なし</div></div>`; continue; }
-    const cpu = ymIsCpu(p), ch = ymSeen(i), col = colOf(i), mine = i === myId;
+    const cpu = ymIsCpu(p), ch = ymSeen(i), mine = i === myId, col = ch == null && !mine ? "#7d8696" : colOf(i);   // 見えない相手は、色でキャラが分からないよう灰色
     const lv = cpu ? (p.cpu ? p.cpuLv : (p.ymCpu || 1) - 1) : 0;
-    const tag = mine || (host && cpu) ? (team ? `${TEAM_NAMES[tgOf(i)] || ""}チーム ⇄` : "色 ⇄") : team && tgOf(i) ? `${TEAM_NAMES[tgOf(i)]}チーム` : "";
+    const tag = mine || (host && cpu) ? (team ? `${TEAM_NAMES[tgOf(i)] || ""}チーム ⇄` : `${PAL_NAMES[(p.pc | 0)] || "いつもの色"} ⇄`) : team && tgOf(i) ? `${TEAM_NAMES[tgOf(i)]}チーム` : "";
     const hidden = ch == null && !mine;
     const nm = ch == null ? "" : ch < 0 ? "おまかせ" : CHARS[ch].name;
     h += `<div class="ym-pn${hidden ? " hidden" : ""}" data-slot="${i}" style="--c:${col}"><canvas class="art" width="220" height="290"></canvas>${tag ? `<div class="hint">${tag}</div>` : ""}`
@@ -5343,7 +5481,7 @@ function ymOnPaint() {
   if (focused) {   // 名前を入力している間は、パネルを作り直さない（キーボードが閉じないように）
   } else {
     pn.innerHTML = h;
-    pn.querySelectorAll(".ym-pn:not(.empty)").forEach(el => { const i = +el.dataset.slot, ch = ymSeen(i); ymPanelArt(el.querySelector("canvas"), ch == null ? (i === myId ? -1 : 0) : ch, colOf(i)); });
+    pn.querySelectorAll(".ym-pn:not(.empty)").forEach(el => { const i = +el.dataset.slot, ch = ymSeen(i); ymPanelArt(el.querySelector("canvas"), ch == null ? (i === myId ? -1 : 0) : ch, ch == null && i !== myId ? "#7d8696" : colOf(i)); });
     const nmIn = pn.querySelector("#ymName");
     if (nmIn) { nmIn.oninput = () => { draft.n = nmIn.value; }; nmIn.onchange = () => { draft = sanitizeProfile(Object.assign({}, draft, { n: nmIn.value })); saveProfile(); ymSendProf({ n: draft.n }); }; }
   }
@@ -5399,9 +5537,10 @@ function ymOnClick(e) {
   if (!mine && !cpu) return;
   // パネル: 色（チーム戦ならチーム）を順に変える
   if (game.tmd) { const nx = (tgOf(i) % 4) + 1; if (mine) ymSendProf({ tg: nx }); else { p.tg = nx; renderUI(); } return; }
-  const pcOf = j => { const q = game.p[j]; return q && q.pc != null ? q.pc : j; };
-  const others = connectedSlots().filter(j => j !== i).map(pcOf), cur = pcOf(i);
-  let nx = cur; for (let n = 1; n <= 4; n++) { const c = (cur + n) % 4; if (!others.includes(c)) { nx = c; break; } }
+  // いつもの色 → 赤 → 黄 → 青 → 緑。同じキャラを同じ色で選んでいる人（分かる範囲）がいれば飛ばす
+  const pcOf = j => (game.p[j] && game.p[j].pc) | 0, chOfS = j => ymSeen(j);
+  const myC = chOfS(i), others = connectedSlots().filter(j => j !== i && myC != null && chOfS(j) === myC).map(pcOf), cur = pcOf(i);
+  let nx = cur; for (let n = 1; n <= 5; n++) { const c = (cur + n) % 5; if (!others.includes(c)) { nx = c; break; } }
   if (mine) ymSendProf({ pc: nx }); else { p.pc = nx; renderUI(); }
 }
 
@@ -6153,7 +6292,7 @@ function drawPlayer(p, i, me, now) {
   // ロビーでは、ほかの人のキャラは見せない
   const chIdx = (game.ph === "lobby" && !clone && i !== myId && !solo) ? 0 : p.ch;
   const chd = CHARS[chIdx] || CHARS[0];
-  const col = clone ? CLONE_COLOR : colOf(i);
+  const col = clone ? CLONE_COLOR : chIdx !== p.ch ? COLORS[i] : colOf(i);
   const up = role === "client" ? !!p.sg : shieldUp(p);            // 盾が効いている状態か（ホストが決めたものを使う）
   // 時計師: 巻き戻しが使えるとき、戻る先（2 秒前の位置）を点線の枠で薄く出す（全員に見える）
   if (chd.id === "clock" && p.al && game.ph === "play" && p.kc === 0 && !p.rw && !clone) {
@@ -6454,7 +6593,7 @@ function drawPlayer(p, i, me, now) {
     cx.restore();
   }
   if (p.al) {
-    cx.fillStyle = col; cx.font = "bold 16px sans-serif"; cx.textAlign = "center";
+    cx.fillStyle = textCol(col); cx.font = "bold 16px sans-serif"; cx.textAlign = "center";
     const label = clone ? "分身" : nameOf(i) + (p.lv > 0 ? " ♥" : "") + (me ? " ▼" : "");
     cx.fillText(label, p.x + PLW * sz / 2, p.y - 10);
     if (game.ph !== "lobby") {                                    // 蓄積ダメージ: 名前の上に「45%」。0% は白で、たまるほど赤くなる（150% でいちばん赤い）
@@ -6501,7 +6640,7 @@ function drawYurei(p, i, me, now) {
   cx.fillStyle = "#111827"; cx.fillRect(x - 6 + p.f * 2, y - 7, 3, 4); cx.fillRect(x + 3 + p.f * 2, y - 7, 3, 4);
   if (ready) { cx.globalAlpha = 0.9; cx.fillStyle = "#4c1d95"; cx.beginPath(); cx.arc(x + p.f * 20, y + 8, YUREI_R, 0, 6.2832); cx.fill(); }   // 次の爆弾を持っている（進む向きの横）
   cx.restore();
-  cx.save(); cx.globalAlpha = 0.8; cx.fillStyle = col; cx.font = "bold 13px sans-serif"; cx.textAlign = "center";
+  cx.save(); cx.globalAlpha = 0.8; cx.fillStyle = textCol(col); cx.font = "bold 13px sans-serif"; cx.textAlign = "center";
   cx.fillText(nameOf(i) + (me ? " ▲" : ""), x, y - 26);
   cx.restore();
 }
