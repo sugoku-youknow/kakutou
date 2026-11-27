@@ -263,6 +263,22 @@ input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1p
 .pinfo dt{color:var(--sub)}.pinfo dd{margin:0;font-weight:700}
 .rank{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:var(--deep);font-size:16px}
 .rank.win{background:#5a4512}
+/* あそびかた（2026-11-28: 表で見やすく） */
+.rules{font-size:14px;line-height:1.6}
+.rules .lead{margin:0 0 4px;font-size:15px;text-align:center}
+.rules h3{margin:14px 0 6px;font-size:15px;color:#ffe7a6;border-bottom:1px solid #d9b25a66;padding-bottom:3px}
+.rules table{width:100%;border-collapse:collapse;font-size:13px;background:#0003;border-radius:8px;overflow:hidden}
+.rules th,.rules td{padding:5px 7px;border-bottom:1px solid #ffffff14;text-align:left;vertical-align:middle}
+.rules th{color:#cdb68a;font-weight:700;white-space:nowrap;width:1%}
+.rules table.c3 tr:first-child th{width:auto;background:#0004}
+.rules table.c3 td:first-child{white-space:nowrap;font-weight:700}
+.rules table.pt td{text-align:center;padding:4px 1px;font-size:12px}.rules table.pt td.red,.rules .red{color:#ff8a7a}
+.rules ol,.rules ul{margin:0;padding-left:1.4em}.rules li{margin:2px 0}
+.rules .steps{display:flex;flex-direction:column;gap:6px}
+.rules .steps>div{background:#0003;border-left:4px solid #d9b25a;border-radius:6px;padding:6px 9px;font-size:13px}
+.rules .steps b{display:block;color:#ffe7a6;font-size:14px}
+.rules .note2{margin:5px 0 0;font-size:12px;color:#cdb68a}
+.rules .rr{width:16px;height:16px;vertical-align:-3px}
 #toast{position:fixed;left:50%;top:40%;transform:translateX(-50%);background:rgba(0,0,0,.85);padding:10px 18px;border-radius:12px;font-size:15px;transition:opacity .3s;opacity:0;pointer-events:none;z-index:60;max-width:90%;text-align:center}
 
 /* =====================================================================
@@ -439,7 +455,7 @@ html,body{background-color:#4a2a14}
 .card2 .np{font-size:14px;color:#efe4cf;letter-spacing:1px}
 .sus{position:fixed;right:12px;left:12px;bottom:calc(12px + env(safe-area-inset-bottom));height:66px;min-height:0;border-radius:6px;font-size:26px;font-weight:900;letter-spacing:6px;background:linear-gradient(#ffe27a 0,#f5c23c 45%,#d99a1c 100%);color:#2a1505;border:3px solid #fff1b8;border-bottom:4px solid #a66d0c;box-shadow:0 0 0 3px #3a2408,0 8px 16px #000b,inset 0 2px 0 #fff8;display:flex;align-items:center;justify-content:center;gap:12px;z-index:5}
 .sus svg{width:36px;height:36px}
-.sus:disabled{filter:grayscale(.6) brightness(.8)}
+.sus:disabled{opacity:1;filter:grayscale(.7) brightness(.65)}
 .su .wait{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));padding:14px;text-align:center;font-weight:800;background:#000a;border:2px solid #6b5a3e;border-radius:8px;color:#f6e7c4;z-index:5}
 .su .wait.sm{bottom:calc(86px + env(safe-area-inset-bottom));padding:6px;font-size:12px}
 @media (orientation:landscape){
@@ -1435,29 +1451,70 @@ function leave() {
 // ================= 画面 =================
 let toastT = null;
 function toast(s) { const t = $("toast"); t.textContent = s; t.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => { t.style.opacity = 0; }, 1800); }
-const rulesHtml = () => `<div class="rules">
-<b>目的</b>: 島に道・村・町をつくって、先に <b>${tgt()}点</b> とった人の勝ち！（勝利点・はじめの村の数・島の大きさは、はじめる前にえらべる）<br>
-<b>土地と資源</b>: 森🌲＝木材、丘🧱＝レンガ、牧草地🐑＝羊毛、畑🌾＝小麦、山⛰️＝鉄。火山🌋からは何もとれない。<br>
-<b>はじめ</b>: 順番に「村＋道」を ${G ? G.setupN : cfg.setupN} 回ずつ置く（往復する順番）。最後に置いた村のまわりの資源をもらえる。置いた村と道は「決定」するまで ↶ で置き直せる。<br>
-<b>自分の番</b>: ①サイコロをふる → 出た数の土地にくっついている村は1まい、町は2まい資源をもらえる（みんな）。<br>
-②資源を使ってつくる・交換する → ③「おわり」。<br>
-<b>つくる</b>: 道 ${costHtml(COST.road)}／村 ${costHtml(COST.vil)}（1点）／町 ${costHtml(COST.town)}（村を町にする・2点）／カード ${costHtml(COST.card)}<br>
-・村は自分の道のはしにつくる。となりの角に村や町があるところにはつくれない。<br>
-<b>7が出たら</b>: 🥷盗賊が来る！ 盗賊を好きな土地へ動かし、そこに村がある人から1まいもらう。盗賊のいる土地は資源が出ない。${robLim()}まい以上持っている人は、半分をえらんですてる${G ? "" : "（大きい島は 12まい以上）"}。<br>
-<b>交換</b>: 自分の番に、ほかの人へ「これを出すから、これがほしい」と🤝よびかけられる（まい数は自由）。OKした人の中から1人えらんで交換。銀行とは 4まい→1まい。港⚓にくっついた村・町があれば 3→1 や 2→1。<br>
-<b>カード</b>（25まい・大きい島は34まい）: ⚔️騎士（盗賊を動かす）・🌉街道建設（道2本タダ）・🧺発見（好きな資源2まい）・💰独占（えらんだ資源をみんなからぜんぶもらう）・⭐勝利点（+1点。ほかの人には見えない）。買った番には使えない。1番に1まいだけ。<br>
-<b>やり直し↶</b>: 自分の番のあいだなら、つくったもの・銀行との交換を取り消せる（サイコロ・カード・ほかの人との交換のあとは取り消せない）。<br>
-<b>最長道</b>: つながった道が5本以上で、いちばん長い人は +2点。<br>
-<b>最大騎士力</b>: 騎士を3回以上使った人のうち、いちばん多く使った人は +2点。
+// 2026-11-28: あそびかたを書き直し（基本 → 点のとり方 → 資源 → 準備 → 1回の番 → 7 → 交換 → つくるもの → カード → 出やすさ → コツ の順に、表で）
+const rulesHtml = () => {
+  const big = G ? G.size === "big" : cfg.size === "big", sN = G ? G.setupN : cfg.setupN, ic = r => riSvg(r, "ri rr");
+  const pct = n => Math.round((6 - Math.abs(7 - n)) / 36 * 100);
+  return `<div class="rules">
+<p class="lead">島に <b>道・村・町</b> をつくって点をあつめ、先に <b>${tgt()}点</b> になった人の勝ち！</p>
+<h3>1. ゲームの基本</h3>
+<table><tr><th>人数</th><td>2〜4人（CPU も入れられる）</td></tr><tr><th>目的</th><td>先に ${tgt()}点（設定で 7〜15点にできる）</td></tr><tr><th>時間</th><td>30〜60分くらい</td></tr></table>
+<h3>2. 点のとり方</h3>
+<table><tr><th>村</th><td>1つで <b>1点</b></td></tr><tr><th>町</th><td>1つで <b>2点</b>（村を町にすると +1点）</td></tr>
+<tr><th>最長道</th><td><b>2点</b>：つながった道が5本以上で、いちばん長い人</td></tr><tr><th>最大騎士力</th><td><b>2点</b>：騎士カードを3回以上使って、いちばん多く使った人</td></tr>
+<tr><th>勝利点カード</th><td>1まい <b>1点</b>（ほかの人には見えない）</td></tr></table>
+<h3>3. 土地と資源</h3>
+<table class="c3"><tr><th>土地</th><th>とれる資源</th><th>おもな使いみち</th></tr>
+<tr><td>森</td><td>${ic("wood")} 木材</td><td>道・村</td></tr><tr><td>丘</td><td>${ic("brick")} レンガ</td><td>道・村</td></tr>
+<tr><td>牧草地</td><td>${ic("sheep")} 羊毛</td><td>村・カード</td></tr><tr><td>畑</td><td>${ic("wheat")} 小麦</td><td>村・町・カード</td></tr>
+<tr><td>山</td><td>${ic("ore")} 鉄</td><td>町・カード</td></tr><tr><td>火山</td><td>なし</td><td>盗賊がはじめにいる場所</td></tr></table>
+<h3>4. はじめの準備</h3>
+<ol><li>島は自動でできる。土地には 2〜12 の数字の札がのっている（7 の札はない）。</li>
+<li>順番に <b>村1つ＋そこからのびる道1本</b> を置く。これを ${sN}回ずつ（1周目は順番どおり、2周目は逆の順番…）。</li>
+<li>最後に置いた村のまわりの土地から、資源を1まいずつもらってスタート。</li>
+<li>「決定」を押すまでは ↶ で置き直せる。</li></ol>
+<h3>5. 1回の番の流れ</h3>
+<div class="steps"><div><b>① サイコロをふる</b>出た数の札の土地に角がくっついている <b>村は1まい・町は2まい</b> 資源をもらえる（自分の番でなくても、みんなもらえる）。</div>
+<div><b>② 交換する</b>ほかの人や銀行・港と資源を交換（下の 7）。</div>
+<div><b>③ つくる</b>道・村・町・カード。資源があれば何回でも。終わったら「おわり ▶」。</div></div>
+<p class="note2">②と③は、順番を入れかえたり何回くり返してもOK。</p>
+<h3>6. 7が出たら（盗賊）</h3>
+<ol><li>手札が <b>${robLim()}まい以上</b>${G ? "" : "（大きい島は12まい以上）"} の人は、半分をえらんですてる。</li>
+<li>サイコロをふった人は、盗賊を好きな土地へ動かす。</li>
+<li>その土地に村・町がある人から、1まいランダムにもらえる。</li>
+<li>盗賊がいる土地は、数字が出ても資源が出ない。</li></ol>
+<h3>7. 交換</h3>
+<table><tr><th>ほかの人</th><td>⇄ 交換 →「これを出すから、これがほしい」とよびかける。まい数は自由。OK した人から1人えらぶ</td></tr>
+<tr><th>銀行</th><td>同じ資源 <b>4まい → 好きな資源1まい</b></td></tr><tr><th>3:1 の港</th><td>同じ資源 <b>3まい → 1まい</b></td></tr><tr><th>2:1 の港</th><td>港の絵の資源 <b>2まい → 1まい</b></td></tr></table>
+<p class="note2">港を使うには、港の桟橋がつながった角に自分の村か町が必要。</p>
+<h3>8. つくるもの</h3>
+<table class="c3"><tr><th></th><th>必要な資源</th><th>できること</th></tr>
+<tr><td>道</td><td>${costHtml(COST.road)}</td><td>村や町からのばす</td></tr><tr><td>村</td><td>${costHtml(COST.vil)}</td><td><b>1点</b>。まわりの土地から資源1まい</td></tr>
+<tr><td>町</td><td>${costHtml(COST.town)}</td><td>村を町にする。<b>2点</b>。資源が2まいに</td></tr><tr><td>カード</td><td>${costHtml(COST.card)}</td><td>山から1まい引く（下の 9）</td></tr></table>
+<ul><li>道は、自分の道・村・町につなげて置く。</li><li>村は、自分の道のはしに置く。</li>
+<li><b>となりの角（道1本でとどく角）に村・町があると、村は置けない</b>（だれの村でも）。</li><li>町は、自分の村を置きかえてつくる。</li></ul>
+<h3>9. カード（${big ? 34 : 25}まい）</h3>
+<table class="c3"><tr><th>カード</th><th>まい数</th><th>こうか</th></tr>
+<tr><td>⚔️ 騎士</td><td>${big ? 20 : 14}</td><td>盗賊を動かして、そこの人から1まいもらう</td></tr>
+<tr><td>🌉 街道建設</td><td>${big ? 3 : 2}</td><td>道を2本タダでつくる</td></tr><tr><td>🧺 発見</td><td>${big ? 3 : 2}</td><td>好きな資源を2まいもらう</td></tr>
+<tr><td>💰 独占</td><td>${big ? 3 : 2}</td><td>資源を1つえらぶと、ほかの全員がそれをぜんぶくれる</td></tr><tr><td>⭐ 勝利点</td><td>5</td><td>持っているだけで +1点</td></tr></table>
+<p class="note2">買った番には使えない。使えるのは1回の番に1まいまで。</p>
+<h3>10. サイコロの出やすさ</h3>
+<table class="pt"><tr><th>出る数</th>${[2, 3, 4, 5, 6, 8, 9, 10, 11, 12].map(n => `<td class="${n === 6 || n === 8 ? "red" : ""}">${n}</td>`).join("")}</tr>
+<tr><th>確率</th>${[2, 3, 4, 5, 6, 8, 9, 10, 11, 12].map(n => `<td>${pct(n)}%</td>`).join("")}</tr></table>
+<p class="note2">いちばん出るのは 7（17%）。札の下の点が多いほど出やすく、<b class="red">6 と 8</b> は赤い数字。</p>
+<h3>11. はじめての人へのコツ</h3>
+<ul><li>はじめの村は、<b>6・8・5・9</b> の札にふれていて、<b>いろいろな資源</b> がとれる角に。</li>
+<li>はじめは木材とレンガで道と村をふやし、あとから小麦と鉄で町・カードへ。</li>
+<li>たりない資源は ⇄ 交換で。同じ資源がたくさんとれるなら、その港をねらうと得。</li>
+${(G ? G.pm !== false : cfg.pm) ? "<li>「置場確率」ボタンで、村を置ける角ごとの出やすさが見られる。</li>" : ""}
+<li>まちがえて置いたら ↶ やり直し（サイコロ・カード・ほかの人との交換のあとは取り消せない）。</li></ul>
 </div>`;
-const rulesShort = () => `サイコロで出た数の土地から資源をもらい、道・村(1点)・町(2点)をつくる。先に${tgt()}点で勝ち。7が出たら盗賊を動かして1まいもらえる。ほかの人とも自由に交換できる（銀行とは4→1、港なら3→1・2→1）。`;
+};
 
 function renderUI() {
   // パーティ: 始まる前（つないでいる・部屋）は、全部のゲームで同じ待ち合わせ画面（ykgLobby）を使う
-  if (PARTY && (screen === "connecting" || screen === "lobby")) {
-    ["menu", "lobby", "game"].forEach(id => $(id).classList.add("hidden")); $("modal").classList.add("hidden");
-    ykgLobby.open(partyLobbyOpts()); return;
-  }
+  // 2026-11-28: パーティでも、共通の待ち合わせ画面ではなく ひとり用と同じ設定画面を使う
   if (PARTY) { try { ykgLobby.close(); } catch (e) {} }
   $("menu").classList.toggle("hidden", screen !== "menu");
   $("lobby").classList.toggle("hidden", screen !== "lobby" && screen !== "connecting" && screen !== "setup");
@@ -1561,14 +1618,14 @@ function renderSetup() {
   const big = c.size === "big";
   let h = `<div class="su">
     <header class="suh"><button class="bk" data-a="su-back" aria-label="もどる"><svg viewBox="0 0 40 24"><path d="M3 12L15 2v6h22v8H15v6z" fill="#e8b84a" stroke="#4a2a08" stroke-width="2" stroke-linejoin="round"/></svg></button>
-      <h1>ゲームの設定</h1>${online ? `<div class="rc0"><small>部屋番号</small><b>${conn ? "…" : esc(L.code || host.code)}</b></div>` : `<span class="rc0 sp"></span>`}</header>
+      <h1>ゲームの設定</h1>${online ? `<div class="rc0"><small>${PARTY ? "パーティ" : "部屋番号"}</small><b>${PARTY ? esc(PARTY.code) : conn ? "…" : esc(L.code || host.code)}</b></div>` : `<span class="rc0 sp"></span>`}</header>
     <div class="suf">
       <section class="sur">${sl("target", "勝利点", "点")}${sl("setupN", "はじめの村", "こ")}<div class="cks">${["size", "pm", "bmap", "bdice"].map(ck).join("")}</div>
         <button class="rl" data-a="rules">あそびかた</button></section>
       <section class="sup"><h3>遊ぶ人 <small>${seats.length} / 4人</small></h3>${seats.map(row).join("")}
         ${edit && seats.length < 4 ? `<button class="add" data-a="bot-add">＋ CPUを追加</button>` : ""}
         ${online && L.specs && L.specs.length ? `<div class="spc">観戦: ${L.specs.map(esc).join("、")}</div>` : ""}
-        ${online && isHost ? `<div class="spc">友だちに部屋番号を教えてね（2〜4人）</div>` : ""}</section>
+        ${online && isHost && !PARTY ? `<div class="spc">友だちに部屋番号を教えてね（2〜4人）</div>` : ""}</section>
       <section class="sui"><div class="card2"><h2>${big ? "大きい島" : "ふつうの島"}</h2>${islandMini(c.size)}
         <p>${big ? "37マスの大きな島。港が11か所あり、じっくり長い勝負になります。" : "19マスのちょうどいい島。はじめての人にもぴったりです。"}</p>
         <div class="tags"><span>勝利点 ${c.target}</span><span>はじめの村 ${c.setupN}</span>${c.bmap ? "<span>バランスマップ</span>" : ""}${c.bdice ? "<span>バランスダイス</span>" : ""}</div><small class="np">2〜4人</small></div></section>
@@ -1593,7 +1650,7 @@ document.addEventListener("change", e => {
 });
 function setupAct(a) {
   const online = mode === "host";
-  if (a === "su-back") { leave(); return true; }
+  if (a === "su-back") { if (PARTY && mode === "host" && !confirm("ゲーム一覧へ戻りますか？（みんなも一覧へ戻ります）")) return true; leave(); return true; }
   if (a === "su-start") { if (online) hostStart(); else startLocal(); return true; }
   if (a.startsWith("chk-")) { const k = a.slice(4); const c = { ...cfg }; if (k === "size") c.size = c.size === "big" ? "std" : "big"; else c[k] = !c[k]; cfg = cleanCfg(c); store.set("kaitaku-cfg", JSON.stringify(cfg)); if (online) hostLobby(); else renderSetup(); return true; }
   if (a.startsWith("help-")) { const k = a.slice(5); toast(`${CHK[k].lb}：${CHK[k].help}`); clearTimeout(toastT); toastT = setTimeout(() => { $("toast").style.opacity = 0; }, 4500); return true; }
@@ -1610,36 +1667,6 @@ function setupAct(a) {
 function renderLobby() {
   renderSetup(); return;   // 2026-11-28: 部屋も ひとり用と同じ設定画面
 }
-// パーティの待ち合わせ画面の中身
-let partySet = null, partyGuestSet = null;
-function partyLobbyOpts() {
-  const isHost = mode === "host";
-  if (screen === "connecting") return { rules: rulesShort(), button: null, wait: isHost ? "部屋を準備しています…" : "ホストにつないでいます…" };
-  const L = lobbyInfo;
-  const members = L.seats.map(s => ({ name: s.name, tag: s.pid === 0 ? "ホスト" : s.bot ? "CPU" : "", me: !s.bot && s.pid === myPid })).concat(L.specs.map(n => ({ name: n, tag: "観戦", me: spectating && n === myName() })));
-  const status = `${L.seats.length} / 4人` + (L.seats.length < 2 ? "（CPU を入れて 2人以上で始められます）" : "");
-  if (!isHost) {
-    if (!partyGuestSet) partyGuestSet = document.createElement("div");
-    partyGuestSet.innerHTML = `<div class="yl-sub">CPUの強さ: ${DIFF[L.diff] || "ふつう"}</div><div class="yl-sub">${esc(cfgTxt(cleanCfg(L.cfg)))}</div>`;
-    return { rules: rulesShort(), members, settings: partyGuestSet, button: null, status, wait: spectating ? "観戦: ホストがスタートするのを待っています…" : "ホストがスタートするのを待っています…" };
-  }
-  if (!partySet) {
-    partySet = document.createElement("div");
-    partySet.innerHTML = `<div class="yl-row"><button data-b="+">CPU を追加</button><button data-b="-">CPU を減らす</button></div><div class="yl-sub">CPUの強さ</div><div class="yl-row" data-g="d"></div><div data-g="cfg"></div>`;
-    partySet.addEventListener("click", e => {
-      const b = e.target.closest("[data-b]"); if (!b || b.disabled || mode !== "host" || host.playing) return;
-      const k = b.dataset.b;
-      if (k === "+") hostAddCpu(); else if (k === "-") hostDelCpu(); else if (k.startsWith("d-")) { host.diff = k.slice(2); host.seats.forEach(x => { if (x.bot) x.diff = host.diff; }); hostLobby(); }
-      else if (/^(c[tszx]|up|dn)-/.test(k)) { setCfg(k); hostLobby(); }
-    });
-  }
-  partySet.querySelector('[data-b="+"]').disabled = L.seats.length >= 4;
-  partySet.querySelector('[data-b="-"]').disabled = !L.seats.some(s => s.bot);
-  partySet.querySelector('[data-g="cfg"]').innerHTML = cfgButtons("data-b");
-  partySet.querySelector('[data-g="d"]').innerHTML = Object.entries(DIFF).map(([k, s]) => `<button data-b="d-${k}" class="${k === host.diff ? "on" : ""}">${s}</button>`).join("");
-  return { rules: rulesShort(), members, settings: partySet, status, button: { label: "スタート", disabled: L.seats.length < 2, onClick: () => hostStart() } };
-}
-
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
   const a = b.dataset.a;
