@@ -835,7 +835,7 @@ function hostAddCpu() {
 function hostRemoveCpu(id) { host.cpus = host.cpus.filter(c => c.id !== id); host.team.delete(id); hostLobby(); }
 function hostLobby() {
   const ids = [...host.conns.keys()];
-  lobby = [{ id: 0, name: myName() }, ...ids.filter(id => !host.conns.get(id).spec).map(id => ({ id, name: host.conns.get(id).pname })), ...host.cpus.map(c => ({ ...c }))];
+  lobby = [{ id: 0, name: myName(), av: myAv() }, ...ids.filter(id => !host.conns.get(id).spec).map(id => ({ id, name: host.conns.get(id).pname, av: host.conns.get(id).pav })), ...host.cpus.map(c => ({ ...c }))];
   lobbySpecs = ids.filter(id => host.conns.get(id).spec).map(id => host.conns.get(id).pname);   // 観戦の人（遊ぶ人には入らない）
   // チーム戦は 4人（2対2）のときだけ。人数が変わって 4人でなくなったら切る
   if (lobby.length !== 4 && !host.playing) teamMode = false;   // 遊んでいる途中に人が抜けても、その試合はチーム戦のまま
@@ -1009,7 +1009,7 @@ function startHost() {
         }
         if (host.playing) { conn.send({ t: "reject", why: "もう始まっています" }); setTimeout(() => conn.close(), 500); return; }
         if (nPlayers + 1 >= MAX_PLAYERS) { conn.send({ t: "reject", why: "満員です（4人まで）" }); setTimeout(() => conn.close(), 500); return; }
-        const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12);
+        const id = host.nextId++; conn.pid = id; conn.pname = String(m.name || "ゲスト").slice(0, 12); conn.pav = clampAv(m.av);
         host.conns.set(id, conn); conn.send({ t: "welcome", you: id }); hostLobby(); renderUI(); return;
       }
       if (conn.pid) hostHandle(conn.pid, m);
@@ -1027,7 +1027,7 @@ function joinRoom(code) {
     const hc = hostConn = peer.connect(netId(code), { reliable: true });
     // パーティ: PeerJS は「相手が見つからない」を知らせないまま止まることがあるので、2.5 秒でつながらなければ peer から作り直す
     if (PARTY) setTimeout(() => { if (hostConn === hc && !hc.open && screen === "connecting" && ++partyTries < 60) { cleanupNet(); joinRoom(code); } }, 2500);
-    hostConn.on("open", () => { hc.opened = true; hostUch = openUch(hc, onMsg); hostConn.send({ t: "hello", name: myName(), spec: !!(PARTY && PARTY.spec) }); });
+    hostConn.on("open", () => { hc.opened = true; hostUch = openUch(hc, onMsg); hostConn.send({ t: "hello", av: myAv(), name: myName(), spec: !!(PARTY && PARTY.spec) }); });
     hostConn.on("data", onMsg);
     hostConn.on("close", () => {
       if (PARTY) { if (hc.opened) toGames(); return; }   // パーティ: ホストがいなくなったらゲーム一覧へ（つながる前の失敗は探し直しに任せる）
@@ -1051,7 +1051,7 @@ let menuCpuN = 1, menuTeams = false;
 function startCpu(n, lv, teams) {
   mode = "local"; myId = 0; cleanupNet();
   teamMode = !!teams && n === 3;
-  players = [{ id: 0, name: myName() }, ...Array.from({ length: n }, (_, i) => ({ id: i + 1, name: `CPU${i + 1}`, cpu: lv }))];
+  players = [{ id: 0, name: myName(), av: myAv() }, ...Array.from({ length: n }, (_, i) => ({ id: i + 1, name: `CPU${i + 1}`, cpu: lv }))];
   if (teamMode) players.forEach((p, i) => { p.team = i < 2 ? 0 : 1; });
   hostStart();
 }
@@ -1072,6 +1072,10 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
 // 電波が切れた・戻ったら、メニューを出し直す（部屋を作る・入る を出す/隠す）
 for (const ev of ["online", "offline"]) addEventListener(ev, () => { if (screen === "menu") renderUI(); });
 let meName = "";
+// 2026-11-28: ホームでえらんだキャラ（../avatars/fNN.png = 全身、16 体）。ほかの人の姿をこの絵にする。えらんでいなければ -1（これまでの人形）
+const AV_N = 16;
+const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : -1; };
+function myAv() { try { const P = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); if (new URLSearchParams(location.search).has("party") && P && P.av != null) return clampAv(P.av); } catch (e) {} return clampAv(store.get("ykg-av")); }
 function myName() { if (meName) return meName; return (document.getElementById("name")?.value || store.get("jenga-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
 function fixName() { meName = ""; meName = myName(); store.set("jenga-name", meName); }
 const urlRoom = new URLSearchParams(location.search).get("room") || "";
@@ -1305,6 +1309,8 @@ function nameSprite(name, on) {
   return t;
 }
 function makeAvatar(p, idx) {
+  if (clampAv(p.av) >= 0) return makeDrawnAvatar(p, idx);
+
   const L = LOOKS[idx % LOOKS.length], mats = [];
   const mat = c => { const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, transparent: true }); mats.push(m); return m; };
   const g = new THREE.Group();
@@ -1335,6 +1341,28 @@ function makeAvatar(p, idx) {
   const yaw = 0.65 + idx * spreadAngle();
   const a = { id: p.id, name: p.name, g, arm, hand, label, mats: [...mats, label.material], yaw, tyaw: yaw, on: false,
     handPos: new THREE.Vector3(), handDir: new THREE.Vector3(0, -1, 0), texOff: label.material.map, texOn: null };
+  a.handPos.copy(restHand(a));
+  avatars.set(p.id, a);
+}
+// 選んだキャラの絵を板にして立てる（いつも見ている人のほうを向く）。手は出さない
+function makeDrawnAvatar(p, idx) {
+  const mats = [], g = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({ color: 0xf3d9b4, roughness: 0.7, transparent: true }); mats.push(skin);
+  const H = 10.5, tex = new THREE.TextureLoader().load("../avatars/f" + String(clampAv(p.av)).padStart(2, "0") + ".png", t => { const w = t.image.width, h = t.image.height; sp.scale.set(Math.min(H * w / h, 7.5), H, 1); });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sm = new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.05 }); mats.push(sm);
+  const sp = new THREE.Sprite(sm); sp.center.set(0.5, 0); sp.scale.set(H * 0.7, H, 1); g.add(sp);
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1, 10), skin);
+  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), skin);
+  const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.5, 4, 8), skin);
+  hand.add(finger); finger.position.set(0, 0, 0.45); finger.rotation.x = Math.PI / 2;
+  /* 絵のキャラには手を出さない（不自然なので）。arm / hand は更新だけされ、シーンには置かない */
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameSprite(p.name, false), transparent: true, depthWrite: false }));
+  label.scale.set(5, 1.25, 1); label.position.set(0, H + 1.2, 0); g.add(label);
+  g.scale.setScalar(AV_SCALE); scene.add(g);
+  const yaw = 0.65 + idx * spreadAngle();
+  const a = { id: p.id, name: p.name, g, arm, hand, label, mats: [...mats, label.material], yaw, tyaw: yaw, on: false,
+    handPos: new THREE.Vector3(), handDir: new THREE.Vector3(0, -1, 0), texOff: label.material.map, texOn: null, drawn: true };
   a.handPos.copy(restHand(a));
   avatars.set(p.id, a);
 }

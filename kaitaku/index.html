@@ -1284,7 +1284,7 @@ const cfgButtons = attr => `${stepper(attr, "target", "勝利点（ふつうは 
 try { const n = +store.get("kaitaku-cpus"); if (n >= 1 && n <= 3) cpuN = n; const d = store.get("kaitaku-diff"); if (DIFF[d]) cpuDiff = d; } catch (e) {}
 let meName = PARTY ? String(PARTY.name || "ゲスト").slice(0, 12) : "";
 // 2026-11-28: ホームでえらんだキャラ（../avatars/aNN.png、19 体）。えらんでいなければ -1（コマのまま）
-const AV_N = 19;
+const AV_N = 16;
 const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : -1; };
 function myAv() { return clampAv(PARTY && PARTY.av != null ? PARTY.av : store.get("ykg-av")); }
 const avImg = (a, cls) => clampAv(a) >= 0 ? `<img class="${cls || "pimg"}" src="../avatars/a${String(clampAv(a)).padStart(2, "0")}.png" alt="">` : "";

@@ -218,7 +218,7 @@ const guests = new Map();   // ホスト: 相手の PeerJS の ID → { conn, na
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const cleanName = v => String(v || "").trim().slice(0, 12) || "ゲスト";
 const myName = () => cleanName(document.getElementById("pname")?.value ?? store.get("ykg-name"));
-const AV_N = 19;   // avatars/a00.png ～ a18.png（ぜんぶ自分で描いたキャラ）
+const AV_N = 16;   // avatars/a00.png ～ a18.png（ぜんぶ自分で描いたキャラ）
 const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : 0; };
 function myAv() {
   let v = store.get("ykg-av");
