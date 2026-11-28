@@ -1073,7 +1073,7 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { ret
 for (const ev of ["online", "offline"]) addEventListener(ev, () => { if (screen === "menu") renderUI(); });
 let meName = "";
 // 2026-11-28: ホームでえらんだキャラ（../avatars/fNN.png = 全身、16 体）。ほかの人の姿をこの絵にする。えらんでいなければ -1（これまでの人形）
-const AV_N = 16;
+const AV_N = 15;
 const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : -1; };
 function myAv() { try { const P = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); if (new URLSearchParams(location.search).has("party") && P && P.av != null) return clampAv(P.av); } catch (e) {} return clampAv(store.get("ykg-av")); }
 function myName() { if (meName) return meName; return (document.getElementById("name")?.value || store.get("jenga-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
@@ -1348,21 +1348,29 @@ function makeAvatar(p, idx) {
 function makeDrawnAvatar(p, idx) {
   const mats = [], g = new THREE.Group();
   const skin = new THREE.MeshStandardMaterial({ color: 0xf3d9b4, roughness: 0.7, transparent: true }); mats.push(skin);
-  const H = 10.5, tex = new THREE.TextureLoader().load("../avatars/f" + String(clampAv(p.av)).padStart(2, "0") + ".png", t => { const w = t.image.width, h = t.image.height; sp.scale.set(Math.min(H * w / h, 7.5), H, 1); });
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const sm = new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.05 }); mats.push(sm);
-  const sp = new THREE.Sprite(sm); sp.center.set(0.5, 0); sp.scale.set(H * 0.7, H, 1); g.add(sp);
+  // 表情: e00_n（ふつう）/ e00_p（あせり）/ e00_h（よろこび）。どれも同じ大きさの絵（まわりに 44px の余白つき）
+  const PADN = 44, HH = 10.5, WMAX = 7.5, nn = String(clampAv(p.av)).padStart(2, "0"), tl = new THREE.TextureLoader(), tex = {};
+  for (const k of ["n", "p", "h"]) {
+    tex[k] = tl.load("../avatars/e" + nn + "_" + k + ".png", t => {
+      if (k !== "n") return;
+      const w = t.image.width, h = t.image.height, s = Math.min(HH / (h - 2 * PADN), WMAX / (w - 2 * PADN));
+      sp.scale.set(s * w, s * h, 1); sp.center.set(0.5, PADN / h);   // 絵の足もとが地面（余白のぶん下げる）
+    });
+    tex[k].colorSpace = THREE.SRGBColorSpace;
+  }
+  const sm = new THREE.SpriteMaterial({ map: tex.n, transparent: true, alphaTest: 0.05 }); mats.push(sm);
+  const sp = new THREE.Sprite(sm); sp.center.set(0.5, 0.1); sp.scale.set(HH * 0.8, HH * 1.25, 1); g.add(sp);
   const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1, 10), skin);
   const hand = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), skin);
   const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.5, 4, 8), skin);
   hand.add(finger); finger.position.set(0, 0, 0.45); finger.rotation.x = Math.PI / 2;
   /* 絵のキャラには手を出さない（不自然なので）。arm / hand は更新だけされ、シーンには置かない */
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameSprite(p.name, false), transparent: true, depthWrite: false }));
-  label.scale.set(5, 1.25, 1); label.position.set(0, H + 1.2, 0); g.add(label);
+  label.scale.set(5, 1.25, 1); label.position.set(0, HH + 1.2, 0); g.add(label);
   g.scale.setScalar(AV_SCALE); scene.add(g);
   const yaw = 0.65 + idx * spreadAngle();
   const a = { id: p.id, name: p.name, g, arm, hand, label, mats: [...mats, label.material], yaw, tyaw: yaw, on: false,
-    handPos: new THREE.Vector3(), handDir: new THREE.Vector3(0, -1, 0), texOff: label.material.map, texOn: null, drawn: true };
+    handPos: new THREE.Vector3(), handDir: new THREE.Vector3(0, -1, 0), texOff: label.material.map, texOn: null, drawn: true, sm, tex, ex: "n", hapUntil: 0 };
   a.handPos.copy(restHand(a));
   avatars.set(p.id, a);
 }
@@ -1390,6 +1398,7 @@ function updateAvatars() {
     // 番の人の名札を光らせる
     const on = a.id === curId && phase !== "over";
     if (on !== a.on) {
+      if (a.drawn && a.on && !on) a.hapUntil = performance.now() + 1800;   // 番を終えたら、すこし よろこぶ
       a.on = on;
       if (on && !a.texOn) a.texOn = nameSprite(a.name, true);
       a.label.material.map = on ? a.texOn : a.texOff; a.label.material.needsUpdate = true;
@@ -1406,6 +1415,17 @@ function updateAvatars() {
       } else if (info.ph === "carry" || info.ph === "place") {   // 上からつまむ
         tgt = c.clone().add(new THREE.Vector3(0, heights[info.s] / 2 + 0.45, 0));
       }
+    }
+    if (a.drawn) {   // 表情
+      let ex = "n";
+      if (phase === "over" && overInfo && overInfo.loser !== -1) {   // 崩した人（チーム戦はそのチーム）はあせり、ほかの人はよろこぶ
+        const lt = teamMode && teamOf(overInfo.loser) != null ? teamOf(a.id) === teamOf(overInfo.loser) : a.id === overInfo.loser;
+        ex = lt ? "p" : "h";
+      } else if (phase === "fallen") ex = "p";
+      else if (on && info && info.s >= 0 && info.ph === "pull") ex = "p";   // ブロックを引き抜いている最中はあせり（抜いたあと運んでいるあいだはふつう）
+      else if (on && info && info.ph === "settle") ex = "h";   // 上に置けたあとはよろこぶ（揺れてくずれたら fallen / over であせりに変わる）
+      else if (performance.now() < a.hapUntil) ex = "h";
+      if (ex !== a.ex) { a.ex = ex; a.sm.map = a.tex[ex]; a.sm.needsUpdate = true; }
     }
     a.handPos.lerp(tgt, 0.25); a.handDir.lerp(dir, 0.25).normalize();
     const sh = shoulderOf(a), v = a.handPos.clone().sub(sh), len = Math.max(0.01, v.length());

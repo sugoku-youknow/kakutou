@@ -79,6 +79,14 @@
   .icon { width:100%; aspect-ratio:1; border-radius:22%; overflow:hidden; background:#fff; border:4px solid #fff; box-shadow:0 4px 0 #8f9bdc,0 8px 10px rgba(60,70,150,.25); display:grid; place-items:center; transition:transform .08s; }
   .icon img, .icon svg { width:100%; height:100%; display:block; }
   .name { font-size:11px; font-weight:900; line-height:1.25; text-align:center; color:#fff; background:linear-gradient(#6a76c8,#515db2); border-radius:12px; padding:4px 5px; width:100%; min-height:2.6em; display:grid; place-items:center; box-shadow:0 2px 0 #38428a; word-break:keep-all; overflow-wrap:anywhere; }
+  button.game.folder { display:flex; flex-direction:column; align-items:center; gap:7px; color:inherit; background:none; border:0; padding:0; font:inherit; min-width:0; cursor:pointer; }
+  button.game.folder:active .icon { transform:translateY(3px); box-shadow:0 1px 0 #8f9bdc; }
+  button.game.folder .icon { background:#3b4385; border-color:#cfd5f5; }
+  .fgrid { width:100%; height:100%; padding:11%; box-sizing:border-box; display:grid; grid-template-columns:1fr 1fr; gap:8%; }
+  .fgrid > div { border-radius:24%; overflow:hidden; background:#fff; }
+  .fgrid svg, .fgrid img { width:100%; height:100%; display:block; }
+  .folderbox { background:var(--panel); border:4px solid #fff; border-radius:22px; box-shadow:0 5px 0 var(--edge); padding:16px 12px 20px; margin-bottom:16px; }
+  .folderbox h2 { margin:0 0 14px; text-align:center; font-size:17px; color:var(--ink); }
   .partybtn { display:block; width:100%; margin-top:22px; padding:16px; font:inherit; font-size:20px; font-weight:900; color:#fff; border:4px solid #fff; border-radius:99px; background:linear-gradient(#ffc04d,#ff9a1f); box-shadow:0 5px 0 #cc7410,0 10px 14px rgba(60,70,150,.25); text-shadow:0 2px 0 #cc7410; cursor:pointer; }
   .partybtn:active { transform:translateY(4px); box-shadow:0 1px 0 #cc7410; }
   body.offline .partybtn { display:none; }
@@ -107,19 +115,7 @@
   <div class="ribbon"><div class="stars"><i></i><i></i><i></i></div><h1>you know <span>games</span></h1></div>
   <p class="lead">友だちとあそべるミニゲーム集</p>
   <div class="sheet" id="sheet" hidden><div class="sheetbox"><section class="party" id="party"></section><button class="sheetclose" id="sheetclose">とじる</button></div></div>
-  <div class="store"><div class="signboard">ゲームをえらぼう</div>
-  <div class="games">
-    <a class="game" href="shieldfight/" data-party="1"><div class="icon"><img src="shieldfight/icon.png" alt=""></div><div class="name">シールドファイト</div></a>
-    <a class="game" href="jenga/" data-party="1"><div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
-        <rect width="72" height="72" fill="#1b2a3f"/>
-        <g stroke="#7a5230" stroke-width="1.2">
-          <rect x="18" y="52" width="36" height="8" fill="#dcb47c"/>
-          <rect x="18" y="44" width="11" height="8" fill="#d2a86e"/><rect x="30.5" y="44" width="11" height="8" fill="#e2bd88"/><rect x="43" y="44" width="11" height="8" fill="#d2a86e"/>
-          <rect x="18" y="36" width="36" height="8" fill="#e0b880"/>
-          <rect x="18" y="28" width="11" height="8" fill="#d2a86e"/><rect x="43" y="28" width="11" height="8" fill="#d8b076"/>
-          <rect x="18" y="20" width="36" height="8" fill="#dcb47c"/>
-          <rect x="24" y="12" width="36" height="8" fill="#e6c48f" transform="rotate(-6 42 16)"/>
-        </g></svg></div><div class="name">ジェンガ</div></a>
+  <div class="sheet" id="foldersheet" hidden><div class="sheetbox"><div class="folderbox"><h2>その他のゲーム</h2><div class="games" id="foldergames">
     <a class="game" href="tameru/" data-party="1"><div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
         <rect width="72" height="72" fill="#0b0e14"/>
         <circle cx="36" cy="22" r="10" fill="#e8b339"/>
@@ -153,6 +149,10 @@
         <circle cx="36" cy="37" r="6" fill="#ffe0bd"/>
         <rect x="29" y="43" width="14" height="22" rx="7" fill="#4aa3ff"/>
       </svg></div><div class="name">素因数バトル</div></a>
+</div></div><button class="sheetclose" id="folderclose">とじる</button></div></div>
+  <div class="store"><div class="signboard">ゲームをえらぼう</div>
+  <div class="games">
+    <a class="game" href="shieldfight/" data-party="1"><div class="icon"><img src="shieldfight/icon.png" alt=""></div><div class="name">シールドファイト</div></a>
     <a class="game" href="kaitaku/" data-party="1"><div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
         <rect width="72" height="72" fill="#3a8fd6"/>
         <g stroke="#f3e3b0" stroke-width="2">
@@ -163,6 +163,16 @@
         <path d="M30 42 L36 36 L42 42 V48 H30 Z" fill="#e0533b" stroke="#3a2010" stroke-width="1.2"/>
         <path d="M18 18 q4 -4 8 0 q-4 -1 -8 0 Z M14 20 l4 -2" stroke="#1b1b1b" stroke-width="2" fill="#1b1b1b"/>
       </svg></div><div class="name">カイタク島</div></a>
+    <a class="game" href="jenga/" data-party="1"><div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
+        <rect width="72" height="72" fill="#1b2a3f"/>
+        <g stroke="#7a5230" stroke-width="1.2">
+          <rect x="18" y="52" width="36" height="8" fill="#dcb47c"/>
+          <rect x="18" y="44" width="11" height="8" fill="#d2a86e"/><rect x="30.5" y="44" width="11" height="8" fill="#e2bd88"/><rect x="43" y="44" width="11" height="8" fill="#d2a86e"/>
+          <rect x="18" y="36" width="36" height="8" fill="#e0b880"/>
+          <rect x="18" y="28" width="11" height="8" fill="#d2a86e"/><rect x="43" y="28" width="11" height="8" fill="#d8b076"/>
+          <rect x="18" y="20" width="36" height="8" fill="#dcb47c"/>
+          <rect x="24" y="12" width="36" height="8" fill="#e6c48f" transform="rotate(-6 42 16)"/>
+        </g></svg></div><div class="name">ジェンガ</div></a>
     <a class="game" href="tank/" data-party="1"><div class="icon"><svg viewBox="0 0 72 72" aria-hidden="true">
         <rect width="72" height="72" fill="#d7c29a"/>
         <rect x="0" y="0" width="72" height="8" fill="#b9a07a"/><rect x="0" y="64" width="72" height="8" fill="#b9a07a"/>
@@ -182,6 +192,7 @@
         <circle cx="22" cy="54" r="9" fill="#d42a2a" stroke="#3a1a10" stroke-width="1.5"/>
         <path d="M27 60 L33 67" stroke="#8a5a2b" stroke-width="4" stroke-linecap="round"/>
       </svg></div><div class="name">ゆび卓球</div></a>
+    <button class="game folder" id="folderbtn" type="button"><div class="icon"><div class="fgrid" id="fgrid"></div></div><div class="name">その他</div></button>
   </div></div>
   <button class="partybtn" id="partybtn"><span id="partybtnt">みんなで遊ぶ</span></button>
   <button class="install" id="install" hidden>アプリとして入れる</button>
@@ -218,15 +229,15 @@ const guests = new Map();   // ホスト: 相手の PeerJS の ID → { conn, na
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const cleanName = v => String(v || "").trim().slice(0, 12) || "ゲスト";
 const myName = () => cleanName(document.getElementById("pname")?.value ?? store.get("ykg-name"));
-const AV_N = 16;   // avatars/a00.png ～ a18.png（ぜんぶ自分で描いたキャラ）
+const AV_N = 15;   // avatars/a00.png ～ a18.png（ぜんぶ自分で描いたキャラ）
 const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : 0; };
 function myAv() {
   let v = store.get("ykg-av");
   if (v == null || v === "") { v = String(Math.floor(Math.random() * AV_N)); store.set("ykg-av", v); }
   return clampAv(v);
 }
-const avUrl = i => "avatars/a" + String(clampAv(i)).padStart(2, "0") + ".png";
-const avImg = (i, cls) => `<img class="${cls || "av"}" src="${avUrl(i)}" alt="">`;
+const avUrl = (i, ex) => "avatars/a" + String(clampAv(i)).padStart(2, "0") + (ex && ex !== "n" ? "_" + ex : "") + ".png";
+const avImg = (i, cls, ex) => `<img class="${cls || "av"}" src="${avUrl(i, ex)}" alt="">`;
 const avOf = name => { const m = members.find(x => x.name === name); return m ? m.av : null; };
 function setAv(i) {
   i = clampAv(i); store.set("ykg-av", String(i));
@@ -247,11 +258,13 @@ function rankRows() {
   rows.forEach((r, i) => { r.rank = i && rows[i - 1].w === r.w && rows[i - 1].l === r.l ? rows[i - 1].rank : i + 1; });
   return rows;
 }
+// 成績の表の表情: 1位はニコニコ、最下位はあせり、ほかはふつう（全員が同じ順位なら全員ふつう）
+const moodOfRank = (r, rows) => { const mx = Math.max(...rows.map(x => x.rank)); return mx === 1 ? "n" : r.rank === 1 ? "h" : r.rank === mx ? "p" : "n"; };
 function statsHtml() {
   const rows = rankRows();
   return `<div class="statsbox"><div class="statshead"><b>成績（このパーティ）</b><button data-p="stats">とじる</button></div>
     ${rows.length ? `<table><tr><th>順位</th><th>名前</th><th>勝ち</th><th>負け</th></tr>
-      ${rows.map(r => `<tr class="${r.name === party.name ? "me" : ""}"><td>${r.rank}</td><td>${avOf(r.name) != null ? avImg(avOf(r.name)) : ""}${esc(r.name)}${r.here ? "" : "（抜けた）"}</td><td>${r.w}</td><td>${r.l}</td></tr>`).join("")}</table>`
+      ${rows.map(r => `<tr class="${r.name === party.name ? "me" : ""}"><td>${r.rank}</td><td>${avOf(r.name) != null ? avImg(avOf(r.name), "av", moodOfRank(r, rows)) : ""}${esc(r.name)}${r.here ? "" : "（抜けた）"}</td><td>${r.w}</td><td>${r.l}</td></tr>`).join("")}</table>`
       : `<div class="note">まだ勝負がついていません</div>`}
     <div class="note">パーティでオンライン対戦したゲームの勝ち負けを数えます（観戦・ひとり用・CPU戦・この端末で交代は数えません）。順位は勝ち数の多い順です。</div></div>`;
 }
@@ -455,8 +468,17 @@ document.getElementById("party").addEventListener("click", e => {
   else if (a === "stats") { showStats = !showStats; render(); }
   else if (a === "leave") leaveParty();
 });
+// その他フォルダ: ミニアイコンを作って、押すと残りのゲームを開く
+(() => {
+  const g = document.getElementById("fgrid");
+  for (const ic of document.querySelectorAll("#foldergames .icon")) { const d = document.createElement("div"); d.innerHTML = ic.innerHTML; g.appendChild(d); }
+  const sh = document.getElementById("foldersheet");
+  document.getElementById("folderbtn").onclick = () => { sh.hidden = false; };
+  document.getElementById("folderclose").onclick = () => { sh.hidden = true; };
+  sh.addEventListener("click", e => { if (e.target === sh) sh.hidden = true; });
+})();
 // ゲームを選んだとき: パーティのホストなら、みんなにも同じゲームへ移ってもらう
-document.querySelector(".games").addEventListener("click", e => {
+document.addEventListener("click", e => {
   const a = e.target.closest("a.game"); if (!a) return;
   if (OFFLINE()) { if (FORCE_OFF) { e.preventDefault(); location.href = a.getAttribute("href") + "?offline=1"; } return; }
   if (!party) return;

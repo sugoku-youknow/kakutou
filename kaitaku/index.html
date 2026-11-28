@@ -1284,10 +1284,12 @@ const cfgButtons = attr => `${stepper(attr, "target", "勝利点（ふつうは 
 try { const n = +store.get("kaitaku-cpus"); if (n >= 1 && n <= 3) cpuN = n; const d = store.get("kaitaku-diff"); if (DIFF[d]) cpuDiff = d; } catch (e) {}
 let meName = PARTY ? String(PARTY.name || "ゲスト").slice(0, 12) : "";
 // 2026-11-28: ホームでえらんだキャラ（../avatars/aNN.png、19 体）。えらんでいなければ -1（コマのまま）
-const AV_N = 16;
+const AV_N = 15;
 const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : -1; };
 function myAv() { return clampAv(PARTY && PARTY.av != null ? PARTY.av : store.get("ykg-av")); }
-const avImg = (a, cls) => clampAv(a) >= 0 ? `<img class="${cls || "pimg"}" src="../avatars/a${String(clampAv(a)).padStart(2, "0")}.png" alt="">` : "";
+const avImg = (a, cls, ex) => clampAv(a) >= 0 ? `<img class="${cls || "pimg"}" src="../avatars/a${String(clampAv(a)).padStart(2, "0")}${ex && ex !== "n" ? "_" + ex : ""}.png" alt="">` : "";
+// 表情（2026-11-28）: 点数が1位はニコニコ（h）、最下位はあせり（p）、ほかはふつう。全員同点なら全員ふつう。ほかの人の隠れた勝利点カードは数えない（pubVp）
+function moodOf(i) { const s = mySeat(), v = G.ps.map((_, k) => pubVp(k, s)), mx = Math.max(...v), mn = Math.min(...v); return mx === mn ? "n" : v[i] === mx ? "h" : v[i] === mn ? "p" : "n"; }
 function myName() { if (meName) return meName; return (($("name") && $("name").value) || store.get("kaitaku-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
 function fixName() { meName = ""; meName = myName(); store.set("kaitaku-name", meName); }
 const mySeat = () => G ? G.ps.findIndex(p => !p.bot && p.pid === myPid) : -1;
@@ -2045,7 +2047,7 @@ function render() {
   if (!myTurn || G.phase !== "main") ui.mode = null;
   if (myTurn && G.phase === "main" && G.free > 0) ui.mode = "road";
   // 人
-  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length + p.vpC; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="av">${clampAv(p.av) >= 0 ? avImg(p.av) : `<svg viewBox="-13 -16 26 30"><use href="#pawn" fill="${shade(COLS[i], -.55)}" stroke="${shade(COLS[i], .5)}" stroke-width="1.2"/></svg>`}</div><div class="vpb">${pubVp(i, s)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
+  $("pls").innerHTML = G.ps.map((p, i) => { const nc = p.cards.length + p.newC.length + p.vpC; return `<div class="pl c${i % 4} ${i === G.cur && G.phase !== "over" ? "cur" : ""}" id="pl${i}" data-g="pinfo" data-p="${i}" style="--pc:${COLS[i]}"><div class="av">${clampAv(p.av) >= 0 ? avImg(p.av, undefined, moodOf(i)) : `<svg viewBox="-13 -16 26 30"><use href="#pawn" fill="${shade(COLS[i], -.55)}" stroke="${shade(COLS[i], .5)}" stroke-width="1.2"/></svg>`}</div><div class="vpb">${pubVp(i, s)}</div><div class="pi"><div class="nm">${esc(p.name)}${p.bot ? "🤖" : ""}${i === s ? "（あなた）" : ""}</div>
     <div class="st"><span>手札${Math.max(0, tot(p.hand) - pendOf(i))}</span>${nc ? `<span>カード${nc}</span>` : ""}${p.kn ? `<span class="${G.armyHolder === i ? "lr" : ""}">騎士${p.kn}</span>` : ""}</div><div class="st"><span>村${p.vils}</span><span>町${p.towns}</span><span class="${G.roadHolder === i ? "lr" : ""}">道${p.lr}</span></div></div></div>`; }).join("");
   $("game").classList.toggle("p4", G.ps.length >= 4);
   const bt = bannerText();
