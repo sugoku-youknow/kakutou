@@ -8,7 +8,8 @@
 <!-- ミニゲーム集「you know games」のゲーム（kakutou/kaitaku/）。2026-11-09 作成:
      六角形の土地が並ぶ島で、サイコロで資源をあつめ、道・村・町をつくって点数を競う（オリジナルのルール）。
      2026-11-28: 見た目をリアル寄りに作り直し（立体の土地・絵・木の台・おはじき風の村と町）。ホームは夕焼けの島、
-     あそぶ のあとに設定画面（勝利点・はじめの村のバー、大きい島・確率表示・バランスマップ・バランスダイス、CPU の追加と強さ）。 -->
+     あそぶ のあとに設定画面（勝利点・はじめの村のバー、大きい島・確率表示・バランスマップ・バランスダイス、CPU の追加と強さ）。
+     2026-11-28: 資源はどこでも手札と同じ絵つきカード（交換・よびかけ・小窓・知らせ）。資源の絵を描き直し（羊=正面の顔、小麦=茎と葉と穂、木材=針葉樹、レンガ=立体3つ）。森の木・牧草地の羊を減らした。 -->
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="you know games">
 <link rel="manifest" href="../manifest.json"><link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=3"><link rel="apple-touch-icon" href="../apple-touch-icon.png?v=3">
 <style>
@@ -491,6 +492,45 @@ html,body{background-color:#4a2a14}
   .hm .mode{width:240px;height:72px}
   .hm .play{height:72px;min-width:200px}
 }
+
+/* ---- 2026-11-28: 資源カードをどこでも同じ見た目に ---- */
+button.rc{font:inherit;border:0;min-height:0;cursor:pointer;touch-action:manipulation;transition:transform .1s}
+button.rc:disabled{opacity:.35;filter:saturate(.3)}
+.rc b.z{opacity:.28}
+.rc.on{box-shadow:0 0 0 3px #ffd54a,0 0 12px #ffc83a,0 4px 6px #000a;transform:translateY(-3px)}
+.rc.dim{opacity:.45;filter:saturate(.4)}
+.rc .sel{position:absolute;right:-6px;top:-7px;min-width:22px;background:#2f9a48;color:#fff;font:800 13px/18px system-ui;border-radius:11px;padding:0 5px;border:2px solid #fff;z-index:1}
+.rc.mini{display:inline-grid;flex:none;width:40px;padding:2px;vertical-align:middle}
+.rc.mini .art{height:24px}.rc.mini .art svg{width:28px;height:22px}
+.rc.mini b{font-size:14px}
+.rc.mini.p b{color:#1f8a3a}.rc.mini.m b{color:#c0392b}
+#tradeBox .tcol .rc{flex:none;width:100%;padding:2px 2px 3px}
+#tradeBox .tcol .rc .art{height:30px}
+#tradeBox .tcol .rc b{font-size:17px}
+#tradeBox .tcol .rc .rn{font-size:9px}
+#tradeBox .tcol .rc .rt{bottom:auto;top:1px;right:2px}
+#tradeBox .pm button{background:var(--plate);border:1px solid #6b5a3e;color:#f6e7c4}
+#tradeBox .tsum{gap:5px}
+#offerBox{background:var(--plate);border:2px solid var(--gold);border-right:0;border-radius:10px 0 0 10px;padding:8px 10px 8px 10px;box-shadow:0 6px 16px #000b;align-items:stretch}
+#offerBox:not(.mine){border-right:0;animation:slide .25s;box-shadow:0 0 0 2px #ffd54a,0 0 16px #ffc83a,0 6px 16px #000b}
+#offerBox .ob{justify-content:flex-end}
+#offerBox .orow{gap:4px}
+#offerBox .ol{font-size:11px;color:#e9d7b4;width:3.6em;flex:none}
+#offerBox .orow.sm{gap:3px}#offerBox .orow.sm span{color:#ddd;margin:0 2px}
+#modal .rcg{gap:6px}
+#modal .rcg .rc{padding:3px 2px 4px}
+#modal .rcg .rc .art{height:40px}#modal .rcg .rc .art svg{width:44px;height:34px}
+#modal .rcg .rc .rn{font-size:12px;font-weight:800;color:#3a2412}
+#modal .picks{display:flex;justify-content:center;gap:8px;min-height:56px;align-items:center}
+#modal .dsc>div{background:none;padding:0;gap:4px}
+#modal .dsc .rc{width:100%}
+#modal .dsc .rc .art{height:34px}
+#stealPop .big{display:block;margin:4px 0}
+#stealPop .big .rc.mini{width:58px}#stealPop .big .rc.mini .art{height:36px}#stealPop .big .rc.mini .art svg{width:42px;height:32px}#stealPop .big .rc.mini b{font-size:18px}
+.fc{border:0;padding:2px;display:flex;flex-direction:column;align-items:center;background:#f6ecd4;box-shadow:0 2px 0 #b89a68,0 4px 8px #000a}
+.fc .art{width:100%;height:28px;border-radius:4px;background:var(--rf);display:grid;place-items:center;overflow:hidden}
+.fc .art svg{width:30px;height:24px}
+.ri.rr{width:15px;height:15px;vertical-align:-3px}
 </style>
 </head>
 <body>
@@ -574,6 +614,36 @@ const costHtml = c => RES.filter(r => c[r]).map(r => riSvg(r).repeat(c[r])).join
 const shade = (c, a) => { const n = parseInt(c.slice(1), 16), t = a < 0 ? 0 : 255, p = Math.abs(a); const f = x => Math.round(x + (t - x) * p); return `rgb(${f(n >> 16)},${f(n >> 8 & 255)},${f(n & 255)})`; };
 const RT = { wood: "forest", brick: "hill", sheep: "pasture", wheat: "field", ore: "mountain" };
 const FACE = { forest: ["#5aa648", "#2b6a2a"], hill: ["#dd8a55", "#9a4724"], pasture: ["#b4dc66", "#6fa33a"], field: ["#f5d872", "#c8952a"], mountain: ["#b0b2b7", "#686b72"], volcano: ["#8e4233", "#3e1712"] };
+// 2026-11-28: 羊 B（正面の顔）・小麦 M（茎1本・葉2枚・穂）の絵。ユーザーが案の中からえらんだもの
+const SHEEP_B = (() => { const puff = [[-6,-6],[0,-8.5],[6,-6],[8,0],[6,5],[-6,5],[-8,0],[0,-4]].map(([x,y]) => `<circle cx="${x}" cy="${y}" r="4.6" fill="#fff" stroke="#bdb5a5" stroke-width=".9"/>`).join("");
+  return `<g transform="scale(.958)"><ellipse cx="0" cy="11" rx="9" ry="2" fill="#0003"/>${puff}<circle cx="0" cy="-2" r="6" fill="#fff"/>`
+    + `<ellipse cx="-8.2" cy="1" rx="3.6" ry="1.7" transform="rotate(-20 -8.2 1)" fill="#2f2a26"/><ellipse cx="8.2" cy="1" rx="3.6" ry="1.7" transform="rotate(20 8.2 1)" fill="#2f2a26"/>`
+    + `<path d="M-4.4 0Q-4.6 9 0 9.6Q4.6 9 4.4 0Q4 -3 0 -3Q-4 -3 -4.4 0Z" fill="#2f2a26"/><circle cx="-1.9" cy="1.6" r="1" fill="#fff"/><circle cx="1.9" cy="1.6" r="1" fill="#fff"/><ellipse cx="0" cy="6.6" rx="1.6" ry=".9" fill="#5a4e46"/></g>`; })();
+// 2026-11-28: 木材 G（針葉樹）・レンガ D（立体のレンガ3つ）。ユーザーが案の中からえらんだもの（±12.5 に収まるよう大きさを合わせ済み）
+const WOOD_G = (() => { const INK = "#6b4a2a";
+  return `<g transform="scale(.862) translate(0,.9)"><ellipse cx="0" cy="12" rx="8" ry="1.6" fill="#0003"/><rect x="-1.8" y="6" width="3.6" height="6" fill="#9a6236" stroke="${INK}" stroke-width="1"/>`
+    + [[12, 8, -2], [9, 2.5, -7.5], [6, -3, -13]].map(([w, b, t], i) => `<path d="M0 ${t - 2.4}L${-w * .75 - 3} ${b + 1}Q0 ${b + 3} ${w * .75 + 3} ${b + 1}Z" fill="${["#3f8a34", "#4f9a3f", "#62ad4b"][i]}" stroke="${INK}" stroke-width="1.1" stroke-linejoin="round"/>`).join("") + `</g>`; })();
+const BRICK_D = (() => { const INK = "#6b4a2a";
+  const b3 = (x, y, w = 10, h = 6, d = 3.5, sw = 1) => `<path d="M${x} ${y}h${w}l${d} ${-d}h${-w}z" fill="#e08a5a" stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round"/>`
+    + `<path d="M${x + w} ${y}l${d} ${-d}v${h}l${-d} ${d}z" fill="#9a3e1e" stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round"/>`
+    + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#c4562f" stroke="${INK}" stroke-width="${sw}"/><path d="M${x + 1.5} ${y + 1.6}h${w * .5}" stroke="#e6926a" stroke-width=".8" stroke-linecap="round"/>`;
+  return `<g transform="scale(.962) translate(-1,-2.85)"><ellipse cx="1" cy="11" rx="13" ry="1.8" fill="#0003"/>${b3(-12, 3)}${b3(0, 3)}${b3(-6, -3.6)}</g>`; })();
+const WHEAT_M = (() => {
+  const INK = "#6b4a2a";
+  const ear = (x, y, a, k, n, sw) => { let g = "";
+    for (let i = 0; i < n; i++) { const yy = -2 - i * 2.5;
+      for (const sd of [-1, 1]) { const cx = sd * 1.8, cy = yy - (sd > 0 ? 1.2 : 0);
+        g += `<path d="M${cx + sd} ${cy - 2}l${sd * 3.6} -4.2" stroke="${INK}" stroke-width="${sw * .6}" stroke-linecap="round"/>`
+          + `<ellipse cx="${cx}" cy="${cy}" rx="1.9" ry="2.9" transform="rotate(${sd * 24} ${cx} ${cy})" fill="#fbe3a0" stroke="${INK}" stroke-width="${sw}"/>`
+          + `<ellipse cx="${cx + sd * .4}" cy="${cy + .6}" rx=".8" ry="1.5" transform="rotate(${sd * 24} ${cx} ${cy})" fill="#d9a441"/>`; } }
+    const top = -2 - n * 2.5 - .6;
+    return `<g transform="translate(${x},${y}) rotate(${a}) scale(${k})"><path d="M0 1V${top}" stroke="${INK}" stroke-width="${sw}"/>${g}`
+      + `<path d="M0 ${top - 1.8}v-4.5" stroke="${INK}" stroke-width="${sw * .6}" stroke-linecap="round"/><ellipse cx="0" cy="${top}" rx="1.6" ry="2.5" fill="#fbe3a0" stroke="${INK}" stroke-width="${sw}"/></g>`; };
+  const leaf = (x, y, tx, ty, w, sw) => { const mx = (x + tx) / 2, my = (y + ty) / 2, dx = tx - x, dy = ty - y, L = Math.hypot(dx, dy), nx = -dy / L * w, ny = dx / L * w;
+    return `<path d="M${x} ${y}Q${mx + nx * 1.5} ${my + ny * 1.5} ${tx} ${ty}Q${mx - nx * .7} ${my - ny * .7} ${x} ${y}Z" fill="#5f9440" stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round"/>`
+      + `<path d="M${x + dx * .15} ${y + dy * .15}Q${mx + nx * .45} ${my + ny * .45} ${x + dx * .85} ${y + dy * .85}" stroke="#86b85e" stroke-width="${sw * .9}" fill="none" stroke-linecap="round"/>`; };
+  return `<g transform="scale(.678) translate(-4.68,4.53)"><ellipse cx="-2" cy="12.4" rx="7.5" ry="1.5" fill="#0003"/>${leaf(-5, 9.4, -9.8, -4.4, -3.8, 1.3)}`
+    + `<path d="M-6 12.4Q-3.4 1.4 2.6 -4" stroke="${INK}" stroke-width="1.6" fill="none" stroke-linecap="round"/>${leaf(-4.8, 10, 10.6, 5.4, 4.8, 1.3)}${ear(2.6, -4, 40, 1.02, 4, 1.2)}</g>`; })();
 (function buildDefs() {
   const at = (id, list, sc = 1) => list.map(([x, y, k = 1]) => `<use href="#${id}" transform="translate(${x},${y}) scale(${k * sc})"/>`).join("");
   const byY = l => l.slice().sort((a, b) => a[1] - b[1]);
@@ -592,25 +662,27 @@ const FACE = { forest: ["#5aa648", "#2b6a2a"], hill: ["#dd8a55", "#9a4724"], pas
   // 部品
   d += `<g id="tree"><ellipse cx="2.5" cy="1" rx="7" ry="2.2" fill="#0003"/><rect x="-1.2" y="-3" width="2.4" height="4" fill="#5a3a1e"/><path d="M0-19L-7-6H0Z" fill="#6cbb52"/><path d="M0-19L7-6H0Z" fill="#2c6a28"/><path d="M0-13L-8.5 0H0Z" fill="#55a243"/><path d="M0-13L8.5 0H0Z" fill="#245a22"/></g>`
     + `<g id="mound"><path d="M-15 5Q0-17 15 5Z" fill="#a24d26"/><path d="M-15 5Q-5-13 1-6Q-7-2-15 5Z" fill="#d98756"/></g>`
-    + `<g id="bricks" stroke="#5e2410" stroke-width=".6"><rect x="-9" y="-3" width="8" height="4" fill="#c4562f"/><rect x="0" y="-3" width="8" height="4" fill="#b44a28"/><rect x="-5" y="-7" width="8" height="4" fill="#d06438"/><path d="M-9-3l2-1.5h17l-2 1.5z" fill="#e08a5a"/></g>`
-    + `<g id="sheep"><ellipse cx="1.5" cy="1.2" rx="7" ry="1.8" fill="#0003"/><rect x="-3.2" y="-1.5" width="1.3" height="3" fill="#2b2b2b"/><rect x="2.4" y="-1.5" width="1.3" height="3" fill="#2b2b2b"/><circle cx="-2.5" cy="-4.5" r="3.2" fill="#fff"/><circle cx="1.2" cy="-5.5" r="3.4" fill="#fff"/><circle cx="4.2" cy="-3.8" r="3" fill="#ece8de"/><ellipse cx=".6" cy="-3" rx="5.6" ry="3.4" fill="#f6f3ea"/><ellipse cx="-6.3" cy="-4.4" rx="2.3" ry="2.7" fill="#2f2a26"/></g>`
+    + `<g id="woodG">${WOOD_G}</g><g id="brickD">${BRICK_D}</g>`
+    + `<g id="bricks"><use href="#brickD" transform="translate(0,-3.5) scale(.68)"/></g>`
+    + `<g id="sheepB">${SHEEP_B}</g><g id="wheatM">${WHEAT_M}</g>`
+    + `<g id="sheep"><use href="#sheepB" transform="translate(0,-6.4) scale(.6)"/></g>`
     + `<g id="tuft" stroke="#4f8a26" stroke-width="1.1" stroke-linecap="round" fill="none"><path d="M0 0l-2.5-4M0 0v-5M0 0l2.5-4"/></g>`
-    + `<g id="sheaf" stroke-linecap="round"><ellipse cx="1.5" cy=".8" rx="5.5" ry="1.6" fill="#0003"/><path d="M0 0L-4.5-11M0 0V-13M0 0L4.5-11M0 0L-2-12.5M0 0L2.2-12.5" stroke="#b07c1c" stroke-width="1.1"/>${[[-4.5, -11, -22], [0, -13, 0], [4.5, -11, 22], [-2.2, -12.6, -10], [2.3, -12.6, 10]].map(([x, y, r]) => `<ellipse cx="${x}" cy="${y - 2}" rx="1.4" ry="3" transform="rotate(${r} ${x} ${y})" fill="#f7d25e" stroke="#a87418" stroke-width=".5"/>`).join("")}<rect x="-2.6" y="-5" width="5.2" height="1.8" rx=".6" fill="#8a5a1a"/></g>`
+    + `<g id="sheaf"><use href="#wheatM" transform="translate(0,-8) scale(.66)"/></g>`
     + `<g id="peak"><path d="M-15 0L-2-21L13 0Z" fill="#9a9da4"/><path d="M-2-21L13 0H1Z" fill="#5d6067"/><path d="M-2-21L-6.6-13.5L-4-14.6L-1.5-12.2L1-14.6L2.6-14Z" fill="#fff"/></g>`
     + `<g id="rock"><path d="M-5 0L-4-4L0-6L4-3L5 0Z" fill="#8a8d94"/><path d="M0-6L4-3L5 0H1Z" fill="#5d6067"/></g>`
     + `<g id="pawn"><path d="M-9 12Q-9 3-4.5-1H4.5Q9 3 9 12Z"/><ellipse cx="0" cy="-1.5" rx="6.5" ry="2.4"/><circle cy="-9" r="6.2"/></g>`;
   // 土地の絵（数字のまわりに置く。六角形の中に切り抜く）
-  d += `<g id="t-forest">${at("tree", byY([[-4, -24, .9], [14, -26, .85], [-22, -14], [28, -12], [-34, 4, .9], [34, 8, .9], [-24, 20], [24, 24], [-8, 34, .95], [10, 36, .9], [-38, 22, .8], [40, 26, .8], [0, -36, .75]]))}</g>`
+  d += `<g id="t-forest">${at("tree", byY([[-16, -18, 1.05], [16, -20, 1], [-32, 10, 1], [32, 12, 1.05], [-12, 34, 1.05], [14, 34, 1]]))}</g>`
     + `<g id="t-hill">${at("mound", [[-18, -18, 1.1], [18, -20, 1], [-30, 8, .9], [30, 6, .95], [-14, 30, 1], [16, 32, 1.05]])}${at("bricks", [[0, -24, 1.2], [-26, 24, 1], [30, 26, 1]])}</g>`
-    + `<g id="t-pasture">${at("tuft", [[-30, -18], [24, -26], [36, 0], [-36, 12], [-10, 38], [26, 34], [8, -36], [-20, 32]])}${at("sheep", byY([[-18, -20, 1.25], [16, -22, 1.15], [-30, 6, 1.1], [30, 10, 1.2], [-8, 32, 1.2], [18, 30, 1.05]]))}<path d="M-44 -6 L-30 -6 M-44 -2 L-30 -2" stroke="#8a6a3f" stroke-width="1.2"/></g>`
+    + `<g id="t-pasture">${at("tuft", [[-32, -14], [30, -24], [36, 2], [-34, 14], [0, 38], [6, -36]])}${at("sheep", byY([[-22, -14, 1.35], [22, -12, 1.3], [0, 36, 1.3]]))}<path d="M-44 -6 L-30 -6 M-44 -2 L-30 -2" stroke="#8a6a3f" stroke-width="1.2"/></g>`
     + `<g id="t-field"><rect x="-50" y="-50" width="100" height="100" fill="url(#furrow)"/>${at("sheaf", byY([[-14, -20, 1.15], [16, -22, 1.1], [-30, 6, 1.1], [32, 8, 1.1], [-14, 34, 1.1], [16, 34, 1.15]]))}</g>`
     + `<g id="t-mountain">${at("peak", [[-14, -16, 1.15], [14, -18, 1.25], [-30, 10, .95], [32, 12, 1], [-4, 40, 1.05]])}${at("rock", [[-22, 32], [24, 36], [0, -38, .8], [40, -10, .8]])}</g>`
     + `<g id="t-volcano"><ellipse cx="0" cy="22" rx="30" ry="6" fill="#0004"/><path d="M-30 22L-7-12H7L30 22Z" fill="#3a1712"/><path d="M-30 22L-7-12H0L-8 22Z" fill="#6a2c20"/><ellipse cx="0" cy="-12" rx="7" ry="2.4" fill="#ff8a1c"/><path d="M-2-11Q-6 2-3 10Q0 16-1 22M3-11Q5 0 9 8" stroke="#ff7a12" stroke-width="2" fill="none" stroke-linecap="round"/>${[[-3, -22, 5], [4, -30, 6.5], [-2, -39, 7.5]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#7a6e6a" fill-opacity=".75"/>`).join("")}${at("rock", [[-30, -18], [32, -12], [-36, 34, .8], [34, 34]])}</g>`;
   // 資源のアイコン（手札・コスト・港）
-  d += `<g id="ri-wood">${[[-8, 6], [0, 6], [8, 6], [-4, -1], [4, -1], [0, -8]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4.3" fill="#dcaa6c" stroke="#6e3f18" stroke-width="1.3"/><circle cx="${x}" cy="${y}" r="1.8" fill="none" stroke="#a8743f" stroke-width=".8"/>`).join("")}</g>`
-    + `<g id="ri-brick"><use href="#bricks" transform="translate(0,5) scale(1.35)"/></g>`
-    + `<g id="ri-sheep"><use href="#sheep" transform="translate(0,6) scale(1.55)"/></g>`
-    + `<g id="ri-wheat"><use href="#sheaf" transform="translate(0,10) scale(1.35)"/></g>`
+  d += `<g id="ri-wood"><use href="#woodG" transform="scale(.98)"/></g>`
+    + `<g id="ri-brick"><use href="#brickD" transform="scale(.98)"/></g>`
+    + `<g id="ri-sheep"><use href="#sheepB" transform="scale(.98)"/></g>`
+    + `<g id="ri-wheat"><use href="#wheatM" transform="scale(.98)"/></g>`
     + `<g id="ri-ore"><path d="M-11 8L-9-1L-2-6L5-4L10 2L9 8Z" fill="#9a9da4"/><path d="M-2-6L5-4L10 2L9 8H1L-1 0Z" fill="#5d6067"/><path d="M-9-1L-2-6L-1 0Z" fill="#c4c7cd"/><path d="M3-1l2 1-1 2-2-1z" fill="#7fc8ff"/></g>`;
   // ホームの小さな絵
   d += `<g id="ic-book"><path d="M-14-9Q-7-12 0-8V10Q-7 6-14 9Z" fill="#f3e3bb" stroke="#d9b25a" stroke-width="1.2"/><path d="M14-9Q7-12 0-8V10Q7 6 14 9Z" fill="#e7d3a3" stroke="#d9b25a" stroke-width="1.2"/><path d="M-11-4q4-2 8 0M-11 0q4-2 8 0M3-4q4-2 8 0M3 0q4-2 8 0" stroke="#a88a5a" stroke-width=".8" fill="none"/></g>`
@@ -1959,7 +2031,7 @@ function flyRes(list) {
   const fx = $("fx"), me = mySeat(), per = {}; let coined = false;
   list.forEach((g, k) => {
     const c = document.createElement("div"); c.className = "fc"; c.style.setProperty("--rc", RCOL[g.r]);
-    c.innerHTML = `${riSvg(g.r, "", "-13 -13 26 26").replace("<svg ", '<svg width="28" height="28" ')}<b>+${g.n}</b>`;
+    c.style.setProperty("--rf", rfill(g.r)); c.innerHTML = `<div class="art">${riSvg(g.r, "", "-14 -12 28 24")}</div><b>+${g.n}</b>`;
     const j = (per[g.ti] = (per[g.ti] || 0) + 1) - 1, p0 = tpos(g.ti);
     c.style.left = (p0.x + j * 16 - (j ? 8 : 0)) + "px"; c.style.top = (p0.y + j * 3) + "px";
     c.style.transform = "scale(.3)"; c.style.opacity = "0"; fx.appendChild(c);
@@ -1980,11 +2052,11 @@ function showSteal(ls, s) {
   let h = "", cls = "info";
   if (ls.mono) {
     const n = ls.took.reduce((a, b) => a + b, 0);
-    if (s === ls.by) { cls = "good"; h = `💰 独占で<span class="big">${RI[ls.r]}×${n}</span>手に入れた！`; }
-    else if (s >= 0 && ls.took[s] > 0) { cls = ""; h = `${nm(ls.by)} に独占で<span class="big">${RI[ls.r]}×${ls.took[s]}</span>${RN[ls.r]}を取られた！`; }
+    if (s === ls.by) { cls = "good"; h = `💰 独占で<span class="big">${cardHtml(ls.r, "×" + n, "p")}</span>手に入れた！`; }
+    else if (s >= 0 && ls.took[s] > 0) { cls = ""; h = `${nm(ls.by)} に独占で<span class="big">${cardHtml(ls.r, "×" + ls.took[s], "m")}</span>${RN[ls.r]}を取られた！`; }
     else h = `💰 ${nm(ls.by)} が独占で ${RI[ls.r]}×${n} を集めた`;
-  } else if (s === ls.from) { cls = ""; h = `🥷 ${nm(ls.by)} に<span class="big">${RI[ls.r]}</span>${rc} を奪われた！`; }
-  else if (s === ls.by) { cls = "good"; h = `🥷 ${nm(ls.from)} から<span class="big">${RI[ls.r]}</span>${rc} を奪った！`; }
+  } else if (s === ls.from) { cls = ""; h = `🥷 ${nm(ls.by)} に<span class="big">${cardHtml(ls.r, "−1", "m")}</span>${rc} を奪われた！`; }
+  else if (s === ls.by) { cls = "good"; h = `🥷 ${nm(ls.from)} から<span class="big">${cardHtml(ls.r, "+1", "p")}</span>${rc} を奪った！`; }
   else h = `🥷 ${nm(ls.by)} が ${nm(ls.from)} から1まい奪った`;
   el.className = cls; el.innerHTML = h; el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
   clearTimeout(stealPopT); stealPopT = setTimeout(() => el.classList.add("hidden"), 3000);
@@ -2040,7 +2112,17 @@ function bannerText() {
   if (ui.mode) return { my: true, h: `${BN[ui.mode]}をつくる場所をタップ` };
   return { my: false, h: "" };
 }
-const cardHtml = r => `<span class="ocard" style="--rc:${RCOL[r]}">${riSvg(r, "", "-13 -13 26 26").replace("<svg ", '<svg width="26" height="26" ')}</span>`;
+// 2026-11-28: 資源はどこでも同じ「絵つきカード」（手札・交換・よびかけ・小窓・知らせ）。
+//   rcard(r, { tag, attrs, n: 大きい数字, sub: 下の小さい字, cls, rt: 港の比率, sel: 右上のバッジ, id })
+const rfill = r => `radial-gradient(circle at 40% 30%,${FACE[RT[r]][0]},${FACE[RT[r]][1]})`;
+function rcard(r, o = {}) {
+  const t = o.tag || "div";
+  return `<${t} class="rc ${o.cls || ""}" ${o.id ? `id="${o.id}"` : ""} style="--rc:${RCOL[r]};--rf:${rfill(r)}" ${o.attrs || ""}><div class="art">${riSvg(r, "", "-14 -12 28 24")}</div>`
+    + `${o.n != null ? `<b class="${o.n === 0 ? "z" : ""}">${o.n}</b>` : ""}${o.sub != null ? `<span class="rn">${o.sub}</span>` : ""}`
+    + `${o.rt ? `<span class="rt">${o.rt}</span>` : ""}${o.sel ? `<span class="sel">${o.sel}</span>` : ""}</${t}>`;
+}
+// よびかけ・知らせ用の小さいカード（n は "+1" / "−2" など。p = もらう / m = わたす）
+const cardHtml = (r, n, pm) => rcard(r, { cls: "mini" + (pm ? " " + pm : ""), n: n == null ? null : n });
 function render() {
   if (!G || screen !== "game") return;
   const s = mySeat(), me = s >= 0 ? G.ps[s] : null, myTurn = s >= 0 && G.cur === s && G.phase !== "over";
@@ -2060,7 +2142,7 @@ function render() {
   { const ls = G.lastSteal; if (ls && ui.stealSeen !== ls.n) { const show = ui.stealSeen != null && ls.n > ui.stealSeen; ui.stealSeen = ls.n; if (show && !FAST) showSteal(ls, s); } }
   // 手もと（下のトレイ）
   if (me) {
-    $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return `<div class="rc" id="hc-${r}" style="--rc:${RCOL[r]};--rf:radial-gradient(circle at 40% 30%,${FACE[RT[r]][0]},${FACE[RT[r]][1]})"><div class="art">${riSvg(r, "", "-14 -12 28 24")}</div><b>${Math.max(0, me.hand[r] - pendOf(s, r))}</b><span class="rn">${RN[r]}</span>${x < 4 ? `<span class="rt">${x}:1</span>` : ""}</div>`; }).join("")
+    $("hand").innerHTML = RES.map(r => { const x = ratio(s, r); return rcard(r, { id: "hc-" + r, n: Math.max(0, me.hand[r] - pendOf(s, r)), sub: RN[r], rt: x < 4 ? x + ":1" : "" }); }).join("")
       + `<div class="rc cards" data-g="cards"><div class="art"><svg viewBox="-14 -12 28 24"><rect x="-9" y="-10" width="13" height="18" rx="2" fill="#efe3c4" stroke="#2c1e47" transform="rotate(-12)"/><rect x="-4" y="-9" width="13" height="18" rx="2" fill="#fff6dc" stroke="#2c1e47" transform="rotate(8)"/><path d="M3-3l1.2 2.6 2.8.3-2.1 1.9.6 2.8L3 3.2.5 4.6l.6-2.8L-1 0l2.8-.3z" fill="#d9a22a" transform="rotate(8)"/></svg></div><b>${me.cards.length + me.newC.length + me.vpC}</b><span class="rn">カード</span></div>`;
   } else $("hand").innerHTML = `<div class="rc" style="padding:8px;font-size:13px">観戦中: みんなの手は見えません</div>`;
   const nc = me ? me.cards.length + me.newC.length + me.vpC : 0;
@@ -2111,12 +2193,12 @@ function render() {
   if (o && s >= 0 && s !== o.from && o.resp[s] === null)
     oh = `<div class="ot"><i class="dot" style="background:${COLS[o.from]}"></i>${esc(G.ps[o.from].name)} からの交換</div>`
       + (G.ps[o.from].bot ? `<div class="cd">あと ${Math.max(0, Math.ceil((OFFER_WAIT - (Date.now() - o.t)) / 1000))} 秒</div>` : "")
-      + RES.filter(r => o.give[r]).map(r => `<div class="orow"><span class="n p">+${o.give[r]}</span>${cardHtml(r)}</div>`).join("")
-      + RES.filter(r => o.get[r]).map(r => `<div class="orow"><span class="n m">−${o.get[r]}</span>${cardHtml(r)}</div>`).join("")
+      + `<div class="orow"><span class="ol">もらえる</span>${RES.filter(r => o.give[r]).map(r => cardHtml(r, "+" + o.give[r], "p")).join("")}</div>`
+      + `<div class="orow"><span class="ol">わたす</span>${RES.filter(r => o.get[r]).map(r => cardHtml(r, "−" + o.get[r], "m")).join("")}</div>`
       + `<div class="ob"><button data-o="no" aria-label="ことわる">✕</button><button data-o="ok" aria-label="OK">✓</button></div>`;
   else if (o && s >= 0 && s === o.from && !ui.trade) {
     const n = k => o.resp.filter(x => x === k).length;
-    oh = `<div class="ot">🤝 よびかけ中</div><div class="orow sm">${amtStr(o.give)} → ${amtStr(o.get)}</div><div class="orow sm">⭕${n("ok")}　⏳${n(null)}　❌${n("no") + n("cant")}</div><div class="ob"><button data-o="open">ひらく</button></div>`;
+    oh = `<div class="ot">🤝 よびかけ中</div><div class="orow sm">${RES.filter(r => o.give[r]).map(r => cardHtml(r, "−" + o.give[r], "m")).join("")}<span>→</span>${RES.filter(r => o.get[r]).map(r => cardHtml(r, "+" + o.get[r], "p")).join("")}</div><div class="orow sm">⭕${n("ok")}　⏳${n(null)}　❌${n("no") + n("cant")}</div><div class="ob"><button data-o="open">ひらく</button></div>`;
   }
   $("offerBox").innerHTML = oh; $("offerBox").classList.toggle("hidden", !oh);
   $("offerBox").classList.toggle("mine", !!(o && s === o.from));
@@ -2147,7 +2229,7 @@ function renderTrade(s, me, myTurn) {
   if (o && o.from === s) {
     const st = { null: "⏳ 考え中", ok: "⭕ OK", no: "❌ ことわった", cant: "資源がたりない" };
     box.innerHTML = `<div class="tt">交換のよびかけ中</div>`
-      + `<div class="tsum">${RES.filter(r => o.give[r]).map(r => cardHtml(r) + `<b class="m">−${o.give[r]}</b>`).join("")}<span>⇄</span>${RES.filter(r => o.get[r]).map(r => cardHtml(r) + `<b class="p">+${o.get[r]}</b>`).join("")}</div>`
+      + `<div class="tsum">${RES.filter(r => o.give[r]).map(r => cardHtml(r, "−" + o.give[r], "m")).join("")}<span>⇄</span>${RES.filter(r => o.get[r]).map(r => cardHtml(r, "+" + o.get[r], "p")).join("")}</div>`
       + G.ps.map((q, i) => i === s || o.resp[i] === "skip" ? "" : `<div class="tst"><i class="dot" style="background:${COLS[i]}"></i><b>${esc(q.name)}</b><span>${st[o.resp[i]]}</span><button data-x="accept" data-p="${i}" ${o.resp[i] === "ok" ? "" : "disabled"}>交換する</button></div>`).join("")
       + `<div class="tbar"><span class="sp"></span><button class="tx no" data-x="cancel" aria-label="とりけす">⇤</button><button class="tx" data-x="close" aria-label="とじる">▾</button></div>`;
     return;
@@ -2157,11 +2239,11 @@ function renderTrade(s, me, myTurn) {
   const pm = (k, r, cm, cp) => bank ? "" : `<div class="pm"><button data-x="dec" data-k="${k}" data-r="${r}" ${cm ? "" : "disabled"} aria-label="${RN[r]}をへらす">−</button><button data-x="inc" data-k="${k}" data-r="${r}" ${cp ? "" : "disabled"} aria-label="${RN[r]}をふやす">＋</button></div>`;
   const top = RES.map(r => {
     const n = bank ? (ui.get === r ? 1 : 0) : (ui.pw[r] || 0);
-    return `<div class="tcol"><button class="tc ${n ? "on" : ""}" data-x="w" data-r="${r}" style="--rc:${RCOL[r]}" ${bank && ui.give === r ? "disabled" : ""}>${RI[r]}${n ? `<span class="sel">${n}</span>` : ""}</button>${pm("pw", r, n > 0, n < 19)}</div>`;
+    return `<div class="tcol">${rcard(r, { tag: "button", cls: n ? "on" : "", attrs: `data-x="w" data-r="${r}" ${bank && ui.give === r ? "disabled" : ""}`, n, sub: RN[r] })}${pm("pw", r, n > 0, n < 19)}</div>`;
   }).join("");
   const bot = RES.map(r => {
     const x = ratio(s, r), n = bank ? (ui.give === r ? x : 0) : (ui.pg[r] || 0), dim = bank ? me.hand[r] < x : !me.hand[r];
-    return `<div class="tcol"><button class="tc ${n ? "on" : ""} ${dim ? "dim" : ""}" data-x="g" data-r="${r}" style="--rc:${RCOL[r]}">${RI[r]}<span class="hc">${me.hand[r]}</span>${bank && x < 4 ? `<span class="rt">${x}:1</span>` : ""}${n ? `<span class="sel">${n}</span>` : ""}</button>${pm("pg", r, n > 0, n < me.hand[r])}</div>`;
+    return `<div class="tcol">${rcard(r, { tag: "button", cls: (n ? "on " : "") + (dim ? "dim" : ""), attrs: `data-x="g" data-r="${r}"`, n, sub: "手札" + me.hand[r], rt: bank && x < 4 ? x + ":1" : "" })}${pm("pg", r, n > 0, n < me.hand[r])}</div>`;
   }).join("");
   const ok = bank ? !!(ui.give && ui.get && ui.give !== ui.get) : RES.some(r => ui.pg[r]) && RES.some(r => ui.pw[r]) && ui.to.length > 0;
   const hint = bank ? "下で出す資源、上でもらう資源をえらんでね（港があれば少なくてすむ）"
@@ -2251,12 +2333,12 @@ function renderModal() {
     if (!p) { ui.modal = null; $("modal").classList.add("hidden"); return; }
     const me2 = i === s, nc = p.cards.length + p.newC.length + p.vpC;
     const two = RES.filter(r => ratio(i, r) === 2), rest = RES.filter(r => ratio(i, r) !== 2), base = rest.length ? ratio(i, rest[0]) : 0;
-    const rateTxt = two.map(r => `${RI[r]}2:1`).join(" ") + (two.length && rest.length ? " ・ ほか " : "") + (rest.length ? `${base}:1` : "") + (base === 4 && !two.length ? "（港なし）" : "");
+    const rateTxt = two.map(r => `${riSvg(r, "ri rr")}2:1`).join(" ") + (two.length && rest.length ? " ・ ほか " : "") + (rest.length ? `${base}:1` : "") + (base === 4 && !two.length ? "（港なし）" : "");
     h = `<h2><i class="dot" style="background:${COLS[i]};width:16px;height:16px"></i> ${esc(p.name)}${p.bot ? " 🤖" : ""}${me2 ? "（あなた）" : ""}</h2>
       <dl class="pinfo" style="margin:0">
         <dt>点数</dt><dd>${pubVp(i, s)}点</dd>
         <dt>うちわけ</dt><dd>${[`村(1点)×${p.vils}`, `町(2点)×${p.towns}`].concat(G.roadHolder === i ? ["最長道(2点)"] : [], G.armyHolder === i ? ["最大騎士力(2点)"] : [], p.vpC && (i === s || G.phase === "over") ? [`勝利点カード(1点)×${p.vpC}`] : []).join(" ・ ")}</dd>
-        <dt>手札</dt><dd>${tot(p.hand)}まい${me2 ? `<br><span style="font-weight:400">${RES.map(r => `${RI[r]}${p.hand[r]}`).join(" ")}</span>` : ""}</dd>
+        <dt>手札</dt><dd>${tot(p.hand)}まい${me2 ? `<br><span style="font-weight:400">${RES.map(r => `${riSvg(r, "ri rr")}${p.hand[r]}`).join(" ")}</span>` : ""}</dd>
         <dt>カード</dt><dd>所有数 ${nc}まい ・ 使用済 ${p.used || 0}まい</dd>
         <dt>騎士</dt><dd>${p.kn || 0}回${G.armyHolder === i ? "（最大騎士力）" : ""}</dd>
         <dt>最長道</dt><dd>${p.lr}${G.roadHolder === i ? "（最長道ボーナス中）" : ""}</dd>
@@ -2266,7 +2348,7 @@ function renderModal() {
       <div class="odds"><div class="oh">1回ふるごとに、資源が出る確率</div>${(() => {
         const od = resOdds(i), pc = x => (x * 100).toFixed(1) + "%";
         return RES.map(r => { const ks = Object.keys(od[r]).map(Number).sort((a, b) => a - b), all = ks.reduce((a, k) => a + od[r][k], 0);
-          return `<div class="or ${all ? "" : "zero"}"><span class="orn">${RI[r]}${RN[r]}</span><b>${all ? pc(all) : "—"}</b><span class="ok">${ks.length > 1 || ks[0] > 1 ? ks.map(k => `${RI[r]}×${k} ${pc(od[r][k])}`).join("<br>") : ""}</span></div>`; }).join("");
+          return `<div class="or ${all ? "" : "zero"}"><span class="orn">${riSvg(r, "ri rr")}${RN[r]}</span><b>${all ? pc(all) : "—"}</b><span class="ok">${ks.length > 1 || ks[0] > 1 ? ks.map(k => `${riSvg(r, "ri rr")}×${k} ${pc(od[r][k])}`).join("<br>") : ""}</span></div>`; }).join("");
       })()}<div class="oh" style="font-size:10px">町は 2まい出るので、まい数（×1・×2…）ごとに分けています。盗賊のいる土地は入れていません。</div></div>
       <button data-m="close">とじる</button>`;
   } else if (k === "steal") {
@@ -2282,20 +2364,20 @@ function renderModal() {
       + `<div class="note">カードは ${costHtml(COST.card)} で買える。1番に1まいだけ使える。</div><button data-m="close">とじる</button>`;
   } else if (k === "harvest") {
     h = `<h2>🧺 大豊作</h2><div class="note">好きな資源を2まいえらぼう（同じのを2回でもOK）</div>
-      <div class="g4">${RES.map(r => `<button data-m="pick" data-r="${r}" ${ui.picks.length >= 2 ? "disabled" : ""}><span class="ic">${RI[r]}</span>${RN[r]}</button>`).join("")}</div>
-      <div style="text-align:center;font-size:28px;min-height:36px">${ui.picks.map(r => RI[r]).join(" ")}</div>
+      <div class="g4 rcg">${RES.map(r => rcard(r, { tag: "button", attrs: `data-m="pick" data-r="${r}" ${ui.picks.length >= 2 ? "disabled" : ""}`, sub: RN[r], sel: ui.picks.filter(x => x === r).length || "" })).join("")}</div>
+      <div class="picks">${ui.picks.length ? ui.picks.map(r => cardHtml(r, "+1", "p")).join("") : `<span class="note">まだえらんでいません</span>`}</div>
       <button class="main" data-m="doharvest" ${ui.picks.length === 2 ? "" : "disabled"}>もらう</button><button data-m="repick">えらびなおす</button><button data-m="close">やめる</button>`;
   } else if (k === "disc") {
     if (!G || G.phase !== "discard" || !(G.disc[s] > 0)) { ui.modal = null; $("modal").classList.add("hidden"); return; }
     const need = G.disc[s], sel = ui.dsel, n = RES.reduce((a, r) => a + (sel[r] || 0), 0);
     h = `<h2>🌪️ すてるカードをえらぶ</h2><div class="note" style="text-align:center">手札が ${robLim()}まい以上なので、半分の <b>${need}まい</b> をすてます</div>
-      <div class="g4 dsc">${RES.map(r => `<div><span class="ic">${RI[r]}</span><small>${RN[r]} ${me.hand[r]}</small><b>${sel[r] || 0}</b>
+      <div class="g4 dsc">${RES.map(r => `<div>${rcard(r, { n: sel[r] || 0, sub: "手札" + me.hand[r], cls: sel[r] ? "on" : "" })}
         <button data-m="dsel" data-r="${r}" data-d="1" ${(sel[r] || 0) >= me.hand[r] || n >= need ? "disabled" : ""} aria-label="${RN[r]}をふやす">＋</button><button data-m="dsel" data-r="${r}" data-d="-1" ${(sel[r] || 0) <= 0 ? "disabled" : ""} aria-label="${RN[r]}をへらす">−</button></div>`).join("")}</div>
       <div style="text-align:center;font-size:18px;font-weight:800;margin:6px 0">${n} / ${need}まい</div>
       <button class="main" data-m="dodisc" ${n === need ? "" : "disabled"}>すてる</button>`;
   } else if (k === "mono") {
     h = `<h2>💰 独占</h2><div class="note">資源を1つえらぶと、ほかの全員がその資源をぜんぶあなたにわたします</div>
-      <div class="g4">${RES.map(r => `<button data-m="domono" data-r="${r}"><span class="ic">${RI[r]}</span>${RN[r]}</button>`).join("")}</div>
+      <div class="g4 rcg">${RES.map(r => rcard(r, { tag: "button", attrs: `data-m="domono" data-r="${r}"`, sub: RN[r] })).join("")}</div>
       <button data-m="close">やめる</button>`;
   } else if (k === "over") {
     const order = G.ps.map((p, i) => i).sort((a, b) => (b === G.winner) - (a === G.winner) || vp(b) - vp(a));
