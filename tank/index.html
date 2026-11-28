@@ -259,6 +259,43 @@ button.pol:active{transform:rotate(var(--r)) scale(.96)}
 .lwhy{font-size:12px;font-weight:800;background:#fffaf0;border:2px solid #d6b07a;border-radius:8px;padding:2px 8px}
 .lwait{font-size:14px;font-weight:900;text-align:right;background:#fffaf0e6;border:2px solid #d6b07a;border-radius:10px;padding:8px 12px}
 .lob .play:disabled{opacity:.5;filter:grayscale(.5)}
+
+/* ---- 試合の結果（写真と成績表）---- */
+#screen.resultd{display:block;padding:0;overflow-y:auto;background:var(--wf) 50% 50%/900px auto,#dcb57a}
+#screen.resultd~#rotB,#screen.resultd~#layB{display:none}
+.res{min-height:100%;display:grid;gap:14px;padding:calc(16px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left))}
+.res.l{grid-template-columns:.8fr 1.4fr;grid-template-rows:1fr auto;grid-template-areas:"ph sh" "ph go";align-items:center;height:100%}
+.res.p{grid-template-rows:auto auto 1fr;grid-template-areas:"ph" "sh" "go"}
+.r-ph{grid-area:ph;min-width:0}.r-sh{grid-area:sh;min-width:0}.r-go{grid-area:go;align-self:end;display:flex;gap:12px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.rph{position:relative;max-width:250px;margin:6px auto 0;background:#f4ecdc;padding:9px 9px 36px;border-radius:4px;transform:rotate(-4deg);filter:drop-shadow(4px 8px 6px #3e240f55)}
+.res.p .rph{max-width:min(250px,62vw)}
+.rph .pin{position:absolute;left:50%;top:-8px;width:18px;height:18px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(circle at 35% 35%,#ff9a8a,#c83b30);box-shadow:0 2px 2px #0005;z-index:1}
+.rph .pic{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;aspect-ratio:1.15;border-radius:2px;background:linear-gradient(color-mix(in srgb,var(--pc) 35%,transparent),color-mix(in srgb,var(--pc) 12%,transparent)),#f1d7a6}
+.rph .pic svg{filter:drop-shadow(0 3px 0 #0003)}
+.rph b{position:absolute;left:4px;right:4px;bottom:8px;text-align:center;font-size:18px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rph b small{font-size:11px;color:var(--ink2)}
+.rtag{position:absolute;right:-14px;top:18px;font-style:normal;background:#f0ad1c;color:#fff;font-weight:900;font-size:16px;padding:4px 14px;border-radius:4px;transform:rotate(14deg);box-shadow:0 3px 0 #8a5a08;-webkit-text-stroke:3px #8a5a08;paint-order:stroke fill}
+.rsh{background:#fffdf8;border-radius:6px;border-top:6px solid #3c7fd8;padding:8px 14px 12px;background-image:repeating-linear-gradient(#0000 0 29px,#bcd3ee 29px 30px);filter:drop-shadow(4px 8px 6px #3e240f55);transform:rotate(1deg)}
+.rsh-h{font-weight:900;font-size:16px}
+.rsh-h small{font-size:11px;color:var(--ink2);margin-left:6px}
+.rts{font-size:20px;font-weight:900;text-align:center;margin:2px 0}
+.rtw{overflow-x:auto}
+.rsh table{width:100%;border-collapse:collapse;font-weight:800;font-size:13px;margin-top:4px}
+.rsh th{text-align:left;white-space:nowrap;padding-right:6px;font-weight:900}
+.rsh th small{font-size:10px;color:var(--ink2);margin-left:4px}
+.rsh tr{height:30px}
+.rsh tr.hd{height:18px;color:var(--ink2);font-size:11px}
+.rsh tr.me th{color:#b8321f}
+.rsh td{text-align:center;min-width:26px}
+.rsh td.st{text-align:right;white-space:nowrap;color:#e39a00;-webkit-text-stroke:.5px #7a4a10;font-size:15px}
+.rsh .dot{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin:0 2px;font-style:normal}
+.rsh .dr{opacity:.4}
+.stamp{display:inline-grid;place-items:center;width:23px;height:23px;border-radius:50%;border:2px solid #d8473b;color:#d8473b;font-size:10.5px;font-weight:900;transform:rotate(-12deg);background:#fff8}
+.rsh .star{color:#f0ad1c}
+.ragain{border:3px solid #6e2018;border-radius:14px;background:linear-gradient(#ee6a5a,#c83b30);color:#fff;font-weight:900;font-size:20px;letter-spacing:2px;padding:9px 20px;box-shadow:inset 0 3px 0 #fff6,0 6px 0 #7d241b,0 10px 14px #0005;text-shadow:0 2px 0 #0004;white-space:nowrap}
+.ragain:active{transform:translateY(5px);box-shadow:inset 0 3px 0 #fff6,0 1px 0 #7d241b}
+.rbtn{border:3px solid #8a5a2b;border-radius:12px;background:linear-gradient(#f4dcae,#e2bf85);color:var(--ink);font-weight:900;font-size:14px;padding:8px 14px;box-shadow:inset 0 2px 0 #fffb,0 5px 0 #8a5a2b;white-space:nowrap}
+.rbtn:active{transform:translateY(4px);box-shadow:0 1px 0 #8a5a2b}
 /* ---- あそびかた ---- */
 .modal{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:16px;background:#2a180aa6}
 .modal .card{width:min(560px,100%);max-height:calc(100% - 8px);overflow:auto;margin:0}
@@ -918,6 +955,7 @@ function finishRound(timeUp) {
   }
   if (G.team && wteam >= 0) { M.teamScore[wteam]++; for (const p of M.players) if (p.tm === wteam) M.score.set(p.id, (M.score.get(p.id) || 0) + 1); }
   else if (win != null) M.score.set(win, (M.score.get(win) || 0) + 1);
+  (M.hist || (M.hist = [])).push({ w: win, t: wteam, s: G.stage });   // 2026-11-28: 結果画面の成績表用
   G.phase = "end"; G.t = 0;
   G.over = G.team ? M.teamScore.some(v => v >= WIN_ROUNDS) : [...M.score.values()].some(v => v >= WIN_ROUNDS);
   broadcast({ t: "rend", n: M.round, win, wteam, timeUp: !!timeUp, score: [...M.score], ts: M.teamScore, over: G.over });
@@ -940,7 +978,7 @@ function finishMatch(forced) {
   if (winners.length) partyReport(M.players.filter(p => human(p) && winners.includes(p.id)).map(p => p.name), M.players.filter(p => human(p) && !winners.includes(p.id)).map(p => p.name));
   const ps = M.players.map(p => ({ id: p.id, name: p.name, tm: p.tm, color: p.color, wins: M.score.get(p.id) || 0, gone: !!p.gone }))
     .sort((a, b) => (winners.includes(b.id) - winners.includes(a.id)) || (b.wins - a.wins));
-  broadcast({ t: "over", ps, winners, team: M.team ? wteam : undefined, ts: M.teamScore });
+  broadcast({ t: "over", ps, winners, team: M.team ? wteam : undefined, ts: M.teamScore, hist: M.hist || [] });
 }
 function hostHandle(id, m) {
   if (!m) return;
@@ -2125,6 +2163,39 @@ function lobbyHTML() {
   const back = `<button class="dback lb" data-a="leave" aria-label="部屋を出る"><svg viewBox="0 0 40 24" style="color:#c83b30"><use href="#i-back"/></svg>退出</button>`;
   return `<div class="lob ${port ? "p" : "l"}"><div class="a-back">${back}</div><div class="a-tk">${ticket}</div><div class="a-ph">${photos}</div><div class="a-cd">${card}</div><div class="a-go">${go}</div></div>`;
 }
+
+// ================= 2026-11-28: 試合の結果（案3: 優勝の写真 ＋ 成績表）=================
+function resultHTML() {
+  const o = overInfo, wt = o.team, team = wt != null, port = innerHeight > innerWidth;
+  const iWon = !spectating && o.winners.includes(myId), draw = team ? wt < 0 : !o.winners.length;
+  const hist = o.hist || [];
+  // 写真: 勝った人（チーム戦はチームの戦車を並べる。引き分けは全員を小さく）
+  const shown = draw ? o.ps.filter(p => !p.gone) : team ? o.ps.filter(p => p.tm === wt) : o.ps.filter(p => o.winners.includes(p.id)).slice(0, 1);
+  const main = shown[0] || {};
+  const tint = draw ? "#b49a7a" : team ? TEAM_CSS[wt] : css(main.color || 0xe8463c);
+  const caption = draw ? "引き分け" : team ? `${TEAM_NAME[wt]}チーム` : esc(main.name || "");
+  const sub = iWon ? "あなた" : "";
+  const tanks = shown.map(p => `<svg viewBox="0 0 48 32" style="color:${css(p.color)};width:${shown.length > 1 ? 100 / Math.min(shown.length, 3) - 6 : 62}%"><use href="#i-tank"/></svg>`).join("");
+  const photo = `<div class="rph" style="--pc:${tint}"><i class="pin"></i><span class="pic">${tanks}</span><b>${caption}${sub ? ` <small>${sub}</small>` : ""}</b>
+    ${draw ? "" : `<em class="rtag">${team ? "勝ち！" : "1位！"}</em>`}</div>`;
+  // 成績表: ラウンドごとに、勝った人のところに「勝」のはんこ
+  const stages = [...new Set(hist.map(h => h.s))].map(k => STAGES[k] || k);
+  const won = (h, p) => h.w === p.id || (team && h.t >= 0 && h.t === p.tm);
+  const rank = (p, i) => draw ? "" : team ? "" : (o.winners.includes(p.id) ? 1 : i + 1) + ".";
+  const rows = o.ps.map((p, i) => `<tr${p.id === myId ? ' class="me"' : ""}><th>${rank(p, i)} <i class="dot" style="background:${css(p.color)}"></i>${esc(p.name)}${p.id === myId ? "<small>あなた</small>" : ""}${p.gone ? "<small>退出</small>" : ""}</th>
+    ${hist.map(h => `<td>${won(h, p) ? `<span class="stamp">勝</span>` : ""}</td>`).join("")}<td class="st">${stars(p.wins)}</td></tr>`).join("");
+  const sheet = `<div class="rsh"><div class="rsh-h">せいせきひょう <small>${stages.length ? esc(stages.join("・")) : ""} ・ 3本先取</small></div>
+    ${team ? `<div class="rts"><span style="color:${TEAM_CSS[0]}">赤 ${o.ts[0]}</span> − <span style="color:${TEAM_CSS[1]}">${o.ts[1]} 青</span></div>` : ""}
+    <div class="rtw"><table><tr class="hd"><th></th>${hist.map((h, i) => `<td>${h.w == null && !(h.t >= 0) ? `<span class="dr">R${i + 1}</span>` : `R${i + 1}`}</td>`).join("")}<td></td></tr>${rows}</table></div>
+    ${hist.some(h => h.w == null && !(h.t >= 0)) ? `<div class="lnote">うすい R は引き分け・時間切れ</div>` : ""}</div>`;
+  // ボタン（今までと同じ動き）
+  const menu = `<button class="rbtn" data-a="leave">${PARTY ? "ゲーム一覧へ" : "メニューへ"}</button>`;
+  let btns;
+  if (mode === "local") btns = `${team ? `<button class="rbtn" data-a="myside">チームを変える</button>` : ""}${menu}<button class="ragain" data-a="again">もう一度${host.train ? "練習" : ""}</button>`;
+  else if (mode === "host") btns = `${team ? `<button class="rbtn" data-a="tolobby">チームを変える</button>` : ""}${menu}<button class="ragain" data-a="tolobby">部屋にもどる</button>`;
+  else btns = `${team && !spectating ? `<button class="rbtn" data-a="sw-${myId}">チームを変える</button>` : ""}${menu}<div class="lwait">ホストが部屋にもどるのを<br>待っています…</div>`;
+  return `<div class="res ${port ? "p" : "l"}"><div class="r-ph">${photo}</div><div class="r-sh">${sheet}</div><div class="r-go">${btns}</div></div>`;
+}
 // ステージの見本（上から見た図）
 function miniMap(k) {
   const vb = `-0.3 -0.3 ${MW + .6} ${MH + .6}`, frame = `<rect x="-.3" y="-.3" width="${MW + .6}" height="${MH + .6}" rx=".7" fill="#8a5a2b"/><rect x=".5" y=".5" width="${MW - 1}" height="${MH - 1}" fill="#f1d7a6"/>`;
@@ -2251,6 +2322,7 @@ function renderUI() {
   s.classList.toggle("home", screen === "menu" && !lay);
   s.classList.toggle("setup", (screen === "setup" || screen === "stages") && !lay);
   s.classList.toggle("lobbyd", screen === "lobby" && !lay);
+  s.classList.toggle("resultd", inGame && !!overInfo && !lay);
   if (lay) {   // ボタン配置の編集: 上に小さな道具バー
     s.classList.remove("hidden");
     const L = layOf(editSel), pct = Math.round(L.s * 100), nm = $(editSel).dataset.name;
@@ -2276,16 +2348,7 @@ function renderUI() {
   } else if (screen === "connecting") {
     h = `<div class="card"><h2>接続中…</h2><button class="btn sub" data-a="leave">やめる</button></div>`;
   } else if (screen === "lobby") { h = lobbyHTML();
-  } else if (inGame && overInfo) {
-    const o = overInfo, wt = o.team, iWon = !spectating && o.winners.includes(myId);
-    let title = !o.winners.length ? "引き分け" : iWon ? "あなたの勝ち！" : `${esc((o.ps.find(p => p.id === o.winners[0]) || {}).name || "")} の勝ち`;
-    if (wt != null) title = wt < 0 ? "引き分け" : `<span style="color:${TEAM_CSS[wt]}">${TEAM_NAME[wt]}チーム</span>の勝ち！`;
-    h = `<div class="card"><h2 class="ttl">${iWon ? `<svg class="trophy"><use href="#i-trophy"/></svg>` : ""}${title}</h2>${wt != null ? `<div class="note">赤 ${o.ts[0]} − ${o.ts[1]} 青</div>` : ""}
-      <table class="res">${o.ps.map((p, i) => `<tr><td>${i + 1}. <span class="dot" style="background:${css(p.color)}"></span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}${p.gone ? "（退出）" : ""}</td><td>${stars(p.wins)}</td></tr>`).join("")}</table>
-      ${mode === "local" ? `<button class="btn red" data-a="again">もう一度${host.train ? "練習する" : ""}</button>${wt != null ? `<button class="btn sub" data-a="myside">チームを変えてもう一度（今: ${TEAM_NAME[practiceSide]}）</button>` : ""}`
-        : mode === "host" ? `<button class="btn red" data-a="tolobby">部屋にもどる</button>${wt != null ? `<button class="btn sub" data-a="tolobby">チームを変える</button>` : ""}`
-        : `<div class="note">ホストが部屋にもどるのを待っています…</div>${wt != null && !spectating ? `<button class="btn sub" data-a="sw-${myId}">チームを変える（部屋にもどります）</button>` : ""}`}
-      <button class="btn sub" data-a="leave">${PARTY ? "ゲーム一覧へ" : "メニューへ"}</button></div>`;
+  } else if (inGame && overInfo) { h = resultHTML();
   } else if (inGame && roundInfo) {
     const r = roundInfo, w = S.players.find(p => p.id === r.win);
     const title = r.timeUp ? "時間切れ（引き分け）" : S.team ? (r.wteam < 0 ? "引き分け" : `<span style="color:${TEAM_CSS[r.wteam]}">${TEAM_NAME[r.wteam]}チーム</span>がとった！`) : w ? (w.id === myId ? "あなたがとった！" : `${esc(w.name)} がとった！`) : "引き分け";
@@ -2304,7 +2367,7 @@ function renderUI() {
 }
 $("screen").addEventListener("input", e => { if (e.target.id === "name" && !PARTY) store.set("tank-name", e.target.value.trim().slice(0, 12)); });
 let homeLand = innerWidth > innerHeight;   // 向きが変わったときだけ（横画面/縦画面ボタンの文字）。キーボードの出し入れでは描き直さない
-addEventListener("resize", () => { const l = innerWidth > innerHeight; if (l === homeLand) return; homeLand = l; if ((screen === "menu" || screen === "lobby") && !layEdit) renderUI(); });
+addEventListener("resize", () => { const l = innerWidth > innerHeight; if (l === homeLand) return; homeLand = l; if ((screen === "menu" || screen === "lobby" || (screen === "game" && overInfo)) && !layEdit) renderUI(); });
 $("screen").addEventListener("click", async e => {
   const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
   const a = b.dataset.a;
