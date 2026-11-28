@@ -204,6 +204,11 @@ addEventListener("resize", resize); resize();
 const cam = { yaw: 0.65, pitch: 0.28, dist: 18, ty: 5, goal: null };
 const PITCH_MIN = -0.25, PITCH_MAX = 1.4;   // 見上げる〜ほぼ真上から   // goal: 自動で視点の高さを合わせる先
 function updateCamera() {
+  if (cam.focus) {   // 崩れたとき: 崩した人の正面へ視点をゆっくり回す（さわったらやめる）
+    const f = cam.focus, k = 0.06;
+    cam.yaw += angDiff(f.yaw, cam.yaw) * k; cam.pitch += (f.pitch - cam.pitch) * k; cam.dist += (f.dist - cam.dist) * k; cam.ty += (f.ty - cam.ty) * k;
+    if (Math.abs(angDiff(f.yaw, cam.yaw)) < 0.01 && Math.abs(f.dist - cam.dist) < 0.05) cam.focus = null;
+  }
   if (cam.goal != null) { cam.ty += (cam.goal - cam.ty) * 0.08; if (Math.abs(cam.goal - cam.ty) < 0.02) cam.goal = null; }
   const cp = Math.cos(cam.pitch);
   camera.position.set(Math.sin(cam.yaw) * cp * cam.dist, cam.ty + Math.sin(cam.pitch) * cam.dist, Math.cos(cam.yaw) * cp * cam.dist);
@@ -352,6 +357,7 @@ let drag = null;          // { axis, off0, target, ty, y0, A, U, det, sx, sy } �
 let rotHold = 0;          // 回転ボタンを押している向き（+1 左回り / -1 右回り）
 let place = null;         // { info, k, pose, tx, ty, tz } 置き場の候補と、指で持っている目標の位置
 let turnPos = [], baseY = [];
+let overAt = 0; const OVER_DELAY = 2500;   // 終わってから結果のカードを出すまで（ms）
 let overInfo = null, errMsg = "", toastMsg = "", toastT = 0, lastSend = 0;
 let peer = null, hostConn = null, lobby = [];
 
@@ -445,7 +451,7 @@ function physStep() {
   }
   if ((phase === "pull" || phase === "carry" || phase === "place" || phase === "settle") && checkFallen()) {
     phase = "fallen"; phaseT = 0; releaseSel(); navigator.vibrate?.([80, 40, 160]);
-    if (!crashed) { crashed = true; sfx("crash"); }
+    if (!crashed) { crashed = true; sfx("crash"); focusLoser(curId); }
     renderUI();
   }
   if (phase === "fallen" && phaseT > 2.5) { phase = "wait"; send({ t: "fall", d: snapshot() }); return; }
@@ -718,7 +724,7 @@ canvas.addEventListener("pointerdown", e => {
     if (screen === "game" && isMine() && phase === "pull" && sel >= 0 && hit === sel) { startDrag(e.clientX, e.clientY); gesture = { type: "push" }; }
     else if (screen === "game" && isMine() && phase === "place" && hit === held) gesture = startMove(e.clientX, e.clientY);
     else gesture = { type: "orbit", hit, moved: 0, lx: e.clientX, ly: e.clientY };
-    cam.goal = null;
+    cam.goal = null; cam.focus = null;
   } else if (ptrs.size === 2) {
     if (isMine()) drag = null;   // CPU の番の drag は CPU の指なので、2本指で拡大しても消さない（消すと CPU が止まる）
     const [a, b] = [...ptrs.values()];
@@ -946,7 +952,7 @@ function onMsg(m) {
       const ph0 = activeInfo && activeInfo.ph;
       if (m.ph !== ph0) {
         if (m.ph === "settle" && ph0 === "place") sfx("place");
-        if (m.ph === "fallen" && !crashed) { crashed = true; sfx("crash"); }
+        if (m.ph === "fallen" && !crashed) { crashed = true; sfx("crash"); focusLoser(curId); }
       }
       if (m.ph === "pull" && m.s >= 0 && m.s !== viewSel) sfx("pick");
       activeInfo = { ph: m.ph, s: m.s };
@@ -957,6 +963,7 @@ function onMsg(m) {
     case "over":
       if (phase !== "over") overSfx(m);
       setHighlight(viewSel, false); viewSel = -1;
+      if (phase !== "over") { overAt = performance.now(); setTimeout(renderUI, OVER_DELAY + 30); }
       phase = "over"; overInfo = m; moves = m.n;
       if (m.d && !simHere()) setTargets(m.d);
       break;
@@ -967,7 +974,7 @@ function onMsg(m) {
 let sfxLobby = null;   // 部屋の画面で最後に見た人たち（来た・抜けたの音のため）
 // 結果の音: 自分（チーム戦は自分のチーム）が勝ち → win / 負け → lose。相手がいなくなった・1台で交代 → draw。観戦・ひとりで練習は「崩れる」音だけ
 function overSfx(o) {
-  if (o.loser !== -1 && !crashed) { crashed = true; sfx("crash"); }   // 崩れた snap が届かなかった人にも
+  if (o.loser !== -1 && !crashed) { crashed = true; sfx("crash"); focusLoser(o.loser); }   // 崩れた snap が届かなかった人にも
   if (spectating || (mode === "local" && players.length === 1)) return;
   const meIn = !(mode === "local" && !players.some(p => p.cpu)) && players.some(p => p.id === myId);
   if (o.loser === -1 || !meIn) { sfx("draw"); return; }
@@ -1223,7 +1230,7 @@ function renderUI() {
         <div class="row"><button class="hold" data-r="1">⟲ 回す</button><button class="main" data-a="drop">離す</button><button class="hold" data-r="-1">回す ⟳</button></div>
       </div>`;
     }
-    if (phase === "over" && overInfo) {
+    if (phase === "over" && overInfo && performance.now() - overAt >= OVER_DELAY) {   // 結果のカードは、顔を見られるよう少し待ってから出す
       const o = overInfo;
       let title, sub;
       if (o.loser === -1) { title = "相手がいなくなりました"; sub = `${o.n}ターン`; }
@@ -1390,6 +1397,15 @@ function buildAvatars() {
 const shoulderOf = a => a.g.localToWorld(new THREE.Vector3(1.5, 6.0, 0.1));
 const restHand = a => a.g.localToWorld(new THREE.Vector3(1.6, 3.2, 0.3));
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+// 崩れたら、崩した人の 3D の姿がテーブルの向こうに正面から見えるよう視点を回す（姿のふちが画面の外に切れて表情が見えないため）。
+// 自分が崩したとき（自分の姿はない）は、いま見ている向きにいちばん近い人のほうへ回す
+function focusLoser(id) {
+  if (screen !== "game") return;
+  let a = avatars.get(id);
+  if (!a) { let best = 9; for (const b of avatars.values()) { const d = Math.abs(angDiff(b.yaw + Math.PI, cam.yaw)); if (d < best) { best = d; a = b; } } }
+  if (!a) return;
+  cam.goal = null; cam.focus = { yaw: a.yaw + Math.PI, pitch: 0.12, dist: 13, ty: 5.5 };
+}
 function updateAvatars() {
   for (const a of avatars.values()) {
     a.yaw += angDiff(a.tyaw, a.yaw) * 0.12;
@@ -1421,7 +1437,7 @@ function updateAvatars() {
       if (phase === "over" && overInfo && overInfo.loser !== -1) {   // 崩した人（チーム戦はそのチーム）は泣き、ほかの人はよろこぶ
         const lt = teamMode && teamOf(overInfo.loser) != null ? teamOf(a.id) === teamOf(overInfo.loser) : a.id === overInfo.loser;
         ex = lt ? "c" : "h";
-      } else if (phase === "fallen") ex = "p";
+      } else if (crashed || phase === "fallen") ex = a.id === curId ? "c" : "p";   // 崩れた瞬間から、崩した人は泣き顔のまま（結果が届くまでのあいだも）。ほかの人はあせり
       else if (on && info && info.s >= 0 && info.ph === "pull") ex = "p";   // ブロックを引き抜いている最中はあせり（抜いたあと運んでいるあいだはふつう）
       else if (on && info && info.ph === "settle") ex = "h";   // 上に置けたあとはよろこぶ（揺れてくずれたら fallen / over であせりに変わる）
       else if (performance.now() < a.hapUntil) ex = "h";
