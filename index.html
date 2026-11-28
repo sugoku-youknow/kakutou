@@ -258,8 +258,8 @@ function rankRows() {
   rows.forEach((r, i) => { r.rank = i && rows[i - 1].w === r.w && rows[i - 1].l === r.l ? rows[i - 1].rank : i + 1; });
   return rows;
 }
-// 成績の表の表情: 1位はニコニコ、最下位はあせり、ほかはふつう（全員が同じ順位なら全員ふつう）
-const moodOfRank = (r, rows) => { const mx = Math.max(...rows.map(x => x.rank)); return mx === 1 ? "n" : r.rank === 1 ? "h" : r.rank === mx ? "p" : "n"; };
+// 成績の表の表情: 1位はニコニコ、最下位は泣き顔、ほかはふつう（全員が同じ順位なら全員ふつう）
+const moodOfRank = (r, rows) => { const mx = Math.max(...rows.map(x => x.rank)); return mx === 1 ? "n" : r.rank === 1 ? "h" : r.rank === mx ? "c" : "n"; };
 function statsHtml() {
   const rows = rankRows();
   return `<div class="statsbox"><div class="statshead"><b>成績（このパーティ）</b><button data-p="stats">とじる</button></div>

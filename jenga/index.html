@@ -1348,9 +1348,9 @@ function makeAvatar(p, idx) {
 function makeDrawnAvatar(p, idx) {
   const mats = [], g = new THREE.Group();
   const skin = new THREE.MeshStandardMaterial({ color: 0xf3d9b4, roughness: 0.7, transparent: true }); mats.push(skin);
-  // 表情: e00_n（ふつう）/ e00_p（あせり）/ e00_h（よろこび）。どれも同じ大きさの絵（まわりに 44px の余白つき）
+  // 表情: e00_n（ふつう）/ e00_p（あせり）/ e00_h（よろこび）/ e00_c（泣き）。どれも同じ大きさの絵（まわりに 44px の余白つき）
   const PADN = 44, HH = 10.5, WMAX = 7.5, nn = String(clampAv(p.av)).padStart(2, "0"), tl = new THREE.TextureLoader(), tex = {};
-  for (const k of ["n", "p", "h"]) {
+  for (const k of ["n", "p", "h", "c"]) {
     tex[k] = tl.load("../avatars/e" + nn + "_" + k + ".png", t => {
       if (k !== "n") return;
       const w = t.image.width, h = t.image.height, s = Math.min(HH / (h - 2 * PADN), WMAX / (w - 2 * PADN));
@@ -1418,9 +1418,9 @@ function updateAvatars() {
     }
     if (a.drawn) {   // 表情
       let ex = "n";
-      if (phase === "over" && overInfo && overInfo.loser !== -1) {   // 崩した人（チーム戦はそのチーム）はあせり、ほかの人はよろこぶ
+      if (phase === "over" && overInfo && overInfo.loser !== -1) {   // 崩した人（チーム戦はそのチーム）は泣き、ほかの人はよろこぶ
         const lt = teamMode && teamOf(overInfo.loser) != null ? teamOf(a.id) === teamOf(overInfo.loser) : a.id === overInfo.loser;
-        ex = lt ? "p" : "h";
+        ex = lt ? "c" : "h";
       } else if (phase === "fallen") ex = "p";
       else if (on && info && info.s >= 0 && info.ph === "pull") ex = "p";   // ブロックを引き抜いている最中はあせり（抜いたあと運んでいるあいだはふつう）
       else if (on && info && info.ph === "settle") ex = "h";   // 上に置けたあとはよろこぶ（揺れてくずれたら fallen / over であせりに変わる）

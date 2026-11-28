@@ -1360,8 +1360,8 @@ const AV_N = 15;
 const clampAv = v => { v = Math.floor(+v); return v >= 0 && v < AV_N ? v : -1; };
 function myAv() { return clampAv(PARTY && PARTY.av != null ? PARTY.av : store.get("ykg-av")); }
 const avImg = (a, cls, ex) => clampAv(a) >= 0 ? `<img class="${cls || "pimg"}" src="../avatars/a${String(clampAv(a)).padStart(2, "0")}${ex && ex !== "n" ? "_" + ex : ""}.png" alt="">` : "";
-// 表情（2026-11-28）: 点数が1位はニコニコ（h）、最下位はあせり（p）、ほかはふつう。全員同点なら全員ふつう。ほかの人の隠れた勝利点カードは数えない（pubVp）
-function moodOf(i) { const s = mySeat(), v = G.ps.map((_, k) => pubVp(k, s)), mx = Math.max(...v), mn = Math.min(...v); return mx === mn ? "n" : v[i] === mx ? "h" : v[i] === mn ? "p" : "n"; }
+// 表情（2026-11-28）: 点数が1位はニコニコ（h）、最下位はあせり（p。ゲームが終わったら泣き c）、ほかはふつう。全員同点なら全員ふつう。ほかの人の隠れた勝利点カードは数えない（pubVp）
+function moodOf(i) { const s = mySeat(), v = G.ps.map((_, k) => pubVp(k, s)), mx = Math.max(...v), mn = Math.min(...v); return mx === mn ? "n" : v[i] === mx ? "h" : v[i] === mn ? (G.phase === "over" ? "c" : "p") : "n"; }
 function myName() { if (meName) return meName; return (($("name") && $("name").value) || store.get("kaitaku-name") || "ゲスト").trim().slice(0, 12) || "ゲスト"; }
 function fixName() { meName = ""; meName = myName(); store.set("kaitaku-name", meName); }
 const mySeat = () => G ? G.ps.findIndex(p => !p.bot && p.pid === myPid) : -1;
