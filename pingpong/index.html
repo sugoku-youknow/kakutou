@@ -103,8 +103,73 @@
   .hm .play svg { width:40px; height:40px; }
   @media (max-height:340px) { .hm .logo h1 { font-size:34px; } .hm .tile { height:54px; } .hm .mode, .hm .play { height:56px; } }
   @media (max-width:700px) { .hm .nm { width:130px; } .hm .play { width:170px; font-size:26px; } .hm .mode { width:200px; } }
+  #app:has(#vsScr:not([hidden])) #rot { left:calc(110px + env(safe-area-inset-left)); top:calc(11px + env(safe-area-inset-top)); }
   #app:has(#title:not([hidden])) #rot { left:calc(33px + env(safe-area-inset-left)); top:calc(74px + env(safe-area-inset-top)); }   /* ホームでは ゲーム一覧 の下へ */
   #app:has(#rules:not([hidden])) #rot, #app:has(#settings:not([hidden])) #rot { display:none; }
+
+  /* ===== オンラインの待機画面（2026-11-28 案C: 対戦カード + 観戦席）。パーティの待ち合わせ画面の中では小さく出す ===== */
+  .vsp { color:#fff; text-align:center; }
+  .vsp .vs-teams { display:grid; grid-template-columns:1fr 52px 1fr; align-items:end; gap:6px; }
+  .vsp .vs-tm { font-size:12px; font-weight:900; letter-spacing:.1em; margin-bottom:4px; }
+  .vsp .vs-side.a .vs-tm { color:#9fd0ff; text-align:left; } .vsp .vs-side.b .vs-tm { color:#ffb0b0; text-align:right; }
+  .vsp .vs-cards { display:flex; gap:6px; height:150px; }
+  .vsp .vs-side.b .vs-cards { flex-direction:row-reverse; }
+  .vsp .vs-card { flex:1 1 0; min-width:0; height:100%; margin:0 !important; padding:4px !important; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:3px; border-radius:10px; background:rgba(255,255,255,.06) !important; border:2px solid transparent !important; color:#fff !important; font-weight:800; }
+  .vsp .vs-side.a .vs-card { background:linear-gradient(#1f5fae55,#1f5fae22) !important; } .vsp .vs-side.b .vs-card { background:linear-gradient(#c02a2a55,#c02a2a22) !important; }
+  .vsp .vs-card img { width:100%; flex:1 1 0; height:0; min-height:0; object-fit:contain; object-position:50% 100%; filter:drop-shadow(0 6px 10px #000a); }
+  .vsp .vs-card svg { flex:1; width:60%; min-height:0; color:#ffffffaa; }
+  .vsp .vs-card.empty { border:2px dashed #ffffff66 !important; background:transparent !important; justify-content:center; color:#ffffffaa !important; }
+  .vsp .vs-card.empty .vs-plus { font-size:28px; line-height:1; }
+  .vsp .vs-card:disabled { opacity:1; }
+  .vsp .vs-card.empty:disabled { opacity:.45; }
+  .vsp .vs-nm { width:100%; font-size:13px; padding:3px 2px; background:#0009; border-radius:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vsp .vs-card.empty .vs-nm { background:transparent; }
+  .vsp .vs-card.me .vs-nm { background:#ffd23f; color:#141006; }
+  .vsp .vs-mid { align-self:center; font-size:36px; font-weight:900; font-style:italic; color:#ffd23f; text-shadow:0 0 16px #ffb400, 0 3px 0 #6a4a00; transform:skewX(-8deg); }
+  .vsp .vs-bench { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; padding:6px 10px; background:rgba(11,15,28,.85); border:1.5px solid #ffd23f; border-radius:8px; text-align:left; }
+  .vsp .vs-bl { font-size:12px; font-weight:900; color:#ffd23f; }
+  .vsp .vs-sp { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:800; }
+  .vsp .vs-sp.me { color:#ffd23f; }
+  .vsp .vs-sp img, .vsp .vs-sp svg { width:26px; height:26px; clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%); background:linear-gradient(#ffd23f,#c98a00); object-fit:cover; object-position:50% 20%; color:#3a2a00; }
+  .vsp .vs-none { font-size:11px; color:#c8cde0; }
+  .vsp .vs-seat { margin:0 0 0 auto !important; width:auto !important; padding:7px 12px !important; font-size:12px !important; font-weight:900; border-radius:6px !important; background:#ffd23f !important; color:#141006 !important; }
+  .vsp .vs-seat.on { background:transparent !important; color:#ffd23f !important; border:1.5px solid #ffd23f !important; }
+  .vsp .vs-fmt { display:flex; justify-content:center; gap:0; margin-top:8px; }
+  .vsp .vs-fmt button { width:auto !important; margin:0 !important; padding:8px 12px !important; font-size:12px !important; font-weight:800; border-radius:0 !important; background:rgba(11,15,28,.85) !important; color:#fff !important; border:1.5px solid #ffd23f !important; }
+  .vsp .vs-fmt button:first-child { border-radius:8px 0 0 8px !important; } .vsp .vs-fmt button:last-child { border-radius:0 8px 8px 0 !important; }
+  .vsp .vs-fmt button.on { background:#ffd23f !important; color:#141006 !important; }
+  .vsp .vs-fmt button:disabled { opacity:1; }
+  .vsp .vs-back { margin:6px auto 0 !important; width:auto !important; padding:6px 12px !important; font-size:12px !important; background:transparent !important; color:#c8cde0 !important; text-decoration:underline; }
+  .vsp .slotnote { color:#c8cde0; }
+  /* 部屋番号の対戦: 画面いっぱい */
+  .screen.vsscr { padding:0; background:#06080f; overflow:hidden; display:block; }
+  .screen.vsscr > * { margin:0; }
+  .vsscr .vs-bg, .vsscr .vs-bg svg { position:absolute; inset:0; width:100%; height:100%; }
+  .vsscr .vs-bg { filter:brightness(.3); }
+  .vsscr .vs-half { position:absolute; top:0; bottom:0; width:50%; }
+  .vsscr .vs-half.a { left:0; background:linear-gradient(100deg,#1f5faecc,#1f5fae22 80%,transparent); clip-path:polygon(0 0,100% 0,88% 100%,0 100%); }
+  .vsscr .vs-half.b { right:0; background:linear-gradient(260deg,#c02a2acc,#c02a2a22 80%,transparent); clip-path:polygon(12% 0,100% 0,100% 100%,0 100%); }
+  .vsscr .vs-pl { background:rgba(11,15,28,.85); color:#fff; border:1.5px solid #ffd23f; border-radius:8px; box-shadow:0 0 0 1px #0008, 0 6px 16px #000a; }
+  .vsscr .vs-cancel { position:absolute; left:calc(16px + env(safe-area-inset-left)); top:calc(10px + env(safe-area-inset-top)); width:84px; height:46px; margin:0; padding:0; font-size:12px; font-weight:800; }
+  .vsscr .vs-ticket { position:absolute; left:50%; top:calc(8px + env(safe-area-inset-top)); transform:translateX(-50%); text-align:center; padding:3px 26px 5px; background:#f6efd8; color:#2a1a05; border-radius:6px; box-shadow:0 6px 16px #000a; }
+  .vsscr .vs-ticket::before, .vsscr .vs-ticket::after { content:""; position:absolute; top:50%; width:14px; height:14px; margin-top:-7px; border-radius:50%; background:#06080f; }
+  .vsscr .vs-ticket::before { left:-7px; } .vsscr .vs-ticket::after { right:-7px; }
+  .vsscr .vs-ticket small { display:block; font-size:9px; letter-spacing:.3em; }
+  .vsscr .vs-ticket b { font-size:28px; letter-spacing:.2em; }
+  .vsscr .vs-msg { position:absolute; left:50%; top:calc(66px + env(safe-area-inset-top)); transform:translateX(-50%); font-size:11px; font-weight:700; color:#ffd23f; white-space:nowrap; }
+  .vsscr #vsSlots { position:absolute; left:calc(24px + env(safe-area-inset-left)); right:calc(24px + env(safe-area-inset-right)); top:calc(84px + env(safe-area-inset-top)); bottom:calc(12px + env(safe-area-inset-bottom)); }
+  .vsscr .vsp { height:100%; display:flex; flex-direction:column; }
+  .vsscr .vsp .vs-teams { flex:1; min-height:0; grid-template-columns:1fr 110px 1fr; grid-template-rows:minmax(0,1fr); align-items:stretch; }
+  .vsscr .vsp .vs-side { min-height:0; display:flex; flex-direction:column; }
+  .vsscr .vsp .vs-cards { flex:1; height:auto; min-height:0; }
+  .vsscr .vsp .vs-card { max-width:160px; }
+  .vsscr .vsp .vs-mid { font-size:60px; }
+  .vsscr .vsp .vs-bench { margin:8px 230px 0 0; min-height:44px; }
+  .vsscr .vsp .vs-fmt { position:absolute; right:0; top:-74px; margin:0; }
+  .vsscr .vsp .vs-back { position:absolute; right:0; top:-34px; margin:0 !important; }
+  .vsscr .vsp > .slotnote { margin:6px 230px 0 0; font-size:11px; }
+  .vsscr .vs-go { position:absolute; right:calc(16px + env(safe-area-inset-right)); bottom:calc(12px + env(safe-area-inset-bottom)); width:200px; height:52px; margin:0; padding:0; font-size:18px; font-weight:900; color:#141006; background:linear-gradient(#ffe36a,#ffc21a); border-radius:8px; clip-path:polygon(8% 0,100% 0,92% 100%,0 100%); }
+  .vsscr .vs-go:disabled { filter:grayscale(1) brightness(.6); }
   [hidden] { display:none !important; }
 </style>
 </head>
@@ -193,6 +258,15 @@
     <button class="main" id="netGo" hidden></button>
     <button id="netCancel">やめる</button>
   </div>
+</div>
+
+<div class="screen vsscr" id="vsScr" hidden>
+  <div class="vs-bg" id="vsBg"></div><div class="vs-half a"></div><div class="vs-half b"></div>
+  <button class="vs-pl vs-cancel" id="vsCancel" type="button">← やめる</button>
+  <div class="vs-ticket"><small>ROOM</small><b id="vsCode"></b></div>
+  <div class="vs-msg" id="vsMsg"></div>
+  <div id="vsSlots"></div>
+  <button class="vs-go" id="vsGo" type="button" hidden></button>
 </div>
 
 <div class="screen" id="menu" hidden>
@@ -1676,28 +1750,28 @@ const serverChar = who => { if (ON && ON.players) { const a = st.serverPid === O
 
 // ---------- ロビー（枠をえらぶ → 決定 → ゲーム形式（ゲームの数）をえらぶ → スタート） ----------
 let slotEl = null, partySetEl = null;
+// 2026-11-28 案C: 対戦カード（チームA・B に 2 枚ずつ）と観戦席。slot: 0〜3 = 枠、-1 = 選んでいる途中、-2 = 観戦席にすわった
+const avBig = a => clampAv(a) >= 0 ? `<img src="../avatars/e${String(clampAv(a)).padStart(2, "0")}_n.png" alt="">` : `<svg viewBox="0 0 32 32"><use href="#i-pawn"/></svg>`;
+const avSmall = a => clampAv(a) >= 0 ? `<img src="../avatars/a${String(clampAv(a)).padStart(2, "0")}.png" alt="">` : `<svg viewBox="0 0 32 32"><use href="#i-pawn"/></svg>`;
 function slotPanel() {
-  if (!slotEl) { slotEl = document.createElement("div"); slotEl.addEventListener("click", onSlotClick); }
-  const m = mePl(), host = ON.host, ph = ON.phase, byslot = s => [...ON.players.values()].find(q => q.slot === s);
-  let h = "";
-  if (ph === "slots") h += `<div class="slotnote">好きな枠を押して入ります（もう一度押すと出ます）。<br>枠に入らない人は観戦になります。ホストが「決定」を押すと確定します。</div>`;
-  else { const [a, b] = sideCounts(); h += `<div class="slotnote"><b>${a}対${b}</b>（チームA ${a}人 ・ チームB ${b}人）</div>`; }
-  h += `<div class="slotgrid">`;
-  for (const s of [0, 1]) {
-    h += `<div><div class="tm ${s ? "b" : "a"}">チーム${s ? "B" : "A"}</div>`;
-    for (const k of [0, 1]) {
-      const slot = s * 2 + k, q = byslot(slot), mine = m && m.slot === slot, dis = ph !== "slots" || (q && !mine) || (m && m.wantSpec);
-      h += `<button data-slot="${slot}" class="${mine ? "on me" : ""}" ${dis ? "disabled" : ""}>${q ? esc(q.name) : "（空き）"}</button>`;
-    }
-    h += `</div>`;
-  }
-  h += `</div>`;
-  const out = [...ON.players.values()].filter(q => q.slot < 0).map(q => q.name);
-  if (out.length) h += `<div class="slotnote">${ph === "slots" ? "選んでいる人" : "観戦"}: ${esc(out.join("・"))}</div>`;
-  if (ph !== "slots") {
-    h += `<div class="slotnote" style="margin-top:8px">ゲーム形式（ゲームの数）${host ? "" : "：ホストが選びます"}</div>
-      <div class="fmtrow"><button data-games="1" class="${ON.need === 1 ? "on" : ""}" ${host ? "" : "disabled"}>1ゲーム</button><button data-games="3" class="${ON.need === 2 ? "on" : ""}" ${host ? "" : "disabled"}>3ゲーム（2本先取）</button></div>`;
-    if (host) h += `<div class="fmtrow"><button data-act="back">← 枠を選び直す</button></div>`;
+  if (!slotEl) { slotEl = document.createElement("div"); slotEl.className = "vsp"; slotEl.addEventListener("click", onSlotClick); }
+  const m = mePl(), host = ON.host, ph = ON.phase, all = [...ON.players.values()], byslot = s => all.find(q => q.slot === s);
+  const card = slot => {
+    const q = byslot(slot), mine = m && m.slot === slot, dis = ph !== "slots" || (q && !mine) || (m && m.wantSpec);
+    return `<button data-slot="${slot}" class="vs-card${q ? "" : " empty"}${mine ? " me" : ""}" ${dis ? "disabled" : ""}>${q ? `${avBig(q.av)}<span class="vs-nm">${esc(q.name)}</span>` : `<span class="vs-plus">＋</span><span class="vs-nm">入る</span>`}</button>`;
+  };
+  const side = s => `<div class="vs-side ${s ? "b" : "a"}"><div class="vs-tm">チーム${s ? "B" : "A"}</div><div class="vs-cards">${card(s * 2)}${card(s * 2 + 1)}</div></div>`;
+  let h = `<div class="vs-teams">${side(0)}<div class="vs-mid">VS</div>${side(1)}</div>`;
+  // 観戦席: すわった人（試合の形式を選ぶ段階からは、枠に入っていない人みんな）
+  const bench = all.filter(q => ph === "slots" ? (q.slot === -2 || q.wantSpec) : q.slot < 0);
+  const sit = m && (m.slot === -2 || m.wantSpec);
+  const seat = ph === "slots" && m && !m.wantSpec ? `<button data-slot="-2" class="vs-seat${sit ? " on" : ""}">${sit ? "観戦席を立つ" : "観戦席にすわる"}</button>` : "";
+  h += `<div class="vs-bench"><span class="vs-bl">観戦席</span>${bench.map(q => `<span class="vs-sp${q.pid === ON.pid ? " me" : ""}">${avSmall(q.av)}${esc(q.name)}</span>`).join("") || `<span class="vs-none">だれもいません</span>`}${seat}</div>`;
+  const choosing = all.filter(q => q.slot === -1 && !q.wantSpec);
+  if (ph === "slots") h += `<div class="slotnote">${choosing.length ? `選んでいる人: ${esc(choosing.map(q => q.name).join("・"))}　` : ""}カードを押して入る（もう一度押すと出る）</div>`;
+  else {
+    h += `<div class="vs-fmt"><button data-games="1" class="${ON.need === 1 ? "on" : ""}" ${host ? "" : "disabled"}>1ゲーム</button><button data-games="3" class="${ON.need === 2 ? "on" : ""}" ${host ? "" : "disabled"}>3ゲーム（2本先取）</button></div>`;
+    if (host) h += `<button class="vs-back" data-act="back">← 枠を選び直す</button>`;
   }
   slotEl.innerHTML = h; return slotEl;
 }
@@ -1721,7 +1795,7 @@ function hostSetSlot(pid, slot) {
 // 2 人だけのときは、ホスト A1 と相手 B1 に自動で入れる（1 対 1）。3 人以上になったら、みんなで選び直す
 function autoSeat() {
   const n = ON.players.size, all = [...ON.players.values()];
-  if (n === 2 && !ON.auto && all.every(p => p.slot < 0) && !all.some(p => p.wantSpec)) { const g = all.find(p => p.pid !== ON.pid); ON.players.get(ON.pid).slot = 0; g.slot = 2; ON.auto = true; ON.phase = "format"; }
+  if (n === 2 && !ON.auto && all.every(p => p.slot === -1) && !all.some(p => p.wantSpec)) { const g = all.find(p => p.pid !== ON.pid); ON.players.get(ON.pid).slot = 0; g.slot = 2; ON.auto = true; ON.phase = "format"; }
   else if (n !== 2 && ON.auto) { for (const p of all) p.slot = -1; ON.auto = false; ON.phase = "slots"; }
   if (ON.phase === "format" && !lineupOk()) { ON.phase = "slots"; ON.auto = false; }
 }
@@ -1738,7 +1812,7 @@ function applyLobby(m) {
   if (st.phase === "title") lobbyUi();
 }
 function partyMembers() {
-  return [...ON.players.values()].map(p => ({ name: p.name, tag: [p.pid === 0 ? "ホスト" : "", p.slot >= 0 ? `${p.slot >> 1 ? "B" : "A"}${(p.slot & 1) + 1}` : (ON.phase === "slots" ? "選択中" : "観戦")].filter(Boolean).join(" "), me: p.pid === ON.pid }));
+  return [...ON.players.values()].map(p => ({ name: p.name, tag: [p.pid === 0 ? "ホスト" : "", p.slot >= 0 ? `${p.slot >> 1 ? "B" : "A"}${(p.slot & 1) + 1}` : (ON.phase === "slots" && p.slot === -1 && !p.wantSpec ? "選択中" : "観戦")].filter(Boolean).join(" "), me: p.pid === ON.pid }));
 }
 function partyLobbyOpts() {
   const rules = "回転で勝負する3D卓球。1対1・2対1・2対2。右の指を、ボールが来た瞬間にすばやくはじくほど強い回転。\n相手の回転が残ると、球がオーバー・ネット・横にそれてミスになる。タイミングを大きく外すと山なり球になり、山なり球にだけスマッシュが打てる。チームのどちらの人も、ボールを打てる。";
@@ -1760,29 +1834,29 @@ function partyUi(retry) {
 function lobbyUi() { if (PARTY) partyUi(); else netUi(); }
 function netUi() {
   if (PARTY || !ON) return;
-  $("net").hidden = false; $("title").hidden = true;
-  $("netTitle").textContent = ON.host ? "部屋をつくりました" : "部屋に入りました";
-  $("netCode").textContent = ON.code; $("netCancel").textContent = "やめる";
+  $("title").hidden = true;
   const ok = ON.ready && (ON.host || ON.pid >= 0);
-  if (!ok) { $("netSub").textContent = "つないでいます…"; $("netSlots").hidden = true; $("netGo").hidden = true; return; }
-  const sl = slotPanel(); if (sl.parentNode !== $("netSlots")) $("netSlots").appendChild(sl);
-  $("netSlots").hidden = false;
+  if (!ok) { netScreen(ON.host ? "部屋をつくっています" : "部屋に入っています", ON.code, "つないでいます…", "やめる"); return; }
+  $("net").hidden = true; $("vsScr").hidden = false;
+  $("vsCode").textContent = ON.code;
+  const sl = slotPanel(); if (sl.parentNode !== $("vsSlots")) $("vsSlots").appendChild(sl);
+  const go = $("vsGo");
   if (ON.host) {
-    $("netSub").textContent = ON.phase === "slots" ? "友だちにこの番号を伝えてください。みんなが枠を選んだら「決定」" : "ゲームの数を選んで「スタート」";
-    $("netGo").hidden = false;
-    if (ON.phase === "slots") { $("netGo").textContent = "決定（この顔ぶれで進む）"; $("netGo").disabled = !lineupOk(); $("netGo").onclick = () => { if (lineupOk()) { ON.phase = "format"; lobbyChanged(false); } }; }
-    else { $("netGo").textContent = "スタート"; $("netGo").disabled = false; $("netGo").onclick = hostStartMatch; }
-  } else { $("netSub").textContent = ON.phase === "slots" ? "枠を選んで、ホストが決定するのを待っています…" : "ホストがスタートするのを待っています…"; $("netGo").hidden = true; }
+    $("vsMsg").textContent = ON.phase === "slots" ? "友だちにこの番号を伝えてね。そろったら「決定」" : "ゲームの数を選んで「スタート」";
+    go.hidden = false;
+    if (ON.phase === "slots") { go.textContent = "決定 ▶"; go.disabled = !lineupOk(); go.onclick = () => { if (lineupOk()) { ON.phase = "format"; lobbyChanged(false); } }; }
+    else { go.textContent = "スタート ▶"; go.disabled = false; go.onclick = hostStartMatch; }
+  } else { $("vsMsg").textContent = ON.phase === "slots" ? "カードを選んで、ホストの「決定」を待っています…" : "ホストがスタートするのを待っています…"; go.hidden = true; }
 }
 function netScreen(title, code, sub, cancelLabel) {
   $("netTitle").textContent = title; $("netCode").textContent = code || ""; $("netSub").textContent = sub || "";
-  $("netCancel").textContent = cancelLabel || "やめる"; $("netSlots").hidden = true; $("netGo").hidden = true; $("net").hidden = false; $("title").hidden = true;
+  $("netCancel").textContent = cancelLabel || "やめる"; $("netSlots").hidden = true; $("netGo").hidden = true; $("net").hidden = false; $("vsScr").hidden = true; $("title").hidden = true;
 }
 function netFailed(why) {
   if (PARTY) { try { peer && peer.destroy(); } catch (e) {} peer = null; clearAvatars(); ON = null; netScreen("つながりません", "", why, "ゲーム一覧へ"); return; }
   closeNet(); toTitle(); netScreen("つながりません", "", why, "もどる");
 }
-function closeNet() { clearAvatars(); try { peer && peer.destroy(); } catch (e) {} peer = null; ON = null; $("net").hidden = true; }
+function closeNet() { clearAvatars(); try { peer && peer.destroy(); } catch (e) {} peer = null; ON = null; $("net").hidden = true; $("vsScr").hidden = true; }
 
 // ---------- ホスト ----------
 function newOn(host, party, code) {
@@ -1854,7 +1928,7 @@ function hostStartMatch() {
   bcastLobby();
   bcast(startMsg(false));
   if (window.ykgLobby && ykgLobby.active) ykgLobby.closeAll();
-  $("net").hidden = true;
+  $("net").hidden = true; $("vsScr").hidden = true;
 }
 // 点の確定（ホストだけ）。ww: 世界のチーム番号（勝ったほう）。pid: 点を知らせてきた人
 function hostConfirm(ww, n, pid) {
@@ -1935,7 +2009,7 @@ function applyStart(m) {
   startMatchCore(m.need, lid(m.sv), m.svp);
   if (m.s) { st.score = swapIf(m.s); st.games = swapIf(m.g); updHud(); }
   if (window.ykgLobby) ykgLobby.close();
-  $("net").hidden = true;
+  $("net").hidden = true; $("vsScr").hidden = true;
 }
 function applyNp(m) {
   st.score = swapIf(m.s); st.games = swapIf(m.g); st.over = false; st.gameWin = -1;
@@ -2022,6 +2096,7 @@ const leaveOnline = () => { if (PARTY) { toGames(); return; } closeNet(); toTitl
 $("toTitle").onclick = () => (ON || PARTY) ? leaveOnline() : toTitle();
 $("quit").onclick = () => (ON || PARTY) ? leaveOnline() : toTitle();
 $("netCancel").onclick = leaveOnline;
+$("vsCancel").onclick = leaveOnline;
 $("joinRoom").onclick = () => { const c = $("roomIn").value.replace(/\D/g, ""); if (c.length !== 4) { $("roomIn").focus(); return; } netJoin(c, false, false); };
 $("resume").onclick = togglePause;
 $("pause").onclick = togglePause;
@@ -2052,7 +2127,7 @@ $("nameIn").value = store.get("ykg-name") || "";
 $("nameIn").addEventListener("input", () => store.set("ykg-name", $("nameIn").value.trim().slice(0, 12)));
 $("homeAv").innerHTML = ME_AV >= 0 ? `<img src="../avatars/a${String(ME_AV).padStart(2, "0")}.png" alt="">` : `<svg viewBox="0 0 32 32"><use href="#i-pawn"/></svg>`;
 // 背景の絵: 暗い観客席・スポットライトの当たる卓球台・赤いマット
-$("homeBg").innerHTML = (() => {
+const ARENA_SVG = (() => {
   const tw = 600, th = 140;
   let crowd = "";
   for (let r = 0; r < 7; r++) {
@@ -2076,6 +2151,8 @@ $("homeBg").innerHTML = (() => {
     <circle cx="760" cy="450" r="12" fill="#fff"/><path d="M760 450q-120-90-260-40" stroke="#fff" stroke-opacity=".35" stroke-width="5" fill="none" stroke-dasharray="4 10"/>
   </svg>`;
 })();
+$("homeBg").innerHTML = ARENA_SVG;
+$("vsBg").innerHTML = ARENA_SVG.replace(/<g transform="translate\(800,480\)">[\s\S]*$/, "</svg>");   // 待機画面は台なし
 setHomeTab("solo");
 if (PARTY) {
   $("title").hidden = true;
