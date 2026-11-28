@@ -405,8 +405,41 @@ function closeRect() {
   return { s, x: W - s - 12, y: 10 };
 }
 
+// 2026-11-28: ホームでえらんだキャラ（../avatars/eNN_n/p/h.png = 全身の絵、15 体）。えらんでいなければ -1（これまでの人形）
+const AV_N = 15;
+const clampAv = v => { if (v == null || v === "") return -1; v = Math.floor(+v); return v >= 0 && v < AV_N ? v : -1; };
+function myAv() { try { const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); if (new URLSearchParams(location.search).has("party") && j && j.av != null) return clampAv(j.av); } catch (e) {} return clampAv(store.get("ykg-av")); }
+const ME_AV = myAv();
+const avTex = new Map();   // "00_n" → テクスチャ（同じキャラが何人いても 1 回だけ読む）
+function avTexOf(nn, k) {
+  const key = nn + "_" + k;
+  if (!avTex.has(key)) { const t = new THREE.TextureLoader().load("../avatars/e" + key + ".png"); t.colorSpace = THREE.SRGBColorSpace; avTex.set(key, t); }
+  return avTex.get(key);
+}
+// 絵のキャラ: 体の部品はかくして、絵を板（いつもカメラを向く）にして立てる。ラケットはそのまま持つ
+const AV_PAD = 44, AV_H = 1.62;   // 絵のまわりの余白（px）・絵の背の高さ（m）
+function drawChar(ch, av) {
+  const nn = String(av).padStart(2, "0"), tex = { n: avTexOf(nn, "n"), p: avTexOf(nn, "p"), h: avTexOf(nn, "h") };
+  for (const o of [...ch.legs, ch.hip, ch.torso, ch.head, ch.hair, ch.lArm, ch.arm]) o.visible = false;
+  const sm = new THREE.SpriteMaterial({ map: tex.n, transparent: true, alphaTest: 0.05 });
+  const sp = new THREE.Sprite(sm);
+  const fit = () => { const im = tex.n.image; if (!im || !im.width) return false; const s = AV_H / (im.height - 2 * AV_PAD); sp.scale.set(s * im.width, s * im.height, 1); sp.center.set(0.5, AV_PAD / im.height); ch.baseSY = 0; return true; };
+  if (!fit()) { sp.scale.set(AV_H * 0.8, AV_H * 1.25, 1); sp.center.set(0.5, 0.1); const iv = setInterval(() => { if (fit()) clearInterval(iv); }, 100); }
+  ch.g.add(sp);
+  Object.assign(ch, { sp, sm, tex, ex: "n", exK: "n", exUntil: 0, baseSY: 0 });
+}
+// 足もとのチームの色の輪（青 = 自分のチーム、赤 = 相手）
+function setRing(ch, col) {
+  if (!ch.ring) {
+    ch.ring = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+    ch.ring.rotation.x = -Math.PI / 2; ch.ring.position.y = 0.006; ch.ring.userData.keep = true; ch.g.add(ch.ring);
+  } else ch.ring.material.color.setHex(col);
+}
+// 表情: 点を取ったら よろこぶ（h）、取られたら あせる（p）
+function setFace(ch, k, sec) { if (ch && ch.sp) { ch.exK = k; ch.exUntil = performance.now() + sec * 1000; } }
+
 // 選手
-function makeChar(shirt) {
+function makeChar(shirt, av = -1) {
   const g = new THREE.Group();
   const skin = mat(0xf1c7a3), dark = mat(0x22252e), sh = mat(shirt);
   const add = (m, x, y, z) => { m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
@@ -427,14 +460,19 @@ function makeChar(shirt) {
   racket.traverse(o => { o.castShadow = true; });
   g.add(racket);
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.3, depthWrite: false }));
-  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.004; g.add(shadow);
+  shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.004; shadow.userData.keep = true; g.add(shadow);
   scene.add(g);
-  return { g, arm, racket, legs, torso, head, hip, hair, lArm, crouch: 0, mv: V(), pos: V(), vel: V(), walk: 0, swingT: 9, swingDir: 1, swingKind: "drive", hand: 1, fing: V() };
+  const ch = { g, arm, racket, legs, torso, head, hip, hair, lArm, crouch: 0, mv: V(), pos: V(), vel: V(), walk: 0, swingT: 9, swingDir: 1, swingKind: "drive", hand: 1, fing: V() };
+  if (clampAv(av) >= 0) drawChar(ch, clampAv(av));
+  return ch;
 }
-const P = makeChar(0x2f7fe0);   // 自分（カメラの前で台が見えなくならないように、半分すける）
-P.mats = [];
-P.g.traverse(o => { if (o.isMesh && o.material && !o.material.length && o !== P.g.children[P.g.children.length - 1]) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; P.mats.push(o.material); } });
+// 半分すけさせる（自分と、チームの相方）。影と足もとの輪はそのまま
+function ghostify(ch) { ch.mats = []; ch.g.traverse(o => { if ((o.isMesh || o.isSprite) && o.material && !o.material.length && !o.userData.keep) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; ch.mats.push(o.material); } }); }
+const P = makeChar(0x2f7fe0, ME_AV);   // 自分（カメラの前で台が見えなくならないように、半分すける）
+setRing(P, 0x3d9bff);
+ghostify(P);
 const C = makeChar(0xe03a3a);   // CPU
+setRing(C, 0xff4a4a);
 C.g.rotation.y = Math.PI;
 
 // 選手のポーズ: ラケットの位置（選手の向きを前 = -z とした座標）
@@ -475,6 +513,13 @@ function poseChar(ch, dt) {
   ch.arm.lookAt(_hw);
   ch.arm.scale.z = Math.max(0.1, ch.arm.position.distanceTo(ch.racket.position) - 0.06);
   ch.torso.rotation.y = (hand > 0 ? -0.25 : 0.35) * (s < 1 ? 1 - s : 0.6);
+  if (ch.sp) {   // 絵のキャラ: かがむと少し低くなる・歩くと少しはずむ。表情を切りかえる
+    if (!ch.baseSY && ch.sp.scale.y > 0) ch.baseSY = ch.sp.scale.y;
+    if (ch.baseSY) ch.sp.scale.y = ch.baseSY * (1 - 0.22 * cr);
+    ch.sp.position.y = Math.abs(Math.sin(ch.walk)) * Math.min(1, sp) * 0.03;
+    const ex = performance.now() < ch.exUntil ? ch.exK : "n";
+    if (ex !== ch.ex) { ch.ex = ex; ch.sm.map = ch.tex[ex]; ch.sm.needsUpdate = true; }
+  }
 }
 
 // ===== 画面の大きさ =====
@@ -551,6 +596,7 @@ let cpuPlan = null;   // CPU がどこで打つか
 function resetPositions() {
   P.pos.set(0.15, 0, HL + 0.75); C.pos.set(-0.15, 0, -HL - 0.75);
   P.vel.set(0, 0, 0); C.vel.set(0, 0, 0); P.tgt = null; C.tgt = null;
+  for (const c of [P, C, ...(ON && ON.av ? ON.av.values() : [])]) c.exUntil = 0;   // 表情をふつうにもどす
   if (ON && ON.phase === "playing") {   // 通信対戦: 枠（チームの人数）に合わせた、はじめの立ち位置
     const me = mePl();
     if (me && me.slot >= 0) P.pos.copy(wv(startWorldPos(ON.pid)));
@@ -635,7 +681,7 @@ function pointApply(winner, ov) {
   msg(`${st.score[0]} - ${st.score[1]}`, winner === 0 ? "#7fc4ff" : "#ff8a8a", 800);
   if (winner === 0) Sfx.coin(); else Sfx.miss();
   updHud();
-  if (ov) { st.over = ov.ov; st.gameWin = ov.gw; return; }
+  if (ov) { st.over = ov.ov; st.gameWin = ov.gw; faceAll(winner, st.over ? 30 : 1.6); return; }
   const [a, b] = st.score;
   if ((a >= 11 || b >= 11) && Math.abs(a - b) >= 2) {
     const gw = a > b ? 0 : 1;
@@ -643,6 +689,14 @@ function pointApply(winner, ov) {
     st.over = st.games[gw] >= st.need;
     st.gameWin = gw;
   } else st.over = false, st.gameWin = -1;
+  faceAll(winner, st.over ? 30 : 1.6);
+}
+// 絵のキャラの表情（取った側が よろこび、取られた側が あせり）。試合が終わったら長めに
+function faceAll(w, sec) {
+  const sides = [[P], [C]];
+  if (ON && ON.av) for (const a of ON.av.values()) sides[a.ls].push(a);
+  for (const c of sides[w]) setFace(c, "h", sec);
+  for (const c of sides[1 - w]) setFace(c, "p", sec);
 }
 function afterDead() {
   let ng = false;
@@ -1259,7 +1313,7 @@ function render(rdt) {
   const k = 1 - Math.pow(following ? 0.00004 : 0.002, rdt);   // ボールを追うときは、すばやく
   camPos.lerp(tp, k); camLook.lerp(tl, k);
   // ボールが近くにあるとき・低いときは、自分のからだをさらに透けさせる（打つ瞬間に球が見えるように）
-  { const near = following && st.hitter === 1 && ball.p.z > P.pos.z - 2.6 && ball.p.z < P.pos.z + 0.6, to = near ? 0.2 : 0.55;
+  { const near = following && st.hitter === 1 && ball.p.z > P.pos.z - 2.6 && ball.p.z < P.pos.z + 0.6, to = P.sp ? (near ? 0.12 : 0.35) : (near ? 0.2 : 0.55);   // 絵のキャラは幅が広いので、もっと透かす
     for (const m of P.mats) m.opacity += (to - m.opacity) * Math.min(1, rdt * 14); }
   camera.position.copy(camPos); camera.lookAt(camLook);
   // カメラの外側（うしろ）にあるフェンスは、ボールをかくさないように消す
@@ -1391,7 +1445,7 @@ const pidsOnSide = s => [...ON.players.values()].filter(p => p.slot >= 0 && (p.s
 const sideCounts = () => [pidsOnSide(0).length, pidsOnSide(1).length];
 const lineupOk = () => { const [a, b] = sideCounts(); return a >= 1 && b >= 1; };
 const teamNames = s => pidsOnSide(s).map(p => p.name);
-const playersList = () => [...ON.players.values()].map(p => ({ pid: p.pid, name: p.name, slot: p.slot, ws: !!p.wantSpec }));
+const playersList = () => [...ON.players.values()].map(p => ({ pid: p.pid, name: p.name, slot: p.slot, ws: !!p.wantSpec, av: p.av }));
 // 自分が観戦か・どちらのチームか（枠が決まってから）
 function recomputeMe() {
   const m = mePl();
@@ -1406,14 +1460,14 @@ function startWorldPos(pid) {
   return V(x, 0, side === 0 ? HL + 0.75 : -HL - 0.75);
 }
 // 自分以外の、枠に入っている人のキャラクターをそろえる（チームの相方は半透明、相手は赤）
-function ghostify(ch) { ch.mats = []; ch.g.traverse(o => { if (o.isMesh && o.material && !o.material.length && o !== ch.g.children[ch.g.children.length - 1]) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; ch.mats.push(o.material); } }); }
 function clearAvatars() { if (ON && ON.av) { for (const a of ON.av.values()) scene.remove(a.g); ON.av.clear(); } }
 function syncAvatars() {
   const others = [...ON.players.values()].filter(p => p.slot >= 0 && p.pid !== ON.pid), keep = new Set(others.map(p => p.pid));
   for (const [pid, a] of ON.av) if (!keep.has(pid)) { scene.remove(a.g); ON.av.delete(pid); }
   for (const p of others) {
     if (ON.av.has(p.pid)) continue;
-    const ls = avatarSide(p), a = makeChar(ls === 0 ? 0x5aa9ff : 0xe03a3a);
+    const ls = avatarSide(p), a = makeChar(ls === 0 ? 0x5aa9ff : 0xe03a3a, p.av);
+    setRing(a, ls === 0 ? 0x3d9bff : 0xff4a4a);
     a.g.rotation.y = ls === 0 ? 0 : Math.PI; a.pid = p.pid; a.ls = ls;
     if (ls === 0 && !ON.spec) ghostify(a);
     ON.av.set(p.pid, a);
@@ -1480,7 +1534,7 @@ function lobbyChanged(autoOk) {
 }
 function bcastLobby() { if (ON && ON.host) bcast({ t: "lobby", players: playersList(), phase: ON.phase, need: ON.need }); }
 function applyLobby(m) {
-  ON.players = new Map(m.players.map(p => [p.pid, { pid: p.pid, name: p.name, slot: p.slot, wantSpec: p.ws }]));
+  ON.players = new Map(m.players.map(p => [p.pid, { pid: p.pid, name: p.name, slot: p.slot, wantSpec: p.ws, av: clampAv(p.av) }]));
   ON.phase = m.phase; ON.need = m.need || 1; recomputeMe();
   if (ON.phase === "playing" && st.phase !== "title") syncAvatars();
   if (st.phase === "title") lobbyUi();
@@ -1538,7 +1592,7 @@ function newOn(host, party, code) {
 }
 function netStartHost(code, party) {
   if (isOffline()) { netFailed("オフラインです。CPUと対戦できます"); return; }
-  ON = newOn(true, party, code); ON.players.set(0, { pid: 0, name: myName(), slot: -1, wantSpec: false });
+  ON = newOn(true, party, code); ON.players.set(0, { pid: 0, name: myName(), slot: -1, wantSpec: false, av: ME_AV });
   let tries = 0;
   const open = () => {
     try { peer = new Peer(netId(ON.code, party)); } catch (e) { netFailed("通信を始められません"); return; }
@@ -1564,7 +1618,7 @@ function onHello(m, c) {
   if (c.pid != null) return;
   const pid = ON.nextPid++; c.pid = pid;
   let nm = String(m.name || "ゲスト").slice(0, 12); if ([...ON.players.values()].some(p => p.name === nm)) nm = nm.slice(0, 10) + pid;
-  ON.players.set(pid, { pid, name: nm, slot: -1, wantSpec: !!m.spec }); ON.conns.add(c);
+  ON.players.set(pid, { pid, name: nm, slot: -1, wantSpec: !!m.spec, av: clampAv(m.av) }); ON.conns.add(c);
   sendTo(c, { t: "welcome", pid, players: playersList(), phase: ON.phase, need: ON.need });
   if (ON.phase === "playing" && ON.playing) sendTo(c, startMsg(true));   // 途中から来た人は観戦
   lobbyChanged(true);
@@ -1635,7 +1689,7 @@ function netJoin(code, party, spec) {
       if (party) setTimeout(() => { if (ON && ON.hc === hc && !hc.open && ++tries < 60) go(); }, 2500);
       hc.on("open", () => {
         hc.opened = true; ON.ready = true; hc.uch = openUch(hc);
-        hc.send({ t: "hello", name: myName(), spec: !!spec });
+        hc.send({ t: "hello", name: myName(), spec: !!spec, av: ME_AV });
         lobbyUi();
       });
       hc.on("data", m => onNet(m, hc));
@@ -1678,7 +1732,7 @@ function onNet(m, c) {
   }
 }
 function applyStart(m) {
-  ON.players = new Map(m.players.map(p => [p.pid, { pid: p.pid, name: p.name, slot: p.slot, wantSpec: p.ws }]));
+  ON.players = new Map(m.players.map(p => [p.pid, { pid: p.pid, name: p.name, slot: p.slot, wantSpec: p.ws, av: clampAv(p.av) }]));
   ON.phase = "playing"; ON.need = m.need; ON.playing = true; recomputeMe(); syncAvatars();
   startMatchCore(m.need, lid(m.sv), m.svp);
   if (m.s) { st.score = swapIf(m.s); st.games = swapIf(m.g); updHud(); }
