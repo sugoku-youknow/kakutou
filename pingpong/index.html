@@ -677,7 +677,7 @@ function closeRect() {
   return { s, x: W - s - 12, y: 10 };
 }
 
-// 2026-11-28: ホームでえらんだキャラ（../avatars/eNN_n/p/h.png = 全身の絵、15 体）。えらんでいなければ -1（これまでの人形）
+// 2026-11-28: ホームでえらんだキャラ（../avatars/eNN_n/p/h/c.png = 全身の絵、15 体）。えらんでいなければ -1（これまでの人形）
 const AV_N = 15;
 const clampAv = v => { if (v == null || v === "") return -1; v = Math.floor(+v); return v >= 0 && v < AV_N ? v : -1; };
 function myAv() { try { const j = JSON.parse(sessionStorage.getItem("ykg-party") || "null"); if (new URLSearchParams(location.search).has("party") && j && j.av != null) return clampAv(j.av); } catch (e) {} return clampAv(store.get("ykg-av")); }
@@ -691,7 +691,7 @@ function avTexOf(nn, k) {
 // 絵のキャラ: 体の部品はかくして、絵を板（いつもカメラを向く）にして立てる。ラケットはそのまま持つ
 const AV_PAD = 44, AV_H = 1.62;   // 絵のまわりの余白（px）・絵の背の高さ（m）
 function drawChar(ch, av) {
-  const nn = String(av).padStart(2, "0"), tex = { n: avTexOf(nn, "n"), p: avTexOf(nn, "p"), h: avTexOf(nn, "h") };
+  const nn = String(av).padStart(2, "0"), tex = { n: avTexOf(nn, "n"), p: avTexOf(nn, "p"), h: avTexOf(nn, "h"), c: avTexOf(nn, "c") };
   for (const o of [...ch.legs, ch.hip, ch.torso, ch.head, ch.hair, ch.lArm, ch.arm]) o.visible = false;
   const sm = new THREE.SpriteMaterial({ map: tex.n, transparent: true, alphaTest: 0.05 });
   const sp = new THREE.Sprite(sm);
@@ -707,7 +707,13 @@ function setRing(ch, col) {
     ch.ring.rotation.x = -Math.PI / 2; ch.ring.position.y = 0.006; ch.ring.userData.keep = true; ch.g.add(ch.ring);
   } else ch.ring.material.color.setHex(col);
 }
-// 表情: 点を取ったら よろこぶ（h）、取られたら あせる（p）
+// 表情（2026-11-28）: 点差で決める。5点以上負けている → 泣き（c）、1〜4点負け → あせり（p）、同点〜1点リード → ふつう（n）、2点以上リード → ニコニコ（h）
+function moodOf(ch) {
+  const sd = ch === P ? 0 : ch === C ? 1 : ch.ls != null ? ch.ls : -1;
+  if (sd < 0) return "n";
+  const d = st.score[sd] - st.score[1 - sd];
+  return d <= -5 ? "c" : d < 0 ? "p" : d >= 2 ? "h" : "n";
+}
 function setFace(ch, k, sec) { if (ch && ch.sp) { ch.exK = k; ch.exUntil = performance.now() + sec * 1000; } }
 
 // 選手
@@ -789,7 +795,7 @@ function poseChar(ch, dt) {
     if (!ch.baseSY && ch.sp.scale.y > 0) ch.baseSY = ch.sp.scale.y;
     if (ch.baseSY) ch.sp.scale.y = ch.baseSY * (1 - 0.22 * cr);
     ch.sp.position.y = Math.abs(Math.sin(ch.walk)) * Math.min(1, sp) * 0.03;
-    const ex = performance.now() < ch.exUntil ? ch.exK : "n";
+    const ex = moodOf(ch);
     if (ex !== ch.ex) { ch.ex = ex; ch.sm.map = ch.tex[ex]; ch.sm.needsUpdate = true; }
   }
 }
