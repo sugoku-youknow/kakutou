@@ -67,6 +67,44 @@
   .small { font-size:12px; color:var(--sub); margin-top:6px; }
   /* 画面が縦のまま（自動回転オフ）でも横向きで遊べるように、JS が #app を 90° 回して横長に置く。#app の中の fixed は #app が基準になる */
   #app { position:fixed; left:0; top:0; width:100vw; height:100vh; overflow:hidden; transform-origin:0 0; }
+
+  /* ===== ホーム（2026-11-28 案B: 夜のアリーナ。左上 ゲーム一覧、右上 なまえ＋キャラ、左右に板、左下 ひとりで/みんなで、右下 あそぶ） ===== */
+  .screen.home { padding:0; background:#06080f; overflow:hidden; display:block; }
+  .screen.home > * { margin:0; }
+  #homeBg, #homeBg svg { position:absolute; inset:0; width:100%; height:100%; }
+  .hm { position:absolute; inset:0; display:grid; grid-template-columns:auto 1fr auto; grid-template-rows:auto 1fr auto; grid-template-areas:"back logo prof" "left . right" "mode opts play"; gap:8px 14px; padding:calc(10px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
+  .hm button { margin:0; width:auto; padding:0; }
+  .hm .pl { background:rgba(11,15,28,.82); color:#fff; border:1.5px solid #ffd23f; border-radius:8px; box-shadow:0 0 0 1px #0008, 0 6px 16px #000a; }
+  .hm .back { grid-area:back; width:78px; height:56px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:10px; font-weight:800; }
+  .hm .back svg { width:34px; height:20px; }
+  .hm .prof { grid-area:prof; display:flex; align-items:center; gap:8px; justify-self:end; align-self:start; }
+  .hm .nm { display:block; width:180px; padding:5px 12px 6px; }
+  .hm .nm small { display:block; font-size:10px; color:#ffd23f; }
+  .hm .nm input { width:100%; background:transparent; border:0; border-bottom:1px dashed #ffd23f88; color:#fff; font:inherit; font-size:17px; font-weight:800; padding:0; outline:none; -webkit-user-select:text; user-select:text; }
+  .hm .av { width:56px; height:56px; display:grid; place-items:center; overflow:hidden; clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%); background:linear-gradient(#ffd23f,#c98a00); color:#3a2a00; }
+  .hm .av img { width:100%; height:100%; object-fit:cover; object-position:50% 20%; }
+  .hm .av svg { width:30px; height:30px; }
+  .hm .logo { grid-area:logo; text-align:center; align-self:start; padding-top:2px; }
+  .hm .logo h1 { font-size:44px; font-weight:900; letter-spacing:.06em; line-height:1.1; color:#fff; font-style:italic; text-shadow:0 0 18px #4aa8ff, 0 3px 0 #0a2a6a; }
+  .hm .logo p { font-size:12px; font-weight:700; margin:4px 0 0; color:#ffd23f; letter-spacing:.2em; }
+  .hm .left { grid-area:left; align-self:center; display:flex; flex-direction:column; gap:10px; }
+  .hm .right { grid-area:right; align-self:center; display:flex; flex-direction:column; gap:10px; justify-self:end; }
+  .hm .tile { width:82px; height:64px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:11px; font-weight:800; }
+  .hm .tile svg { width:28px; height:24px; }
+  .hm .mode { grid-area:mode; display:flex; width:240px; height:66px; overflow:hidden; align-self:end; }
+  .hm .mode button { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:13px; font-weight:800; background:transparent; color:#fff; border-radius:0; }
+  .hm .mode button.on { background:#ffd23f; color:#141006; }
+  .hm .mode button:disabled { opacity:.35; }
+  .hm .mode svg { width:28px; height:22px; }
+  .hm .opts { grid-area:opts; align-self:end; justify-self:center; display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12px; font-weight:800; white-space:nowrap; }
+  .hm .opts input { width:74px; margin:0; padding:8px 6px; font:inherit; font-size:16px; text-align:center; border-radius:6px; border:1px solid #ffd23f88; background:#05070d; color:#fff; -webkit-user-select:text; user-select:text; }
+  .hm .opts button { padding:8px 14px; background:#ffd23f; color:#141006; border-radius:6px; font-size:14px; }
+  .hm .play { grid-area:play; width:210px; height:66px; align-self:end; justify-self:end; display:flex; align-items:center; justify-content:center; gap:12px; font-size:30px; font-weight:900; letter-spacing:.1em; background:linear-gradient(#ffe36a,#ffc21a); color:#141006; border-radius:8px; clip-path:polygon(8% 0,100% 0,92% 100%,0 100%); }
+  .hm .play svg { width:40px; height:40px; }
+  @media (max-height:340px) { .hm .logo h1 { font-size:34px; } .hm .tile { height:54px; } .hm .mode, .hm .play { height:56px; } }
+  @media (max-width:700px) { .hm .nm { width:130px; } .hm .play { width:170px; font-size:26px; } .hm .mode { width:200px; } }
+  #app:has(#title:not([hidden])) #rot { left:calc(33px + env(safe-area-inset-left)); top:calc(74px + env(safe-area-inset-top)); }   /* ホームでは ゲーム一覧 の下へ */
+  #app:has(#rules:not([hidden])) #rot, #app:has(#settings:not([hidden])) #rot { display:none; }
   [hidden] { display:none !important; }
 </style>
 </head>
@@ -86,13 +124,24 @@
 <button id="rot" type="button" aria-label="画面の向きの切り替え" hidden></button>
 <div id="spd" hidden aria-label="キャラの移動速度"><input type="range" class="spdR" min="1" max="2" step="0.01"><span class="spdV"></span></div>
 
-<div class="screen" id="title">
-  <div class="card">
-    <div class="cols">
-      <div>
-        <h1>🏓 ゆび卓球</h1>
-        <p class="lead">回転で勝負する3D卓球。2本の指で体とラケットを動かして、CPUと11点勝負。</p>
-        <ul class="how">
+<div class="screen home" id="title">
+  <div id="homeBg"></div>
+  <div class="hm">
+    <button class="back pl" id="toGames" type="button"><svg viewBox="0 0 40 24"><path d="M3 12L15 2v6h22v8H15v6z" fill="currentColor"/></svg>ゲーム一覧</button>
+    <div class="logo"><h1>ゆび卓球</h1><p>回転で勝負する 3D 卓球</p></div>
+    <div class="prof"><label class="nm pl"><small>なまえ</small><input id="nameIn" maxlength="12" placeholder="ゲスト" autocomplete="off"></label><div class="av" id="homeAv"></div></div>
+    <div class="left"><button class="tile pl" id="hRules" type="button"><svg viewBox="0 0 32 26"><use href="#i-book"/></svg>あそびかた</button></div>
+    <div class="right"><button class="tile pl" id="hSnd" type="button" data-nosfx></button><button class="tile pl" id="hSet" type="button"><svg viewBox="0 0 32 26"><use href="#i-gear"/></svg>せってい</button></div>
+    <div class="opts pl" id="onBox" hidden><span>番号で入る</span><input id="roomIn" inputmode="numeric" maxlength="4" placeholder="4けた" autocomplete="off"><button id="joinRoom" type="button">入る</button></div>
+    <div class="mode pl"><button id="tabSolo" type="button" class="on"><svg viewBox="0 0 32 26"><use href="#i-one"/></svg>ひとりで</button><button id="tabOn" type="button"><svg viewBox="0 0 32 26"><use href="#i-many"/></svg>みんなで</button></div>
+    <button class="play" id="start" type="button">あそぶ<svg viewBox="0 0 40 40"><use href="#i-paddle"/></svg></button>
+  </div>
+</div>
+
+<div class="screen" id="rules" hidden>
+  <div class="card" style="max-width:640px">
+    <h2>あそびかた</h2>
+    <ul class="how">
           <li><b>左の指</b>：体を動かす（台の後ろも横も動ける）</li>
           <li><b>右の指</b>：ボールがラケットに来た<b>瞬間の指のスライド</b>の向きと速さで回転が決まる（ボールが体の近くにある間に指をすべらせると打つ）
             <br>↑上＝<b>前回転</b>（速く深い・低く伸びる）／↓下＝<b>下回転</b>（遅く短い・止まる）
@@ -104,25 +153,36 @@
           <li>打った球は基本的に入る。でも<b>相手の回転が残るとミス</b>（前回転→オーバー、下回転→ネット、横回転→横へ）</li>
           <li>右上のボールの<b>矢印と同じ向きにこする</b>と、相手の回転を打ち消せる。</li>
         </ul>
-      </div>
-      <div>
-        <div class="lab">体の動かし方</div>
-        <div class="seg" data-k="move"><button data-v="stick">スティック</button><button data-v="direct">ダイレクト</button></div>
-        <div class="small" id="moveDesc"></div>
-        <div class="lab">キャラの移動速度 <b class="spdV"></b>（今の速さの 1〜2 倍。0.01 きざみ。試合中も画面の上のバーで変えられる）</div>
-        <input type="range" class="spdR" min="1" max="2" step="0.01">
-        <div class="lab">CPUのつよさ</div>
-        <div class="seg" data-k="cpu"><button data-v="0">よわい</button><button data-v="1">ふつう</button><button data-v="2">つよい</button></div>
-        <div class="lab">試合</div>
-        <div class="seg" data-k="games"><button data-v="1">1ゲーム</button><button data-v="3">3ゲーム(2本先取)</button></div>
-        <button class="main" id="start">はじめる</button>
-        <div id="onBox"><div class="lab">オンライン対戦（部屋番号で友だちと）</div>
-          <div class="seg"><button id="mkRoom">部屋をつくる</button><input id="roomIn" inputmode="numeric" maxlength="4" placeholder="番号4けた" autocomplete="off"><button id="joinRoom">入る</button></div></div>
-        <div class="seg" style="margin-top:8px" id="titleBtns"><button id="toGames">← ゲーム一覧</button></div>
-      </div>
-    </div>
+    <button class="main" id="rulesClose" type="button">とじる</button>
   </div>
 </div>
+
+<div class="screen" id="settings" hidden>
+  <div class="card" style="max-width:420px">
+    <h2>せってい</h2>
+    <div class="lab">体の動かし方</div>
+    <div class="seg" data-k="move"><button data-v="stick">スティック</button><button data-v="direct">ダイレクト</button></div>
+    <div class="small" id="moveDesc"></div>
+    <div class="lab">キャラの移動速度 <b class="spdV"></b>（今の速さの 1〜2 倍。試合中も画面の上のバーで変えられる）</div>
+    <input type="range" class="spdR" min="1" max="2" step="0.01">
+    <div class="lab">CPUのつよさ（ひとりで）</div>
+    <div class="seg" data-k="cpu"><button data-v="0">よわい</button><button data-v="1">ふつう</button><button data-v="2">つよい</button></div>
+    <div class="lab">試合</div>
+    <div class="seg" data-k="games"><button data-v="1">1ゲーム</button><button data-v="3">3ゲーム(2本先取)</button></div>
+    <button class="main" id="setClose" type="button">とじる</button>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-book" viewBox="0 0 32 26"><path d="M2 4q7-3 14 1q7-4 14-1v19q-7-3-14 1q-7-4-14-1z" fill="currentColor" opacity=".9"/><path d="M16 5v19" stroke="#0005" stroke-width="1.5"/></symbol>
+  <symbol id="i-snd" viewBox="0 0 32 26"><path d="M3 9h6l8-6v20l-8-6H3z" fill="currentColor"/><path d="M21 8q4 5 0 10M25 5q7 8 0 16" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 32 26"><path d="M3 9h6l8-6v20l-8-6H3z" fill="currentColor"/><path d="M21 8l8 10M29 8l-8 10" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-gear" viewBox="-16 -13 32 26"><g fill="currentColor"><rect x="-2.6" y="-12" width="5.2" height="6" rx="1" transform="rotate(0)"/><rect x="-2.6" y="-12" width="5.2" height="6" rx="1" transform="rotate(45)"/><rect x="-2.6" y="-12" width="5.2" height="6" rx="1" transform="rotate(90)"/><rect x="-2.6" y="-12" width="5.2" height="6" rx="1" transform="rotate(135)"/><rect x="-2.6" y="-12" width="5.2" height="6" rx="1" transform="rotate(180)"/><rect x="-2.6" y="-12" width="5.2" height="6" rx="1" transform="rotate(225)"/><rect x="-2.6" y="-12" width="5.2" height="6" rx="1" transform="rotate(270)"/><rect x="-2.6" y="-12" width="5.2" height="6" rx="1" transform="rotate(315)"/><circle r="8"/></g><circle r="3.4" fill="#0b0f1c"/></symbol>
+  <symbol id="i-one" viewBox="0 0 32 26"><circle cx="16" cy="7" r="5" fill="currentColor"/><path d="M6 25q0-11 10-11t10 11z" fill="currentColor"/></symbol>
+  <symbol id="i-many" viewBox="0 0 32 26"><circle cx="11" cy="7" r="4.5" fill="currentColor"/><circle cx="22" cy="9" r="4" fill="currentColor" opacity=".75"/><path d="M2 25q0-10 9-10t9 10z" fill="currentColor"/><path d="M17 25q1-9 6-9t8 9z" fill="currentColor" opacity=".75"/></symbol>
+  <symbol id="i-paddle" viewBox="0 0 40 40"><circle cx="17" cy="16" r="13" fill="currentColor" stroke="#1a1a1a" stroke-width="2"/><rect x="25" y="25" width="6" height="14" rx="2" transform="rotate(-45 28 32)" fill="#8a5a2b"/><circle cx="33" cy="8" r="4.5" fill="#fff" stroke="#999"/></symbol>
+  <symbol id="i-pawn" viewBox="0 0 32 32"><circle cx="16" cy="10" r="6" fill="currentColor"/><path d="M7 30q0-13 9-13t9 13z" fill="currentColor"/></symbol>
+</svg>
 
 <div class="screen" id="net" hidden>
   <div class="card" style="max-width:360px; text-align:center">
@@ -322,7 +382,6 @@ document.querySelectorAll(".seg[data-k]").forEach(s => s.addEventListener("click
 }));
 refreshSeg();
 if (window.YkgSfx) {
-  $("titleBtns").appendChild(YkgSfx.toggleButton(""));
   $("menuSnd").appendChild(YkgSfx.toggleButton(""));
 }
 
@@ -332,11 +391,14 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a2033);
-scene.fog = new THREE.Fog(0x1a2033, 9, 22);
-const camera = new THREE.PerspectiveCamera(48, 2, 0.05, 60);
+// ===== 会場（2026-11-28: 1 大会の体育館 / 2 夜のアリーナ / 3 学校の体育館 を、ページを開くたびにランダム。?bg=0〜3 で固定。0 = 前の暗い会場） =====
+const BG = (() => { const q = new URLSearchParams(location.search).get("bg"); const v = q == null ? 0 : +q; return v >= 0 && v <= 3 && q != null ? v : 1 + Math.floor(Math.random() * 3); })();
+const BGC = [0x1a2033, 0x8a7a66, 0x07090f, 0xb9c4cc][BG];
+scene.background = new THREE.Color(BGC);
+scene.fog = BG === 0 ? new THREE.Fog(BGC, 9, 22) : new THREE.Fog(BGC, 18, 46);
+const camera = new THREE.PerspectiveCamera(48, 2, 0.05, 80);
 
-scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x3a2a26, 0.9));
+const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x3a2a26, 0.9); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
 sun.position.set(2.5, 7, 3);
 sun.castShadow = true;
@@ -345,15 +407,151 @@ Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 5, bottom: -5, near:
 scene.add(sun);
 
 const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 });
-// 床（試合場の赤いマットと、まわりの暗い床）
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), mat(0x232a3d));
-floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
-const court = new THREE.Mesh(new THREE.PlaneGeometry(7, 12), mat(0x9a3b2f));
-court.rotation.x = -Math.PI / 2; court.position.y = 0.002; court.receiveShadow = true; scene.add(court);
-// フェンス
+// 絵を描いてテクスチャにする
+function canvasTex(w, h, draw, rep) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); }
+  return t;
+}
+// 木の床（板を並べた模様）
+function woodTex(base, rep) {
+  return canvasTex(512, 512, (g, w, h) => {
+    const n = 8, pw = w / n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < 4; j++) {
+      const y0 = (j * 128 + (i % 2) * 64) % h;
+      const l = 0.88 + ((i * 7 + j * 13) % 9) / 40;
+      const [r, gg, b] = base.map(v => Math.round(Math.min(255, v * l)));
+      g.fillStyle = `rgb(${r},${gg},${b})`; g.fillRect(i * pw, y0, pw, 128); if (y0 + 128 > h) g.fillRect(i * pw, 0, pw, y0 + 128 - h);
+      g.strokeStyle = "rgba(60,30,10,.16)"; g.lineWidth = 1;
+      for (let k = 0; k < 5; k++) { const x = i * pw + 6 + k * (pw - 12) / 4 + Math.sin(j + k) * 2; g.beginPath(); g.moveTo(x, y0); g.lineTo(x + 2, y0 + 128); g.stroke(); }
+      g.fillStyle = "rgba(40,20,5,.35)"; g.fillRect(i * pw, y0, pw, 2);
+    }
+    g.fillStyle = "rgba(40,20,5,.4)"; for (let i = 0; i <= n; i++) g.fillRect(i * pw - 1, 0, 2, h);
+  }, rep);
+}
+// 横断幕・フェンスの文字
+function bannerTex(bg, fg, text, sub) {
+  return canvasTex(512, 128, (g, w, h) => {
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.fillStyle = fg; g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = `900 ${sub ? 62 : 72}px "Hiragino Sans","Noto Sans JP",system-ui,sans-serif`; g.fillText(text, w / 2, sub ? 52 : 66, w - 30);
+    if (sub) { g.font = `700 24px system-ui,sans-serif`; g.fillText(sub, w / 2, 102, w - 30); }
+  });
+}
+const plane = (w, h, m, x, y, z, ry = 0) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); o.position.set(x, y, z); o.rotation.y = ry; scene.add(o); return o; };
+const box = (w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); scene.add(o); return o; };
+// フェンス（試合場をかこう板）: 4 辺それぞれ group。fences[0] = 奥, [1] = 手前, [2] [3] = 左右
 const fences = [];
-for (const [x, z, w, d] of [[0, -6, 7, 0.05], [0, 6, 7, 0.05], [-3.5, 0, 0.05, 12], [3.5, 0, 0.05, 12]]) {
-  const f = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, d), mat(0x1b3f7a)); f.position.set(x, 0.35, z); scene.add(f); fences.push(f);
+function buildFences(col, banners, hgt = 0.7) {
+  const sides = [[0, -6, 7, 0], [0, 6, 7, Math.PI], [-3.5, 0, 12, Math.PI / 2], [3.5, 0, 12, -Math.PI / 2]];
+  let bi = 0;
+  for (const [x, z, len, ry] of sides) {
+    const grp = new THREE.Group(); grp.position.set(x, 0, z); grp.rotation.y = ry;
+    const n = Math.round(len / 1.4), pw = len / n;
+    for (let i = 0; i < n; i++) {
+      const px = -len / 2 + pw * (i + 0.5);
+      const bd = new THREE.Mesh(new THREE.BoxGeometry(pw - 0.03, hgt, 0.05), mat(col)); bd.position.set(px, hgt / 2, 0); grp.add(bd);
+      if (banners) { const t = banners[bi++ % banners.length]; const f = new THREE.Mesh(new THREE.PlaneGeometry(pw - 0.1, hgt - 0.12), new THREE.MeshStandardMaterial({ map: t, roughness: 0.8 })); f.position.set(px, hgt / 2, 0.03); grp.add(f); }
+      for (const s of [-1, 1]) { const ft = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.35), mat(0x333333)); ft.position.set(px + s * (pw / 2 - 0.1), 0.015, -0.12); grp.add(ft); }
+    }
+    scene.add(grp); fences.push(grp);
+  }
+}
+// 観客席（段々）と観客。返り値 = 観客席のいちばん後ろまでの距離
+function buildStands(opt) {
+  const { rows = 6, step = 0.45, rise = 0.38, standCol = 0x5a4a3a, front = 9, light = false } = opt;
+  const people = [];
+  const runs = [{ ax: "z", s: -1, len: 20 }, { ax: "x", s: -1, len: 22 }, { ax: "x", s: 1, len: 22 }];
+  const sm = mat(standCol);
+  for (const r of runs) for (let k = 0; k < rows; k++) {
+    const d = (r.ax === "z" ? front : front - 1.5) + k * step, y = 0.5 + k * rise;
+    if (r.ax === "z") box(r.len, y, step, sm, 0, y / 2, r.s * (d + step / 2)); else box(step, y, r.len, sm, r.s * (d + step / 2), y / 2, -2);
+    for (let i = 0; i < r.len / 0.55; i++) {
+      if (Math.random() < (opt.empty || 0.3)) continue;
+      const u = -r.len / 2 + 0.3 + i * 0.55 + (Math.random() - 0.5) * 0.1;
+      people.push(r.ax === "z" ? [u, y, r.s * (d + step * 0.45)] : [r.s * (d + step * 0.45), y, u - 2]);
+    }
+  }
+  const N = people.length;
+  const bodyM = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.17, 0.32, 3, 8), new THREE.MeshStandardMaterial({ roughness: 0.9 }), N);
+  const headM = new THREE.InstancedMesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshStandardMaterial({ roughness: 0.8 }), N);
+  const shirts = [0xe04848, 0x3b82f6, 0xf5f5f5, 0x2a2a2a, 0xf5c542, 0x44aa66, 0xff8a3a, 0x8a5ad0];
+  const skins = [0xf1c7a3, 0xe0b08a, 0xc68c64, 0xf5d5b8];
+  const m4 = new THREE.Matrix4(), c = new THREE.Color(), k = light ? 1 : 0.55;
+  people.forEach(([x, y, z], i) => {
+    m4.makeTranslation(x, y + 0.33, z); bodyM.setMatrixAt(i, m4);
+    m4.makeTranslation(x, y + 0.74, z); headM.setMatrixAt(i, m4);
+    bodyM.setColorAt(i, c.setHex(shirts[(Math.random() * shirts.length) | 0]).multiplyScalar(k));
+    headM.setColorAt(i, c.setHex(skins[(Math.random() * skins.length) | 0]).multiplyScalar(k));
+  });
+  scene.add(bodyM, headM);
+  return front + rows * step;
+}
+const KANJI = ["精神", "礼", "一球入魂", "全力", "回転", "根性"];
+if (BG === 0) {
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), mat(0x232a3d)); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(7, 12), mat(0x9a3b2f)); court.rotation.x = -Math.PI / 2; court.position.y = 0.002; court.receiveShadow = true; scene.add(court);
+  buildFences(0x1b3f7a, null);
+} else if (BG === 1) {
+  // 案1: 大会の体育館（木の床・白いフェンスに文字・まわりに観客席・横断幕）
+  hemi.color.setHex(0xfff2dc); hemi.groundColor.setHex(0x6a4a2a); hemi.intensity = 1.05;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ map: woodTex([214, 160, 96], [44, 44]), roughness: 0.55 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  buildFences(0xf4f4f2, [bannerTex("#f4f4f2", "#d02a3a", "ゆび卓球"), bannerTex("#f4f4f2", "#1f5fae", "SPIN", "YUBI TAKKYU OPEN"), bannerTex("#f4f4f2", "#d02a3a", "回転", "SPIN MASTER"), bannerTex("#f4f4f2", "#222", "YKG", "you know games")]);
+  const back = buildStands({ standCol: 0x7a6248, light: true, empty: 0.25 });
+  const wallM = mat(0xcdbb9c);
+  plane(40, 14, wallM, 0, 7, -back - 0.3); plane(40, 14, wallM, -back + 1.2, 7, -2, Math.PI / 2); plane(40, 14, wallM, back - 1.2, 7, -2, -Math.PI / 2);
+  KANJI.forEach((k, i) => { const t = bannerTex(i % 2 ? "#1a6a3a" : "#f6f1e4", i % 2 ? "#fff" : "#b0182a", k); plane(2.6, 0.75, new THREE.MeshStandardMaterial({ map: t }), -8.5 + i * 3.4, 3.9, -back - 0.25); });
+  const winM = new THREE.MeshBasicMaterial({ color: 0xfff6dc });
+  for (let i = 0; i < 7; i++) plane(1.8, 1.4, winM, -10.8 + i * 3.6, 8.2, -back - 0.25);
+} else if (BG === 2) {
+  // 案2: 夜のアリーナ（暗い会場・赤いマット・台だけ明るい・大きな画面）
+  hemi.color.setHex(0x8aa0ff); hemi.groundColor.setHex(0x101018); hemi.intensity = 0.45;
+  sun.intensity = 0.7;
+  const spot = new THREE.SpotLight(0xffffff, 80, 24, 0.6, 0.5, 1.2); spot.position.set(0, 9, 0.5); spot.target.position.set(0, 0, 0); scene.add(spot, spot.target);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), mat(0x16161c)); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(7, 12), new THREE.MeshStandardMaterial({ color: 0x8a2430, roughness: 0.6 })); court.rotation.x = -Math.PI / 2; court.position.y = 0.002; court.receiveShadow = true; scene.add(court);
+  buildFences(0x0d2a5a, [bannerTex("#0d2a5a", "#ffffff", "YUBI TAKKYU"), bannerTex("#0d2a5a", "#ffd23f", "ゆび卓球", "WORLD TOUR"), bannerTex("#0d2a5a", "#7fd4ff", "SPIN")]);
+  const back = buildStands({ standCol: 0x1c1c26, light: false, empty: 0.15, rows: 9, rise: 0.45 });
+  // 観客のスマホのライト（小さな光の点）
+  const pts = [];
+  for (let i = 0; i < 260; i++) { const side = Math.random(), k = Math.random(), d = 9 + k * 4, y = 1.3 + k * 3.8, u = (Math.random() - 0.5) * 20; if (side < 0.5) pts.push(u, y, -d); else pts.push((side < 0.75 ? -1 : 1) * (d - 1.5), y, u - 2); }
+  const pg = new THREE.BufferGeometry(); pg.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xfff1c0, size: 0.07, transparent: true, opacity: 0.85 })));
+  // 奥の大きな画面
+  const scr = canvasTex(1024, 384, (g, w, h) => { const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, "#0a2a6a"); gr.addColorStop(1, "#4a0a3a"); g.fillStyle = gr; g.fillRect(0, 0, w, h); g.fillStyle = "#fff"; g.textAlign = "center"; g.font = "900 120px system-ui"; g.fillText("ゆび卓球", w / 2, 170); g.fillStyle = "#ffd23f"; g.font = "800 56px system-ui"; g.fillText("FINAL", w / 2, 290); });
+  box(9.4, 3.8, 0.3, mat(0x111111), 0, 7.6, -back - 0.4);
+  plane(9, 3.4, new THREE.MeshBasicMaterial({ map: scr }), 0, 7.6, -back - 0.2);
+  const lm = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  for (const x of [-4, 0, 4]) for (const z of [-6, 0, 6]) box(1.2, 0.08, 0.4, lm, x, 11, z);
+} else {
+  // 案3: 学校の体育館（明るい木の床にライン・奥にステージと幕・高い窓・緑のフェンス）
+  hemi.color.setHex(0xeef6ff); hemi.groundColor.setHex(0x7a5a3a); hemi.intensity = 1.1;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(36, 44), new THREE.MeshStandardMaterial({ map: woodTex([228, 184, 120], [26, 32]), roughness: 0.5 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  const ln = (w, d, x, z, col) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: col })); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.003, z); scene.add(m); };
+  for (const [col, W, D] of [[0xffffff, 15, 28], [0xf5c542, 9, 18]]) { ln(W, 0.06, 0, -D / 2, col); ln(W, 0.06, 0, D / 2, col); ln(0.06, D, -W / 2, 0, col); ln(0.06, D, W / 2, 0, col); }
+  ln(15, 0.06, 0, -9, 0xe04848); ln(15, 0.06, 0, 9, 0xe04848);
+  buildFences(0x2f7a4a, [bannerTex("#2f7a4a", "#ffffff", "卓球部"), bannerTex("#2f7a4a", "#fff6c0", "ゆび卓球"), bannerTex("#2f7a4a", "#ffffff", "全力")]);
+  const wallM = mat(0xe8e2d4), lowM = mat(0xb08a5a);
+  plane(36, 2, lowM, 0, 1, -16); plane(44, 2, lowM, -14, 1, 0, Math.PI / 2); plane(44, 2, lowM, 14, 1, 0, -Math.PI / 2);
+  plane(36, 10, wallM, 0, 7, -16.01); plane(44, 10, wallM, -14.01, 7, 0, Math.PI / 2); plane(44, 10, wallM, 14.01, 7, 0, -Math.PI / 2);
+  // ステージと幕
+  box(14, 1.1, 3, mat(0x9a6a3a), 0, 0.55, -14.5);
+  plane(13, 4.6, mat(0x7a1420), 0, 3.4, -15.9);
+  const cur = mat(0x9a1a2a); for (const s of [-1, 1]) box(1.6, 4.8, 0.2, cur, s * 6.8, 3.5, -15.7);
+  box(14.4, 0.8, 0.3, cur, 0, 6.2, -15.7);
+  plane(2.6, 0.9, new THREE.MeshStandardMaterial({ map: bannerTex("#fffaf0", "#222", "卓球大会", "ゆび卓球部") }), 0, 5.2, -15.5);
+  const winM = new THREE.MeshBasicMaterial({ color: 0xdff0ff });
+  for (let i = 0; i < 8; i++) { const z = -12 + i * 3.2; plane(2, 1.6, winM, -13.98, 8.6, z, Math.PI / 2); plane(2, 1.6, winM, 13.98, 8.6, z, -Math.PI / 2); }
+  // 肋木（左右の壁）
+  const rbM = mat(0xc8a06a);
+  for (const s of [-1, 1]) for (let i = 0; i < 4; i++) { const z = -9 + i * 1.2; for (const zz of [z - 0.45, z + 0.45]) box(0.08, 2.6, 0.08, rbM, s * 13.9, 1.3, zz); for (let j = 0; j < 10; j++) box(0.05, 0.05, 0.9, rbM, s * 13.88, 0.2 + j * 0.25, z); }
+  // バスケのゴール（左右の壁）
+  for (const s of [-1, 1]) { box(0.05, 1.05, 1.8, new THREE.MeshStandardMaterial({ color: 0xffffff }), s * 13.8, 3.4, 0); const r = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.02, 6, 20), mat(0xff6a1a)); r.rotation.x = Math.PI / 2; r.position.set(s * 13.5, 3.05, 0); scene.add(r); }
+  // 置いてある卓球台（奥に 2 台）
+  for (const x of [-4.5, 4.5]) { box(1.52, 0.03, 2.74, mat(0x1f5fae), x, 0.745, -10.5); for (const [dx, dz] of [[-0.6, -1.1], [0.6, -1.1], [-0.6, 1.1], [0.6, 1.1]]) box(0.05, 0.73, 0.05, mat(0x222222), x + dx, 0.365, -10.5 + dz); }
 }
 // 台
 const top = new THREE.Mesh(new THREE.BoxGeometry(TW, 0.03, TL), mat(0x1f5fae));
@@ -1437,7 +1635,7 @@ function bcast(m, unrel) {
   else if (ON.hc) sendTo(ON.hc, m, unrel);
 }
 function relay(m, from, unrel) { for (const c of ON.conns) if (c !== from) sendTo(c, m, unrel); }
-const myName = () => (PARTY ? String(PARTY.name || (PARTY.role === "host" ? "ホスト" : "ゲスト")).slice(0, 12) : (ON && ON.host ? "ホスト" : "ゲスト"));
+const myName = () => (PARTY ? String(PARTY.name || (PARTY.role === "host" ? "ホスト" : "ゲスト")).slice(0, 12) : (String(store.get("ykg-name") || "").trim().slice(0, 12) || (ON && ON.host ? "ホスト" : "ゲスト")));
 
 // ---------- 参加者・枠 ----------
 const mePl = () => ON && ON.players.get(ON.pid);
@@ -1818,20 +2016,67 @@ function toTitle() {
   ball.p.set(0, TH + 0.4, 0); ball.v.set(0, 0, 0);
   resetPositions();
 }
-$("start").onclick = startMatch;
+$("start").onclick = () => { if (homeTab === "on" && !isOffline()) netStartHost(String(Math.floor(1000 + Math.random() * 9000)), false); else startMatch(); };
 $("again").onclick = startMatch;
 const leaveOnline = () => { if (PARTY) { toGames(); return; } closeNet(); toTitle(); };
 $("toTitle").onclick = () => (ON || PARTY) ? leaveOnline() : toTitle();
 $("quit").onclick = () => (ON || PARTY) ? leaveOnline() : toTitle();
 $("netCancel").onclick = leaveOnline;
-$("mkRoom").onclick = () => { netStartHost(String(Math.floor(1000 + Math.random() * 9000)), false); };
 $("joinRoom").onclick = () => { const c = $("roomIn").value.replace(/\D/g, ""); if (c.length !== 4) { $("roomIn").focus(); return; } netJoin(c, false, false); };
 $("resume").onclick = togglePause;
 $("pause").onclick = togglePause;
 $("toGames").onclick = () => { location.href = "../"; };
 document.addEventListener("visibilitychange", () => { if (!ON && document.hidden && !st.paused && (st.phase === "rally" || st.phase === "serve" || st.phase === "dead")) togglePause(); });
 toTitle();
-if (isOffline() || PARTY) $("onBox").hidden = true;
+// ===== ホーム（2026-11-28 案B: 夜のアリーナ） =====
+let homeTab = "solo";
+function setHomeTab(t) {
+  if (t === "on" && isOffline()) t = "solo";
+  homeTab = t;
+  $("tabSolo").classList.toggle("on", t === "solo"); $("tabOn").classList.toggle("on", t === "on");
+  $("tabOn").disabled = isOffline();
+  $("onBox").hidden = t !== "on";
+}
+$("tabSolo").onclick = () => setHomeTab("solo");
+$("tabOn").onclick = () => setHomeTab("on");
+for (const ev of ["online", "offline"]) addEventListener(ev, () => setHomeTab(homeTab));
+$("hRules").onclick = () => { $("rules").hidden = false; };
+$("rulesClose").onclick = () => { $("rules").hidden = true; };
+$("hSet").onclick = () => { $("settings").hidden = false; };
+$("setClose").onclick = () => { $("settings").hidden = true; };
+function updSnd() { const m = !!(window.YkgSfx && YkgSfx.muted); $("hSnd").innerHTML = `<svg viewBox="0 0 32 26"><use href="#${m ? "i-mute" : "i-snd"}"/></svg>${m ? "音：オフ" : "音：オン"}`; }
+$("hSnd").onclick = () => { if (window.YkgSfx) YkgSfx.toggle(); updSnd(); };
+if (window.YkgSfx && YkgSfx.onChange) YkgSfx.onChange(updSnd);
+updSnd();
+$("nameIn").value = store.get("ykg-name") || "";
+$("nameIn").addEventListener("input", () => store.set("ykg-name", $("nameIn").value.trim().slice(0, 12)));
+$("homeAv").innerHTML = ME_AV >= 0 ? `<img src="../avatars/a${String(ME_AV).padStart(2, "0")}.png" alt="">` : `<svg viewBox="0 0 32 32"><use href="#i-pawn"/></svg>`;
+// 背景の絵: 暗い観客席・スポットライトの当たる卓球台・赤いマット
+$("homeBg").innerHTML = (() => {
+  const tw = 600, th = 140;
+  let crowd = "";
+  for (let r = 0; r < 7; r++) {
+    if (r % 2) crowd += `<rect y="${80 + r * 48}" width="1600" height="48" fill="#0c0f1a"/>`;
+    for (let i = 0; i < 60; i++) crowd += `<circle cx="${(i * 27 + r * 13) % 1600}" cy="${100 + r * 48}" r="9" fill="hsl(${(i * 47 + r * 31) % 360},45%,${18 + (i % 3) * 5}%)"/>`;
+  }
+  for (let i = 0; i < 90; i++) crowd += `<circle cx="${(i * 173) % 1600}" cy="${90 + (i * 61) % 320}" r="2.4" fill="#fff4c0" opacity="${0.4 + (i % 4) * 0.15}"/>`;
+  let fence = "";
+  for (let i = 0; i < 10; i++) fence += `<rect x="${-40 + i * 170}" y="404" width="160" height="40" fill="#0d2a5a" stroke="#4aa8ff55"/><text x="${40 + i * 170}" y="431" text-anchor="middle" font-size="19" font-weight="900" fill="${i % 2 ? "#ffd23f" : "#fff"}" font-style="italic">${i % 2 ? "ゆび卓球" : "YUBI TAKKYU"}</text>`;
+  return `<svg viewBox="0 0 1600 740" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs><radialGradient id="hsb" cx=".5" cy=".75" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="hbeam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe6ff" stop-opacity="0"/><stop offset="1" stop-color="#cfe6ff" stop-opacity=".22"/></linearGradient></defs>
+    <rect width="1600" height="740" fill="#06080f"/>${crowd}
+    <path d="M0 440H1600V740H0Z" fill="#2a0c12"/><path d="M220 470H1380L1600 740H0Z" fill="#8a2430"/>${fence}
+    <path d="M640 0H960L1200 740H400Z" fill="url(#hbeam)"/><ellipse cx="800" cy="610" rx="460" ry="110" fill="url(#hsb)"/>
+    <g transform="translate(800,480)">
+      <path d="M${-tw * 0.36} 0H${tw * 0.36}L${tw / 2} ${th}H${-tw / 2}Z" fill="#1f5fae" stroke="#fff" stroke-width="4"/><path d="M0 0V${th}" stroke="#fff" stroke-width="2"/>
+      <rect x="${-tw * 0.47}" y="${th * 0.42}" width="${tw * 0.94}" height="${th * 0.16}" fill="#11141888" stroke="#fff" stroke-width="2"/>
+      <path d="M${-tw / 2} ${th}v14H${tw / 2}v-14" fill="#123a6a"/><rect x="${-tw * 0.4}" y="${th + 12}" width="8" height="70" fill="#222"/><rect x="${tw * 0.4 - 8}" y="${th + 12}" width="8" height="70" fill="#222"/>
+    </g>
+    <circle cx="760" cy="450" r="12" fill="#fff"/><path d="M760 450q-120-90-260-40" stroke="#fff" stroke-opacity=".35" stroke-width="5" fill="none" stroke-dasharray="4 10"/>
+  </svg>`;
+})();
+setHomeTab("solo");
 if (PARTY) {
   $("title").hidden = true;
   if (PARTY.role === "host") netStartHost(PARTY.code, true); else netJoin(PARTY.code, true, !!PARTY.spec);
