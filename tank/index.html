@@ -3,139 +3,248 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#1b1a17">
+<meta name="theme-color" content="#4a2c12">
 <title>タンクファイト</title>
 <!-- ミニゲーム集「you know games」のゲーム（kakutou/tank/）。2026-11-18 作成 -->
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="you know games">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="manifest" href="../manifest.json"><link rel="icon" type="image/png" sizes="192x192" href="../icon-192.png?v=3"><link rel="apple-touch-icon" href="../apple-touch-icon.png?v=3">
 <style>
+/* 2026-11-28: 木のおもちゃ風のUI。木目は JS で canvas に描いて --wl（明るい板）/ --wf（床）/ --wd（こげ茶の台）に入れる */
+:root{--ink:#4a2a10;--ink2:#7a5230;--cream:#fff7e6;--pine:#ecd3a2;--edge:#8a5a2b;--edgeD:#6b4320;--red:#d8473b;--blue:#3c7fd8;--wl:none;--wf:none;--wd:none}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#1b1a17;color:#f2efe8;font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#4a2c12;color:var(--ink);font-family:"M PLUS Rounded 1c",system-ui,-apple-system,"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 button{font:inherit;color:inherit;cursor:pointer}
 input{font:inherit}
 #c{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
 .hidden{display:none!important}
+.ic{width:1em;height:1em;vertical-align:-.15em;fill:currentColor}
+
+/* 木の部品 */
+.pine{background:var(--wl) 0 0/360px auto,var(--pine)}
+.blockbtn{border:3px solid var(--edge);border-radius:12px;color:var(--ink);background:var(--wl) 0 0/320px auto,#efd5a3;box-shadow:inset 0 2px 0 #fffb,inset 0 -3px 0 #0000001a,0 5px 0 #9a6a35,0 8px 12px #0004;transition:transform .06s,box-shadow .06s}
+.blockbtn:active:not(:disabled){transform:translateY(4px);box-shadow:inset 0 2px 0 #fffb,0 1px 0 #9a6a35}
 
 /* ---- HUD ---- */
 #hud{position:fixed;inset:0;pointer-events:none;touch-action:none}
-#quit{position:absolute;left:calc(env(safe-area-inset-left) + 8px);top:calc(env(safe-area-inset-top) + 8px);pointer-events:auto;background:rgba(20,18,14,.72);border:1px solid #665;border-radius:10px;padding:8px 14px;font-size:14px}
+#quit{position:absolute;left:calc(env(safe-area-inset-left) + 8px);top:calc(env(safe-area-inset-top) + 8px);pointer-events:auto;padding:5px 12px;font-size:13px;font-weight:900;border-radius:10px;border-width:2px;box-shadow:inset 0 2px 0 #fffb,0 4px 0 #9a6a35,0 6px 8px #0004}
 #scorebar{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 6px);transform:translateX(-50%);display:flex;gap:5px;justify-content:center;max-width:calc(100% - 180px)}
-.sc{background:rgba(20,18,14,.72);border-radius:10px;padding:3px 8px;font-size:12px;font-weight:700;white-space:nowrap;display:flex;align-items:center;gap:4px;min-width:0}
+.sc{border:2px solid var(--edge);border-radius:10px;padding:2px 8px;font-size:12px;font-weight:800;white-space:nowrap;display:flex;align-items:center;gap:4px;min-width:0;color:var(--ink);background:var(--wl) 0 0/300px auto,var(--pine);box-shadow:0 3px 0 #9a6a35,0 5px 8px #0003}
 .sc .nm{overflow:hidden;text-overflow:ellipsis;max-width:6em}
 @media (max-width:900px){#scorebar.many .sc .nm{max-width:3.2em}}
-.sc i{display:inline-block;width:11px;height:11px;border-radius:50%}
-.sc b{color:#ffd21a;letter-spacing:1px}
-.sc.dead{opacity:.45}
-#timer{position:absolute;right:calc(env(safe-area-inset-right) + 8px);top:calc(env(safe-area-inset-top) + 8px);background:rgba(20,18,14,.72);border-radius:10px;padding:6px 12px;font-size:16px;font-weight:800}
-#timer.hot{color:#ffd21a}
-#feed{position:absolute;right:calc(env(safe-area-inset-right) + 8px);top:calc(env(safe-area-inset-top) + 48px);display:flex;flex-direction:column;align-items:flex-end;gap:3px}
-#feed div{background:rgba(20,18,14,.65);font-size:12px;padding:3px 8px;border-radius:8px;transition:opacity .6s}
-#banner{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);font-size:64px;font-weight:900;color:#fff;text-shadow:0 4px 0 #000,0 0 18px rgba(0,0,0,.6);white-space:nowrap}
-#banner.small{font-size:30px}
-#toast{position:absolute;left:50%;top:22%;transform:translateX(-50%);background:rgba(0,0,0,.8);padding:8px 16px;border-radius:12px;font-size:14px;transition:opacity .3s;opacity:0;white-space:nowrap}
+@media (orientation:portrait){#scorebar{top:calc(env(safe-area-inset-top) + 56px);left:8px;right:8px;transform:none;max-width:none;flex-wrap:wrap}}
+.sc i{display:inline-block;width:12px;height:12px;border-radius:3px;border:1.5px solid #0005}
+.sc b{color:#e39a00;letter-spacing:1px;-webkit-text-stroke:.6px #7a4a10}
+.sc.dead{opacity:.5;filter:grayscale(.6)}
+#timer{position:absolute;right:calc(env(safe-area-inset-right) + 8px);top:calc(env(safe-area-inset-top) + 8px);border:2px solid #2a180a;border-radius:10px;padding:3px 12px;font-size:17px;font-weight:900;color:var(--cream);background:var(--wd) 0 0/300px auto,#5a3618;box-shadow:inset 0 1px 0 #fff3,0 4px 0 #2a180a,0 6px 8px #0004;font-variant-numeric:tabular-nums}
+#timer.hot{background:linear-gradient(#e85a4c,#c23a2f);border-color:#6e2018;box-shadow:inset 0 1px 0 #fff5,0 4px 0 #7d241b}
+#feed{position:absolute;right:calc(env(safe-area-inset-right) + 8px);top:calc(env(safe-area-inset-top) + 50px);display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+#feed div{background:#fff7e6e6;color:var(--ink);font-size:12px;font-weight:700;padding:2px 9px;border-radius:8px;border:1.5px solid #b98a52;transition:opacity .6s}
+#banner{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);font-size:68px;font-weight:900;color:#fff7e6;-webkit-text-stroke:7px #5a3416;paint-order:stroke fill;text-shadow:0 6px 0 #5a3416,0 10px 18px #0007;white-space:nowrap;letter-spacing:2px}
+#banner.small{font-size:32px;-webkit-text-stroke:5px #5a3416;text-shadow:0 4px 0 #5a3416,0 8px 14px #0007}
+#toast{position:absolute;left:50%;top:22%;transform:translateX(-50%);color:var(--cream);background:#3e240fe6;border:2px solid #a8783f;padding:7px 16px;border-radius:12px;font-size:14px;font-weight:700;transition:opacity .3s;opacity:0;white-space:nowrap}
 .lay{position:absolute;left:0;top:0;transform-origin:center center}
-.stick{width:120px;height:120px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);pointer-events:none}
-#hud.editing .lay{pointer-events:auto;outline:2px dashed rgba(255,210,26,.8);outline-offset:3px;touch-action:none}
-#hud.editing .lay.sel{outline:3px solid #ffd21a}
+.stick{width:120px;height:120px;border-radius:50%;border:4px solid #fff7e680;background:radial-gradient(circle,#5a341622 0 55%,#5a341638 70%);box-shadow:0 0 0 2px #5a341655;pointer-events:none}
+#hud.editing .lay{pointer-events:auto;outline:3px dashed #fff7e6;outline-offset:3px;touch-action:none}
+#hud.editing .lay.sel{outline:3px solid var(--red)}
 #hud.editing .lay *{pointer-events:none}
-#hud.editing .lay::after{content:attr(data-name);position:absolute;left:50%;top:-20px;transform:translateX(-50%);font-size:11px;font-weight:800;background:#ffd21a;color:#222;padding:1px 7px;border-radius:7px;white-space:nowrap}
+#hud.editing .lay::after{content:attr(data-name);position:absolute;left:50%;top:-22px;transform:translateX(-50%);font-size:11px;font-weight:900;background:var(--pine);border:2px solid var(--edge);color:var(--ink);padding:0 8px;border-radius:7px;white-space:nowrap}
 #screen.toolbar{inset:auto;left:50%;top:6px;transform:translateX(-50%);background:none;padding:0;overflow:visible}
-#screen.toolbar .card{width:auto;padding:6px 10px;display:flex;align-items:center;gap:8px;white-space:nowrap;background:rgba(38,35,29,.95)}
-#screen.toolbar .card .btn{width:auto;margin:0;padding:8px 10px;font-size:13px}
-#screen.toolbar input[type=range]{width:min(150px,24vw);accent-color:#ffd21a}
-#rotB{position:fixed;z-index:2147483200;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 84px);width:36px;height:36px;padding:0;border-radius:50%;border:1px solid #776;background:rgba(20,18,14,.75);line-height:0}
-#rotB svg{width:20px;height:20px}
-#layB{position:fixed;z-index:2147483200;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 128px);width:36px;height:36px;padding:0;border-radius:50%;border:1px solid #776;background:rgba(20,18,14,.75);font-size:17px;line-height:34px;text-align:center}
+#screen.toolbar .card{width:auto;padding:6px 10px;display:flex;align-items:center;gap:8px;white-space:nowrap}
+#screen.toolbar .card .btn{width:auto;margin:0;padding:6px 10px;font-size:13px}
+#screen.toolbar input[type=range]{width:min(150px,24vw);accent-color:var(--red)}
+.rnd{position:fixed;z-index:2147483200;top:calc(env(safe-area-inset-top) + 8px);width:38px;height:38px;padding:0;border-radius:50%;display:grid;place-items:center;color:var(--ink);border:2px solid var(--edge);background:var(--wl) 0 0/200px auto,var(--pine);box-shadow:inset 0 2px 0 #fffb,0 4px 0 #9a6a35,0 6px 8px #0004}
+.rnd:active{transform:translateY(3px);box-shadow:0 1px 0 #9a6a35}
+.rnd svg{width:22px;height:22px}
+#rotB{right:calc(env(safe-area-inset-right) + 84px)}
+#layB{right:calc(env(safe-area-inset-right) + 130px)}
+#screen.home~#rotB,#screen.home~#layB{display:none}
 #hud.editing #quit,#hud.editing #timer,#hud.editing #scorebar,#hud.editing #feed,#hud.editing #hint,#hud.editing #banner,#hud.editing #spec{display:none}
-#ask{position:fixed;inset:0;z-index:2147483300;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
+#ask{position:fixed;inset:0;z-index:2147483300;display:flex;align-items:center;justify-content:center;background:#2a180a99;padding:16px}
 #ask .card{text-align:center}
 #ask .row .btn{margin-top:0}
-.stick .knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.5)}
-#stR{border-color:rgba(255,210,26,.6)}
-#stR .knob{background:rgba(255,210,26,.65)}
-#mineBtn{position:absolute;pointer-events:auto;width:68px;height:68px;border-radius:50%;border:3px solid rgba(255,210,26,.85);background:rgba(20,18,14,.55);font-weight:800;font-size:12px;line-height:1.15;touch-action:none;padding:0}
-#mineBtn b{display:block;font-size:15px;color:#ffd21a;letter-spacing:2px}
-#mineBtn:active{background:rgba(255,210,26,.35)}
+.stick .knob{position:absolute;left:33px;top:33px;width:54px;height:54px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#fff3d6,#e2bd80 55%,#b88748);border:2px solid #8a5a2b;box-shadow:0 4px 0 #6b4320aa,0 6px 10px #0005;opacity:.9}
+#stR{border-color:#ffd9d0aa;box-shadow:0 0 0 2px #7d241b66}
+#stR .knob{background:radial-gradient(circle at 38% 32%,#ffb3a6,#e0503f 55%,#a32c22);border-color:#6e2018;box-shadow:0 4px 0 #6e2018aa,0 6px 10px #0005}
+#mineBtn{position:absolute;pointer-events:auto;width:70px;height:70px;border-radius:50%;border:3px solid var(--edge);color:var(--ink);background:radial-gradient(circle at 40% 30%,#fff5dc,#ecd3a2 60%,#d1ad72);box-shadow:inset 0 2px 0 #fffc,0 5px 0 #9a6a35,0 8px 12px #0005;font-weight:900;font-size:12px;line-height:1.15;touch-action:none;padding:0}
+#mineBtn b{display:block;font-size:15px;color:var(--red);letter-spacing:2px}
+#mineBtn:active{transform:translateY(4px);box-shadow:0 1px 0 #9a6a35}
 @keyframes glow{from{box-shadow:0 0 4px var(--c)}to{box-shadow:0 0 16px var(--c)}}
-#hint{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 8px);transform:translateX(-50%);font-size:12px;opacity:.7;white-space:nowrap;background:rgba(20,18,14,.5);padding:3px 10px;border-radius:8px}
-#spec{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 30px);transform:translateX(-50%);font-size:14px;font-weight:700;background:rgba(20,18,14,.7);padding:5px 12px;border-radius:10px}
+#hint{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 8px);transform:translateX(-50%);font-size:12px;font-weight:700;white-space:nowrap;color:var(--cream);background:#3e240fb3;padding:3px 12px;border-radius:8px}
+#spec{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 30px);transform:translateX(-50%);font-size:14px;font-weight:900;color:var(--cream);background:#3e240fd9;border:2px solid #a8783f;padding:4px 14px;border-radius:10px}
 
-/* ---- 画面（メニュー・部屋・結果） ---- */
-#screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(14,12,9,.84);overflow:auto;padding:16px}
-#screen.clear{background:rgba(14,12,9,.35)}
-.card{width:min(440px,100%);background:#26231d;border:1px solid #3d382e;border-radius:18px;padding:18px 18px 16px;box-shadow:0 10px 30px rgba(0,0,0,.45);margin:auto}
+/* ---- 画面（部屋・準備・結果）: こげ茶の台の上に、明るい木の板 ---- */
+#screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#0000 35%,#1e0f0580 100%),var(--wd) 0 0/560px auto,#5a3618;overflow:auto;padding:16px}
+#screen.clear{background:#2a180a59}
+.card{width:min(440px,100%);margin:auto;padding:18px 16px 16px;border-radius:16px;color:var(--ink);background:var(--wl) 0 0/420px auto,var(--pine);border:3px solid var(--edge);box-shadow:inset 0 2px 0 #fffa,inset 0 0 0 2px #f8e3b8,inset 0 -5px 0 #0000001c,0 6px 0 var(--edgeD),0 14px 26px #0008}
 h1{margin:0 0 6px;font-size:30px;text-align:center;letter-spacing:3px}
-h1 small{display:block;font-size:12px;letter-spacing:0;opacity:.6;font-weight:400}
-h2{margin:0 0 10px;font-size:20px;text-align:center}
-.rules{font-size:13px;line-height:1.65;background:#1a1814;border-radius:12px;padding:8px 12px;margin:10px 0}
-.rules b{color:#ffd21a}
-details.rd{margin-top:14px}details.rd summary{cursor:pointer;font-size:13px;font-weight:700;padding:6px 0;color:#ffd21a}
-label{font-size:12px;opacity:.7;display:block;margin-top:8px}
+h2{margin:0 0 10px;font-size:21px;text-align:center;font-weight:900;letter-spacing:1px}
+.rules{font-size:13.5px;line-height:1.7;background:#fffaf0;border:2px solid #d6b07a;border-radius:12px;padding:10px 12px;margin:10px 0;color:var(--ink)}
+.rules b{color:#b8321f}
+label{font-size:12.5px;font-weight:800;color:var(--ink2);display:block;margin-top:10px}
 .row{display:flex;gap:8px;margin-top:8px}
-.in{width:100%;background:#15130f;border:1px solid #4a4436;border-radius:10px;padding:10px;color:#fff;font-size:16px}
-.btn{display:block;width:100%;border:none;border-radius:12px;padding:12px;font-size:16px;font-weight:700;background:#d9822b;margin-top:8px;color:#fff}
-.btn.sub{background:#3a352b}
-.btn.red{background:#c23b3b}
-.btn.gar{background:#ffd21a;color:#2a2105}
-.btn:disabled{opacity:.4}
-.err{color:#ff8a80;font-size:13px;margin-top:8px;text-align:center}
-.code{font-size:42px;font-weight:800;text-align:center;letter-spacing:8px;color:#ffd21a}
+.in{width:100%;background:#fffaf0;border:3px solid #b98a52;border-radius:10px;padding:9px 10px;color:var(--ink);font-size:16px;font-weight:700;box-shadow:inset 0 3px 0 #0000000f;outline:none}
+.in:focus{border-color:var(--blue)}
+.in::placeholder{color:#b49a7a}
+.btn{display:block;width:100%;margin-top:10px;padding:10px 12px;border:3px solid #1f4d8f;border-radius:12px;font-size:17px;font-weight:900;letter-spacing:1px;color:#fff;background:linear-gradient(#5d98e8,#3772c8);text-shadow:0 2px 0 #0004;box-shadow:inset 0 2px 0 #fff6,0 5px 0 #22549c,0 8px 12px #0004;transition:transform .06s,box-shadow .06s}
+.btn:active:not(:disabled){transform:translateY(4px);box-shadow:inset 0 2px 0 #fff6,0 1px 0 #22549c}
+.btn.red{border-color:#6e2018;background:linear-gradient(#ea5e50,#c83b30);box-shadow:inset 0 2px 0 #fff6,0 5px 0 #7d241b,0 8px 12px #0004}
+.btn.red:active:not(:disabled){box-shadow:inset 0 2px 0 #fff6,0 1px 0 #7d241b}
+.btn.gar{border-color:#8a5a08;color:#4a2a05;text-shadow:0 1px 0 #fff8;background:linear-gradient(#ffd75a,#f0ad1c);box-shadow:inset 0 2px 0 #fff8,0 5px 0 #a8700c,0 8px 12px #0004;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn.gar:active:not(:disabled){box-shadow:inset 0 2px 0 #fff8,0 1px 0 #a8700c}
+.btn.sub{border-color:var(--edge);color:var(--ink);text-shadow:none;background:var(--wl) 0 0/320px auto,#f2dcb0;box-shadow:inset 0 2px 0 #fffb,0 5px 0 #9a6a35,0 8px 12px #0003}
+.btn.sub:active:not(:disabled){box-shadow:inset 0 2px 0 #fffb,0 1px 0 #9a6a35}
+.btn:disabled{opacity:.45;filter:grayscale(.4)}
+.btn .ic{width:1.2em;height:1.2em}
+.err{color:#b8321f;font-size:13px;font-weight:800;margin-top:8px;text-align:center}
+.code{font-size:44px;font-weight:900;text-align:center;letter-spacing:12px;padding-left:12px;color:var(--ink);background:#fffaf0;border:3px solid #b98a52;border-radius:12px;box-shadow:inset 0 3px 0 #0000000f;font-variant-numeric:tabular-nums}
 .plist{list-style:none;padding:0;margin:8px 0}
-.plist li{background:#1a1814;border-radius:10px;padding:8px 12px;margin-top:5px;display:flex;justify-content:space-between;align-items:center}
-.note{font-size:12px;opacity:.7;text-align:center;margin-top:6px}
-.seg{display:flex;gap:6px;margin-top:4px}
-.seg button{flex:1;border:1px solid #4a4436;background:#1a1814;border-radius:10px;padding:8px 4px;font-size:14px}
-.seg button.on{background:#d9822b;border-color:#d9822b}
-.loadsum{font-size:12px;opacity:.8;text-align:center;margin-top:4px}
+.plist li{background:#fffaf0;border:2px solid #d6b07a;border-radius:10px;padding:7px 12px;margin-top:5px;display:flex;justify-content:space-between;align-items:center;font-weight:700}
+.plist li span:last-child{font-size:12px;color:var(--ink2)}
+.note{font-size:12.5px;font-weight:700;color:var(--ink2);text-align:center;margin-top:6px}
+.seg{display:flex;gap:6px;margin-top:5px}
+.seg button{flex:1;min-width:0;border:2px solid #a8783f;background:#f8e7c3;border-radius:10px;padding:7px 3px;font-size:14px;font-weight:800;color:var(--ink);box-shadow:inset 0 2px 0 #fff9,0 4px 0 #a8783f;transition:transform .06s}
+.seg button.on{background:linear-gradient(#5d98e8,#3772c8);border-color:#1f4d8f;color:#fff;box-shadow:inset 0 3px 4px #0003,0 1px 0 #1f4d8f;transform:translateY(3px)}
+.loadsum{font-size:12px;font-weight:700;color:var(--ink2);text-align:center;margin-top:6px}
 .rdy{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px}
-.rdy span{background:#1a1814;border-radius:99px;padding:5px 11px;font-size:13px;display:flex;align-items:center;gap:5px;opacity:.65}
-.rdy span.ok{opacity:1;outline:1px solid #6fcf6f}
-.rdy i{display:inline-block;width:10px;height:10px;border-radius:50%}
-table.res{width:100%;border-collapse:collapse;margin:8px 0;font-size:15px}
-table.res td{padding:6px 4px;border-bottom:1px solid #3d382e}
-table.res td:last-child{text-align:right;color:#ffd21a;letter-spacing:1px}
-.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
-.tmcols{display:flex;gap:8px;margin:8px 0}.tmcol{flex:1;border:2px solid;border-radius:12px;padding:6px;background:#1a1814;min-width:0}.tmh{border-radius:8px;color:#fff;font-weight:800;text-align:center;padding:3px 0;font-size:13px}.tmp{padding:5px 4px;font-size:14px;overflow:hidden;text-overflow:ellipsis}.tmpb{background:#2a2620;color:#fff;border:1px solid #555;border-radius:8px;padding:4px 8px;width:100%;text-align:left}
+.rdy span{background:#fffaf0;border:2px solid #d6b07a;border-radius:99px;padding:4px 11px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:5px;opacity:.7}
+.rdy span.ok{opacity:1;border-color:#3f9a46;background:#eefbe6}
+.rdy i{display:inline-block;width:10px;height:10px;border-radius:3px}
+table.res{width:100%;border-collapse:collapse;margin:8px 0;font-size:15px;font-weight:700;background:#fffaf0;border:2px solid #d6b07a;border-radius:12px;overflow:hidden}
+table.res td{padding:7px 10px;border-bottom:2px dashed #ecd3a2}
+table.res tr:last-child td{border-bottom:0}
+table.res td:last-child{text-align:right;color:#e39a00;letter-spacing:1px;-webkit-text-stroke:.6px #7a4a10;font-size:17px}
+.dot{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1.5px solid #0004}
+.tmcols{display:flex;gap:8px;margin:8px 0}.tmcol{flex:1;border:3px solid;border-radius:12px;padding:6px;background:#fffaf0;min-width:0}.tmh{border-radius:8px;color:#fff;font-weight:900;text-align:center;padding:3px 0;font-size:13px}.tmp{padding:5px 4px;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis}.tmpb{background:#f8e7c3;color:var(--ink);border:2px solid #b98a52;border-radius:8px;padding:4px 8px;width:100%;text-align:left;font-weight:700}
 .tmb{border:none;border-radius:8px;padding:2px 10px;font-weight:800;margin-left:6px;min-width:2.6em;color:#fff}
 .tmb:disabled{opacity:1;cursor:default}
+.ttl{display:flex;align-items:center;justify-content:center;gap:8px}
+.trophy{width:30px;height:30px;color:#f0ad1c;filter:drop-shadow(0 2px 0 #7a4a10)}
 
-/* ---- ガレージ（パーツ選び） ---- */
-#garage{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;background:
-  radial-gradient(ellipse at 70% 55%,rgba(255,210,120,.18),transparent 60%),
-  repeating-conic-gradient(#24221d 0 25%,#2c2a24 0 50%) 0 0/48px 48px;
+/* ---- ホーム（案A）: 木の机に広げたカード・小物 ---- */
+#screen.home{padding:0;display:block;overflow:hidden;background:var(--wf) 50% 50%/900px auto,#dcb57a}
+#screen.home::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 45% 40%,#fff3 0,#0000 45%,#3e240f66 100%);pointer-events:none}
+.desk{position:absolute;inset:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.desk .it{position:absolute;transform:rotate(var(--r,0deg));filter:drop-shadow(4px 8px 6px #3e240f55)}
+.desk .prop svg{display:block;width:100%;height:100%;overflow:visible}
+.dcard{padding:0;border:0;background:none;color:var(--ink);z-index:3;transition:transform .1s}
+.dcard:active{transform:rotate(var(--r)) scale(.96) translateY(3px)}
+.dcard .face{position:absolute;inset:0;border-radius:14px;background:#fffdf8;overflow:hidden;box-shadow:inset 0 0 0 2px #0000000d}
+.dcard.tag .face{border-radius:6px;clip-path:polygon(13% 0,100% 0,100% 100%,13% 100%,0 50%)}
+.dcard .art{position:absolute;inset:0;width:100%;height:100%;color:var(--c)}
+.dcard .hole{position:absolute;left:8%;top:calc(50% - 7px);width:14px;height:14px;border-radius:50%;background:#c9a067;box-shadow:0 0 0 3px #fff}
+.dcard .t{position:absolute;right:8%;top:24%;font-size:clamp(20px,4.6vmin,34px);font-weight:900;letter-spacing:2px;line-height:1.05;white-space:nowrap}
+.dcard .dots{position:absolute;right:8%;top:61%;width:40%;height:3px;color:var(--c);background:radial-gradient(circle,currentColor 1.3px,#0000 1.6px) 0 0/10px 3px;opacity:.7}
+.dcard .s{position:absolute;right:8%;top:69%;font-size:clamp(10px,1.9vmin,13px);font-weight:800;opacity:.75;white-space:nowrap}
+.photo{z-index:2;background:#f4ecdc;padding:10px 10px 30px;border-radius:6px;box-shadow:0 0 0 1px #0001}
+.photo .in{position:relative;width:100%;height:100%;border-radius:3px;overflow:hidden;background:var(--wf) 50% 50%/500px auto,#e9cf9c}
+.photo .in .scenew{position:absolute;inset:0}
+.photo .in .scene{position:absolute;inset:4% 0 0;width:100%;height:96%}
+.photo .blks{position:absolute;left:50%;top:-16px;transform:translateX(-50%) rotate(-3deg);gap:3px}
+.photo .blks span{width:30px;height:32px;font-size:20px;-webkit-text-stroke:4px var(--d);box-shadow:inset 0 2px 0 #fff7,0 4px 0 var(--d),0 6px 8px #0004}
+.photo .blks span.sm{font-size:15px}
+.photo p{position:absolute;left:0;right:0;bottom:7px;margin:0;text-align:center;font-weight:900;font-size:clamp(11px,2vmin,14px)}
+.plogo{position:absolute;right:10px;top:16px;z-index:4}
+.plogo .blks span{width:34px;height:36px;font-size:23px;-webkit-text-stroke:4px var(--d)}
+.plogo .blks span.sm{font-size:17px}
+@media (max-width:380px){.plogo .blks span{width:30px;height:32px;font-size:20px}}
+.dback{left:12px;top:12px;width:96px;height:58px;z-index:9;border-radius:10px;background:linear-gradient(#f4dcae,#e2bf85);border:3px solid #8a5a2b;box-shadow:inset 0 2px 0 #fffb,0 5px 0 #8a5a2b;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:900;font-size:11px;color:var(--ink);filter:none;--r:-4deg;padding:0}
+.dback svg{width:34px;height:20px}
+.dback:active{transform:rotate(-4deg) translateY(4px);box-shadow:0 1px 0 #8a5a2b}
+.dock{position:absolute;display:flex;gap:8px;z-index:8}
+.dock.p{left:50%;bottom:10px;transform:translateX(-50%)}
+.dock.l{left:61%;top:8px}
+.dock button{width:60px;height:54px;border:0;border-radius:12px 12px 6px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:#fff;font-size:10px;font-weight:900;white-space:nowrap;padding:0;box-shadow:inset 0 2px 0 #fff5,0 5px 0 #0004;transition:transform .06s}
+.dock button:active{transform:translateY(4px);box-shadow:inset 0 2px 0 #fff5,0 1px 0 #0004}
+.dock button:disabled{opacity:.45}
+.dock button svg{width:26px;height:22px}
+.derr{position:absolute;left:50%;bottom:76px;transform:translateX(-50%);z-index:9;background:#fffaf0;border:2px solid #b8321f;color:#b8321f;font-weight:800;font-size:13px;padding:4px 10px;border-radius:8px;white-space:nowrap}
+.blks{display:flex;justify-content:center;gap:4px;flex-wrap:nowrap}
+.blks span{--c:#d8473b;--d:#7d241b;width:44px;height:46px;display:grid;place-items:center;font-size:30px;font-weight:900;color:#fff;border-radius:7px;background:linear-gradient(#fff3 0,#fff0 40%),var(--c);border:2px solid var(--d);box-shadow:inset 0 2px 0 #fff7,0 6px 0 var(--d),0 10px 12px #0005;-webkit-text-stroke:5px var(--d);paint-order:stroke fill;line-height:1}
+.blks span:nth-child(4n+2){--c:#3c7fd8;--d:#1f4d8f}
+.blks span:nth-child(4n+3){--c:#f0ad1c;--d:#8a5a08}
+.blks span:nth-child(4n+4){--c:#3f9a46;--d:#1f5a24}
+.blks span:nth-child(odd){transform:rotate(-3deg)}
+.blks span:nth-child(3n){transform:rotate(4deg) translateY(2px)}
+.blks span.sm{font-size:22px}
+.play{min-width:150px;border-radius:14px;font-size:27px;font-weight:900;letter-spacing:3px;color:#fff;border:3px solid #6e2018;background:linear-gradient(#ee6a5a,#c83b30);box-shadow:inset 0 3px 0 #fff6,inset 0 -4px 0 #0002,0 6px 0 #7d241b,0 10px 14px #0005;text-shadow:0 2px 0 #0004;display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 14px;transition:transform .06s,box-shadow .06s}
+.play:active:not(:disabled){transform:translateY(5px);box-shadow:inset 0 3px 0 #fff6,0 1px 0 #7d241b}
+.play svg{width:40px;height:30px;filter:drop-shadow(0 2px 0 #0004)}
+/* ステージを見る */
+.stl{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-content:start}
+.stl .row{grid-column:1/-1}
+.stc{border:2px solid #b98a52;border-radius:10px;background:#fffaf0;padding:6px 4px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:900;font-size:13px;color:var(--ink);box-shadow:0 4px 0 #b98a52}
+.stc .mm{width:100%;aspect-ratio:1;border-radius:6px;box-shadow:none}
+.stc.on{border-color:#1f4d8f;background:#e3eefc;box-shadow:0 0 0 2px #3c7fd8,0 4px 0 #1f4d8f}
+.mapc.big .mm{width:min(100%,280px)}
+@media (orientation:portrait){.mapc.big{flex-direction:column}.mapc.big .mm{width:min(100%,230px)}}
+@media (orientation:landscape) and (max-height:560px){.mapc.big .mm{width:min(100%,170px)}.stl{grid-template-columns:repeat(5,1fr)}.stc{font-size:11px}}
+/* ---- ひとりで → 設定画面 / 部屋 ---- */
+#screen.setup{display:block;padding:0}
+.su{min-height:100%;display:flex;flex-direction:column;gap:12px;padding:calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));max-width:900px;margin:0 auto}
+.suh{display:grid;grid-template-columns:74px 1fr 74px;align-items:center;gap:8px}
+.suh .bk{height:48px;padding:0;display:grid;place-items:center}
+.suh .bk svg{width:34px;height:24px}
+.suh h1{margin:0;font-size:22px;font-weight:900;letter-spacing:2px;color:var(--cream);-webkit-text-stroke:5px #3e240f;paint-order:stroke fill;text-shadow:0 3px 0 #3e240f}
+.sub2{display:grid;grid-template-columns:1fr;gap:12px}
+.sub2 .card{width:100%;margin:0}
+.sub2 .card h3{margin:0 0 2px;font-size:15px;font-weight:900;display:flex;align-items:center;gap:6px}
+.sub2 .card h3:not(:first-child){margin-top:14px}
+.sub2 .card h3 small{font-size:11.5px;font-weight:700;color:var(--ink2)}
+.mapc{display:flex;flex-direction:column;align-items:center;gap:6px}
+.mapc .mm{width:min(100%,260px);aspect-ratio:1;border-radius:10px;box-shadow:0 5px 0 #6b4320,0 8px 14px #0004}
+.mapc .mt{text-align:center}
+.mapc b{font-size:19px;font-weight:900}
+@media (orientation:portrait){.mapc{flex-direction:row;justify-content:center;gap:16px}.mapc .mm{width:136px;flex:none}}
+#screen.setup~#rotB,#screen.setup~#layB{display:none}
+.mapc .note{margin:0}
+.rcol{display:flex;flex-direction:column;gap:14px;min-width:0}
+.sufoot{display:flex;justify-content:flex-end}
+.sufoot .play{min-width:190px}
+@media (min-width:700px){.sub2{grid-template-columns:1.25fr 1fr}}
+@media (orientation:landscape) and (max-height:560px){.sub2{grid-template-columns:1.3fr 1fr}.mapc .mm{width:min(100%,150px)}.mapc{gap:4px;padding:12px}.rcol{gap:10px}.su{gap:8px}}
+
+/* ---- あそびかた ---- */
+.modal{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:16px;background:#2a180aa6}
+.modal .card{width:min(560px,100%);max-height:calc(100% - 8px);overflow:auto;margin:0}
+.modal .rules{margin:6px 0 4px}
+
+/* ---- ガレージ（パーツ選び）: こげ茶の台・明るい木のケース ---- */
+#garage{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;color:var(--ink);background:radial-gradient(ellipse at 70% 55%,#ffe3a833,#0000 60%),var(--wd) 0 0/560px auto,#5a3618;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 .gtop{flex:none;display:flex;align-items:center;gap:10px;height:46px;padding:0 12px}
-.gtop .t{flex:1;text-align:center;font-size:17px;font-weight:800;letter-spacing:1px}
-.gtop .n{font-size:12px;opacity:.75;min-width:70px;text-align:right}
+.gtop .t{flex:1;text-align:center;font-size:18px;font-weight:900;letter-spacing:1px;color:var(--cream);-webkit-text-stroke:4px #2a180a;paint-order:stroke fill}
+.gtop .n{font-size:12px;font-weight:800;color:var(--cream);min-width:70px;text-align:right}
 .gmain{flex:1;display:flex;gap:12px;padding:4px 12px 8px;min-height:0}
-.gcols{flex:1.25;display:flex;gap:8px;padding:8px;background:linear-gradient(#5d6067,#44474d);border-radius:16px;border:3px solid #2b2d31;box-shadow:inset 0 2px 0 rgba(255,255,255,.18),0 8px 22px rgba(0,0,0,.5);min-height:0;min-width:0}
-.gcol{flex:1;display:flex;flex-direction:column;background:linear-gradient(#e9ebee,#d3d6db);border-radius:10px;overflow:hidden;min-width:0;border:2px solid transparent}
-.gcol.focus{border-color:#ffd21a}
-.gcol h4{margin:0;padding:4px 0;font-size:13px;text-align:center;color:#2b2d31;background:rgba(0,0,0,.08);font-weight:900;letter-spacing:2px}
-.garr{flex:none;border:0;background:transparent;color:#3c3f45;font-size:15px;height:24px;line-height:24px}
-.garr:active{color:#d9822b}
+.gcols{flex:1.25;display:flex;gap:8px;padding:8px;border-radius:16px;border:3px solid var(--edge);background:var(--wl) 0 0/360px auto,var(--pine);box-shadow:inset 0 2px 0 #fffa,0 6px 0 var(--edgeD),0 10px 22px #0007;min-height:0;min-width:0}
+.gcol{flex:1;display:flex;flex-direction:column;background:#fff8ea;border-radius:10px;overflow:hidden;min-width:0;border:2px solid #c9a06a;box-shadow:inset 0 3px 6px #7a4a1022}
+.gcol.focus{border-color:var(--red);box-shadow:0 0 0 2px var(--red)}
+.gcol h4{margin:0;padding:4px 0;font-size:13px;text-align:center;color:var(--cream);background:var(--wd) 0 0/200px auto,#6b4320;font-weight:900;letter-spacing:2px}
+.garr{flex:none;border:0;background:transparent;color:#8a5a2b;font-size:15px;height:24px;line-height:24px}
+.garr:active{color:var(--red)}
 .gwin{flex:1;position:relative;overflow:hidden;touch-action:none;min-height:0}
-.gitem{position:absolute;left:7%;width:86%;display:flex;align-items:center;justify-content:center;border-radius:12px;transition:transform .18s ease,opacity .18s ease;background:rgba(255,255,255,.35)}
+.gitem{position:absolute;left:7%;width:86%;display:flex;align-items:center;justify-content:center;border-radius:12px;transition:transform .18s ease,opacity .18s ease;background:#f3e2c2}
 .gitem img{max-width:94%;max-height:92%;pointer-events:none;-webkit-user-drag:none}
-.gitem span{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:10px;font-weight:800;color:#3c3f45}
-.gitem.sel{outline:5px solid #ffd21a;outline-offset:-2px;background:#fff7cf;box-shadow:0 0 14px rgba(255,210,26,.7)}
+.gitem span{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:10px;font-weight:900;color:var(--ink)}
+.gitem.sel{outline:4px solid var(--red);outline-offset:-2px;background:#fff3d6;box-shadow:0 4px 0 #c9a06a}
 .gside{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0}
-.gstats{flex:none;background:rgba(18,18,20,.82);border-radius:12px;padding:8px 12px;border:1px solid rgba(255,255,255,.12)}
+.gstats{flex:none;border-radius:12px;padding:8px 12px;color:var(--ink);border:3px solid var(--edge);background:var(--wl) 0 0/360px auto,var(--pine);box-shadow:inset 0 2px 0 #fffa,0 5px 0 var(--edgeD)}
 .gst{display:flex;align-items:center;gap:8px;margin:2px 0}
-.gst .gl{width:6.4em;font-size:12px;font-weight:800;flex:none}
-.gb{flex:1;height:12px;background:#1d1d20;border:1px solid #55585e;position:relative;transform:skewX(-14deg);overflow:hidden}
-.gb i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(#ffe46a,#f2b705);transition:width .2s}
-.gb::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 calc(20% - 2px),#1d1d20 calc(20% - 2px) 20%)}
-.gb.bul i{background:linear-gradient(#ffb36a,#e8701a)}
-.gsep{height:1px;background:rgba(255,255,255,.15);margin:5px 0}
+.gst .gl{width:6.4em;font-size:12px;font-weight:900;flex:none}
+.gb{flex:1;height:12px;background:#fff8ea;border:2px solid #a8783f;border-radius:4px;position:relative;overflow:hidden}
+.gb i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(#6aa6f0,#3772c8);transition:width .2s}
+.gb::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 calc(20% - 2px),#a8783f88 calc(20% - 2px) 20%)}
+.gb.bul i{background:linear-gradient(#f07a6a,#c83b30)}
+.gsep{height:2px;background:#c9a06a88;margin:5px 0}
 .gprev{flex:1;position:relative;min-height:90px}
 .gprev canvas{position:absolute;inset:0;width:100%;height:100%}
-.gbot{flex:none;display:flex;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(#3a3d43,#26282c);border-top:2px solid #55585e}
-.gback{border:0;border-radius:12px;padding:10px 14px;background:#4a4d54;font-weight:800;font-size:15px}
-.gname{flex:1;text-align:center;min-width:0}
+.gbot{flex:none;display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--wd) 0 0/400px auto,#4a2c12;border-top:3px solid #2a180a;box-shadow:inset 0 2px 0 #fff2}
+.gback{padding:8px 14px;font-weight:900;font-size:15px}
+.gname{flex:1;text-align:center;min-width:0;color:var(--cream)}
 .gname b{display:block;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gname small{display:block;font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gok{border:0;border-radius:12px;padding:10px 24px;background:#ffd21a;color:#2a2105;font-weight:900;font-size:17px}
+.gname small{display:block;font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gok{border:3px solid #6e2018;border-radius:12px;padding:8px 26px;color:#fff;background:linear-gradient(#ea5e50,#c83b30);font-weight:900;font-size:18px;text-shadow:0 2px 0 #0004;box-shadow:inset 0 2px 0 #fff6,0 5px 0 #7d241b}
+.gok:active{transform:translateY(4px);box-shadow:0 1px 0 #7d241b}
 @media (orientation:portrait){
   .gmain{flex-direction:column-reverse}
   .gcols{flex:1.2}
@@ -145,10 +254,26 @@ table.res td:last-child{text-align:right;color:#ffd21a;letter-spacing:1px}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-back" viewBox="0 0 40 24"><path d="M3 12L15 2v6h22v8H15v6z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+<symbol id="i-book" viewBox="0 0 32 28"><path d="M2 4c5-1.5 9-1 14 2v20c-5-3-9-3.5-14-2zM30 4c-5-1.5-9-1-14 2v20c5-3 9-3.5 14-2z" fill="currentColor"/><path d="M5 10c3-.6 5-.3 8 1M5 15c3-.6 5-.3 8 1M27 10c-3-.6-5-.3-8 1M27 15c-3-.6-5-.3-8 1" stroke="#fff9" stroke-width="1.6" fill="none" stroke-linecap="round"/></symbol>
+<symbol id="i-snd" viewBox="0 0 32 28"><path d="M3 10h6l8-7v22l-8-7H3z" fill="currentColor"/><path d="M21 9a7 7 0 0 1 0 10M24.5 5.5a12 12 0 0 1 0 17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+<symbol id="i-mute" viewBox="0 0 32 28"><path d="M3 10h6l8-7v22l-8-7H3z" fill="currentColor"/><path d="M21 9.5l8 9M29 9.5l-8 9" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></symbol>
+<symbol id="i-pad" viewBox="0 0 32 24"><path d="M8 3h16a7 7 0 0 1 7 8l-1 7a4 4 0 0 1-7 1.5L21 17H11l-2 2.5A4 4 0 0 1 2 18l-1-7a7 7 0 0 1 7-8z" fill="currentColor"/><path d="M8 8v6M5 11h6" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="22" cy="9" r="1.8" fill="#fff"/><circle cx="25.5" cy="12.5" r="1.8" fill="#fff"/></symbol>
+<symbol id="i-rot" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5"/><path d="M3 4v5h5M21 20v-5h-5"/></g></symbol>
+<symbol id="i-one" viewBox="0 0 32 28"><circle cx="16" cy="8" r="6" fill="currentColor"/><path d="M5 27a11 10 0 0 1 22 0z" fill="currentColor"/></symbol>
+<symbol id="i-many" viewBox="0 0 32 28"><circle cx="22" cy="8" r="5" fill="currentColor" opacity=".75"/><path d="M14 26a9 9 0 0 1 17 0z" fill="currentColor" opacity=".75"/><circle cx="11" cy="9" r="5.5" fill="currentColor"/><path d="M1 27a10 9.5 0 0 1 20 0z" fill="currentColor"/></symbol>
+<symbol id="i-tank" viewBox="0 0 48 32"><rect x="2" y="20" width="42" height="10" rx="5" fill="currentColor"/><g fill="#0003"><circle cx="8" cy="25" r="2.6"/><circle cx="16" cy="25" r="2.6"/><circle cx="24" cy="25" r="2.6"/><circle cx="32" cy="25" r="2.6"/><circle cx="39" cy="25" r="2.6"/></g><path d="M5 19l3-6h30l4 6z" fill="currentColor"/><rect x="13" y="5" width="17" height="9" rx="3" fill="currentColor"/><rect x="27" y="7.5" width="18" height="3.8" rx="1.6" fill="currentColor"/></symbol>
+<symbol id="i-wrench" viewBox="0 0 24 24"><path d="M21 6.5a5 5 0 0 1-6.6 4.8L6 19.7a2 2 0 0 1-2.8-2.8l8.4-8.4A5 5 0 0 1 17.5 2l-3 3 1.5 3 3 1.5z" fill="currentColor"/></symbol>
+<symbol id="i-trophy" viewBox="0 0 24 24"><path d="M6 2h12v5a6 6 0 0 1-12 0z" fill="currentColor"/><path d="M6 4H3v2a4 4 0 0 0 4 4M18 4h3v2a4 4 0 0 1-4 4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 12.5h4v4h3v4.5H7v-4.5h3z" fill="currentColor"/></symbol>
+<symbol id="i-target" viewBox="-20 -20 40 40"><circle r="18" fill="#fff"/><circle r="18" fill="none" stroke="currentColor" stroke-width="4"/><circle r="11" fill="currentColor"/><circle r="6" fill="#fff"/><circle r="2.6" fill="currentColor"/></symbol>
+<symbol id="tk" viewBox="-20 -18 44 36"><rect x="-17" y="-15" width="34" height="8" rx="3" fill="#3a332c"/><rect x="-17" y="7" width="34" height="8" rx="3" fill="#3a332c"/><rect x="-15" y="-9" width="30" height="18" rx="4" fill="currentColor" stroke="#0005" stroke-width="1.5"/><rect x="2" y="-2.6" width="22" height="5.2" rx="2" fill="#0006"/><circle r="8" fill="currentColor" stroke="#0005" stroke-width="1.8"/><circle r="8" fill="#fff3"/></symbol>
+<symbol id="map" viewBox="0 0 14 14"><rect width="14" height="14" rx=".5" fill="#8a5a2b"/><rect x=".5" y=".5" width="13" height="13" fill="#f1d7a6"/><path d="M5.5 1.5V5.5M2.5 3.5H4.5M8.5 2.5V5M10 6.5H12.5M3 8.5H6.5V10M8.5 9V12.5M10.5 9.5H12M6.5 12.5H5" stroke="#7a4a22" stroke-width=".3" stroke-linecap="round" fill="none"/><rect x="7" y="7" width=".9" height=".9" fill="#c98d4e"/><rect x="3" y="11" width=".9" height=".9" fill="#c98d4e"/><circle cx="1.6" cy="1.6" r=".5" fill="#e8463c"/><circle cx="12.4" cy="12.4" r=".5" fill="#3a7be8"/></symbol>
+</defs></svg>
 <canvas id="c"></canvas>
 <div id="hud" class="hidden">
   <div id="fx"></div>
-  <button id="quit">退出</button>
+  <button id="quit" class="blockbtn">退出</button>
   <div id="scorebar"></div>
   <div id="timer">1:30</div>
   <div id="feed"></div>
@@ -161,8 +286,8 @@ table.res td:last-child{text-align:right;color:#ffd21a;letter-spacing:1px}
   <div id="spec" class="hidden">観戦中</div>
 </div>
 <div id="screen"></div>
-<button id="rotB" class="hidden" aria-label="縦画面と横画面の切り替え" data-nosfx><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5"/><path d="M3 4v5h5M21 20v-5h-5"/></svg></button>
-<button id="layB" class="hidden" aria-label="ボタンの配置を変える" data-nosfx>🎮</button>
+<button id="rotB" class="rnd hidden" aria-label="縦画面と横画面の切り替え" data-nosfx><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5"/><path d="M3 4v5h5M21 20v-5h-5"/></svg></button>
+<button id="layB" class="rnd hidden" aria-label="ボタンの配置を変える" data-nosfx><svg viewBox="0 0 32 24"><use href="#i-pad"/></svg></button>
 <div id="ask" class="hidden"><div class="card"><h2 id="askT"></h2><div class="row"><button class="btn sub" id="askN">やめる</button><button class="btn red" id="askY">はい</button></div></div></div>
 <div id="garage" class="hidden">
   <div class="gtop"><div style="min-width:70px"></div><div class="t">戦車をカスタマイズ</div><div class="n" id="gnext"></div></div>
@@ -173,7 +298,7 @@ table.res td:last-child{text-align:right;color:#ffd21a;letter-spacing:1px}
       <div class="gprev" id="gprev"><canvas id="gcv"></canvas></div>
     </div>
   </div>
-  <div class="gbot"><button class="gback" id="gback">← もどる</button><div class="gname" id="gname"></div><button class="gok" id="gok">OK</button></div>
+  <div class="gbot"><button class="gback blockbtn" id="gback">← もどる</button><div class="gname" id="gname"></div><button class="gok" id="gok">OK</button></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -605,7 +730,7 @@ function hostStart() {
     team: !!host.team, round: 0, teamScore: [0, 0],
     players: list.map((p, i) => {
       const tm = host.team ? p.tm : undefined;
-      const color = host.team ? TEAM_COLS[tm][idx[tm]++ % 3] : COLORS[i % COLORS.length];
+      const color = host.train && p.bot ? 0xb8a58a : host.team ? TEAM_COLS[tm][idx[tm]++ % 3] : COLORS[i % COLORS.length];
       return { id: p.id, name: p.name, bot: !!p.bot, tm, color, load: p.bot ? randLoad() : fixLoad(host.loads.get(p.id) || (p.id === myId ? LOAD : {})) };
     }),
     score: new Map(list.map(p => [p.id, 0])),
@@ -811,7 +936,7 @@ function hostTick(dt) {
   for (const t of all) {
     if (!t.alive) continue;
     if (t.bot) {
-      const inp = play ? botUpdate(t, dt) : { mx: 0, mz: 0 };
+      const inp = play && !host.train ? botUpdate(t, dt) : { mx: 0, mz: 0 };
       driveTank(t, inp.mx, inp.mz, dt); sepTanks(t, all);
     } else if (t.id === myId && !spectating) {
       const inp = play ? localMove() : { mx: 0, mz: 0 };
@@ -1142,7 +1267,7 @@ const randCode = () => String(Math.floor(1000 + Math.random() * 9000));
 let hostTries = 0;
 function startHost() {
   if (!peerOk()) return;
-  mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; spectating = false; host.nextId = 1; host.loads.clear(); host.loads.set(0, LOAD); host.tm.clear(); renderUI();
+  host.train = false; mode = "host"; screen = "connecting"; errMsg = ""; myId = 0; spectating = false; host.nextId = 1; host.loads.clear(); host.loads.set(0, LOAD); host.tm.clear(); renderUI();
   const code = PARTY ? PARTY.code : randCode();
   try { peer = new Peer(netId(code)); } catch (e) { netFail(); return; }
   peer.on("open", () => { host.code = code; hostTries = 0; screen = "lobby"; hostLobby(); });
@@ -1204,7 +1329,15 @@ function joinRoom(code) {
     clearGame(); cleanupNet(); mode = "none"; screen = "menu"; renderUI();
   });
 }
-function startPractice() {
+// 2026-11-28: 練習 = 動かない・撃たない「まと」の戦車を全部たおす（train=true）。CPUと対戦は train=false
+let practiceTrain = false;
+function startPractice(train) {
+  if (train != null) practiceTrain = !!train;
+  host.train = practiceTrain;
+  if (practiceTrain) { mode = "local"; myId = 0; spectating = false; host.code = ""; host.bots = 3; host.stage = practiceStage; host.team = false; host.cpuLv = 0; host.tm.clear();
+    host.loads.clear(); host.loads.set(0, LOAD);
+    lobbyPs = [{ id: 0, name: myName() }].concat([0, 1, 2].map(i => ({ id: 100 + i, name: "まと" + (i + 1), bot: true })));
+    hostStart(); return; }
   mode = "local"; myId = 0; spectating = false; host.code = ""; host.bots = practiceBots; host.stage = practiceStage; host.team = practiceTeam; host.cpuLv = practiceLv; host.tm.clear();
   host.loads.clear(); host.loads.set(0, LOAD);
   lobbyPs = [{ id: 0, name: myName() }];
@@ -1245,18 +1378,62 @@ const cyl = (r1, r2, h, n = 16) => geo(`c${r1},${r2},${h},${n}`, () => new THREE
 
 // 机の上のステージ
 function canvasTex(w, h, draw) { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
-const floorTex = canvasTex(512, 512, (x, w, h) => {
-  x.fillStyle = "#d7c29a"; x.fillRect(0, 0, w, h);
-  for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(${120 + Math.random() * 60},${90 + Math.random() * 40},50,${Math.random() * .16})`; x.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 3, 2 + Math.random() * 3); }
-  x.strokeStyle = "rgba(90,70,40,.18)"; x.lineWidth = 2;
-  for (let i = 0; i <= 8; i++) { x.beginPath(); x.moveTo(i * w / 8, 0); x.lineTo(i * w / 8, h); x.stroke(); x.beginPath(); x.moveTo(0, i * h / 8); x.lineTo(w, i * h / 8); x.stroke(); }
+// 2026-11-28: 木目を描く（板を何枚か並べ、ゆらゆらした木目と節）。3D のステージと、画面の板（CSS）の両方で使う
+function seeded(seed) { let v = seed >>> 0 || 1; return () => (v = (v * 1664525 + 1013904223) >>> 0) / 4294967296; }
+function woodDraw(x, w, h, o) {
+  const R = seeded(o.seed || 7), n = o.planks || 4, ph = h / n, gc = o.grain || "95,55,20";
+  for (let p = 0; p < n; p++) {
+    const y0 = p * ph, t = (R() - .5) * (o.vary || .1);
+    const [r, g, b] = o.base.map(v => clamp(Math.round(v * (1 + t)), 0, 255));
+    x.fillStyle = `rgb(${r},${g},${b})`; x.fillRect(0, y0, w, ph);
+    x.save(); x.beginPath(); x.rect(0, y0, w, ph); x.clip();
+    const lines = Math.round(ph / (o.dense || 3));
+    for (let i = 0; i < lines; i++) {   // 左右がつながるように、波の数は整数
+      const yy = y0 + R() * ph, al = (.04 + R() * .12) * (o.str || 1), amp = 1 + R() * ph * .05, k = 1 + Math.floor(R() * 3), f = k * TAU / w, p0 = R() * TAU;
+      x.strokeStyle = `rgba(${gc},${al})`; x.lineWidth = .6 + R() * 1.8; x.beginPath();
+      for (let xx = 0; xx <= w; xx += 8) { const yv = yy + Math.sin(xx * f + p0) * amp; xx ? x.lineTo(xx, yv) : x.moveTo(xx, yv); }
+      x.stroke();
+    }
+    if (R() < (o.knots || 0)) {   // 節（板のまん中あたり）
+      const kx = w * (.2 + R() * .6), ky = y0 + ph * (.35 + R() * .3), s = ph * .05;
+      for (let k = 1; k < 7; k++) { x.strokeStyle = `rgba(${gc},${(.06 + .025 * k) * (o.str || 1)})`; x.lineWidth = 1.3; x.beginPath(); x.ellipse(kx, ky, k * s * 3.4, k * s, 0, 0, TAU); x.stroke(); }
+      x.fillStyle = `rgba(${gc},.35)`; x.beginPath(); x.ellipse(kx, ky, s * 2.4, s * .8, 0, 0, TAU); x.fill();
+    }
+    x.restore();
+    const gr = x.createLinearGradient(0, y0, 0, y0 + ph); gr.addColorStop(0, "rgba(255,255,255,.10)"); gr.addColorStop(1, "rgba(0,0,0,.07)"); x.fillStyle = gr; x.fillRect(0, y0, w, ph);
+    if (o.seam) {   // 板のつなぎ目
+      x.fillStyle = "rgba(60,30,10,.42)"; x.fillRect(0, y0, w, Math.max(1.5, h / 400));
+      x.fillStyle = "rgba(60,30,10,.3)"; x.fillRect(w * (.1 + R() * .8), y0, Math.max(1.5, h / 500), ph);
+    }
+  }
+}
+const WOOD = {
+  maple: { base: [230, 196, 140], planks: 5, vary: .1, knots: .5, seam: true, seed: 11 },
+  table: { base: [128, 80, 42], planks: 6, vary: .14, knots: .4, seam: true, seed: 5, grain: "40,20,5", str: 1.6 },
+  pine: { base: [236, 208, 156], planks: 1, vary: 0, knots: .35, seed: 3 },
+  honey: { base: [214, 160, 92], planks: 1, vary: 0, knots: .4, seed: 8, str: 1.2 },
+  walnut: { base: [150, 98, 56], planks: 1, vary: 0, knots: .3, seed: 21, grain: "50,25,8", str: 1.4 },
+};
+// 画面の板・床・台（CSS）用の木目
+(() => {
+  const url = (w, h, o) => { const c = document.createElement("canvas"); c.width = w; c.height = h; woodDraw(c.getContext("2d"), w, h, o); return `url(${c.toDataURL("image/jpeg", .82)})`; };
+  const st = document.documentElement.style;
+  st.setProperty("--wl", url(512, 384, { base: [238, 211, 160], planks: 3, vary: .05, knots: .4, seam: true, seed: 4, str: .8 }));
+  st.setProperty("--wf", url(1024, 1024, { ...WOOD.maple, planks: 7, seed: 12 }));
+  st.setProperty("--wd", url(512, 512, { base: [112, 70, 36], planks: 4, vary: .12, knots: .5, seam: true, seed: 9, grain: "35,18,5", str: 1.6 }));
+})();
+const woodTex = (w, h, o) => canvasTex(w, h, (x, ww, hh) => woodDraw(x, ww, hh, o));
+const floorTex = woodTex(1024, 1024, WOOD.maple);
+floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping; floorTex.repeat.set((MW - 1) / 6, (MH - 1) / 6);
+const deskTex = woodTex(512, 512, WOOD.table);
+deskTex.wrapS = deskTex.wrapT = THREE.RepeatWrapping; deskTex.repeat.set(10, 10);
+// 積み木（まわりの囲いと、中の板）。コルクっぽいものもまぜる
+const corkTex = canvasTex(256, 256, (x, w, h) => {
+  x.fillStyle = "#c79a7c"; x.fillRect(0, 0, w, h);
+  const R = seeded(33);
+  for (let i = 0; i < 2600; i++) { const v = R(); x.fillStyle = v < .5 ? `rgba(120,70,45,${.25 + R() * .3})` : `rgba(240,205,175,${.25 + R() * .35})`; x.fillRect(R() * w, R() * h, 1.5 + R() * 3, 1.5 + R() * 3); }
 });
-floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping; floorTex.repeat.set((MW - 1) / 8, (MH - 1) / 8);
-const deskTex = canvasTex(512, 512, (x, w, h) => {
-  x.fillStyle = "#6b4a2c"; x.fillRect(0, 0, w, h);
-  for (let i = 0; i < 90; i++) { x.strokeStyle = `rgba(${40 + Math.random() * 30},${25 + Math.random() * 15},10,${.2 + Math.random() * .3})`; x.lineWidth = 1 + Math.random() * 3; x.beginPath(); const y = Math.random() * h; x.moveTo(0, y); x.bezierCurveTo(w * .3, y + Math.random() * 20 - 10, w * .6, y + Math.random() * 20 - 10, w, y + Math.random() * 12 - 6); x.stroke(); }
-});
-deskTex.wrapS = deskTex.wrapT = THREE.RepeatWrapping; deskTex.repeat.set(6, 6);
+const BLOCK_MATS = ["pine", "honey", "walnut", "pine", "honey"].map(k => new THREE.MeshLambertMaterial({ map: woodTex(256, 256, WOOD[k]) })).concat([new THREE.MeshLambertMaterial({ map: corkTex })]);
 const crateTex = canvasTex(128, 128, (x, w, h) => {
   x.fillStyle = "#c98d4e"; x.fillRect(0, 0, w, h);
   x.fillStyle = "#b47738"; for (let i = 0; i < 4; i++) x.fillRect(0, i * 32 + 30, w, 2);
@@ -1266,7 +1443,7 @@ const crateTex = canvasTex(128, 128, (x, w, h) => {
 const MAT = {
   floor: new THREE.MeshLambertMaterial({ map: floorTex }),
   desk: new THREE.MeshLambertMaterial({ map: deskTex }),
-  wall: [0, 0, 1, 0, 0, 0].map(k => new THREE.MeshLambertMaterial({ color: k ? 0xf1e6cf : 0xb9a07a })),
+  wall: BLOCK_MATS[0],
   crate: new THREE.MeshLambertMaterial({ map: crateTex }),
   crateHit: new THREE.MeshLambertMaterial({ map: crateTex, color: 0x9a8a80 }),
   scorch: new THREE.MeshBasicMaterial({ color: 0x1a120a, transparent: true, opacity: .45, depthWrite: false }),
@@ -1280,10 +1457,30 @@ function buildStage() {
   crateMeshes.clear();
   const fl = new THREE.Mesh(geo("floor", () => new THREE.PlaneGeometry(MW - 1, MH - 1)), MAT.floor); fl.rotation.x = -PI / 2; fl.receiveShadow = true; stageGroup.add(fl);
   const cg = box(.92, .7, .92);
+  // 中の壁は今までどおり薄い板（当たり判定と同じ大きさ）。木の色を板ごとに少し変える
+  const E = MW / 2 - .5, onEdge = r => (r.x1 - r.x0 < .2 && Math.abs(Math.abs((r.x0 + r.x1) / 2) - E) < .01) || (r.z1 - r.z0 < .2 && Math.abs(Math.abs((r.z0 + r.z1) / 2) - E) < .01);
+  let wi = 0;
   for (const r of rects) {
-    if (r.kind !== "w") continue;
-    const o = new THREE.Mesh(box(+(r.x1 - r.x0).toFixed(3), .6, +(r.z1 - r.z0).toFixed(3)), MAT.wall);
+    if (r.kind !== "w" || onEdge(r)) continue;
+    const o = new THREE.Mesh(box(+(r.x1 - r.x0).toFixed(3), .6, +(r.z1 - r.z0).toFixed(3)), BLOCK_MATS[[0, 1, 0, 4][wi++ % 4]]);
     o.position.set((r.x0 + r.x1) / 2, .3, (r.z0 + r.z1) / 2); o.castShadow = o.receiveShadow = true; stageGroup.add(o);
+  }
+  // 2026-11-28: まわりの囲いは、外側に積み木を並べる（中の広さ・当たり判定は変えない）
+  const R = seeded([...curStage].reduce((a, c) => a * 31 + c.charCodeAt(0), 7)), IN = E - WALL_T / 2, T = .85;
+  const blk = (x0, x1, z0, z1, horiz) => {
+    let a = horiz ? x0 : z0; const end = horiz ? x1 : z1;
+    while (end - a > .05) {
+      let len = .7 + R() * 1.1; if (end - a - len < .6) len = end - a;
+      const ht = .55 + R() * .4, m = R() < .1 ? BLOCK_MATS[5] : BLOCK_MATS[Math.floor(R() * 5)];
+      const L = len - .04, o = new THREE.Mesh(horiz ? box(+L.toFixed(3), +ht.toFixed(3), T) : box(T, +ht.toFixed(3), +L.toFixed(3)), m);
+      if (horiz) o.position.set(a + len / 2, ht / 2, (z0 + z1) / 2); else o.position.set((x0 + x1) / 2, ht / 2, a + len / 2);
+      o.castShadow = o.receiveShadow = true; stageGroup.add(o); a += len;
+    }
+  };
+  blk(-IN - T, IN + T, -IN - T, -IN, true); blk(-IN - T, IN + T, IN, IN + T, true);
+  blk(-IN - T, -IN, -IN, IN, false); blk(IN, IN + T, -IN, IN, false);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {   // 四すみは丸太
+    const o = new THREE.Mesh(cyl(.5, .5, 1.15, 20), BLOCK_MATS[1]); o.position.set(sx * (IN + T / 2), .575, sz * (IN + T / 2)); o.castShadow = o.receiveShadow = true; stageGroup.add(o);
   }
   for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) {
     const n = j * MW + i;
@@ -1705,7 +1902,7 @@ function prepButtons() {
   const c = readyCount(), first = S.prep.first;
   return (iAmReady() ? `<button class="btn sub" data-a="unready">準備OKを取り消す</button><div class="note">ほかの人を待っています…</div>`
       : `<button class="btn red" data-a="ready">${first ? "準備OK（バトル開始）" : "次のバトルへ"}</button>`)
-    + `<button class="btn gar" data-a="garage">🛠 ${first ? "戦車をカスタマイズ" : "パーツを変える"}</button><div class="loadsum">${esc(loadText(LOAD))}</div>`
+    + `<button class="btn gar" data-a="garage"><svg class="ic"><use href="#i-wrench"/></svg>${first ? "戦車をカスタマイズ" : "パーツを変える"}</button><div class="loadsum">${esc(loadText(LOAD))}</div>`
     + (mode === "host" && c.n < c.humans.length ? `<button class="btn sub" data-a="force">みんなを待たずに始める</button>` : "");
 }
 // 縦画面 ↔ 横画面（シールドファイトと同じ: 全画面にしてから向きを固定する。iPhone はできないのでボタンを出さない）
@@ -1753,8 +1950,117 @@ const RULES = `<div class="rules">
 ・スティックと地雷ボタンの位置・大きさは「ボタンの配置を変える」で変えられる<br>
 ・チーム戦: 味方の弾には当たらない。味方の地雷には近づいても反応しないが、爆発には巻き込まれる</div>`;
 const segH = (opts, cur, pre) => `<div class="seg">${opts.map(([k, s]) => `<button class="${k === cur ? "on" : ""}" data-a="${pre}-${k}">${s}</button>`).join("")}</div>`;
-let partySet = null, partyGuestSet = null, sfxBtn = null;
-const partyMine = () => [{ label: "🎮 ボタンの配置を変える", onClick: () => enterLayout() }];
+let partySet = null, partyGuestSet = null;
+// ================= 2026-11-28: ホーム（木の床・文字の積み木）と、ひとりで遊ぶときの設定画面 =================
+let rulesOpen = false, onlineOpen = !!urlRoom;
+function homeScene() {
+  // 上から見た積み木: 上の面と手前の面（厚み）
+  const bl = (x, y, w, d, h, top, side) => `<rect x="${x + 3}" y="${y + 5}" width="${w}" height="${d + h}" rx="2" fill="#3e240f" opacity=".22"/><rect x="${x}" y="${y + d - 2}" width="${w}" height="${h + 2}" rx="2" fill="${side}"/><rect x="${x}" y="${y}" width="${w}" height="${d}" rx="2" fill="${top}"/><path d="M${x + 3} ${y + d * .35}h${w - 6}M${x + 5} ${y + d * .7}h${w - 12}" stroke="#7a4a1a" stroke-opacity=".18" stroke-width="1.2"/>`;
+  const tank = (x, y, ang, c, d, l) => `<g transform="translate(${x} ${y}) rotate(${ang})"><ellipse cx="3" cy="5" rx="21" ry="17" fill="#3e240f" opacity=".2"/>
+    <rect x="-17" y="-15" width="34" height="8" rx="3" fill="#3a332c"/><rect x="-17" y="7" width="34" height="8" rx="3" fill="#3a332c"/>
+    <path d="M-14 -11v-1M-9 -11v-1M-4 -11v-1M1 -11v-1M6 -11v-1M11 -11v-1M-14 11v1M-9 11v1M-4 11v1M1 11v1M6 11v1M11 11v1" stroke="#6b6258" stroke-width="3"/>
+    <rect x="-15" y="-9" width="30" height="18" rx="4" fill="${c}" stroke="${d}" stroke-width="1.5"/><rect x="-12" y="-7" width="24" height="5" rx="2" fill="${l}" opacity=".7"/>
+    <rect x="2" y="-2.6" width="22" height="5.2" rx="2" fill="${d}"/><circle r="8" fill="${l}" stroke="${d}" stroke-width="1.8"/><circle r="3" fill="${d}" opacity=".5"/></g>`;
+  const track = pts => `<path d="${pts}" fill="none" stroke="#7a4a1a" stroke-opacity=".28" stroke-width="2.4" stroke-dasharray="2 3.5"/>`;
+  return `<div class="scenew"><svg class="scene" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    ${track("M40 282 L84 250 M50 294 L94 262")}${track("M262 290 L218 258 M272 278 L228 246")}
+    ${bl(99, 112, 34, 22, 9, "#f0d49e", "#c99a5b")}${bl(133, 112, 34, 22, 9, "#dcaa66", "#a8743a")}${bl(167, 112, 34, 22, 9, "#f0d49e", "#c99a5b")}
+    ${bl(133, 90, 34, 22, 9, "#e8574a", "#a8342a")}
+    ${bl(70, 26, 30, 30, 10, "#d9ad92", "#a97f66")}${bl(208, 22, 24, 24, 9, "#5fb468", "#3a7d40")}
+    ${bl(62, 196, 22, 22, 8, "#4f8de0", "#2c5ea8")}${bl(214, 192, 30, 22, 9, "#f2c14a", "#b98a1c")}
+    <path d="M114 228 L150 145 L186 228" fill="none" stroke="#fff7e6" stroke-width="3" stroke-linecap="round" stroke-dasharray=".1 7"/>
+    <circle cx="150" cy="145" r="6" fill="none" stroke="#fff7e6" stroke-width="2" opacity=".8"/>
+    <circle cx="178" cy="209" r="3.6" fill="#5a3416" stroke="#fff7e6" stroke-width="1.4"/>
+    ${tank(100, 246, -66, "#3c7fd8", "#1f4d8f", "#7fb0f0")}${tank(202, 248, -114, "#d8473b", "#7d241b", "#f08a7e")}
+  </svg></div>`;
+}
+// 2026-11-28: ホームは「机の上に広げたカード」（案A）。カードを押すとすぐその画面へ
+// 置き場所は [left, top, width, height, 回転] を %。縦画面と横画面で別
+const DESK = {
+  port: { c1: [7, 11, 76, 15, -3], c2: [16, 28, 76, 15, 4], c3: [5, 45, 76, 15, -4], c4: [18, 62, 76, 13, 2],
+    pencil: [3, 77, 42, 2.6, 8], eraser: [80, 90, 14, 4, -12], toy: [74, 23, 14, 6, -30], coin: [4, 91, 8, 4, 0], clip: [90, 41, 5, 6, 20] },
+  land: { c1: [14, 6, 33, 32, -4], c2: [3, 38, 33, 32, -7], c3: [18, 66, 35, 33, 3], c4: [55, 67, 32, 28, -2], photo: [55, 25, 38, 40, 3],
+    pencil: [0, 80, 20, 4, 24], eraser: [92, 58, 7, 6, 15], toy: [45, 29, 7, 11, 20], coin: [48, 5, 4, 7, 0], clip: [50, 52, 2, 10, -30] },
+};
+const DESK_PROPS = {
+  pencil: `<svg viewBox="0 0 220 24" preserveAspectRatio="none"><path d="M0 12L26 2h176v20H26z" fill="#f2c14a"/><path d="M0 12L26 2v20z" fill="#f0d9b0"/><path d="M0 12l8-3v6z" fill="#333"/><rect x="26" y="2" width="176" height="6" fill="#fff4"/><rect x="186" y="2" width="16" height="20" fill="#bfc3c7"/><rect x="202" y="2" width="16" height="20" rx="3" fill="#e88a9a"/></svg>`,
+  eraser: `<svg viewBox="0 0 80 40"><rect width="80" height="40" rx="6" fill="#fff"/><rect x="26" width="54" height="40" rx="4" fill="#3c7fd8"/><text x="53" y="26" text-anchor="middle" font-size="12" font-weight="900" fill="#fff">KESU</text></svg>`,
+  toy: `<svg viewBox="-24 -20 48 40" style="color:#3c7fd8"><use href="#tk"/></svg>`,
+  coin: `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#e6b34a" stroke="#a87a1c" stroke-width="3"/><circle cx="20" cy="20" r="11" fill="none" stroke="#a87a1c" stroke-width="1.5"/></svg>`,
+  clip: `<svg viewBox="0 0 30 70"><path d="M10 60V12a6 6 0 0 1 12 0v44a10 10 0 0 1-20 0V8" fill="none" stroke="#9aa3ad" stroke-width="3.4" stroke-linecap="round"/></svg>`,
+};
+const deskPos = P => `left:${P[0]}%;top:${P[1]}%;width:${P[2]}%;height:${P[3]}%;--r:${P[4]}deg`;
+function deskCard(a, c, t, s, art, P, tag) {
+  return `<button class="it dcard${tag ? " tag" : ""}" data-a="${a}" style="${deskPos(P)};--c:${c}"><span class="face">
+    <svg class="art" viewBox="0 0 300 170" preserveAspectRatio="none">${art}</svg>
+    ${tag ? `<i class="hole"></i>` : ""}<b class="t">${t}</b><i class="dots"></i><small class="s">${s}</small></span></button>`;
+}
+function homeHTML() {
+  const port = innerHeight > innerWidth, L = port ? DESK.port : DESK.land;
+  const snd = window.YkgSfx && YkgSfx.muted, off = isOffline();
+  const prop = k => `<div class="it prop" style="${deskPos(L[k])}">${DESK_PROPS[k]}</div>`;
+  const dk = (a, ic, vb, lb, col, dis) => `<button data-a="${a}" style="background:${col}" ${dis ? "disabled" : ""}><svg viewBox="${vb}"><use href="#${ic}"/></svg>${lb}</button>`;
+  const logo = `<div class="blks">${[..."タンクファイト"].map(c => `<span class="${c === "ァ" ? "sm" : ""}">${c}</span>`).join("")}</div>`;
+  return `<div class="desk">
+    ${prop("coin")}${prop("clip")}${prop("pencil")}${prop("eraser")}${prop("toy")}
+    ${deskCard("go-train", "#d8473b", "練習", "まとの戦車を撃ってみる", `<path d="M0 0H300V26Q150 50 0 30z" fill="#d8473b"/><path d="M0 170H300V150Q160 120 0 150z" fill="#d8473b"/><g transform="translate(62 92) scale(2)" style="color:#d8473b"><use href="#i-target" x="-20" y="-20" width="40" height="40"/></g>`, L.c1)}
+    ${deskCard("go-setup", "#f0a01c", "CPUと対戦", "1〜3体のCPUとバトル", `<path d="M0 0H130Q90 85 0 120z" fill="#f0a01c"/><path d="M0 170V140L60 170z" fill="#f0a01c"/><g style="color:#fff"><use href="#i-tank" x="10" y="20" width="70" height="46"/></g><g style="color:#d8473b"><use href="#i-tank" x="40" y="84" width="64" height="42" transform="scale(-1 1) translate(-144 0)"/></g>`, L.c2)}
+    ${deskCard("go-stages", "#3f9a46", "ステージを見る", "4つのステージ", `<path d="M0 60L110 20V170H0z" fill="#3f9a46"/><path d="M0 170L300 140V170z" fill="#3f9a46"/><use href="#map" x="14" y="52" width="88" height="88"/>`, L.c3)}
+    ${deskCard("layout", "#2f4f7f", "ボタン配置", "スティックを動かす", `<path d="M0 170V110Q70 60 140 120T300 100V170z" fill="#2f4f7f" opacity=".9"/><g style="color:#2f4f7f"><use href="#i-pad" x="58" y="18" width="90" height="66"/></g>`, L.c4, true)}
+    ${port ? `<div class="plogo">${logo}</div>` : `<div class="it photo" style="${deskPos(L.photo)}"><div class="in">${homeScene()}</div>${logo}<p>跳ね返る弾で撃ち合う戦車バトル</p></div>`}
+    <button class="it dback" data-a="games" aria-label="ゲーム一覧へもどる"><svg viewBox="0 0 40 24" style="color:#c83b30"><use href="#i-back"/></svg>ゲーム一覧</button>
+    <div class="dock ${port ? "p" : "l"}">${dk("online", "i-many", "0 0 32 28", "みんなで", "#3c7fd8", off)}${dk("rules", "i-book", "0 0 32 28", "あそびかた", "#d9822b")}${dk("snd", snd ? "i-mute" : "i-snd", "0 0 32 28", snd ? "音：オフ" : "音：オン", "#3f9a46")}${canRot() ? dk("rot", "i-rot", "0 0 24 24", port ? "横画面" : "縦画面", "#8a5a2b") : ""}</div>
+    ${errMsg && !onlineOpen ? `<div class="derr">${esc(errMsg)}</div>` : ""}
+  </div>`;
+}
+// みんなで: なまえ・部屋をつくる・番号で入る
+function onlineHTML() {
+  return `<div class="modal" data-a="online-x"><div class="card" data-a="noop"><h2>みんなで遊ぶ</h2>
+    <label>なまえ</label><input id="name" class="in" maxlength="12" value="${esc(store.get("tank-name") || "")}" placeholder="ゲスト">
+    <button class="btn red" data-a="host">部屋をつくる</button>
+    <label>友だちの部屋に入る</label><div class="row" style="margin-top:4px"><input id="code" class="in" inputmode="numeric" maxlength="4" placeholder="部屋番号（4けた）" value="${esc(urlRoom)}"><button class="btn sub" style="width:40%;margin-top:0" data-a="join">入る</button></div>
+    ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}
+    <button class="btn sub" data-a="online-x">とじる</button></div></div>`;
+}
+// ステージを見る
+function stagesHTML() {
+  const ks = Object.keys(HALF), cur = HALF[practiceStage] ? practiceStage : ks[0];
+  return `<div class="su"><header class="suh"><button class="bk blockbtn" data-a="home" aria-label="もどる"><svg viewBox="0 0 40 24" style="color:#c83b30"><use href="#i-back"/></svg></button><h1>ステージを見る</h1><span></span></header>
+    <div class="sub2"><div class="card mapc big">${miniMap(cur)}<div class="mt"><b>${STAGES[cur]}</b><div class="note">${STAGE_NOTE[cur]}</div></div></div>
+    <div class="card stl">${ks.map(k => `<button class="stc${k === cur ? " on" : ""}" data-a="sv-${k}">${miniMap(k)}<span>${STAGES[k]}</span></button>`).join("")}
+      <div class="row"><button class="btn red" data-a="go-train" style="margin-top:4px">ここで練習</button><button class="btn" data-a="go-setup" style="margin-top:4px">CPUと対戦</button></div></div></div></div>`;
+}
+// ステージの見本（上から見た図）
+function miniMap(k) {
+  const vb = `-0.3 -0.3 ${MW + .6} ${MH + .6}`, frame = `<rect x="-.3" y="-.3" width="${MW + .6}" height="${MH + .6}" rx=".7" fill="#8a5a2b"/><rect x=".5" y=".5" width="${MW - 1}" height="${MH - 1}" fill="#f1d7a6"/>`;
+  if (!HALF[k]) return `<svg class="mm" viewBox="${vb}">${frame}<text x="${MW / 2}" y="${MH / 2 + 2.4}" text-anchor="middle" font-size="7" font-weight="900" fill="#b98a52">?</text></svg>`;
+  const rows = fullMap(k), W = (i, j) => (rows[j] || "")[i] === "#";
+  let ln = "", cr = "", sp = "";
+  for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) {
+    const c = (rows[j] || "")[i], cx = i + .5, cy = j + .5;
+    if (W(i, j)) {
+      if (W(i + 1, j)) ln += `M${cx} ${cy}H${cx + 1}`;
+      if (W(i, j + 1)) ln += `M${cx} ${cy}V${cy + 1}`;
+      if (!W(i - 1, j) && !W(i + 1, j) && !W(i, j - 1) && !W(i, j + 1)) ln += `M${i} ${cy}H${i + 1}`;
+    } else if (c === "x") cr += `<rect x="${i + .1}" y="${j + .1}" width=".8" height=".8" rx=".12"/>`;
+    else if ("1234".includes(c)) sp += `<circle cx="${cx}" cy="${cy}" r=".4" fill="${css(COLORS[+c - 1])}" stroke="#0007" stroke-width=".1"/>`;
+  }
+  return `<svg class="mm" viewBox="${vb}">${frame}<path d="${ln}" stroke="#7a4a22" stroke-width=".24" stroke-linecap="round" fill="none"/><g fill="#c98d4e" stroke="#7d4f22" stroke-width=".08">${cr}</g>${sp}</svg>`;
+}
+function setupHTML() {
+  return `<div class="su"><header class="suh"><button class="bk blockbtn" data-a="home" aria-label="もどる"><svg viewBox="0 0 40 24" style="color:#c83b30"><use href="#i-back"/></svg></button><h1>CPUとたいせん</h1><span></span></header>
+    <div class="sub2"><div class="card">
+      <h3>CPUの数</h3>${segH([[1, "1体"], [2, "2体"], [3, "3体"]], practiceBots, "pb")}
+      <h3>CPUの強さ</h3>${segH(LV.map((l, i) => [i, l.name]), practiceLv, "pl")}
+      <h3>ルール</h3>${segH([[0, "個人戦"], [1, "チーム戦"]], +practiceTeam, "pt")}
+      ${practiceTeam ? `<h3>あなたのチーム <small>CPUは人数が合うように分かれる</small></h3>${segH([[0, "赤チーム"], [1, "青チーム"]], practiceSide, "pm")}` : ""}
+      <h3>ステージ</h3>${segH(Object.entries(STAGES), practiceStage, "ps")}
+    </div>
+    <div class="rcol"><div class="card mapc">${miniMap(practiceStage)}<div class="mt"><b>${STAGES[practiceStage]}</b><div class="note">${STAGE_NOTE[practiceStage]}</div><div class="note">3本先取 ・ 1ラウンド90秒</div></div></div>
+    <div class="sufoot"><button class="play" data-a="practice">スタート<svg viewBox="0 0 48 32"><use href="#i-tank"/></svg></button></div></div></div></div>`;
+}
+
+const partyMine = () => [{ label: "ボタンの配置を変える", onClick: () => enterLayout() }];
 // ボタン配置の編集（2026-11-19: screen は変えずに、上にかぶせる。いつでも開ける）。
 // 対戦中にひらくと、オンラインでは試合は止まらない（自分の戦車は止まる）。ひとりで遊んでいるときだけ、試合も止まる
 let layEdit = false, layGarageWas = false, editSel = "stL", layDrag = null;
@@ -1847,10 +2153,12 @@ function renderUI() {
   $("layB").classList.toggle("hidden", lay || spectating);
   s.classList.toggle("clear", inGame);
   s.classList.toggle("toolbar", lay);
+  s.classList.toggle("home", screen === "menu" && !lay);
+  s.classList.toggle("setup", (screen === "setup" || screen === "stages") && !lay);
   if (lay) {   // ボタン配置の編集: 上に小さな道具バー
     s.classList.remove("hidden");
     const L = layOf(editSel), pct = Math.round(L.s * 100), nm = $(editSel).dataset.name;
-    s.innerHTML = `<div class="card"><b style="color:#ffd21a">${esc(nm)}</b><input type="range" id="laysize" min="50" max="220" step="5" value="${pct}"><span id="laypct" style="font-size:12px;width:3em">${pct}%</span>
+    s.innerHTML = `<div class="card"><b style="color:#b8321f">${esc(nm)}</b><input type="range" id="laysize" min="50" max="220" step="5" value="${pct}"><span id="laypct" style="font-size:12px;width:3em">${pct}%</span>
       <button class="btn sub" data-a="layone">戻す</button><button class="btn sub" data-a="layreset">全部戻す</button><button class="btn" data-a="laydone">完了</button></div>`;
     $("laysize").addEventListener("input", e => { const v = layOf(editSel); setLay(editSel, { ...v, s: +e.target.value / 100 }); $("laypct").textContent = e.target.value + "%"; applyLayout(); });
     for (const id of LAY_IDS) { $(id).classList.remove("hidden"); $(id).classList.toggle("sel", id === editSel); }
@@ -1866,25 +2174,9 @@ function renderUI() {
   if (inGame && !overInfo && !roundInfo) { s.classList.add("hidden"); s.innerHTML = ""; return; }
   s.classList.remove("hidden");
   let h = "";
-  if (screen === "menu") {
-    const off = isOffline();
-    h = `<div class="card"><h1>タンクファイト<small>跳ね返る弾で撃ち合う戦車バトル</small></h1>
-      ${canRot() ? `<button class="btn sub" data-a="rot" id="rotBtn">${rotLabel()}</button>` : ""}
-      <label>なまえ</label><input id="name" class="in" maxlength="12" value="${esc(store.get("tank-name") || "")}" placeholder="ゲスト">
-      ${off ? `<div class="note">📴 オフライン: CPUとの対戦だけ遊べます</div>` : `<button class="btn" data-a="host">部屋をつくる</button>
-      <div class="row"><input id="code" class="in" inputmode="numeric" maxlength="4" placeholder="部屋番号（4けた）" value="${esc(urlRoom)}"><button class="btn sub" style="width:40%;margin-top:0" data-a="join">入る</button></div>`}
-      <div style="margin-top:14px;border-top:1px solid #3d382e;padding-top:6px">
-      <label>CPUと対戦（CPUの数）</label>${segH([[1, "1体"], [2, "2体"], [3, "3体"]], practiceBots, "pb")}
-      <label>CPUの強さ</label>${segH(LV.map((l, i) => [i, l.name]), practiceLv, "pl")}
-      <label>ステージ</label>${segH(Object.entries(STAGES), practiceStage, "ps")}<div class="note" style="margin-top:2px">${STAGE_NOTE[practiceStage]}</div>
-      ${segH([[0, "個人戦"], [1, "チーム戦"]], +practiceTeam, "pt")}
-      ${practiceTeam ? `<label>あなたのチーム（CPUは人数が合うように分かれる）</label>${segH([[0, "赤チーム"], [1, "青チーム"]], practiceSide, "pm")}` : ""}
-      <button class="btn sub" data-a="practice">CPUと対戦する</button></div>
-      <details class="rd"><summary>ルール・遊び方</summary>${RULES}</details>
-      <div class="row" id="sndrow"></div>
-      <button class="btn sub" data-a="layout">🎮 ボタンの配置を変える</button>
-      <button class="btn sub" data-a="games">← ゲーム一覧へ（you know games）</button>
-      ${errMsg ? `<div class="err">${esc(errMsg)}</div>` : ""}</div>`;
+  if (screen === "menu") { h = homeHTML();
+  } else if (screen === "setup") { h = setupHTML();
+  } else if (screen === "stages") { h = stagesHTML();
   } else if (screen === "connecting") {
     h = `<div class="card"><h2>接続中…</h2><button class="btn sub" data-a="leave">やめる</button></div>`;
   } else if (screen === "lobby") {
@@ -1904,11 +2196,11 @@ function renderUI() {
       <button class="btn sub" data-a="leave">退出</button></div>`;
   } else if (inGame && overInfo) {
     const o = overInfo, wt = o.team, iWon = !spectating && o.winners.includes(myId);
-    let title = !o.winners.length ? "引き分け" : iWon ? "🏆 あなたの勝ち！" : `${esc((o.ps.find(p => p.id === o.winners[0]) || {}).name || "")} の勝ち`;
-    if (wt != null) title = wt < 0 ? "引き分け" : `<span style="color:${TEAM_CSS[wt]}">${TEAM_NAME[wt]}チーム</span>の勝ち！${iWon ? " 🏆" : ""}`;
-    h = `<div class="card"><h2>${title}</h2>${wt != null ? `<div class="note">赤 ${o.ts[0]} − ${o.ts[1]} 青</div>` : ""}
+    let title = !o.winners.length ? "引き分け" : iWon ? "あなたの勝ち！" : `${esc((o.ps.find(p => p.id === o.winners[0]) || {}).name || "")} の勝ち`;
+    if (wt != null) title = wt < 0 ? "引き分け" : `<span style="color:${TEAM_CSS[wt]}">${TEAM_NAME[wt]}チーム</span>の勝ち！`;
+    h = `<div class="card"><h2 class="ttl">${iWon ? `<svg class="trophy"><use href="#i-trophy"/></svg>` : ""}${title}</h2>${wt != null ? `<div class="note">赤 ${o.ts[0]} − ${o.ts[1]} 青</div>` : ""}
       <table class="res">${o.ps.map((p, i) => `<tr><td>${i + 1}. <span class="dot" style="background:${css(p.color)}"></span>${esc(p.name)}${p.id === myId ? "（自分）" : ""}${p.gone ? "（退出）" : ""}</td><td>${stars(p.wins)}</td></tr>`).join("")}</table>
-      ${mode === "local" ? `<button class="btn red" data-a="again">もう一度</button>${wt != null ? `<button class="btn sub" data-a="myside">チームを変えてもう一度（今: ${TEAM_NAME[practiceSide]}）</button>` : ""}`
+      ${mode === "local" ? `<button class="btn red" data-a="again">もう一度${host.train ? "練習する" : ""}</button>${wt != null ? `<button class="btn sub" data-a="myside">チームを変えてもう一度（今: ${TEAM_NAME[practiceSide]}）</button>` : ""}`
         : mode === "host" ? `<button class="btn red" data-a="tolobby">部屋にもどる</button>${wt != null ? `<button class="btn sub" data-a="tolobby">チームを変える</button>` : ""}`
         : `<div class="note">ホストが部屋にもどるのを待っています…</div>${wt != null && !spectating ? `<button class="btn sub" data-a="sw-${myId}">チームを変える（部屋にもどります）</button>` : ""}`}
       <button class="btn sub" data-a="leave">${PARTY ? "ゲーム一覧へ" : "メニューへ"}</button></div>`;
@@ -1921,18 +2213,22 @@ function renderUI() {
       ${r.over ? `<div class="note">決着！</div>` : readyBox() + prepButtons()}</div>`;
   } else if (screen === "prep") {
     h = `<div class="card"><h2>バトルの準備</h2><div class="note" style="margin-bottom:6px">弾・機体・タイヤを選んで「準備OK」</div>${readyBox()}${prepButtons()}
-      ${spectating ? "" : `<button class="btn sub" data-a="layout">🎮 ボタンの配置を変える</button>`}
+      ${spectating ? "" : `<button class="btn sub" data-a="layout">ボタンの配置を変える</button>`}
       <button class="btn sub" data-a="leave">${PARTY ? "ゲーム一覧へ" : mode === "local" ? "やめる" : "退出"}</button></div>`;
   }
+  if (onlineOpen && screen === "menu") h += onlineHTML();
+  if (rulesOpen && (screen === "menu" || screen === "setup")) h += `<div class="modal" data-a="rules-x"><div class="card" data-a="noop"><h2>あそびかた</h2>${RULES}<button class="btn red" data-a="rules-x">とじる</button></div></div>`;
   s.innerHTML = h;
-  if (window.YkgSfx && $("sndrow")) { if (!sfxBtn) sfxBtn = YkgSfx.toggleButton("btn sub"); $("sndrow").appendChild(sfxBtn); }
 }
+$("screen").addEventListener("input", e => { if (e.target.id === "name" && !PARTY) store.set("tank-name", e.target.value.trim().slice(0, 12)); });
+let homeLand = innerWidth > innerHeight;   // 向きが変わったときだけ（横画面/縦画面ボタンの文字）。キーボードの出し入れでは描き直さない
+addEventListener("resize", () => { const l = innerWidth > innerHeight; if (l === homeLand) return; homeLand = l; if (screen === "menu" && !layEdit) renderUI(); });
 $("screen").addEventListener("click", async e => {
   const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
   const a = b.dataset.a;
   if (a === "host") { fixName(); startHost(); }
   else if (a === "join") { fixName(); joinRoom($("code").value); }
-  else if (a === "practice") { fixName(); startPractice(); }
+  else if (a === "practice") { fixName(); startPractice(false); }
   else if (a === "rot") { fixName(); toggleRot(); }
   else if (a === "layout") { if (screen === "menu") fixName(); enterLayout(); }
   else if (a === "laydone") exitLayout();
@@ -1943,6 +2239,17 @@ $("screen").addEventListener("click", async e => {
   else if (a === "unready") readyLocal(false);
   else if (a === "force") { if (mode === "host") checkReady(true); }
   else if (a === "games") toGames();
+  else if (a === "noop") return;
+  else if (a === "go-setup") { fixName(); errMsg = ""; screen = "setup"; renderUI(); }
+  else if (a === "go-train") { fixName(); errMsg = ""; startPractice(true); }
+  else if (a === "go-stages") { screen = "stages"; renderUI(); }
+  else if (a.startsWith("sv-")) { practiceStage = STAGES[a.slice(3)] ? a.slice(3) : "plaza"; store.set("tank-stage", practiceStage); renderUI(); }
+  else if (a === "online") { onlineOpen = true; renderUI(); }
+  else if (a === "online-x") { onlineOpen = false; errMsg = ""; renderUI(); }
+  else if (a === "home") { screen = "menu"; rulesOpen = false; renderUI(); }
+  else if (a === "rules") { rulesOpen = true; renderUI(); }
+  else if (a === "rules-x") { rulesOpen = false; renderUI(); }
+  else if (a === "snd") { if (window.YkgSfx) YkgSfx.toggle(); renderUI(); }
   else if (/^(pb|ps|pt|pl|pm)-/.test(a)) {
     const nm = $("name") && $("name").value, v = a.slice(3);
     if (a === "pb-" + v && a[1] === "b") { practiceBots = clamp(+v, 1, 3); store.set("tank-bots", practiceBots); }
@@ -2000,8 +2307,8 @@ function initGarage() {
   gR.setPixelRatio(Math.min(devicePixelRatio, 2));
   // 台
   const ped = new THREE.Group();
-  ped.add(new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, .16, 48), new THREE.MeshLambertMaterial({ color: 0x3a3c42 })));
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(1.18, 1.18, .02, 48), new THREE.MeshLambertMaterial({ color: 0x55585f })); top.position.y = .085; ped.add(top);
+  ped.add(new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, .16, 48), BLOCK_MATS[2]));
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(1.18, 1.18, .02, 48), BLOCK_MATS[0]); top.position.y = .085; ped.add(top);
   ped.position.y = -.08; gScene.add(ped);
   // 列
   const cols = $("gcols"); cols.innerHTML = "";
